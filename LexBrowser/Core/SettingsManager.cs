@@ -1,0 +1,89 @@
+using System;
+using System.IO;
+using System.Text.Json;
+
+namespace LexBrowser.Core;
+
+public class BrowserSettings
+{
+    public bool ShowFloatingPageButton { get; set; } = true;
+    public bool EnableAutoVideoPip { get; set; } = true;
+    public bool ShowBookmarksBar { get; set; } = true;
+    public bool EnableAdBlocker { get; set; } = true;
+    public bool EnableHistory { get; set; } = true;
+    public string DefaultSearchEngine { get; set; } = "Google";
+    public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
+}
+
+public static class SettingsManager
+{
+    private static readonly string SettingsPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "LexBrowser",
+        "settings.json"
+    );
+
+    public static BrowserSettings Current { get; private set; } = new();
+
+    public static event Action? SettingsChanged;
+
+    static SettingsManager()
+    {
+        Load();
+    }
+
+    public static void Load()
+    {
+        try
+        {
+            if (File.Exists(SettingsPath))
+            {
+                string json = File.ReadAllText(SettingsPath);
+                var loaded = JsonSerializer.Deserialize<BrowserSettings>(json);
+                if (loaded != null)
+                {
+                    Current = loaded;
+                    return;
+                }
+            }
+        }
+        catch { }
+
+        Current = new BrowserSettings();
+        Save();
+    }
+
+    public static void Save()
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(SettingsPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(SettingsPath, json);
+            SettingsChanged?.Invoke();
+        }
+        catch { }
+    }
+
+    public static string GetSearchUrl(string query)
+    {
+        string encoded = Uri.EscapeDataString(query);
+        return Current.DefaultSearchEngine switch
+        {
+            "DuckDuckGo" => $"https://duckduckgo.com/?q={encoded}",
+            "Bing" => $"https://www.bing.com/search?q={encoded}",
+            "Brave" => $"https://search.brave.com/search?q={encoded}",
+            "Custom" => string.IsNullOrWhiteSpace(Current.CustomSearchUrl)
+                ? $"https://www.google.com/search?q={encoded}"
+                : (Current.CustomSearchUrl.Contains("%s")
+                    ? Current.CustomSearchUrl.Replace("%s", encoded)
+                    : Current.CustomSearchUrl + encoded),
+            _ => $"https://www.google.com/search?q={encoded}"
+        };
+    }
+}
+

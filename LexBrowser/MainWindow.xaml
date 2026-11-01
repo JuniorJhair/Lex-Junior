@@ -1,0 +1,636 @@
+<Window x:Class="LexBrowser.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lex Junior Browser" 
+        Icon="pack://application:,,,/Assets/logo.png"
+        Height="800" Width="1280"
+        MinHeight="500" MinWidth="800"
+        WindowState="Maximized"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        Background="#0F0F12"
+        Foreground="#E4E4E7"
+        PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome x:Name="AppWindowChrome" CaptionHeight="42" ResizeBorderThickness="6" CornerRadius="0" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Colores base -->
+        <SolidColorBrush x:Key="BgDark" Color="#0F0F12"/>
+        <SolidColorBrush x:Key="SurfaceDark" Color="#18181D"/>
+        <SolidColorBrush x:Key="SurfaceLighter" Color="#22222B"/>
+        <SolidColorBrush x:Key="AccentColor" Color="#6366F1"/>
+        <SolidColorBrush x:Key="AccentHover" Color="#818CF8"/>
+        <SolidColorBrush x:Key="BorderDark" Color="#2E2E3A"/>
+        <SolidColorBrush x:Key="TextLight" Color="#F4F4F5"/>
+        <SolidColorBrush x:Key="TextMuted" Color="#9CA3AF"/>
+
+        <!-- Estilo botones de ventana (Minimizar, Maximizar, Cerrar) -->
+        <Style x:Key="WindowCtrlBtn" TargetType="Button">
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#9CA3AF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#252530"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WindowCloseBtn" TargetType="Button" BasedOn="{StaticResource WindowCtrlBtn}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bg" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bg" Property="Background" Value="#E11D48"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Estilo botones de navegación -->
+        <Style x:Key="NavBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextLight}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceLighter}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.3"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Botón compacto para + / Incógnito al costado de las pestañas -->
+        <Style x:Key="TabActionBtn" TargetType="Button">
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#A1A1AA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#2A2A38"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Estilo ContextMenu para Pestañas (Tema Oscuro Elegante) -->
+        <Style x:Key="TabContextMenu" TargetType="ContextMenu">
+            <Setter Property="Background" Value="#1A1A22"/>
+            <Setter Property="BorderBrush" Value="#2D2D3B"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#E4E4E7"/>
+            <Setter Property="Padding" Value="4,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="18" ShadowDepth="4" Direction="270" Color="#000000" Opacity="0.6"/>
+                            </Border.Effect>
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" Margin="2,2"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TabMenuItem" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="#E4E4E7"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="miBorder" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" ContentSource="Header" VerticalAlignment="Center" Margin="0,0,20,0"/>
+                                <TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}" Foreground="#71717A" FontSize="11" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="miBorder" Property="Background" Value="#2E2E3E"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TabMenuSeparator" TargetType="Separator">
+            <Setter Property="Background" Value="#2D2D3B"/>
+            <Setter Property="Margin" Value="6,3"/>
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Background="{TemplateBinding Background}" Height="1" Margin="{TemplateBinding Margin}"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Fila 0: Barra de título con pestañas y controles de ventana -->
+            <RowDefinition x:Name="RowHeader" Height="42"/>
+            <!-- Fila 1: Barra de navegación, Omnibox e indicadores -->
+            <RowDefinition x:Name="RowNavBar" Height="50"/>
+            <!-- Fila 2: Barra de Accesos Directos Pro (Bookmarks Bar) -->
+            <RowDefinition x:Name="RowBookmarksBar" Height="34"/>
+            <!-- Fila 3: Indicador de carga sutil -->
+            <RowDefinition x:Name="RowProgressBar" Height="2"/>
+            <!-- Fila 4: Contenedor del navegador (WebView2) -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Fila 0: Header & Tabs (Doble clic maximiza/restaura, clic arrastra) -->
+        <Grid Grid.Row="0" Background="{StaticResource BgDark}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid.ColumnDefinitions>
+                <!-- Logo & Brand LJ -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Tiras de Pestañas + Botones pegados a la derecha de las pestañas -->
+                <ColumnDefinition Width="*"/>
+                <!-- Botones Minimizar / Maximizar / Cerrar -->
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Brand Logo LJ -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,14,0" WindowChrome.IsHitTestVisibleInChrome="False">
+                <Border CornerRadius="7" Width="26" Height="26" Margin="0,0,8,0" ClipToBounds="True">
+                    <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                </Border>
+                <TextBlock Text="LEX JUNIOR" FontWeight="Black" FontSize="11" Foreground="#818CF8" VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Lista de Pestañas con Drag & Drop y botones pegados a la última pestaña -->
+            <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Stretch">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" 
+                              WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- ItemsControl de pestañas con soporte Drag & Drop -->
+                        <ItemsControl x:Name="TabsItemsControl">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border x:Name="TabBorder" Margin="2,4,2,0" CornerRadius="8,8,0,0" Padding="10,6,8,6" Cursor="Hand"
+                                            Background="#16161B"
+                                            PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
+                                            PreviewMouseMove="Tab_PreviewMouseMove"
+                                            PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp">
+                                        <!-- Menú Contextual (Clic derecho en pestaña) -->
+                                        <Border.ContextMenu>
+                                            <ContextMenu Style="{StaticResource TabContextMenu}">
+                                                <MenuItem Header="Nueva pestaña a la derecha" Click="MenuNewTabRight_Click" Style="{StaticResource TabMenuItem}" InputGestureText="Ctrl+T"/>
+                                                <MenuItem Header="Duplicar" Click="MenuDuplicateTab_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <Separator Style="{StaticResource TabMenuSeparator}"/>
+                                                <MenuItem Header="📌 Fijar (solo logo)" Click="MenuPinLogoOnly_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <MenuItem Header="📌 Fijar (logo y nombre)" Click="MenuPinLogoAndName_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <MenuItem Header="Desfijar pestaña" Click="MenuUnpin_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <Separator Style="{StaticResource TabMenuSeparator}"/>
+                                                <MenuItem Header="Silenciar / Activar sonido" Click="MenuToggleMute_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <MenuItem Header="Mover pestaña a una nueva ventana" Click="MenuMoveToNewWindow_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <MenuItem Header="Volver a cargar" Click="MenuReload_Click" Style="{StaticResource TabMenuItem}" InputGestureText="Ctrl+R"/>
+                                                <Separator Style="{StaticResource TabMenuSeparator}"/>
+                                                <MenuItem Header="Cerrar" Click="MenuCloseTab_Click" Style="{StaticResource TabMenuItem}" InputGestureText="Ctrl+W"/>
+                                                <MenuItem Header="Cerrar las demás pestañas" Click="MenuCloseOtherTabs_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <MenuItem Header="Cerrar pestañas a la derecha" Click="MenuCloseTabsToRight_Click" Style="{StaticResource TabMenuItem}"/>
+                                                <Separator Style="{StaticResource TabMenuSeparator}"/>
+                                                <MenuItem Header="Volver a abrir pestaña cerrada" Click="MenuReopenClosedTab_Click" Style="{StaticResource TabMenuItem}" InputGestureText="Ctrl+Shift+T"/>
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
+
+                                        <Grid MinWidth="30">
+                                            <Grid.ColumnDefinitions>
+                                                <!-- Icono / Favicon -->
+                                                <ColumnDefinition Width="Auto"/>
+                                                <!-- Indicador pin si es con nombre -->
+                                                <ColumnDefinition Width="Auto"/>
+                                                <!-- Título de la pestaña -->
+                                                <ColumnDefinition Width="*"/>
+                                                <!-- Indicador de audio -->
+                                                <ColumnDefinition Width="Auto"/>
+                                                <!-- Botón Cerrar -->
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Favicon / Logo Real de la Página -->
+                                            <Image Grid.Column="0" Source="{Binding FaviconImage}" 
+                                                   Width="16" Height="16" Margin="0,0,5,0"
+                                                   VerticalAlignment="Center"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                   Visibility="{Binding HasFaviconImage, Converter={StaticResource BoolToVis}}"/>
+
+                                            <!-- Icono Fallback cuando aún no carga el logo real -->
+                                            <TextBlock Grid.Column="0" Text="{Binding FaviconIcon}" 
+                                                       FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"
+                                                       Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
+
+                                            <!-- Indicador pin -->
+                                            <TextBlock Grid.Column="1" Text="📌 " FontSize="9" 
+                                                       Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}}" 
+                                                       VerticalAlignment="Center"/>
+
+                                            <!-- Título (Visible solo si no es solo logo) -->
+                                            <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" Foreground="{StaticResource TextLight}" FontSize="12" 
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" MaxWidth="160"
+                                                       Visibility="{Binding ShowTitleInTab, Converter={StaticResource BoolToVis}}"/>
+
+                                            <!-- Indicador de audio dinámico (🔊 o 🔇) -->
+                                            <TextBlock Grid.Column="3" Text="{Binding AudioIndicatorText}" Foreground="#67E8F9" FontSize="10" Margin="4,0" 
+                                                       VerticalAlignment="Center"/>
+
+                                            <!-- Botón Cerrar Pestaña (Oculto en pestañas fijadas) -->
+                                            <Button Grid.Column="4" Content="✕" Width="18" Height="18" Margin="4,0,0,0"
+                                                    Background="Transparent" BorderThickness="0" Foreground="#888899"
+                                                    Cursor="Hand" Click="CloseTab_Click" Tag="{Binding}"
+                                                    Visibility="{Binding ShowCloseButton, Converter={StaticResource BoolToVis}}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <Border x:Name="b" CornerRadius="9" Background="{TemplateBinding Background}">
+                                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter TargetName="b" Property="Background" Value="#33FF3344"/>
+                                                                            <Setter Property="Foreground" Value="#FF6677"/>
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource SurfaceDark}"/>
+                                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AccentColor}"/>
+                                            <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsIncognito}" Value="True">
+                                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="#8B5CF6"/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Botón + pegado a la última pestaña -->
+                        <Button Content="＋" Style="{StaticResource TabActionBtn}" ToolTip="Abrir nueva pestaña (Ctrl+T o Ctrl+N)"
+                                Click="BtnNewTab_Click" Margin="4,4,2,0" VerticalAlignment="Center"/>
+
+                        <!-- Botón Incógnito pegado al botón + -->
+                        <Button Content="🕵️" Style="{StaticResource TabActionBtn}" ToolTip="Abrir pestaña de incógnito (Ctrl+Shift+N)"
+                                Click="BtnNewIncognitoTab_Click" Margin="2,4,8,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Controles de Ventana (Minimizar, Maximizar, Cerrar) -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Content="─" Style="{StaticResource WindowCtrlBtn}" Click="BtnMinimize_Click" ToolTip="Minimizar"/>
+                <Button x:Name="BtnMaxRestore" Content="□" Style="{StaticResource WindowCtrlBtn}" Click="BtnMaximize_Click" ToolTip="Maximizar"/>
+                <Button Content="✕" Style="{StaticResource WindowCloseBtn}" Click="BtnClose_Click" ToolTip="Cerrar"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Fila 1: Barra de herramientas y URL Omnibox -->
+        <Grid Grid.Row="1" Background="{StaticResource SurfaceDark}">
+            <Grid.ColumnDefinitions>
+                <!-- Botones de Navegación -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Omnibox (Dirección / Búsqueda) -->
+                <ColumnDefinition Width="*"/>
+                <!-- Botones de Utilidad (Página Flotante, Escudo, Configuración) -->
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Botones Atrás, Adelante, Recargar, Home -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="8,0">
+                <Button x:Name="BtnBack" Style="{StaticResource NavBtn}" Content="←" FontSize="14" FontWeight="Bold"
+                        ToolTip="Página anterior (Alt+←)" Click="BtnBack_Click"/>
+                <Button x:Name="BtnForward" Style="{StaticResource NavBtn}" Content="→" FontSize="14" FontWeight="Bold"
+                        ToolTip="Página siguiente (Alt+→)" Click="BtnForward_Click"/>
+                <Button x:Name="BtnRefresh" Style="{StaticResource NavBtn}" Content="↻" FontSize="14" FontWeight="Bold"
+                        ToolTip="Recargar página (Ctrl+R / F5)" Click="BtnRefresh_Click"/>
+                <Button x:Name="BtnHome" Style="{StaticResource NavBtn}" Content="⌂" FontSize="14"
+                        ToolTip="Ir a YouTube" Click="BtnHome_Click"/>
+            </StackPanel>
+
+            <!-- Barra de Direcciones / Omnibox (Estilo Chrome / Brave) -->
+            <Border Grid.Column="1" Background="{StaticResource SurfaceLighter}" CornerRadius="10" Margin="4,7" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
+                <Grid Margin="10,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0" Text="🔒" FontSize="11" Foreground="#10B981" VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                    <!-- Input URL: Comportamiento exacto de Chrome/Brave implementado -->
+                    <TextBox x:Name="TxtUrl" Grid.Column="1" Background="Transparent" BorderThickness="0" 
+                             Foreground="{StaticResource TextLight}" FontSize="13" VerticalAlignment="Center"
+                             CaretBrush="#FFFFFF" SelectionBrush="{StaticResource AccentColor}"
+                             KeyDown="TxtUrl_KeyDown"
+                             PreviewMouseDown="TxtUrl_PreviewMouseDown"/>
+
+                    <!-- Escudo de Anuncios en la barra -->
+                    <Border Grid.Column="2" Background="#1E293B" CornerRadius="6" Padding="6,2" Margin="4,0,0,0" ToolTip="Anuncios neutralizados en esta pestaña">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🛡️" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock x:Name="TxtShieldBadge" Text="0 bloqueados" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Pill de Zoom en Omnibox -->
+                    <Border x:Name="PillZoomIndicator" Grid.Column="3" Background="#222234" BorderBrush="#6366F1" BorderThickness="1"
+                            CornerRadius="6" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
+                            Cursor="Hand" ToolTip="Zoom modificado. Clic para restablecer al 100% (o pulsa Ctrl+0)"
+                            MouseLeftButtonDown="PillZoom_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🔍 " FontSize="9" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtZoomValue" Text="100%" FontSize="11" FontWeight="Bold" Foreground="#818CF8" VerticalAlignment="Center"/>
+                            <TextBlock Text=" ↺" FontSize="11" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="3,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <!-- Botones a la derecha: Página Flotante, 0 Telemetría y Configuración -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,12,0">
+                <!-- Botón Página Flotante (Controlable desde configuración) -->
+                <Button x:Name="BtnTogglePip" Style="{StaticResource NavBtn}" Width="118" Margin="4,0" 
+                        ToolTip="Página Flotante: ver la página web completa en una mini ventana flotante" Click="BtnTogglePip_Click">
+                    <Border Background="#252536" CornerRadius="8" Padding="6,4">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="🗖" FontSize="12" Margin="0,0,5,0" Foreground="{StaticResource AccentHover}"/>
+                            <TextBlock Text="Página Flotante" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}"/>
+                        </StackPanel>
+                    </Border>
+                </Button>
+
+                <!-- Pill 0 Telemetría (Clic abre la pestaña explicativa en Configuración) -->
+                <Border Background="#16161D" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="4,0" 
+                        Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="0 Telemetría: haz clic para ver cómo te protege y sus ventajas">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="7" Height="7" Fill="#10B981" Margin="0,0,6,0"/>
+                        <TextBlock Text="0 Telemetría" FontSize="10" Foreground="#A1A1AA" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Botón Historial 🕒 -->
+                <Button x:Name="BtnHistory" Style="{StaticResource NavBtn}" ToolTip="Historial de Navegación y Limpieza (Ctrl+H)" Click="BtnHistory_Click">
+                    <TextBlock Text="🕒" FontSize="13" Foreground="#A1A1AA"/>
+                </Button>
+
+                <!-- Botón Configuración ⚙️ -->
+                <Button x:Name="BtnSettings" Style="{StaticResource NavBtn}" ToolTip="Configuración del Navegador (Ctrl+,)" Click="BtnSettings_Click">
+                    <TextBlock Text="⚙" FontSize="15" Foreground="#A1A1AA"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Fila 2: Barra de Accesos Directos Pro (Bookmarks Bar) -->
+        <Grid x:Name="RowBookmarksGrid" Grid.Row="2" Background="#121217" Height="34">
+            <Grid.ContextMenu>
+                <ContextMenu Style="{StaticResource TabContextMenu}">
+                    <MenuItem Header="Ocultar barra de accesos directos" Click="BtnHideBookmarksBar_Click" Style="{StaticResource TabMenuItem}" InputGestureText="Ctrl+Shift+B"/>
+                </ContextMenu>
+            </Grid.ContextMenu>
+            <Grid.ColumnDefinitions>
+                <!-- Botón dinámico de la pestaña actual (Anclar / Anclado) -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Separador sutil -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Marcadores anclados fijos -->
+                <ColumnDefinition Width="*"/>
+                <!-- Botón opciones de barra y Banner de Deshacer -->
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Botón Pestaña Actual: Color de borde brillante si está anclada, borde tenue si no -->
+            <Border x:Name="BorderCurrentTabBookmark" Grid.Column="0" Margin="10,3,4,3" CornerRadius="7" 
+                    Background="#1A1A24" BorderBrush="#2E2E3A" BorderThickness="1.5" Cursor="Hand"
+                    MouseLeftButtonDown="CurrentTabBookmark_Click" ToolTip="Anclar / Desanclar la página actual">
+                <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtCurrentTabBookmarkIcon" Text="＋" Foreground="#A1A1AA" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtCurrentTabBookmarkTitle" Text="Anclar pestaña actual" Foreground="#E4E4E7" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Separador vertical -->
+            <Border Grid.Column="1" Width="1" Height="16" Background="#2A2A38" Margin="4,0,6,0" VerticalAlignment="Center"/>
+
+            <!-- Lista horizontal de Marcadores Anclados -->
+            <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center">
+                <ItemsControl x:Name="BookmarksItemsControl">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border x:Name="BkBorder" Margin="3,3" CornerRadius="6" Background="#181820" BorderBrush="#272736" BorderThickness="1" Padding="7,2,5,2" Cursor="Hand"
+                                    MouseLeftButtonDown="BookmarkItem_Click">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Image Source="{Binding FaviconImage}" Width="14" Height="14" Margin="0,0,5,0" 
+                                           VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"
+                                           Visibility="{Binding HasFaviconImage, Converter={StaticResource BoolToVis}}"/>
+                                    <TextBlock Text="{Binding DisplayIcon}" FontSize="11" Margin="0,0,5,0" 
+                                               VerticalAlignment="Center"
+                                               Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
+                                    <TextBlock Text="{Binding Title}" Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center" MaxWidth="110" TextTrimming="CharacterEllipsis"/>
+                                    <!-- Botón '✕' protegido -->
+                                    <Button Content="✕" Width="16" Height="16" Margin="6,0,0,0"
+                                            Background="Transparent" BorderThickness="0" Foreground="#71717A" FontSize="9"
+                                            Cursor="Hand" ToolTip="Quitar de la barra de accesos directos"
+                                            Click="BtnRemoveBookmark_Click" Tag="{Binding}">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border x:Name="xb" CornerRadius="8" Background="{TemplateBinding Background}">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="xb" Property="Background" Value="#33FF3344"/>
+                                                                    <Setter Property="Foreground" Value="#FF6677"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Menú de la barra y Banner temporal de Deshacer -->
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="0,0,10,0" VerticalAlignment="Center">
+                <!-- Banner temporal Deshacer (10s) -->
+                <Border x:Name="UndoBanner" Background="#1F1F2E" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6"
+                        Padding="8,3" Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Marcador quitado" Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center"/>
+                        <Button x:Name="BtnUndoBookmark" Content="Deshacer" Foreground="#38BDF8" FontWeight="Bold" FontSize="11"
+                                Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnUndoBookmark_Click" Margin="6,0,0,0"/>
+                        <Button Content="✕" Foreground="#71717A" FontSize="9" Background="Transparent" BorderThickness="0"
+                                Cursor="Hand" Click="BtnCloseUndoBanner_Click" Margin="6,0,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Botón para ocultar barra de accesos directos -->
+                <Button Style="{StaticResource NavBtn}" Width="26" Height="26" ToolTip="Ocultar barra de accesos directos (Ctrl+Shift+B)" Click="BtnHideBookmarksBar_Click">
+                    <TextBlock Text="···" FontSize="13" Foreground="#71717A"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Fila 3: Barra de progreso sutil -->
+        <ProgressBar x:Name="LoadingProgressBar" Grid.Row="3" Height="2" Background="Transparent" 
+                     Foreground="{StaticResource AccentColor}" BorderThickness="0" Visibility="Collapsed" IsIndeterminate="True"/>
+
+        <!-- Fila 4: Contenedor donde se inserta el WebView2 activo -->
+        <Grid x:Name="BrowserContainer" Grid.Row="4" Background="#0A0A0E">
+            <!-- Los WebViews de las pestañas se alojan aquí dinámicamente -->
+        </Grid>
+
+        <!-- Widget Flotante de Zoom en Esquina Superior Derecha -->
+        <Border x:Name="FloatingZoomWidget" Grid.Row="4" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,16,24,0" Background="#181824" BorderBrush="#6366F1" BorderThickness="1.5"
+                CornerRadius="8" Padding="10,6" Visibility="Collapsed" Panel.ZIndex="1000">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.6" Color="Black"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="−" Width="24" Height="24" Background="#262638" Foreground="#FFFFFF" FontWeight="Bold"
+                        BorderThickness="0" Cursor="Hand" Click="BtnZoomOut_Click" ToolTip="Reducir zoom (Ctrl -)"/>
+                <TextBlock x:Name="TxtFloatingZoomValue" Text="100%" Foreground="#818CF8" FontWeight="Bold" FontSize="12"
+                           VerticalAlignment="Center" Margin="8,0"/>
+                <Button Content="+" Width="24" Height="24" Background="#262638" Foreground="#FFFFFF" FontWeight="Bold"
+                        BorderThickness="0" Cursor="Hand" Click="BtnZoomIn_Click" ToolTip="Aumentar zoom (Ctrl +)"/>
+                <Button Content="↺ 100%" Background="#6366F1" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11"
+                        Padding="8,2" BorderThickness="0" Cursor="Hand" Margin="8,0,0,0" Click="BtnZoomReset_Click"
+                        ToolTip="Restablecer zoom al 100% original (Ctrl+0)">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="b" Property="Background" Value="#4F46E5"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- Toast / Notificación flotante informativa (ej. cuando se oculta la barra) -->
+        <Border x:Name="ToastNotification" Grid.Row="4" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Background="#252538" BorderBrush="#6366F1" BorderThickness="1.5" CornerRadius="10"
+                Padding="16,10" Margin="0,0,0,24" Visibility="Collapsed">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="20" ShadowDepth="4" Color="#000000" Opacity="0.7"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtToastMessage" Text="Barra de accesos directos oculta. Para volver a activarla ve a Configuración (o presiona Ctrl+Shift+B)" 
+                           Foreground="#FFFFFF" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <Button Content="Ir a Configuración" Foreground="#818CF8" FontWeight="Bold" FontSize="11" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToastGoSettings_Click" Margin="12,0,0,0"/>
+                <Button Content="✕" Foreground="#71717A" FontSize="10" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToastClose_Click" Margin="10,0,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

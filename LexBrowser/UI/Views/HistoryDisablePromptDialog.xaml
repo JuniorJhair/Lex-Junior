@@ -1,0 +1,140 @@
+<Window x:Class="LexBrowser.UI.Views.HistoryDisablePromptDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Desactivar Historial - Lex Junior"
+        Height="360" Width="480"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+
+    <Border Background="#121218" BorderBrush="#2D2D3E" BorderThickness="1" CornerRadius="12" Margin="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="6" Direction="270" Opacity="0.6" Color="Black"/>
+        </Border.Effect>
+        <Grid Margin="24,20,24,20">
+            <Grid.RowDefinitions>
+                <!-- 0: Encabezado -->
+                <RowDefinition Height="Auto"/>
+                <!-- 1: Mensaje explicativo -->
+                <RowDefinition Height="Auto"/>
+                <!-- 2: Caja de estadísticas de almacenamiento -->
+                <RowDefinition Height="Auto"/>
+                <!-- 3: Botones de acción -->
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Encabezado con icono -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                <Border Width="36" Height="36" CornerRadius="8" Background="#1E1E2E" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <TextBlock Text="🛡️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="¿Deseas eliminar el historial acumulado?" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF"/>
+                    <TextBlock Text="Opciones de privacidad al desactivar el registro" FontSize="11" Foreground="#71717A"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Mensaje explicativo -->
+            <TextBlock Grid.Row="1" Text="Al desactivar el historial, Lex Junior dejará de guardar las páginas web, rutas y títulos que visites de ahora en adelante, ahorrando memoria y espacio."
+                       FontSize="12" Foreground="#A1A1AA" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,14"/>
+
+            <!-- Caja de estadísticas -->
+            <Border Grid.Row="2" Background="#171722" BorderBrush="#262636" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,18">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Páginas guardadas:" FontSize="11" Foreground="#71717A"/>
+                        <TextBlock x:Name="TxtPagesCount" Text="0 visitas" FontWeight="Bold" FontSize="13" Foreground="#F4F4F5" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Espacio en disco:" FontSize="11" Foreground="#71717A"/>
+                        <TextBlock x:Name="TxtStorageSize" Text="0 B" FontWeight="Bold" FontSize="13" Foreground="#818CF8" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Botones de Acción -->
+            <StackPanel Grid.Row="3" VerticalAlignment="Bottom">
+                <!-- Botón 1: Eliminar y desactivar (Recomendado) -->
+                <Button x:Name="BtnDeleteAndDisable" Content="🗑️ Eliminar historial actual y liberar espacio" 
+                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="12" Padding="12,9" Cursor="Hand"
+                        BorderThickness="0" Margin="0,0,0,8" Click="BtnDeleteAndDisable_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="b" Property="Background" Value="#B91C1C"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <!-- Botón 2: Conservar y desactivar -->
+                <Button x:Name="BtnKeepAndDisable" Content="📦 Conservar lo que ya estaba guardado" 
+                        Background="#222230" Foreground="#E4E4E7" FontWeight="SemiBold" FontSize="12" Padding="12,8" Cursor="Hand"
+                        BorderBrush="#2F2F42" BorderThickness="1" Margin="0,0,0,8" Click="BtnKeepAndDisable_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="b" Property="Background" Value="#2D2D40"/>
+                                                <Setter TargetName="b" Property="BorderBrush" Value="#4B4B68"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <!-- Botón 3: Cancelar -->
+                <Button x:Name="BtnCancel" Content="Cancelar" 
+                        Background="Transparent" Foreground="#A1A1AA" FontSize="12" Padding="8,4" Cursor="Hand"
+                        BorderThickness="0" Click="BtnCancel_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="b" Background="{TemplateBinding Background}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
+
