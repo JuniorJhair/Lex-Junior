@@ -41,6 +41,45 @@ public static class YouTubeOptimizer
                 configurable: true
             });
         } catch(_) {}
+
+        // Navegación SPA: tras el primer video, YouTube ya no recarga la página; pide el player por fetch.
+        // Sin esto el pre-hook de arriba solo protege al primer video.
+        try {
+            const cleanPlayerPayload = function(data) {
+                if (!data || typeof data !== 'object') return data;
+                try {
+                    if (data.adPlacements) data.adPlacements = [];
+                    if (data.playerAds) data.playerAds = [];
+                    if (data.adSlots) data.adSlots = [];
+                    if (data.playerResponse) cleanPlayerPayload(data.playerResponse);
+                } catch(_) {}
+                return data;
+            };
+            const isPlayerEndpoint = (u) => typeof u === 'string' && (u.indexOf('/youtubei/v1/player') !== -1 || u.indexOf('/youtubei/v1/reel/reel_item_watch') !== -1);
+
+            const origFetch = window.fetch;
+            window.fetch = function(input, init) {
+                const url = (typeof input === 'string') ? input : (input && input.url);
+                const p = origFetch.apply(this, arguments);
+                if (!isPlayerEndpoint(url)) return p;
+                return p.then(function(res) {
+                    return res.clone().json().then(function(json) {
+                        const body = JSON.stringify(cleanPlayerPayload(json));
+                        return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+                    }).catch(function() { return res; });
+                });
+            };
+
+            // Respuestas del reproductor que YouTube entrega parseando JSON (ytInitialPlayerResponse tardío, /next)
+            const origParse = JSON.parse;
+            JSON.parse = function() {
+                const out = origParse.apply(this, arguments);
+                if (out && typeof out === 'object' && (out.adPlacements || out.playerAds || out.adSlots)) {
+                    return cleanPlayerPayload(out);
+                }
+                return out;
+            };
+        } catch(_) {}
     }
 
     // ─────────────────────────────────────────────────────────────────

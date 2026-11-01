@@ -87,12 +87,12 @@ public partial class MainWindow : Window
         SettingsManager.SettingsChanged += ApplySettings;
         ApplySettings();
 
-        // Callback cuando el usuario pulsa "⇱ Volver" en la Página Flotante manual
+        // Callback cuando el usuario pulsa "⇱ Volver" en el mini-reproductor / Página Flotante
         _pipWindow.OnReturnToTabRequested = (tab) =>
         {
             Dispatcher.Invoke(() =>
             {
-                ReinsertWebViewToContainer(tab);
+                _pipWindow.HideAndDetach(resumeSource: true);
                 if (WindowState == WindowState.Minimized)
                 {
                     WindowState = WindowState.Normal;
@@ -102,9 +102,22 @@ public partial class MainWindow : Window
             });
         };
 
+        // El mini-reproductor se liberó: la pestaña origen retoma donde quedó (y reanuda si corresponde)
         _pipWindow.OnDetachWebView = (tab) =>
         {
-            Dispatcher.Invoke(() => ReinsertWebViewToContainer(tab));
+            Dispatcher.Invoke(() =>
+            {
+                if (tab.IsDisposed || tab.WebView?.CoreWebView2 == null) return;
+                try
+                {
+                    var core = tab.WebView.CoreWebView2;
+                    if (tab.MediaCurrentTime > 1)
+                        core.PostWebMessageAsJson(JsonSerializer.Serialize(new { action = "seek", time = tab.MediaCurrentTime }));
+                    if (tab.MediaIsPlaying)
+                        core.PostWebMessageAsJson(JsonSerializer.Serialize(new { action = "play" }));
+                }
+                catch { }
+            });
         };
 
         Loaded += MainWindow_Loaded;
@@ -399,11 +412,6 @@ public partial class MainWindow : Window
                         tab.MediaTitle = title;
                         tab.MediaCurrentTime = curTime;
                         tab.MediaDuration = duration;
-
-                        if (_pipWindow.IsVisible && _pipWindow.TargetTab == tab)
-                        {
-                            _pipWindow.UpdateMediaControls(title, curTime, duration, isPlaying);
-                        }
                     });
                 }
                 else if (type == "open_history")
@@ -581,11 +589,17 @@ public partial class MainWindow : Window
             var previousTab = _activeTab;
 
             // Mini-reproductor automático universal (si está activado en Configuración):
+            // - Videos de YouTube en reproducción → ventana propia, redimensionable sin límite (como Brave).
+            // - Resto de sitios (streams en iframes, etc.) → Picture-in-Picture nativo del motor.
             if (SettingsManager.Current.EnableAutoVideoPip && previousTab != null && !previousTab.IsDisposed)
             {
                 try
                 {
-                    if (previousTab.WebView?.CoreWebView2 != null)
+                    if (previousTab.MediaIsPlaying && MiniPlayerUrl.IsYouTubeVideo(previousTab.Url))
+                    {
+                        OpenMiniPlayer(previousTab);
+                    }
+                    else if (previousTab.WebView?.CoreWebView2 != null)
                     {
                         _ = TriggerAutoPiPAsync(previousTab);
                     }
@@ -603,10 +617,10 @@ public partial class MainWindow : Window
             }
             catch { }
 
-            // Si la pestaña estaba en la ventana de Página Flotante manual, cerrarla
+            // Si la pestaña estaba en el mini-reproductor, cerrarlo y reanudarla donde quedó
             if (_pipWindow.IsVisible && _pipWindow.TargetTab == tab)
             {
-                _pipWindow.HideAndDetach();
+                _pipWindow.HideAndDetach(resumeSource: true);
             }
 
             foreach (var t in Tabs)
@@ -1159,14 +1173,25 @@ public partial class MainWindow : Window
 
         if (_pipWindow.IsVisible && _pipWindow.TargetTab == _activeTab)
         {
-            _pipWindow.HideAndDetach();
-            ReinsertWebViewToContainer(_activeTab);
+            _pipWindow.HideAndDetach(resumeSource: true);
         }
         else
         {
-            _pipWindow.AttachTab(_activeTab);
-            if (!_pipWindow.IsVisible)
+            OpenMiniPlayer(_activeTab);
+        }
+    }
+
+    private async void OpenMiniPlayer(BrowserTab tab)
+    {
+        try
+        {
+            await _pipWindow.AttachTabAsync(tab);
+            if (_pipWindow.TargetTab == tab && !_pipWindow.IsVisible)
                 _pipWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MiniPlayer] {ex.Message}");
         }
     }
 
@@ -1606,9 +1631,7 @@ public partial class MainWindow : Window
         var tab = GetTabFromMenuItem(sender);
         if (tab != null)
         {
-            _pipWindow.AttachTab(tab);
-            if (!_pipWindow.IsVisible)
-                _pipWindow.Show();
+            OpenMiniPlayer(tab);
         }
     }
 
