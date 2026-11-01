@@ -28,14 +28,7 @@ public class HistoryEntry
         }
     }
 
-    public string FaviconUrl
-    {
-        get
-        {
-            if (string.IsNullOrWhiteSpace(Domain)) return "pack://application:,,,/Assets/logo.png";
-            return "pack://application:,,,/Assets/logo.png";
-        }
-    }
+    public string FaviconUrl => "pack://application:,,,/Assets/logo.png";
 }
 
 public class DomainVisitStat

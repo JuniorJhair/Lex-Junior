@@ -87,10 +87,6 @@ public partial class MainWindow : Window
         SettingsManager.SettingsChanged += ApplySettings;
         ApplySettings();
 
-        // Inicializar redimensionador libre de mini-reproductor nativo
-        NativePipResizer.Initialize();
-        Closed += (s, e) => NativePipResizer.Shutdown();
-
         // Callback cuando el usuario pulsa "⇱ Volver" en la Página Flotante manual
         _pipWindow.OnReturnToTabRequested = (tab) =>
         {
@@ -445,11 +441,6 @@ public partial class MainWindow : Window
         core.NavigationStarting += (s, e) =>
         {
             if (tab.IsDisposed) return;
-            if (e.Uri.EndsWith("/blocked.html", StringComparison.OrdinalIgnoreCase) || e.Uri.Contains("/blocked.html?"))
-            {
-                e.Cancel = true;
-                return;
-            }
 
             Dispatcher.Invoke(() =>
             {
@@ -457,15 +448,6 @@ public partial class MainWindow : Window
                 tab.IsLoading = true;
                 if (_activeTab == tab) LoadingProgressBar.Visibility = Visibility.Visible;
             });
-        };
-
-        core.FrameNavigationStarting += (s, e) =>
-        {
-            if (tab.IsDisposed) return;
-            if (e.Uri.EndsWith("/blocked.html", StringComparison.OrdinalIgnoreCase) || e.Uri.Contains("/blocked.html?"))
-            {
-                e.Cancel = true;
-            }
         };
 
         core.FaviconChanged += (s, e) =>

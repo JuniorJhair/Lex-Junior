@@ -51,7 +51,7 @@ public partial class FloatingPipWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     // ATTACH: Mueve el WebView2 de la pestaña al área de video del PiP
     // ─────────────────────────────────────────────────────────────────────
-    public void AttachTab(BrowserTab tab, bool? videoOnlyMode = null, bool isShort = false)
+    public void AttachTab(BrowserTab tab, bool? videoOnlyMode = null)
     {
         // Si ya hay otra pestaña, primero devolvemos su WebView
         if (TargetTab != null && TargetTab != tab)
@@ -79,7 +79,7 @@ public partial class FloatingPipWindow : Window
 
         // Ajustar dimensiones iniciales según sea video vertical (Shorts) o estándar (16:9)
         var workArea = SystemParameters.WorkArea;
-        bool isVertical = isShort || (!string.IsNullOrEmpty(tab.Url) && tab.Url.Contains("/shorts/"));
+        bool isVertical = !string.IsNullOrEmpty(tab.Url) && tab.Url.Contains("/shorts/");
         if (isVertical)
         {
             double w = 420;
