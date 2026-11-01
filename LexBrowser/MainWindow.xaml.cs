@@ -510,7 +510,7 @@ public partial class MainWindow : Window
                 tab.Title = string.IsNullOrWhiteSpace(core.DocumentTitle) ? "Nueva pestaña" : core.DocumentTitle;
                 if (!tab.IsIncognito && !string.IsNullOrWhiteSpace(core.Source))
                 {
-                    HistoryManager.AddEntry(core.Source, tab.Title);
+                    HistoryManager.UpdateTitle(core.Source, tab.Title);
                 }
             }
 

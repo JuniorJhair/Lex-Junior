@@ -14,25 +14,21 @@ public static class BrowserEngine
     private static readonly SemaphoreSlim _initLock = new(1, 1);
 
     /// <summary>
-    /// Flags de Chromium diseñados para eliminar telemetría, desactivar procesos
-    /// en segundo plano inútiles, reducir el consumo de RAM y optimizar video por hardware.
+    /// Flags de Chromium para reducir telemetría y procesos en segundo plano inútiles.
+    /// Se evitan a propósito --disable-renderer-backgrounding, --disable-backgrounding-occluded-windows y
+    /// desactivar CalculateNativeWinOcclusion: mantenían las pestañas ocultas a prioridad completa (más CPU/RAM/batería).
     /// </summary>
     private const string OptimizedEngineFlags =
         "--disable-background-networking " +
         "--disable-sync " +
-        "--disable-component-update " +
         "--no-pings " +
         "--disable-breakpad " +
         "--disable-domain-reliability " +
         "--disable-client-side-phishing-detection " +
-        "--disable-speech-api " +
         "--disable-default-apps " +
-        "--disable-features=OptimizationHints,Translate,InterestCohort," +
-            "CalculateNativeWinOcclusion,MediaEngagementBypassAutoplayPolicies " +
-        "--enable-features=OverlayScrollbar,AutoPictureInPictureVideoHeuristics " +
-        "--autoplay-policy=no-user-gesture-required " +
-        "--disable-renderer-backgrounding " +
-        "--disable-backgrounding-occluded-windows";
+        "--disable-features=OptimizationHints,Translate,InterestCohort " +
+        "--enable-features=OverlayScrollbar " +
+        "--autoplay-policy=no-user-gesture-required";
 
     /// <summary>
     /// Devuelve el entorno WebView2 compartido, creándolo una sola vez de forma

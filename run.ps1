@@ -1,28 +1,30 @@
 # Lanzador rápido de Lex Junior Browser
-$ErrorActionPreference = "SilentlyContinue"
+# Cierra cualquier instancia previa (evita archivos bloqueados y la acumulación de .bak), compila y abre.
+param(
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Release"
+)
 
 $projectDir = Join-Path $PSScriptRoot "LexBrowser"
-$binDir = Join-Path $projectDir "bin\Debug\net8.0-windows"
-$exePath = Join-Path $binDir "LexBrowser.exe"
+$project = Join-Path $projectDir "LexBrowser.csproj"
+$exePath = Join-Path $projectDir "bin\$Configuration\net8.0-windows\LexBrowser.exe"
 
-# Rotar binarios si estuvieran retenidos por un proceso previo
-if (Test-Path $exePath) {
-    $rand = [System.IO.Path]::GetRandomFileName()
-    Move-Item -Path $exePath -Destination "$exePath.$rand.bak" -Force -ErrorAction SilentlyContinue
-    $dllPath = Join-Path $binDir "LexBrowser.dll"
-    if (Test-Path $dllPath) {
-        Move-Item -Path $dllPath -Destination "$dllPath.$rand.bak" -Force -ErrorAction SilentlyContinue
-    }
+Get-Process -Name "LexBrowser" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Milliseconds 300
+
+Write-Host "Compilando Lex Junior Browser ($Configuration)..." -ForegroundColor Cyan
+dotnet build $project -c $Configuration --verbosity minimal
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: la compilación falló." -ForegroundColor Red
+    exit $LASTEXITCODE
 }
-
-Write-Host "Compilando Lex Junior Browser..." -ForegroundColor Cyan
-dotnet build (Join-Path $projectDir "LexBrowser.csproj") --verbosity minimal
 
 if (Test-Path $exePath) {
     Write-Host "Iniciando Lex Junior Browser..." -ForegroundColor Green
     Start-Process $exePath
 }
 else {
-    Write-Host "Error: No se encontró LexBrowser.exe" -ForegroundColor Red
+    Write-Host "Error: no se encontró $exePath" -ForegroundColor Red
+    exit 1
 }
-    

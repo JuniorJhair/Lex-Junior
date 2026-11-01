@@ -32,4 +32,11 @@ public partial class App : Application
 
         base.OnStartup(e);
     }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        // Garantiza que el historial pendiente (guardado diferido) llegue a disco al cerrar
+        try { LexBrowser.Core.HistoryManager.Flush(); } catch { }
+        base.OnExit(e);
+    }
 }

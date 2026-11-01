@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="LexBrowser.Tests/LexBrowser.Tests.csproj" />
+  <Project Path="LexBrowser/LexBrowser.csproj" />
+</Solution>

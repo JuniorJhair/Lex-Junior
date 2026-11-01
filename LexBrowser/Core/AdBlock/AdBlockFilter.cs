@@ -74,6 +74,7 @@ public static class AdBlockFilter
         "adcash.com",
         "onclickalgo.com",
         "onclickperformance.com",
+        "onclickads.net",
         "mgid.com",
         "yadro.ru",
         "aniview.com",
@@ -132,6 +133,8 @@ public static class AdBlockFilter
     };
 
     // ── Patrones de URL de telemetría, popunders y recursos publicitarios ─
+    // Solo patrones específicos de publicidad. Se descartaron los genéricos que rompían sitios
+    // legítimos ("onclick", "vast.xml", "campaign_id=", "/youtubei/v1/att/", "log_event").
     private static readonly string[] GenericAdUrlPatterns = new[]
     {
         "/api/stats/ads",
@@ -139,14 +142,12 @@ public static class AdBlockFilter
         "/ptracking",
         "/youtubei/v1/player/ad_break",
         "/get_midroll_info",
-        "/youtubei/v1/att/",
         "adformat=",
         "&ad_type=",
         "&adflag=1",
         "&ad_url=",
         "&ad_host=",
         "googleads.g.doubleclick.net",
-        "youtubei.googleapis.com/youtubei/v1/log_event",
         "/popunder",
         "/popcash",
         "/direct-link",
@@ -154,13 +155,9 @@ public static class AdBlockFilter
         "track/ad",
         "click.php?",
         "servedbyadbutler",
-        "onclick",
         "/adserver/",
-        "vast.xml",
         "monetag",
         "zoneid=",
-        "zoneId=",
-        "campaign_id=",
         "/ads.js",
         "aclib.js",
         "/tag.min.js",
@@ -187,14 +184,39 @@ public static class AdBlockFilter
         ".quest"
     };
 
+    // ── Palabras que, dentro del HOST de un popup externo, indican red publicitaria ──
+    private static readonly string[] SuspiciousHostKeywords = new[]
+    {
+        "popunder", "adserver", "adclick", "rotator", "onclickads", "syndication"
+    };
+
     // ── Dominios seguros globales (navegación legítima de usuario) ────────
     private static readonly HashSet<string> TrustedRootDomains = new(StringComparer.OrdinalIgnoreCase)
     {
         "google.com", "google.com.pe", "google.es", "bing.com", "microsoft.com",
         "youtube.com", "youtu.be", "wikipedia.org", "github.com", "reddit.com",
         "twitter.com", "x.com", "facebook.com", "instagram.com", "twitch.tv",
-        "amazon.com", "discord.com", "apple.com", "netflix.com", "spotify.com"
+        "amazon.com", "discord.com", "apple.com", "netflix.com", "spotify.com",
+        "live.com", "microsoftonline.com", "paypal.com", "linkedin.com", "mercadolibre.com"
     };
+
+    /// <summary>
+    /// Devuelve true si el host, o cualquiera de sus dominios padre, está en <paramref name="set"/>.
+    /// Recorre las etiquetas del host (a.b.c → a.b.c, b.c, c): coste O(etiquetas), no O(tamaño de la lista).
+    /// </summary>
+    private static bool HostMatchesSet(string host, HashSet<string> set)
+    {
+        if (string.IsNullOrEmpty(host)) return false;
+
+        int start = 0;
+        while (true)
+        {
+            if (set.Contains(host.Substring(start))) return true;
+            int dot = host.IndexOf('.', start);
+            if (dot < 0) return false;
+            start = dot + 1;
+        }
+    }
 
     public static bool ShouldBlock(Uri? uri)
     {
@@ -205,14 +227,7 @@ public static class AdBlockFilter
         string fullUrl = uri.AbsoluteUri;
 
         // 1. Bloquear dominios completos (incluyendo subdominios)
-        foreach (var domain in BlockedDomains)
-        {
-            if (host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
-                host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
+        if (HostMatchesSet(host, BlockedDomains)) return true;
 
         // 2. Bloquear Facebook solo en paths de tracking
         if (FacebookBlockedHosts.Contains(host) ||
@@ -263,10 +278,14 @@ public static class AdBlockFilter
             }
         }
 
-        // 2. Identificadores de trackers de afiliados y popunders (trkr.*, ?z=, zoneid)
-        if (targetHost.StartsWith("trkr.") || targetHost.Contains("trkr.") || targetHost.Contains("ppof.net") ||
-            targetUrl.Contains("?z=") || targetUrl.Contains("&z=") || targetUrl.Contains("link?z=") ||
-            targetUrl.Contains("zoneid=") || targetUrl.Contains("zoneid"))
+        // Los dominios de confianza (Google, Microsoft, PayPal…) nunca se tratan como popunder:
+        // sus URLs usan parámetros como &z= (zoom de Maps) o redirect_uri (OAuth) de forma legítima.
+        if (IsTrustedDomain(targetHost)) return false;
+
+        // 2. Identificadores de trackers de afiliados y popunders (trkr.*, ?z=, zoneid=)
+        if (targetHost.Contains("trkr.") || targetHost.Contains("ppof.net") ||
+            targetUrl.Contains("?z=") || targetUrl.Contains("&z=") ||
+            targetUrl.Contains("zoneid="))
         {
             return true;
         }
@@ -280,43 +299,26 @@ public static class AdBlockFilter
             }
         }
 
-        // 4. Palabras clave sospechosas en el host o parámetros de redirección publicitaria
-        string[] suspiciousKeywords = new[]
+        // 4. Palabras de red publicitaria en el host
+        foreach (var kw in SuspiciousHostKeywords)
         {
-            "onclick", "popunder", "adserver", "syndication", "tracker",
-            "affiliate", "campaign", "adclick", "redirect", "rotator", "promo", "traff"
-        };
-
-        foreach (var kw in suspiciousKeywords)
-        {
-            if (targetHost.Contains(kw) || targetUrl.Contains("?" + kw) || targetUrl.Contains("&" + kw))
-            {
-                return true;
-            }
+            if (targetHost.Contains(kw)) return true;
         }
 
-        // 5. Si proviene de un sitio web que no es el actual, no es un dominio seguro de confianza,
-        // y tiene múltiples niveles de redirección o query params de destino sospechosos:
-        if (currentSiteUri != null && !IsTrustedDomain(targetHost))
+        // 5. Redirección abierta: otra URL completa incrustada tal cual (sin codificar) en la dirección
+        //    de un dominio desconocido, abierta desde otro sitio.
+        if (currentSiteUri != null)
         {
-            if (targetUrl.Contains("http://") || targetUrl.Contains("https://") && targetUrl.IndexOf("https://", 8) > 0)
+            int schemeEnd = targetUrl.IndexOf("://", StringComparison.Ordinal);
+            if (schemeEnd >= 0 && targetUrl.IndexOf("://", schemeEnd + 3, StringComparison.Ordinal) > 0)
             {
-                return true; // Intento de redirección abierta (open redirect)
+                return true;
             }
         }
 
         return false;
     }
 
-    private static bool IsTrustedDomain(string host)
-    {
-        foreach (var trusted in TrustedRootDomains)
-        {
-            if (host.Equals(trusted, StringComparison.OrdinalIgnoreCase) || host.EndsWith("." + trusted, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
+    private static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);
 }
+
