@@ -194,7 +194,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Grid x:Name="RootWindowGrid">
         <Grid.RowDefinitions>
             <!-- Fila 0: Barra de título con pestañas y controles de ventana -->
             <RowDefinition x:Name="RowHeader" Height="42"/>

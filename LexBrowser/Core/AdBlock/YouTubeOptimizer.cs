@@ -398,10 +398,25 @@ public static class YouTubeOptimizer
         const feedback = document.getElementById('feedback');
         if (feedback) {
             const dialog = feedback.closest('tp-yt-paper-dialog');
-            if (dialog) dialog.remove();
+            if (dialog) {
+                if (typeof dialog.close === 'function') {
+                    try { dialog.close(); } catch(_) { dialog.remove(); }
+                } else {
+                    const dismissBtn = dialog.querySelector('#dismiss-button, button[aria-label=""Dismiss""], button[aria-label=""Cancelar""]');
+                    if (dismissBtn) {
+                        dismissBtn.click();
+                    } else {
+                        dialog.remove();
+                    }
+                }
+            }
         }
-        const backdrop = document.querySelector('tp-yt-iron-overlay-backdrop');
-        if (backdrop) backdrop.remove();
+        if (document.body && document.body.style.overflow === 'hidden') {
+            document.body.style.overflow = '';
+        }
+        if (document.documentElement && document.documentElement.style.overflow === 'hidden') {
+            document.documentElement.style.overflow = '';
+        }
     };
 
     let wasMutedByAdBlock = false;
@@ -867,10 +882,7 @@ public static class YouTubeOptimizer
                 pointer-events: none !important;
             }
 
-            /* YouTube Shorts: Asegurar que el reproductor y la barra de tiempo/progreso nunca se desborden ni se oculten */
-            ytd-shorts {
-                overflow-y: auto !important;
-            }
+            /* YouTube Shorts: Asegurar que la barra de tiempo/progreso nunca se oculte */
             ytd-reel-player-progress-bar-view-model,
             .ytd-reel-player-progress-bar-view-model,
             ytd-shorts [class*=""progress-bar""],

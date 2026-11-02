@@ -110,6 +110,8 @@ public partial class MainWindow : Window
 
         Loaded += MainWindow_Loaded;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        StateChanged += MainWindow_StateChanged;
+        UpdateWindowMargin();
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -258,6 +260,7 @@ public partial class MainWindow : Window
                     ResizeMode = ResizeMode.NoResize;
                     WindowState = WindowState.Normal;
                     WindowState = WindowState.Maximized;
+                    UpdateWindowMargin();
                 }
                 else
                 {
@@ -272,6 +275,7 @@ public partial class MainWindow : Window
 
                     ResizeMode = _savedResizeMode;
                     WindowState = _savedWindowState;
+                    UpdateWindowMargin();
                 }
             });
         };
@@ -1711,5 +1715,33 @@ public partial class MainWindow : Window
         _pipWindow.OnDetachWebView = null;
         _pipWindow.Close();
         Close();
+    }
+
+    private void MainWindow_StateChanged(object? sender, EventArgs e)
+    {
+        UpdateWindowMargin();
+        if (WindowState == WindowState.Maximized)
+        {
+            BtnMaxRestore.Content = "❐";
+        }
+        else if (WindowState == WindowState.Normal)
+        {
+            BtnMaxRestore.Content = "□";
+        }
+    }
+
+    private void UpdateWindowMargin()
+    {
+        bool isFullscreen = _activeTab?.WebView?.CoreWebView2?.ContainsFullScreenElement ?? false;
+        if (WindowState == WindowState.Maximized && !isFullscreen && WindowChrome.GetWindowChrome(this) != null)
+        {
+            // En WindowStyle="None" con WindowChrome, Win32 expande la ventana 8px fuera de la pantalla.
+            // Un margen de 8px en RootWindowGrid asegura que la barra de scroll y los Shorts queden 100% dentro del monitor.
+            RootWindowGrid.Margin = new Thickness(8);
+        }
+        else
+        {
+            RootWindowGrid.Margin = new Thickness(0);
+        }
     }
 }
