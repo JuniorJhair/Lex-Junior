@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -45,6 +46,7 @@ public class BookmarkItem : INotifyPropertyChanged
         set => SetField(ref _faviconUrl, value);
     }
 
+    [JsonIgnore]
     public ImageSource? FaviconImage
     {
         get
@@ -97,9 +99,12 @@ public class BookmarkItem : INotifyPropertyChanged
         }
     }
 
+    [JsonIgnore]
     public bool HasFaviconImage => FaviconImage != null;
+    [JsonIgnore]
     public bool HasNoFaviconImage => FaviconImage == null;
 
+    [JsonIgnore]
     public string DisplayIcon
     {
         get

@@ -343,6 +343,7 @@
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsIncognito}" Value="True">
                                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="#8B5CF6"/>
+                                            <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
                                         </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
@@ -401,7 +402,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="🔒" FontSize="11" Foreground="#10B981" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="TxtSecurityIcon" Grid.Column="0" Text="🔍" FontSize="11" Foreground="#9CA3AF" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="Búsqueda o dirección web"/>
 
                     <!-- Input URL: Comportamiento exacto de Chrome/Brave implementado -->
                     <TextBox x:Name="TxtUrl" Grid.Column="1" Background="Transparent" BorderThickness="0" 
@@ -432,7 +433,7 @@
                 </Grid>
             </Border>
 
-            <!-- Botones a la derecha: Página Flotante, 0 Telemetría y Configuración -->
+            <!-- Botones a la derecha: Página Flotante, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,12,0">
                 <!-- Botón Página Flotante (Controlable desde configuración) -->
                 <Button x:Name="BtnTogglePip" Style="{StaticResource NavBtn}" Width="118" Margin="4,0" 
@@ -445,6 +446,187 @@
                     </Border>
                 </Button>
 
+                <!-- Botón Amplificador de Volumen (Hasta 300% estilo Volume Master) -->
+                <Button x:Name="BtnVolumeBooster" Style="{StaticResource NavBtn}" Width="74" Margin="2,0"
+                        ToolTip="Amplificador de Volumen: ajusta el volumen de esta pestaña hasta 300%" Click="BtnVolumeBooster_Click">
+                    <Border x:Name="BorderVolumeBooster" Background="#252536" CornerRadius="8" Padding="7,4">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtVolumeBoosterIcon" Text="🔊" FontSize="11" Margin="0,0,4,0" Foreground="#38BDF8"/>
+                            <TextBlock x:Name="TxtVolumeBoosterLabel" Text="100%" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextLight}"/>
+                        </StackPanel>
+                    </Border>
+                </Button>
+
+                <!-- Popup Amplificador de Volumen (0% a 300%) -->
+                <Popup x:Name="PopupVolumeBooster" PlacementTarget="{Binding ElementName=BtnVolumeBooster}" Placement="Bottom"
+                       VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Background="#181822" BorderBrush="#3B3B52" BorderThickness="1.5" CornerRadius="12" Padding="16,14" Width="310">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="6" Opacity="0.7" Color="#000000"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🔊 " FontSize="13" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Amplificador de Volumen" Foreground="#F4F4F5" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <Border Background="#26263A" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6" Padding="8,2" HorizontalAlignment="Right">
+                                    <TextBlock x:Name="TxtVolumePopupValue" Text="100%" Foreground="#818CF8" FontSize="12" FontWeight="Black"/>
+                                </Border>
+                            </Grid>
+
+                            <!-- Barra horizontal de volumen (0% a 300%) -->
+                            <Slider x:Name="SliderVolumeBoost" Minimum="0" Maximum="300" Value="100"
+                                    TickFrequency="5" IsSnapToTickEnabled="False" Cursor="Hand"
+                                    ValueChanged="SliderVolumeBoost_ValueChanged" Margin="0,4,0,4"/>
+
+                            <Grid Margin="0,0,0,12">
+                                <TextBlock Text="0%" Foreground="#71717A" FontSize="10" HorizontalAlignment="Left"/>
+                                <TextBlock Text="100%" Foreground="#A1A1AA" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Left" Margin="85,0,0,0"/>
+                                <TextBlock Text="200%" Foreground="#71717A" FontSize="10" HorizontalAlignment="Right" Margin="0,0,82,0"/>
+                                <TextBlock Text="300% Máx" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                            </Grid>
+
+                            <!-- Botones de preajuste y Restablecer -->
+                            <UniformGrid Columns="4" Margin="0,2,0,0">
+                                <Button Content="↺ 100%" Click="BtnVolumeReset_Click" Margin="0,0,4,0" Padding="6,5"
+                                        Background="#6366F1" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" BorderThickness="0" Cursor="Hand"
+                                        ToolTip="Restablecer volumen original al 100%"/>
+                                <Button Content="150%" Tag="150" Click="BtnVolumePreset_Click" Margin="2,0" Padding="6,5"
+                                        Background="#262636" Foreground="#E4E4E7" FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+                                <Button Content="200%" Tag="200" Click="BtnVolumePreset_Click" Margin="2,0" Padding="6,5"
+                                        Background="#262636" Foreground="#E4E4E7" FontSize="11" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand"/>
+                                <Button Content="300%" Tag="300" Click="BtnVolumePreset_Click" Margin="4,0,0,0" Padding="6,5"
+                                        Background="#262636" Foreground="#38BDF8" FontSize="11" FontWeight="Bold" BorderThickness="0" Cursor="Hand"/>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <!-- Botón Detector Multimedia y Archivos Bajo Demanda -->
+                <Button x:Name="BtnMediaSniffer" Style="{StaticResource NavBtn}" Width="106" Margin="2,0,4,0"
+                        ToolTip="Detector Multimedia Bajo Demanda: detecta y descarga videos, audios, imágenes y documentos de la página"
+                        Click="BtnMediaSniffer_Click">
+                    <Border x:Name="BorderMediaSniffer" Background="#252536" CornerRadius="8" Padding="7,4">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="DotMediaSnifferStatus" Width="6" Height="6" Fill="#71717A" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="📥" FontSize="11" Margin="0,0,4,0"/>
+                            <TextBlock x:Name="TxtMediaSnifferLabel" Text="Multimedia" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}"/>
+                        </StackPanel>
+                    </Border>
+                </Button>
+
+                <!-- Popup Detector Multimedia Bajo Demanda -->
+                <Popup x:Name="PopupMediaSniffer" PlacementTarget="{Binding ElementName=BtnMediaSniffer}" Placement="Bottom"
+                       VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Background="#181822" BorderBrush="#3B3B52" BorderThickness="1.5" CornerRadius="12" Padding="14" Width="430">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.75" Color="#000000"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <!-- Encabezado y botón de activación bajo demanda -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="📥 Detector Multimedia y Documentos" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtSnifferStatusSubtitle" Text="Apagado (0 MB RAM en reposo)" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <Button x:Name="BtnToggleSnifferActive" Grid.Column="1" Click="BtnToggleSnifferActive_Click"
+                                        Background="#6366F1" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11"
+                                        Padding="12,6" BorderThickness="0" Cursor="Hand">
+                                    <TextBlock x:Name="TxtToggleSnifferBtn" Text="⚡ Activar aquí"/>
+                                </Button>
+                            </Grid>
+
+                            <!-- Opciones de persistencia y acciones rápidas -->
+                            <Grid Margin="0,0,0,10">
+                                <CheckBox x:Name="ChkKeepSnifferOnNavigate" Content="Mantener activo al cambiar de página"
+                                          Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center"
+                                          Checked="ChkKeepSnifferOnNavigate_Changed" Unchecked="ChkKeepSnifferOnNavigate_Changed"
+                                          ToolTip="Si está desmarcado, el detector se apaga y libera memoria automáticamente al salir o recargar la página"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="🔄 Escanear" Click="BtnRescanMedia_Click" Background="#262638" Foreground="#E4E4E7"
+                                            FontSize="10.5" Padding="8,3" BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"
+                                            ToolTip="Volver a escanear elementos de la página actual"/>
+                                    <Button Content="🗑️ Limpiar" Click="BtnClearMedia_Click" Background="#262638" Foreground="#A1A1AA"
+                                            FontSize="10.5" Padding="8,3" BorderThickness="0" Cursor="Hand"
+                                            ToolTip="Limpiar lista detectada"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Filtros por tipo -->
+                            <UniformGrid Columns="4" Margin="0,0,0,8">
+                                <Button x:Name="BtnFilterAll" Content="Todos" Tag="Todos" Click="BtnMediaFilter_Click"
+                                        Background="#6366F1" Foreground="#FFFFFF" FontSize="10.5" FontWeight="Bold" Padding="4,4" Margin="0,0,3,0" BorderThickness="0" Cursor="Hand"/>
+                                <Button x:Name="BtnFilterVideo" Content="🎬 Video/Audio" Tag="VideoAudio" Click="BtnMediaFilter_Click"
+                                        Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="2,0" BorderThickness="0" Cursor="Hand"/>
+                                <Button x:Name="BtnFilterImage" Content="🖼️ Imágenes" Tag="Imagen" Click="BtnMediaFilter_Click"
+                                        Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="2,0" BorderThickness="0" Cursor="Hand"/>
+                                <Button x:Name="BtnFilterDoc" Content="📄 Docs/Otros" Tag="Documento" Click="BtnMediaFilter_Click"
+                                        Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="3,0,0,0" BorderThickness="0" Cursor="Hand"/>
+                            </UniformGrid>
+
+                            <!-- Lista de archivos detectados -->
+                            <Border Background="#12121A" BorderBrush="#272736" BorderThickness="1" CornerRadius="8" Padding="6" Height="230">
+                                <Grid>
+                                    <TextBlock x:Name="TxtMediaEmptyState"
+                                               Text="Presiona '⚡ Activar aquí' para detectar videos, audios, imágenes de alta resolución y documentos (PDF, ZIP, Office) en esta página."
+                                               Foreground="#71717A" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center" Margin="18"/>
+
+                                    <ScrollViewer x:Name="ScrollDetectedMedia" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                                        <ItemsControl x:Name="ItemsDetectedMedia">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="#1B1B26" BorderBrush="#2A2A3C" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,0,5">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <!-- Icono + Formato -->
+                                                            <Border Grid.Column="0" Background="#28283C" CornerRadius="5" Padding="6,3" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <TextBlock Text="{Binding CategoryIcon}" FontSize="11" Margin="0,0,4,0"/>
+                                                                    <TextBlock Text="{Binding FormatBadge}" Foreground="#818CF8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                            </Border>
+
+                                                            <!-- Nombre y Tamaño -->
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                                <TextBlock Text="{Binding FileName}" Foreground="#F4F4F5" FontSize="11" FontWeight="SemiBold"
+                                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}"/>
+                                                                <TextBlock Text="{Binding SizeDisplay}" Foreground="#9CA3AF" FontSize="9.5"/>
+                                                            </StackPanel>
+
+                                                            <!-- Copiar enlace -->
+                                                            <Button Grid.Column="2" Content="📋" Tag="{Binding}" Click="BtnCopyMediaUrl_Click"
+                                                                    Background="#262638" Foreground="#D4D4D8" FontSize="11" Padding="7,4" Margin="0,0,4,0"
+                                                                    BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Copiar enlace directo"/>
+
+                                                            <!-- Descargar archivo -->
+                                                            <Button Grid.Column="3" Content="⬇ Descargar" Tag="{Binding}" Click="BtnDownloadDetectedMedia_Click"
+                                                                    Background="#10B981" Foreground="#FFFFFF" FontSize="10.5" FontWeight="Bold" Padding="9,4"
+                                                                    BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Descargar archivo a tu equipo"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
                 <!-- Pill 0 Telemetría (Clic abre la pestaña explicativa en Configuración) -->
                 <Border Background="#16161D" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="4,0" 
                         Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="0 Telemetría: haz clic para ver cómo te protege y sus ventajas">
@@ -453,6 +635,18 @@
                         <TextBlock Text="0 Telemetría" FontSize="10" Foreground="#A1A1AA" FontWeight="SemiBold"/>
                     </StackPanel>
                 </Border>
+
+                <!-- Botón de Actualización Disponible (Solo aparece automáticamente cuando existe una nueva versión en GitHub) -->
+                <Button x:Name="BtnUpdateAvailable" Style="{StaticResource NavBtn}" Width="140" Margin="4,0" Visibility="Collapsed"
+                        ToolTip="¡Nueva versión de Lex Junior disponible! Haz clic para actualizar automáticamente"
+                        Click="BtnUpdateAvailable_Click">
+                    <Border Background="#065F46" BorderBrush="#10B981" BorderThickness="1" CornerRadius="8" Padding="8,4">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="⬆️" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtUpdateAvailableLabel" Text="Actualizar" FontSize="11" FontWeight="Bold" Foreground="#ECFDF5" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </Button>
 
                 <!-- Botón Historial 🕒 -->
                 <Button x:Name="BtnHistory" Style="{StaticResource NavBtn}" ToolTip="Historial de Navegación y Limpieza (Ctrl+H)" Click="BtnHistory_Click">

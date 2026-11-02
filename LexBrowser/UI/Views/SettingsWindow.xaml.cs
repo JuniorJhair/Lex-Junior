@@ -1,16 +1,19 @@
 using System;
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.Web.WebView2.Core;
 using LexBrowser.Core;
 
 namespace LexBrowser.UI.Views;
 
 public partial class SettingsWindow : Window
 {
+    private readonly CoreWebView2? _core;
     private bool _isInitializing = true;
 
-    public SettingsWindow()
+    public SettingsWindow(CoreWebView2? core = null)
     {
+        _core = core;
         InitializeComponent();
         LoadCurrentSettings();
         _isInitializing = false;
@@ -125,7 +128,7 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            var historyWin = new HistoryWindow
+            var historyWin = new HistoryWindow(_core)
             {
                 Owner = this
             };

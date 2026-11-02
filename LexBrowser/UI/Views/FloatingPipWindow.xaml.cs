@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using LexBrowser.Core;
 using LexBrowser.UI.Models;
 using Microsoft.Web.WebView2.Wpf;
 
@@ -21,14 +22,36 @@ public partial class FloatingPipWindow : Window
     // Callback: devuelve el WebView2 al BrowserContainer principal
     public Action<BrowserTab>? OnDetachWebView { get; set; }
 
-    private bool _isUpdatingSlider = false;
-    private bool _isMuted = false;
+    private bool _isAttaching = false;
 
     public FloatingPipWindow()
     {
         InitializeComponent();
+
+        // Restaurar último tamaño guardado por el usuario
+        double savedW = SettingsManager.Current.FloatingPipWidth;
+        double savedH = SettingsManager.Current.FloatingPipHeight;
+        if (savedW >= 200) Width = savedW;
+        if (savedH >= 150) Height = savedH;
+
         Loaded += FloatingPipWindow_Loaded;
         Closing += FloatingPipWindow_Closing;
+        SizeChanged += FloatingPipWindow_SizeChanged;
+    }
+
+    private void FloatingPipWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_isAttaching || !IsVisible) return;
+        if (WindowState == WindowState.Normal && Width >= 200 && Height >= 150)
+        {
+            bool isVertical = TargetTab != null && !string.IsNullOrEmpty(TargetTab.Url) && TargetTab.Url.Contains("/shorts/");
+            if (!isVertical)
+            {
+                SettingsManager.Current.FloatingPipWidth = Width;
+                SettingsManager.Current.FloatingPipHeight = Height;
+                SettingsManager.Save(notify: false);
+            }
+        }
     }
 
     private void FloatingPipWindow_Loaded(object sender, RoutedEventArgs e)
@@ -46,66 +69,67 @@ public partial class FloatingPipWindow : Window
         HideAndDetach();
     }
 
-    public bool IsVideoOnlyMode { get; private set; } = false;
-
     // ─────────────────────────────────────────────────────────────────────
-    // ATTACH: Mueve el WebView2 de la pestaña al área de video del PiP
+    // ATTACH: Mueve el WebView2 de la pestaña a la ventana de Página Flotante
     // ─────────────────────────────────────────────────────────────────────
-    public void AttachTab(BrowserTab tab, bool? videoOnlyMode = null)
+    public void AttachTab(BrowserTab tab)
     {
-        // Si ya hay otra pestaña, primero devolvemos su WebView
-        if (TargetTab != null && TargetTab != tab)
+        _isAttaching = true;
+        try
         {
-            DetachCurrentWebView();
+            // Si ya hay otra pestaña, primero devolvemos su WebView
+            if (TargetTab != null && TargetTab != tab)
+            {
+                DetachCurrentWebView();
+            }
+
+            TargetTab = tab;
+
+            // Quitar el WebView2 de su padre actual (BrowserContainer)
+            var webView = tab.WebView;
+            if (webView.Parent is Panel oldParent)
+            {
+                oldParent.Children.Remove(webView);
+            }
+
+            // Insertar el WebView2 real dentro del VideoContainer de la ventana flotante
+            VideoContainer.Children.Clear();
+            VideoPlaceholder.Visibility = Visibility.Collapsed;
+            VideoContainer.Children.Add(webView);
+
+            // Ajustar dimensiones iniciales según sea video vertical (Shorts) o estándar (conservando el último tamaño elegido por el usuario)
+            var workArea = SystemParameters.WorkArea;
+            bool isVertical = !string.IsNullOrEmpty(tab.Url) && tab.Url.Contains("/shorts/");
+            if (isVertical)
+            {
+                double w = 420;
+                double h = Math.Min(740, workArea.Height - 40);
+                Width = w;
+                Height = h;
+                Left = workArea.Right - w - 24;
+                Top = workArea.Bottom - h - 24;
+            }
+            else
+            {
+                double w = SettingsManager.Current.FloatingPipWidth >= 200 ? SettingsManager.Current.FloatingPipWidth : 640;
+                double h = SettingsManager.Current.FloatingPipHeight >= 150 ? SettingsManager.Current.FloatingPipHeight : 390;
+                w = Math.Min(w, workArea.Width - 40);
+                h = Math.Min(h, workArea.Height - 40);
+
+                Width = w;
+                Height = h;
+                Left = Math.Max(workArea.Left, workArea.Right - w - 24);
+                Top = Math.Max(workArea.Top, workArea.Bottom - h - 24);
+            }
+
+            TxtPipBadge.Text = "🗖 Página Flotante";
+            string displayTitle = !string.IsNullOrWhiteSpace(tab.MediaTitle) ? tab.MediaTitle : tab.Title;
+            UpdateMediaControls(displayTitle, tab.MediaCurrentTime, tab.MediaDuration, tab.MediaIsPlaying);
         }
-
-        TargetTab = tab;
-
-        // Auto-detectar modo Solo Video: si es YouTube o tiene multimedia activa, activar Solo Video por defecto para estiramiento libre
-        bool isMediaTab = tab.HasActiveMedia || (!string.IsNullOrWhiteSpace(tab.Url) && tab.Url.Contains("youtube.com"));
-        IsVideoOnlyMode = videoOnlyMode ?? isMediaTab;
-
-        // Quitar el WebView2 de su padre actual (BrowserContainer)
-        var webView = tab.WebView;
-        if (webView.Parent is Panel oldParent)
+        finally
         {
-            oldParent.Children.Remove(webView);
+            _isAttaching = false;
         }
-
-        // Insertar el WebView2 real dentro del VideoContainer del PiP
-        VideoContainer.Children.Clear();
-        VideoPlaceholder.Visibility = Visibility.Collapsed;
-        VideoContainer.Children.Add(webView);
-
-        // Ajustar dimensiones iniciales según sea video vertical (Shorts) o estándar (16:9)
-        var workArea = SystemParameters.WorkArea;
-        bool isVertical = !string.IsNullOrEmpty(tab.Url) && tab.Url.Contains("/shorts/");
-        if (isVertical)
-        {
-            double w = 420;
-            double h = Math.Min(740, workArea.Height - 40);
-            Width = w;
-            Height = h;
-            Left = workArea.Right - w - 24;
-            Top = workArea.Bottom - h - 24;
-        }
-        else
-        {
-            double w = 640;
-            double h = 390;
-            Width = w;
-            Height = h;
-            Left = workArea.Right - w - 24;
-            Top = workArea.Bottom - h - 24;
-        }
-
-        // Configurar badge y modo
-        TxtPipBadge.Text = IsVideoOnlyMode ? "▶ Mini-Reproductor" : "🗖 Página Flotante";
-        TxtToggleVideoOnly.Text = IsVideoOnlyMode ? "🗖 Web Completa" : "🎬 Solo Video";
-        SendJsCommand("set_video_only_mode", IsVideoOnlyMode);
-
-        // Sincronizar estado inicial de controles
-        UpdateMediaControls(tab.MediaTitle, tab.MediaCurrentTime, tab.MediaDuration, tab.MediaIsPlaying);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -116,17 +140,6 @@ public partial class FloatingPipWindow : Window
         if (TargetTab == null) return;
         var tab = TargetTab;
         TargetTab = null;
-
-        // Desactivar modo solo video antes de devolverlo
-        try
-        {
-            if (tab.WebView?.CoreWebView2 != null)
-            {
-                string json = JsonSerializer.Serialize(new { action = "set_video_only_mode", enabled = false });
-                tab.WebView.CoreWebView2.PostWebMessageAsJson(json);
-            }
-        }
-        catch { }
 
         // Quitar el WebView del VideoContainer
         VideoContainer.Children.Clear();
@@ -143,7 +156,7 @@ public partial class FloatingPipWindow : Window
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Actualizar los controles de la barra inferior
+    // Actualizar el título superior de la Página Flotante
     // ─────────────────────────────────────────────────────────────────────
     public void UpdateMediaControls(string title, double currentTime, double duration, bool isPlaying)
     {
@@ -152,33 +165,8 @@ public partial class FloatingPipWindow : Window
             if (!string.IsNullOrWhiteSpace(title))
             {
                 TxtHeaderTitle.Text = title;
-                TxtMediaTitle.Text = title;
-            }
-
-            TxtPlayPause.Text = isPlaying ? "⏸" : "▶";
-            BtnPlayPause.Background = isPlaying
-                ? System.Windows.Media.Brushes.Transparent
-                : new System.Windows.Media.SolidColorBrush(
-                    (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#6366F1"));
-
-            TxtCurrentTime.Text = FormatTime(currentTime);
-            TxtDuration.Text = FormatTime(duration);
-
-            if (duration > 0 && !SeekSlider.IsMouseCaptureWithin)
-            {
-                _isUpdatingSlider = true;
-                SeekSlider.Maximum = duration;
-                SeekSlider.Value = currentTime;
-                _isUpdatingSlider = false;
             }
         });
-    }
-
-    private static string FormatTime(double seconds)
-    {
-        if (double.IsNaN(seconds) || seconds < 0) return "0:00";
-        var ts = TimeSpan.FromSeconds(seconds);
-        return ts.Hours > 0 ? ts.ToString(@"h\:mm\:ss") : ts.ToString(@"m\:ss");
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -192,14 +180,6 @@ public partial class FloatingPipWindow : Window
         {
             try { DragMove(); } catch { }
         }
-    }
-
-    private void BtnToggleVideoOnly_Click(object sender, RoutedEventArgs e)
-    {
-        IsVideoOnlyMode = !IsVideoOnlyMode;
-        TxtPipBadge.Text = IsVideoOnlyMode ? "▶ Mini-Reproductor" : "🗖 Página Flotante";
-        TxtToggleVideoOnly.Text = IsVideoOnlyMode ? "🗖 Web Completa" : "🎬 Solo Video";
-        SendJsCommand("set_video_only_mode", IsVideoOnlyMode);
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -336,6 +316,12 @@ public partial class FloatingPipWindow : Window
         }
     }
 
+    private void BtnMinimize_Click(object sender, RoutedEventArgs e)
+    {
+        // Minimizar solo la ventana flotante a la barra de tareas; el video sigue corriendo y NO se cambia de pestaña
+        WindowState = WindowState.Minimized;
+    }
+
     private void BtnReturnToTab_Click(object sender, RoutedEventArgs e)
     {
         if (TargetTab != null)
@@ -347,71 +333,20 @@ public partial class FloatingPipWindow : Window
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
+        // Al pulsar 'X': se pausa el video y se cierra la ventana flotante, SIN llevar al usuario a la pestaña
+        SendJsCommand("pause");
         HideAndDetach();
-    }
-
-    private void BtnPlayPause_Click(object sender, RoutedEventArgs e)
-    {
-        SendJsCommand("toggle_play");
-    }
-
-    private void BtnRewind_Click(object sender, RoutedEventArgs e)
-    {
-        if (TargetTab != null)
-        {
-            double newTime = Math.Max(0, TargetTab.MediaCurrentTime - 10);
-            SendJsCommand("seek", newTime);
-        }
-    }
-
-    private void BtnForward_Click(object sender, RoutedEventArgs e)
-    {
-        if (TargetTab != null)
-        {
-            double newTime = Math.Min(TargetTab.MediaDuration, TargetTab.MediaCurrentTime + 10);
-            SendJsCommand("seek", newTime);
-        }
-    }
-
-    private void BtnMute_Click(object sender, RoutedEventArgs e)
-    {
-        _isMuted = !_isMuted;
-        TxtMute.Text = _isMuted ? "🔇" : "🔊";
-        SendJsCommand("toggle_mute");
-    }
-
-    private void SeekSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_isUpdatingSlider) return;
-        if (SeekSlider.IsMouseCaptureWithin)
-        {
-            SendJsCommand("seek", SeekSlider.Value);
-        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Enviar comandos JS al WebView2 de la pestaña
     // ─────────────────────────────────────────────────────────────────────
-    private void SendJsCommand(string action, object? extra = null)
+    private void SendJsCommand(string action)
     {
         try
         {
             if (TargetTab?.WebView?.CoreWebView2 == null) return;
-
-            string json;
-            if (action == "seek" && extra is double seekTime)
-            {
-                json = JsonSerializer.Serialize(new { action, time = seekTime });
-            }
-            else if (action == "set_video_only_mode" && extra is bool enabled)
-            {
-                json = JsonSerializer.Serialize(new { action, enabled });
-            }
-            else
-            {
-                json = JsonSerializer.Serialize(new { action });
-            }
-
+            string json = JsonSerializer.Serialize(new { action });
             TargetTab.WebView.CoreWebView2.PostWebMessageAsJson(json);
         }
         catch

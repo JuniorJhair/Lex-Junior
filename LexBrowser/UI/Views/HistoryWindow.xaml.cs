@@ -539,7 +539,7 @@ public partial class HistoryWindow : Window
             string cleanDomain = domain.ToLowerInvariant().Trim();
             if (cleanDomain.StartsWith("www.")) cleanDomain = cleanDomain.Substring(4);
 
-            // 1. Borrar cookies asociadas al dominio
+            // 1. Borrar cookies asociadas al dominio (y sus subdominios)
             if (cookies && _core.CookieManager != null)
             {
                 var allCookies = await _core.CookieManager.GetCookiesAsync("");
@@ -554,14 +554,49 @@ public partial class HistoryWindow : Window
                 }
             }
 
-            // 2. Limpieza de caché y almacenamiento
-            if (cache || storage)
+            // 2. Limpieza aislada por origen (Storage.clearDataForOrigin via CDP)
+            // Evita borrar LocalStorage o IndexedDB de otros sitios web del perfil global
+            if (cache || storage || cookies)
             {
-                var kinds = CoreWebView2BrowsingDataKinds.FileSystems;
-                if (cache) kinds |= CoreWebView2BrowsingDataKinds.CacheStorage | CoreWebView2BrowsingDataKinds.DiskCache;
-                if (storage) kinds |= CoreWebView2BrowsingDataKinds.LocalStorage | CoreWebView2BrowsingDataKinds.IndexedDb;
+                var storageTypes = new List<string>();
+                if (cookies) storageTypes.Add("cookies");
+                if (cache)
+                {
+                    storageTypes.Add("appcache");
+                    storageTypes.Add("cache_storage");
+                    storageTypes.Add("shader_cache");
+                }
+                if (storage)
+                {
+                    storageTypes.Add("file_systems");
+                    storageTypes.Add("indexeddb");
+                    storageTypes.Add("local_storage");
+                    storageTypes.Add("websql");
+                    storageTypes.Add("service_workers");
+                }
 
-                await _core.Profile.ClearBrowsingDataAsync(kinds);
+                string typesCsv = string.Join(",", storageTypes);
+                string[] origins =
+                {
+                    $"https://{cleanDomain}",
+                    $"https://www.{cleanDomain}",
+                    $"http://{cleanDomain}",
+                    $"http://www.{cleanDomain}"
+                };
+
+                foreach (string origin in origins)
+                {
+                    try
+                    {
+                        string cdpParams = System.Text.Json.JsonSerializer.Serialize(new
+                        {
+                            origin,
+                            storageTypes = typesCsv
+                        });
+                        await _core.CallDevToolsProtocolMethodAsync("Storage.clearDataForOrigin", cdpParams);
+                    }
+                    catch { }
+                }
             }
         }
         catch { }

@@ -387,35 +387,62 @@ public static class YouTubeOptimizer
     // ─────────────────────────────────────────────────────────────────
     // 2. YOUTUBE: Anti-anuncios, cortina visual fantasma y salto instantáneo
     // ─────────────────────────────────────────────────────────────────
+    const closePolymerDialog = (dialog) => {
+        if (!dialog) return;
+        try { if (typeof dialog.cancel === 'function') dialog.cancel(); } catch(_) {}
+        try { if (typeof dialog.close === 'function') dialog.close(); } catch(_) {}
+        try {
+            dialog.removeAttribute('opened');
+            dialog.setAttribute('aria-hidden', 'true');
+            dialog.style.display = 'none';
+            dialog.style.pointerEvents = 'none';
+        } catch(_) {}
+    };
+
     const clearYouTubePopups = () => {
         if (!isYouTube) return;
         const enforcement = document.querySelector('ytd-enforcement-message-view-model');
         if (enforcement) {
+            const dialog = enforcement.closest('tp-yt-paper-dialog, ytd-modal-with-backdrop-renderer');
+            if (dialog) closePolymerDialog(dialog);
             enforcement.remove();
+            document.querySelectorAll('tp-yt-iron-overlay-backdrop').forEach(b => {
+                b.classList.remove('opened');
+                b.removeAttribute('opened');
+                b.style.pointerEvents = 'none';
+                b.style.display = 'none';
+            });
             const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
             if (player && typeof player.playVideo === 'function') player.playVideo();
         }
-        const feedback = document.getElementById('feedback');
+        const feedback = document.querySelector('tp-yt-paper-dialog #feedback');
         if (feedback) {
             const dialog = feedback.closest('tp-yt-paper-dialog');
             if (dialog) {
-                if (typeof dialog.close === 'function') {
-                    try { dialog.close(); } catch(_) { dialog.remove(); }
-                } else {
-                    const dismissBtn = dialog.querySelector('#dismiss-button, button[aria-label=""Dismiss""], button[aria-label=""Cancelar""]');
-                    if (dismissBtn) {
-                        dismissBtn.click();
-                    } else {
-                        dialog.remove();
-                    }
-                }
+                closePolymerDialog(dialog);
+                feedback.remove();
             }
         }
-        if (document.body && document.body.style.overflow === 'hidden') {
-            document.body.style.overflow = '';
+        // Cerrar cualquier tp-yt-paper-dialog que haya quedado abierto pero vacío (huérfano tras limpiar su contenido)
+        const openDialogs = document.querySelectorAll('tp-yt-paper-dialog:not([aria-hidden=""true""]), tp-yt-paper-dialog[opened]');
+        for (let i = 0; i < openDialogs.length; i++) {
+            const d = openDialogs[i];
+            if (d.children.length === 0 || d.querySelector('ytd-enforcement-message-view-model')) {
+                closePolymerDialog(d);
+            }
         }
-        if (document.documentElement && document.documentElement.style.overflow === 'hidden') {
-            document.documentElement.style.overflow = '';
+        // Neutralizar backdrops huérfanos cuando no exista un diálogo legítimo visible en pantalla
+        const openBackdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop.opened, tp-yt-iron-overlay-backdrop[opened]');
+        for (let i = 0; i < openBackdrops.length; i++) {
+            const b = openBackdrops[i];
+            const validDialog = document.querySelector('tp-yt-paper-dialog[opened]:not([aria-hidden=""true""]), ytd-modal-with-backdrop-renderer[opened]');
+            const isLegitOpen = validDialog && validDialog.children.length > 0 && validDialog.offsetWidth > 0 && !validDialog.querySelector('ytd-enforcement-message-view-model');
+            if (!isLegitOpen) {
+                b.classList.remove('opened');
+                b.removeAttribute('opened');
+                b.style.display = 'none';
+                b.style.pointerEvents = 'none';
+            }
         }
     };
 
@@ -538,12 +565,9 @@ public static class YouTubeOptimizer
             });
             ytPlayerObserver.observe(player, {
                 attributes: true,
-                attributeFilter: ['class'],
-                childList: true,
-                subtree: true
+                attributeFilter: ['class']
             });
 
-            // Neutralización inmediata en el primer milisegundo al encontrar el reproductor
             skipYouTubeAds();
             clearYouTubePopups();
         }
@@ -559,38 +583,216 @@ public static class YouTubeOptimizer
         }
         video.disablePictureInPicture = false;
 
-        // Escuchar el evento cuando el usuario presiona 'Volver a la pestaña' en el PiP nativo
         if (!video.__lex_pip_listener_attached) {
             video.__lex_pip_listener_attached = true;
-            video.addEventListener('leavepictureinpicture', () => {
+            video.addEventListener('enterpictureinpicture', () => {
                 if (window.chrome && window.chrome.webview) {
                     window.chrome.webview.postMessage({
-                        type: 'pip_return_requested',
-                        currentTime: video.currentTime,
-                        isPaused: video.paused,
-                        url: window.location.href,
-                        wasFullscreen: !!window.__lexWasFullscreen
+                        type: 'pip_entered',
+                        videoWidth: video.videoWidth || 16,
+                        videoHeight: video.videoHeight || 9,
+                        url: window.location.href
                     });
                 }
+            });
+            video.addEventListener('leavepictureinpicture', () => {
+                const programmatic = !!window.__lexProgrammaticPiPExit;
+                window.__lexProgrammaticPiPExit = false;
+                if (programmatic) return;
+                if (!(window.chrome && window.chrome.webview)) return;
+
+                window.chrome.webview.postMessage({
+                    type: 'pip_leaving_now',
+                    url: window.location.href
+                });
+
+                setTimeout(() => {
+                    const isPaused = video.paused;
+                    window.chrome.webview.postMessage({
+                        type: 'pip_left',
+                        currentTime: video.currentTime,
+                        isPaused: isPaused,
+                        url: window.location.href,
+                        isFullScreen: !!window.__lexWasFullscreen
+                    });
+                }, 120);
             });
         }
     };
 
     // Desbloquear videos existentes y bajo demanda al reproducir
     document.addEventListener('play', (e) => {
-        if (e.target && e.target.tagName === 'VIDEO') {
-            unlockVideoPiP(e.target);
+        if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {
+            if (e.target.tagName === 'VIDEO') unlockVideoPiP(e.target);
+            if (typeof window.__lexVolumePercent === 'number' && window.__lexVolumePercent !== 100) {
+                applyVolumeBoostToElement(e.target, window.__lexVolumePercent);
+            }
         }
     }, true);
     document.querySelectorAll('video').forEach(unlockVideoPiP);
 
+    // ─────────────────────────────────────────────────────────────────
+    // 3.1 AMPLIFICADOR DE VOLUMEN HASTA 300% (Lazy AudioContext + GainNode: 0 MB RAM en reposo)
+    // ─────────────────────────────────────────────────────────────────
+    window.__lexVolumePercent = 100;
+
+    const applyVolumeBoostToElement = (el, percent) => {
+        if (!el) return;
+        const p = Math.max(0, Math.min(300, Number(percent) || 100));
+        try {
+            if (p === 0) {
+                el.muted = true;
+                return;
+            }
+            if (el.muted && window.__lexMutedByZeroVol) {
+                el.muted = false;
+                window.__lexMutedByZeroVol = false;
+            }
+            if (p <= 100) {
+                el.volume = p / 100.0;
+                if (el.__lexGainNode) {
+                    el.__lexGainNode.gain.value = 1.0;
+                }
+                return;
+            }
+
+            // p > 100 (101% a 300%): Fijar volumen base al 100% y usar GainNode
+            el.volume = 1.0;
+            const mediaSrc = el.currentSrc || el.src || '';
+            const canUseWebAudio = !mediaSrc || mediaSrc.startsWith('blob:') || mediaSrc.startsWith('data:') || !!el.crossOrigin || (function() {
+                try { return new URL(mediaSrc, window.location.href).origin === window.location.origin; } catch(_) { return false; }
+            })();
+            if (canUseWebAudio && !el.__lexGainNode && !el.__lexAudioHookFailed) {
+                try {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        if (!window.__lexAudioCtx) {
+                            window.__lexAudioCtx = new AudioCtx();
+                        }
+                        if (window.__lexAudioCtx.state === 'suspended') {
+                            window.__lexAudioCtx.resume().catch(() => {});
+                        }
+                        const src = window.__lexAudioCtx.createMediaElementSource(el);
+                        const gain = window.__lexAudioCtx.createGain();
+                        const compressor = window.__lexAudioCtx.createDynamicsCompressor();
+                        compressor.threshold.value = -6;
+                        compressor.knee.value = 12;
+                        compressor.ratio.value = 4;
+                        src.connect(gain);
+                        gain.connect(compressor);
+                        compressor.connect(window.__lexAudioCtx.destination);
+                        el.__lexGainNode = gain;
+                    }
+                } catch (err) {
+                    el.__lexAudioHookFailed = true;
+                }
+            }
+            if (el.__lexGainNode) {
+                if (window.__lexAudioCtx && window.__lexAudioCtx.state === 'suspended') {
+                    window.__lexAudioCtx.resume().catch(() => {});
+                }
+                el.__lexGainNode.gain.value = p / 100.0;
+            }
+        } catch (_) {}
+    };
+
+    const applyVolumeBoostAll = (percent) => {
+        const p = Math.max(0, Math.min(300, Number(percent) || 100));
+        if (p === 0) window.__lexMutedByZeroVol = true;
+        window.__lexVolumePercent = p;
+        document.querySelectorAll('video, audio').forEach(el => applyVolumeBoostToElement(el, p));
+        // Propagar a iframes hijos (reproductores embebidos en sitios de anime/deportes)
+        document.querySelectorAll('iframe').forEach(ifr => {
+            try {
+                if (ifr.contentWindow) {
+                    ifr.contentWindow.postMessage({ __lex_cmd: 'set_volume_boost', percent: p }, '*');
+                }
+            } catch (_) {}
+        });
+    };
+
+    // ─────────────────────────────────────────────────────────────────
+    // 3.2 DETECTOR MULTIMEDIA Y DE DOCUMENTOS BAJO DEMANDA (0 consumo cuando está apagado)
+    // ─────────────────────────────────────────────────────────────────
+    const scanPageMediaOnDemand = () => {
+        try {
+            const items = [];
+            const seen = new Set();
+            const addUrl = (rawUrl, category) => {
+                if (!rawUrl || typeof rawUrl !== 'string') return;
+                if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) return;
+                let abs = rawUrl;
+                try { abs = new URL(rawUrl, window.location.href).href; } catch (_) { return; }
+                if (!abs.startsWith('http')) return;
+                if (seen.has(abs)) return;
+                seen.add(abs);
+                items.push({ url: abs, category: category || '' });
+            };
+
+            // 1. Videos y Audios en el DOM
+            document.querySelectorAll('video, audio').forEach(m => {
+                const cat = m.tagName === 'AUDIO' ? 'Audio' : 'Video';
+                if (m.currentSrc) addUrl(m.currentSrc, cat);
+                if (m.src) addUrl(m.src, cat);
+                m.querySelectorAll('source').forEach(s => addUrl(s.src, cat));
+            });
+
+            // 2. Imágenes de alta resolución y portadas OpenGraph
+            const ogImg = document.querySelector('meta[property=""og:image""]');
+            if (ogImg && ogImg.content) addUrl(ogImg.content, 'Imagen');
+
+            document.querySelectorAll('img').forEach(img => {
+                const w = img.naturalWidth || img.width || 0;
+                const h = img.naturalHeight || img.height || 0;
+                if (w >= 180 || h >= 180) {
+                    addUrl(img.currentSrc || img.src, 'Imagen');
+                }
+            });
+
+            // 3. Enlaces directos a documentos, comprimidos, audios y videos
+            const docRegex = /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|csv|txt|mp4|mkv|webm|mp3|wav|flac|ogg)(\?|#|$)/i;
+            document.querySelectorAll('a[href]').forEach(a => {
+                const href = a.getAttribute('href') || '';
+                if (docRegex.test(href) || a.hasAttribute('download')) {
+                    addUrl(a.href, '');
+                }
+            });
+
+            if (items.length > 0 && window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage({
+                    type: 'media_detected_batch',
+                    items: items.slice(0, 45)
+                });
+            }
+
+            // Solicitar escaneo a iframes hijos
+            document.querySelectorAll('iframe').forEach(ifr => {
+                try {
+                    if (ifr.contentWindow) {
+                        ifr.contentWindow.postMessage({ __lex_cmd: 'scan_page_media' }, '*');
+                    }
+                } catch (_) {}
+            });
+        } catch (_) {}
+    };
+
+    // Escuchar comandos propagados entre frames (iframes de reproductores)
+    window.addEventListener('message', (e) => {
+        try {
+            if (!e.data || typeof e.data !== 'object') return;
+            if (e.data.__lex_cmd === 'set_volume_boost') {
+                applyVolumeBoostAll(e.data.percent);
+            } else if (e.data.__lex_cmd === 'scan_page_media') {
+                scanPageMediaOnDemand();
+            }
+        } catch (_) {}
+    });
+
     const getActiveVideo = () => {
         const videos = Array.from(document.querySelectorAll('video'));
-        // 1. Preferir el video que esté reproduciéndose activamente
         const playing = videos.find(v => !v.paused && !v.ended && v.readyState > 1);
         if (playing) return playing;
 
-        // 2. Si no, cualquier video que tenga duración o tamaño visible
         const withDuration = videos.find(v => (v.duration > 0 || v.currentTime > 0) && v.offsetWidth > 0 && v.offsetHeight > 0);
         if (withDuration) return withDuration;
 
@@ -630,10 +832,10 @@ public static class YouTubeOptimizer
     window.__lexExitPiP = async function() {
         try {
             if (document.pictureInPictureElement && typeof document.exitPictureInPicture === 'function') {
-                try { await document.exitPictureInPicture(); } catch(e) {}
+                window.__lexProgrammaticPiPExit = true;
+                try { await document.exitPictureInPicture(); } catch(e) { window.__lexProgrammaticPiPExit = false; }
             }
 
-            // Si antes de ir a PiP estaba en pantalla completa, restaurar pantalla completa automáticamente
             if (window.__lexWasFullscreen) {
                 window.__lexWasFullscreen = false;
                 const video = getActiveVideo();
@@ -648,7 +850,7 @@ public static class YouTubeOptimizer
         } catch(e) {}
     };
 
-    // Sincronizar estado multimedia con C#
+    // Sincronizar estado multimedia con C# (solo cuando cambia play/pausa, título o está reproduciéndose)
     let lastMediaState = { isPlaying: false, title: '', currentTime: 0, duration: 0 };
     const syncMediaState = () => {
         const video = getActiveVideo();
@@ -667,8 +869,8 @@ public static class YouTubeOptimizer
 
         const stateChanged = (
             lastMediaState.isPlaying !== isPlaying ||
-            Math.abs(lastMediaState.currentTime - video.currentTime) > 1 ||
-            lastMediaState.title !== title
+            lastMediaState.title !== title ||
+            (isPlaying && Math.abs(lastMediaState.currentTime - video.currentTime) > 1)
         );
 
         if (stateChanged && window.chrome && window.chrome.webview) {
@@ -719,16 +921,18 @@ public static class YouTubeOptimizer
                 case 'set_mute':
                     if (video && typeof msg.muted === 'boolean') video.muted = msg.muted;
                     break;
-
-                // Mini-Reproductor: activar Picture-in-Picture nativo
+                case 'set_volume_boost':
+                    applyVolumeBoostAll(msg.percent);
+                    break;
+                case 'scan_page_media':
+                    scanPageMediaOnDemand();
+                    break;
                 case 'enter_pip':
                     if (window.__lexEnterPiP) await window.__lexEnterPiP();
                     break;
-
                 case 'exit_pip':
                     if (window.__lexExitPiP) await window.__lexExitPiP();
                     break;
-
                 case 'restore_fullscreen':
                     window.__lexWasFullscreen = false;
                     const fVideo = getActiveVideo();
@@ -740,82 +944,44 @@ public static class YouTubeOptimizer
                         } catch(e) {}
                     }
                     break;
-
-                // Mini-Reproductor libre: Estiramiento responsive 100% sin límites (shorts y videos)
-                case 'set_video_only_mode':
-                    if (typeof msg.enabled === 'boolean') {
-                        let pipStyle = document.getElementById('lex-video-only-style');
-                        if (msg.enabled) {
-                            if (!pipStyle) {
-                                pipStyle = document.createElement('style');
-                                pipStyle.id = 'lex-video-only-style';
-                                pipStyle.textContent = `
-                                    html, body {
-                                        overflow: hidden !important;
-                                        background: #000000 !important;
-                                        margin: 0 !important;
-                                        padding: 0 !important;
-                                    }
-                                    #masthead-container, ytd-mini-guide-renderer, #guide, #sidebar, #below, #comments, #secondary, ytd-shorts #actions {
-                                        display: none !important;
-                                    }
-                                    ytd-app, #page-manager, ytd-watch-flexy, #primary, #primary-inner, #player, #player-container-outer, #player-container, #movie_player, .html5-video-player {
-                                        width: 100vw !important;
-                                        height: 100vh !important;
-                                        max-width: 100vw !important;
-                                        max-height: 100vh !important;
-                                        position: fixed !important;
-                                        top: 0 !important;
-                                        left: 0 !important;
-                                        margin: 0 !important;
-                                        padding: 0 !important;
-                                        z-index: 2147483640 !important;
-                                        background: #000000 !important;
-                                    }
-                                    ytd-shorts, #shorts-container, ytd-reel-video-renderer {
-                                        width: 100vw !important;
-                                        height: 100vh !important;
-                                        max-width: 100vw !important;
-                                        max-height: 100vh !important;
-                                        position: fixed !important;
-                                        top: 0 !important;
-                                        left: 0 !important;
-                                        background: #000000 !important;
-                                    }
-                                    video {
-                                        width: 100% !important;
-                                        height: 100% !important;
-                                        max-width: 100% !important;
-                                        max-height: 100% !important;
-                                        object-fit: contain !important;
-                                    }
-                                `;
-                                (document.head || document.documentElement).appendChild(pipStyle);
-                            }
-                            const v = getActiveVideo();
-                            if (v && !v.__lex_click_toggle_attached) {
-                                v.__lex_click_toggle_attached = true;
-                                v.addEventListener('click', () => {
-                                    if (v.paused) v.play().catch(() => {}); else v.pause();
-                                });
-                            }
-                        } else {
-                            if (pipStyle) pipStyle.remove();
-                        }
-                    }
-                    break;
             }
         });
     }
 
-    // Atajos de teclado dentro de la página web (Ctrl + H para abrir Historial)
+    // Atajos de teclado dentro de la página web (Ctrl+N, Ctrl+T, Ctrl+Shift+N, Ctrl+Shift+T, Ctrl+W, Ctrl+H)
     try {
         window.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && (e.key === 'h' || e.key === 'H' || e.keyCode === 72)) {
+            if (!e.ctrlKey || e.altKey) return;
+            const k = (e.key || '').toLowerCase();
+            if (!e.shiftKey && k === 'h') {
                 e.preventDefault();
                 e.stopPropagation();
                 if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage(JSON.stringify({ type: 'open_history' }));
+                    window.chrome.webview.postMessage({ type: 'open_history' });
+                }
+            } else if (!e.shiftKey && (k === 'n' || k === 't')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({ type: 'shortcut_new_tab', incognito: false });
+                }
+            } else if (e.shiftKey && k === 'n') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({ type: 'shortcut_new_tab', incognito: true });
+                }
+            } else if (e.shiftKey && k === 't') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({ type: 'shortcut_reopen_tab' });
+                }
+            } else if (!e.shiftKey && k === 'w') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({ type: 'shortcut_close_tab' });
                 }
             }
         }, true);
@@ -830,7 +996,7 @@ public static class YouTubeOptimizer
             clearYouTubePopups();
         }, 350);
     } else {
-        setInterval(clearClickjackOverlays, 300);
+        setInterval(() => { if (!document.hidden) clearClickjackOverlays(); }, 1500);
     }
     setInterval(syncMediaState, 1000);
 
@@ -873,6 +1039,10 @@ public static class YouTubeOptimizer
             ytd-ad-slot-renderer,
             #player-ads,
             #masthead-ad,
+            /* Desactivar el backdrop y modal anti-adblock específicamente sin alterar menús legítimos */
+            ytd-enforcement-message-view-model,
+            tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
+            ytd-popup-container:has(ytd-enforcement-message-view-model) tp-yt-iron-overlay-backdrop,
             .ytd-merch-shelf-renderer,
             ytd-banner-promo-renderer {
                 display: none !important;
@@ -882,17 +1052,34 @@ public static class YouTubeOptimizer
                 pointer-events: none !important;
             }
 
-            /* YouTube Shorts: Asegurar que la barra de tiempo/progreso nunca se oculte */
+            /* Garantizar que el telón de fondo de Polymer jamás capture ni bloquee los clics del puntero */
+            tp-yt-iron-overlay-backdrop {
+                pointer-events: none !important;
+            }
+
+            /* YouTube Shorts: Garantizar visibilidad de barra de tiempo y controles sin alterar el layout nativo de YouTube */
             ytd-reel-player-progress-bar-view-model,
             .ytd-reel-player-progress-bar-view-model,
             ytd-shorts [class*=""progress-bar""],
             ytd-shorts #progress-bar,
             ytd-shorts .yt-progress-bar,
-            ytd-shorts [class*=""time-display""] {
+            ytd-shorts [class*=""time-display""],
+            desktop-shorts-player-controls,
+            .desktopShortsPlayerControlsHost,
+            .desktopShortsPlayerControlsHost * {
                 visibility: visible !important;
                 opacity: 1 !important;
-                display: flex !important;
                 z-index: 2147483640 !important;
+            }
+
+            #experiment-overlay {
+                overflow: visible !important;
+            }
+
+            desktop-shorts-player-controls,
+            .desktopShortsPlayerControlsHost {
+                transform: none !important;
+                bottom: 2px !important;
             }
         `;
         (document.head || document.documentElement).appendChild(style);

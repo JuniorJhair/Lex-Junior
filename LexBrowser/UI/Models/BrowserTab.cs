@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
@@ -12,6 +13,18 @@ public enum TabPinMode
     None,
     LogoOnly,
     LogoAndName
+}
+
+public class DetectedMediaItem
+{
+    public string Url { get; set; } = "";
+    public string Referer { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public string Category { get; set; } = "Video"; // "Video", "Audio", "Imagen", "Documento"
+    public string CategoryIcon { get; set; } = "🎬";
+    public string FormatBadge { get; set; } = "MP4";
+    public string SizeDisplay { get; set; } = "Directo";
+    public long SizeBytes { get; set; } = 0;
 }
 
 public class BrowserTab : INotifyPropertyChanged
@@ -32,10 +45,47 @@ public class BrowserTab : INotifyPropertyChanged
     private bool _isMuted = false;
     private bool _isIncognito = false;
     private bool _isNewTab = true;
+    private int _volumeBoostPercent = 100;
+    private bool _isMediaSnifferActive = false;
+    private bool _keepSnifferActiveOnNavigate = false;
 
     public Guid Id { get; } = Guid.NewGuid();
     public WebView2 WebView { get; }
+    public MainWindow? OwnerWindow { get; set; }
     public bool IsDisposed { get; set; } = false;
+
+    /// <summary>Nivel de amplificación de volumen de la pestaña (0% a 300%, por defecto 100%).</summary>
+    public int VolumeBoostPercent
+    {
+        get => _volumeBoostPercent;
+        set => SetField(ref _volumeBoostPercent, Math.Clamp(value, 0, 300));
+    }
+
+    /// <summary>Indica si el detector bajo demanda de archivos multimedia está activo en esta pestaña.</summary>
+    public bool IsMediaSnifferActive
+    {
+        get => _isMediaSnifferActive;
+        set => SetField(ref _isMediaSnifferActive, value);
+    }
+
+    /// <summary>Si es true, mantiene activo el detector multimedia al cambiar de página en esta pestaña.</summary>
+    public bool KeepSnifferActiveOnNavigate
+    {
+        get => _keepSnifferActiveOnNavigate;
+        set => SetField(ref _keepSnifferActiveOnNavigate, value);
+    }
+
+    /// <summary>Lista acotada de recursos multimedia/documentos detectados cuando el sniffer está activo.</summary>
+    public ObservableCollection<DetectedMediaItem> DetectedMedia { get; } = new();
+
+    /// <summary>Conjunto O(1) para evitar duplicados de URLs detectadas.</summary>
+    public HashSet<string> DetectedMediaUrls { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public void ClearDetectedMedia()
+    {
+        DetectedMedia.Clear();
+        DetectedMediaUrls.Clear();
+    }
 
     public string Title
     {

@@ -32,6 +32,11 @@ public static class FaviconService
     }
 
     /// <summary>
+    /// Limpia la caché en memoria de favicons.
+    /// </summary>
+    public static void ClearCache() => _cache.Clear();
+
+    /// <summary>
     /// Obtiene de forma síncrona el icono si ya está en caché, o null si aún no se ha descargado.
     /// </summary>
     public static ImageSource? GetCachedFavicon(string domain)
@@ -43,17 +48,18 @@ public static class FaviconService
 
     /// <summary>
     /// Resuelve el favicon oficial de una página web usando primero el stream de WebView2,
-    /// luego la URI del favicon, y finalmente el servicio de favicons de alta resolución por dominio.
+    /// luego la URI del favicon, y finalmente el favicon directo del servidor.
+    /// En modo incógnito no almacena en la caché compartida ni realiza peticiones a servicios de terceros.
     /// </summary>
-    public static async Task<ImageSource?> ResolveFaviconAsync(string pageUrl, Stream? webViewStream = null, string? faviconUri = null)
+    public static async Task<ImageSource?> ResolveFaviconAsync(string pageUrl, Stream? webViewStream = null, string? faviconUri = null, bool isIncognito = false)
     {
         if (string.IsNullOrWhiteSpace(pageUrl)) return null;
 
         string domain = ExtractDomain(pageUrl);
         if (string.IsNullOrEmpty(domain)) return null;
 
-        // 1. Revisar caché en memoria
-        if (_cache.TryGetValue(domain, out var cached))
+        // 1. Revisar caché en memoria (solo si no es incógnito)
+        if (!isIncognito && _cache.TryGetValue(domain, out var cached))
         {
             return cached;
         }
@@ -66,11 +72,21 @@ public static class FaviconService
                 var bmp = await CreateFrozenBitmapFromStreamAsync(webViewStream);
                 if (bmp != null)
                 {
-                    _cache[domain] = bmp;
+                    if (!isIncognito) _cache[domain] = bmp;
                     return bmp;
                 }
             }
             catch { }
+        }
+
+        // En modo incógnito, nunca hacer peticiones HTTP fuera del WebView2 InPrivate ni filtrar dominios
+        if (isIncognito)
+        {
+            if (!string.IsNullOrWhiteSpace(faviconUri) && faviconUri.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
+            {
+                try { return await DownloadAndCreateBitmapAsync(faviconUri); } catch { }
+            }
+            return null;
         }
 
         // 3. Intentar descargar desde la FaviconUri informada por el motor
@@ -88,11 +104,11 @@ public static class FaviconService
             catch { }
         }
 
-        // 4. Fallback de alta fidelidad: Servicio oficial por dominio (32x32)
+        // 4. Fallback directo al propio servidor de origen (sin terceros)
         try
         {
-            string serviceUrl = $"https://www.google.com/s2/favicons?domain={domain}&sz=32";
-            var bmp = await DownloadAndCreateBitmapAsync(serviceUrl);
+            string directIconUrl = $"https://{domain}/favicon.ico";
+            var bmp = await DownloadAndCreateBitmapAsync(directIconUrl);
             if (bmp != null)
             {
                 _cache[domain] = bmp;

@@ -44,6 +44,16 @@ public static class NewTabPage
             ? @"<img src=""data:image/png;base64," + logoBase64 + @""" class=""logo-img"" alt=""Lex Junior Logo""/>"
             : @"<div class=""logo-fallback"">LJ</div>";
 
+        string engineName = SettingsManager.Current.DefaultSearchEngine switch
+        {
+            "DuckDuckGo" => "DuckDuckGo",
+            "Brave" => "Brave Search",
+            "Bing" => "Bing",
+            "Custom" => " tu buscador",
+            _ => "Google"
+        };
+        string searchUrlTemplate = SettingsManager.GetSearchUrl("__LEX_QUERY__").Replace("'", "\\'");
+
         return @"<!DOCTYPE html>
 <html lang=""es"">
 <head>
@@ -182,7 +192,8 @@ public static class NewTabPage
       box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     }
 
-    .quick-link .ico { font-size: 20px; line-height: 1; }
+    .quick-link .ico { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; }
+    .quick-link .ico svg { width: 22px; height: 22px; display: block; }
 
     .footer {
       position: fixed; bottom: 16px;
@@ -212,19 +223,79 @@ public static class NewTabPage
           <path d=""M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"" fill=""#FBBC05""/>
           <path d=""M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"" fill=""#EA4335""/>
         </svg>
-        <input type=""text"" placeholder=""Buscar en Google o escribir una URL..."" id=""si"" autocomplete=""off"" spellcheck=""false""/>
+        <input type=""text"" placeholder=""Buscar en " + engineName + @" o escribir una URL..."" id=""si"" autocomplete=""off"" spellcheck=""false""/>
         <button class=""search-btn"" onclick=""go()"">Buscar</button>
       </div>
     </div>
 
     <div class=""quick-links"">
-      <a class=""quick-link"" href=""https://www.youtube.com""><div class=""ico"">▶️</div>YouTube</a>
-      <a class=""quick-link"" href=""https://www.google.com""><div class=""ico"">🌐</div>Google</a>
-      <a class=""quick-link"" href=""https://mail.google.com""><div class=""ico"">📧</div>Gmail</a>
-      <a class=""quick-link"" href=""https://calendar.google.com""><div class=""ico"">📅</div>Calendar</a>
-      <a class=""quick-link"" href=""https://drive.google.com""><div class=""ico"">💾</div>Drive</a>
-      <a class=""quick-link"" href=""https://www.twitch.tv""><div class=""ico"">🎮</div>Twitch</a>
-      <a class=""quick-link"" href=""https://twitter.com""><div class=""ico"">𝕏</div>X</a>
+      <a class=""quick-link"" href=""https://www.youtube.com"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <path d=""M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"" fill=""#FF0000""/>
+            <path d=""M9.545 15.568V8.432L15.818 12l-6.273 3.568z"" fill=""#FFFFFF""/>
+          </svg>
+        </div>YouTube
+      </a>
+      <a class=""quick-link"" href=""https://www.google.com"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <path d=""M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"" fill=""#4285F4""/>
+            <path d=""M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"" fill=""#34A853""/>
+            <path d=""M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"" fill=""#FBBC05""/>
+            <path d=""M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"" fill=""#EA4335""/>
+          </svg>
+        </div>Google
+      </a>
+      <a class=""quick-link"" href=""https://mail.google.com"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <path d=""M2 6.5V18c0 1.1.9 2 2 2h2V9.8l6 4.5 6-4.5V20h2c1.1 0 2-.9 2-2V6.5c0-1.8-2.1-2.8-3.5-1.7L12 10 5.5 4.8C4.1 3.7 2 4.7 2 6.5z"" fill=""#EA4335""/>
+            <path d=""M2 6.5V18c0 1.1.9 2 2 2h2V9.8L2 6.5z"" fill=""#4285F4""/>
+            <path d=""M22 6.5V18c0 1.1-.9 2-2 2h-2V9.8l4-3.3z"" fill=""#34A853""/>
+            <path d=""M18 9.8V4.5l2.5 1.8c.9.7 1.5 1.1 1.5 2.2L18 9.8z"" fill=""#FBBC04""/>
+            <path d=""M6 9.8V4.5L3.5 6.3C2.6 7 2 7.4 2 8.5L6 9.8z"" fill=""#C5221F""/>
+          </svg>
+        </div>Gmail
+      </a>
+      <a class=""quick-link"" href=""https://calendar.google.com"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <rect x=""3"" y=""3"" width=""18"" height=""18"" rx=""3"" fill=""#FFFFFF""/>
+            <path d=""M3 6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v2H3V6z"" fill=""#4285F4""/>
+            <path d=""M18 3h3v5h-3V3z"" fill=""#1967D2""/>
+            <path d=""M3 18h18v0a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"" fill=""#34A853""/>
+            <path d=""M18 16h3v2a3 3 0 0 1-3 3v-5z"" fill=""#EA4335""/>
+            <path d=""M3 8h3v10H3V8z"" fill=""#FBBC04""/>
+            <text x=""12"" y=""16.2"" text-anchor=""middle"" font-family=""Segoe UI,Arial,sans-serif"" font-weight=""800"" font-size=""8.5"" fill=""#1A73E8"">31</text>
+          </svg>
+        </div>Calendar
+      </a>
+      <a class=""quick-link"" href=""https://drive.google.com"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <path d=""M8.5 3.5L15.5 3.5L22 14.8L15 14.8Z"" fill=""#FBBC04""/>
+            <path d=""M8.5 3.5L12 9.5L5.5 20.5L2 14.8Z"" fill=""#0F9D58""/>
+            <path d=""M5.5 20.5L18.5 20.5L22 14.8L9 14.8Z"" fill=""#4285F4""/>
+          </svg>
+        </div>Drive
+      </a>
+      <a class=""quick-link"" href=""https://www.twitch.tv"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <path d=""M4.3 3H21v11.7l-4.7 4.7h-3.9l-2.5 2.4H7v-2.4H3V6.2L4.3 3z"" fill=""#9146FF""/>
+            <path d=""M19 13.8V5H6v12h3v2.4l2.4-2.4h4.5L19 13.8z"" fill=""#FFFFFF""/>
+            <path d=""M15 8h2v4.7h-2V8zm-4 0h2v4.7h-2V8z"" fill=""#9146FF""/>
+          </svg>
+        </div>Twitch
+      </a>
+      <a class=""quick-link"" href=""https://twitter.com"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <path d=""M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"" fill=""#F4F4F5""/>
+          </svg>
+        </div>X
+      </a>
     </div>
   </div>
 
@@ -250,7 +321,8 @@ public static class NewTabPage
       } else if (/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/i.test(v) && !v.includes(' ')) {
         window.location.href = 'https://' + v;
       } else {
-        window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(v);
+        const tpl = '" + searchUrlTemplate + @"';
+        window.location.href = tpl.replace('__LEX_QUERY__', encodeURIComponent(v));
       }
     }
 

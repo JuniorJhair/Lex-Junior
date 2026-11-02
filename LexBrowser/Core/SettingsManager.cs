@@ -11,12 +11,20 @@ public class BrowserSettings
     public bool ShowBookmarksBar { get; set; } = true;
     public bool EnableAdBlocker { get; set; } = true;
     public bool EnableHistory { get; set; } = true;
+    public double FloatingPipWidth { get; set; } = 640;
+    public double FloatingPipHeight { get; set; } = 390;
+    public int NativePipWidth { get; set; } = 0;
+    public int NativePipHeight { get; set; } = 0;
+    public int NativePipShortsWidth { get; set; } = 0;
+    public int NativePipShortsHeight { get; set; } = 0;
     public string DefaultSearchEngine { get; set; } = "Google";
     public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
 }
 
 public static class SettingsManager
 {
+    private static readonly object _saveLock = new();
+
     private static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "LexBrowser",
@@ -53,18 +61,26 @@ public static class SettingsManager
         Save();
     }
 
-    public static void Save()
+    public static void Save(bool notify = true)
     {
         try
         {
-            string? dir = Path.GetDirectoryName(SettingsPath);
-            if (!string.IsNullOrEmpty(dir))
+            lock (_saveLock)
             {
-                Directory.CreateDirectory(dir);
+                string? dir = Path.GetDirectoryName(SettingsPath);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
+                string tempPath = SettingsPath + ".tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, SettingsPath, overwrite: true);
             }
-            string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(SettingsPath, json);
-            SettingsChanged?.Invoke();
+            if (notify)
+            {
+                SettingsChanged?.Invoke();
+            }
         }
         catch { }
     }

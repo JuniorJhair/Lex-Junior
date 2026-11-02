@@ -21,7 +21,7 @@ public partial class App : Application
         };
     }
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         try
         {
@@ -31,6 +31,37 @@ public partial class App : Application
         catch { }
 
         base.OnStartup(e);
+
+        if (LexBrowser.Core.InstallerService.ShouldRunAsSilentUpdate(e.Args))
+        {
+            try
+            {
+                await LexBrowser.Core.InstallerService.PerformSilentUpdateAndRestartAsync();
+            }
+            catch { }
+            Shutdown();
+            return;
+        }
+
+        if (LexBrowser.Core.InstallerService.ShouldRunAsUninstaller(e.Args))
+        {
+            var uninstaller = new LexBrowser.UI.Views.InstallerWindow(isUninstallMode: true);
+            MainWindow = uninstaller;
+            uninstaller.Show();
+            return;
+        }
+
+        if (LexBrowser.Core.InstallerService.ShouldRunAsInstaller(e.Args))
+        {
+            var installer = new LexBrowser.UI.Views.InstallerWindow(isUninstallMode: false);
+            MainWindow = installer;
+            installer.Show();
+            return;
+        }
+
+        var browserWindow = new MainWindow();
+        MainWindow = browserWindow;
+        browserWindow.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)

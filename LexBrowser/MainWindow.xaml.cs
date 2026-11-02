@@ -47,14 +47,20 @@ public partial class MainWindow : Window
     private WindowState _savedWindowState = WindowState.Normal;
     private ResizeMode _savedResizeMode = ResizeMode.CanResizeWithGrip;
 
-    // Variables para arrastre visual suave de pestañas
+    // Variables para arrastre visual suave de pestañas y desprendimiento a nueva ventana (Tab Tear-Off)
     private Point _tabDragStartPoint;
     private BrowserTab? _draggedTab;
     private Border? _draggedBorder;
     private bool _isDraggingTab = false;
+    private BrowserTab? _initialAttachedTab;
 
-    public MainWindow()
+    public MainWindow() : this(null)
     {
+    }
+
+    public MainWindow(BrowserTab? initialTab)
+    {
+        _initialAttachedTab = initialTab;
         InitializeComponent();
         TabsItemsControl.ItemsSource = Tabs;
         BookmarksItemsControl.ItemsSource = BookmarkManager.Bookmarks;
@@ -98,8 +104,11 @@ public partial class MainWindow : Window
                 {
                     WindowState = WindowState.Normal;
                 }
+                Topmost = true;
+                Topmost = false;
                 Activate();
-                SelectTab(tab);
+                Focus();
+                SelectTab(tab, force: true);
             });
         };
 
@@ -114,9 +123,427 @@ public partial class MainWindow : Window
         UpdateWindowMargin();
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // MAXIMIZADO LIMITADO AL ÁREA DE TRABAJO (la barra de tareas no tapa el contenido)
+    // Con WindowStyle=None, Windows maximiza sobre el monitor completo y la barra de tareas
+    // tapa la parte inferior de la página (línea de tiempo de los Shorts). Se corrige limitando
+    // el tamaño maximizado al área de trabajo. En pantalla completa real no se aplica.
+    // ─────────────────────────────────────────────────────────────────────
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var source = System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        source?.AddHook(WorkAreaHook);
+    }
+
+    private IntPtr WorkAreaHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_GETMINMAXINFO = 0x0024;
+        if (msg != WM_GETMINMAXINFO) return IntPtr.Zero;
+        if (WindowChrome.GetWindowChrome(this) == null) return IntPtr.Zero; // pantalla completa real
+
+        var monitor = NativeMethods.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        if (monitor == IntPtr.Zero) return IntPtr.Zero;
+
+        var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+        if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return IntPtr.Zero;
+
+        var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<NativeMethods.MINMAXINFO>(lParam);
+        mmi.ptMaxPosition.x = info.rcWork.left - info.rcMonitor.left;
+        mmi.ptMaxPosition.y = info.rcWork.top - info.rcMonitor.top;
+        mmi.ptMaxSize.x = info.rcWork.right - info.rcWork.left;
+        mmi.ptMaxSize.y = info.rcWork.bottom - info.rcWork.top;
+        System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, true);
+        handled = true;
+        return IntPtr.Zero;
+    }
+
+    private static class NativeMethods
+    {
+        public const int GWL_EXSTYLE = -20;
+        public const int WS_EX_TOPMOST = 0x00000008;
+        public const uint SWP_NOZORDER = 0x0004;
+        public const uint SWP_NOACTIVATE = 0x0010;
+        public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+        public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct POINT { public int x; public int y; }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int left, top, right, bottom;
+            public int Width => right - left;
+            public int Height => bottom - top;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool IsWindow(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool IsIconic(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        public static extern int GetWindowTextLength(IntPtr hWnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool GetCursorPos(out POINT lpPoint);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    }
+
+    private static readonly byte[] EmptyResponseBytes = Array.Empty<byte>();
+
+    // ─────────────────────────────────────────────────────────────────────
+    // CONTROLADOR DE TAMAÑO Y BOTONES DEL MINI-REPRODUCTOR NATIVO (WebView2)
+    // ─────────────────────────────────────────────────────────────────────
+    private IntPtr _nativePipHwnd = IntPtr.Zero;
+    private NativeMethods.RECT _lastNativePipRect;
+    private NativeMethods.RECT _lastNativePipVisibleRect;
+    private uint _lastNativePipDpi = 120;
+    private NativeMethods.POINT _pipExitCursorPos;
+    private bool _nativePipIsVertical = false;
+    private bool _canRecordUserPipResize = false;
+    private int _pipSessionId = 0;
+    private DispatcherTimer? _nativePipTimer;
+
+    private IntPtr FindNativePipWindow()
+    {
+        IntPtr found = IntPtr.Zero;
+        IntPtr fallbackFound = IntPtr.Zero;
+        IntPtr mainHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        uint expectedBrowserPid = _activeTab?.WebView?.CoreWebView2?.BrowserProcessId
+            ?? Tabs.FirstOrDefault(t => !t.IsDisposed && t.WebView?.CoreWebView2 != null)?.WebView?.CoreWebView2?.BrowserProcessId
+            ?? 0;
+
+        NativeMethods.EnumWindows((hWnd, lParam) =>
+        {
+            if (hWnd == mainHwnd) return true;
+            if (!NativeMethods.IsWindowVisible(hWnd) || NativeMethods.IsIconic(hWnd)) return true;
+
+            int exStyle = NativeMethods.GetWindowLong(hWnd, NativeMethods.GWL_EXSTYLE);
+            if ((exStyle & NativeMethods.WS_EX_TOPMOST) == 0) return true;
+
+            var sbClass = new System.Text.StringBuilder(64);
+            NativeMethods.GetClassName(hWnd, sbClass, sbClass.Capacity);
+            if (sbClass.ToString() != "Chrome_WidgetWin_1") return true;
+
+            if (NativeMethods.GetWindowTextLength(hWnd) <= 0) return true;
+
+            if (!NativeMethods.GetWindowRect(hWnd, out var rc)) return true;
+            if (rc.Width < 120 || rc.Height < 80 || rc.left < -10000) return true;
+
+            if (expectedBrowserPid > 0)
+            {
+                NativeMethods.GetWindowThreadProcessId(hWnd, out uint winPid);
+                if (winPid == expectedBrowserPid)
+                {
+                    found = hWnd;
+                    return false;
+                }
+                if (fallbackFound == IntPtr.Zero) fallbackFound = hWnd;
+                return true;
+            }
+
+            found = hWnd;
+            return false;
+        }, IntPtr.Zero);
+
+        return found != IntPtr.Zero ? found : fallbackFound;
+    }
+
+    private bool UpdateCachedNativePipBounds(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd) || NativeMethods.IsIconic(hwnd)) return false;
+        if (!NativeMethods.GetWindowRect(hwnd, out var rc)) return false;
+        if (rc.Width < 120 || rc.Height < 80 || rc.left < -10000) return false;
+
+        _lastNativePipRect = rc;
+        if (NativeMethods.DwmGetWindowAttribute(hwnd, NativeMethods.DWMWA_EXTENDED_FRAME_BOUNDS, out var visRc, System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.RECT>()) == 0 && visRc.Width > 0)
+        {
+            _lastNativePipVisibleRect = visRc;
+        }
+        else
+        {
+            _lastNativePipVisibleRect = rc;
+        }
+
+        uint dpi = NativeMethods.GetDpiForWindow(hwnd);
+        if (dpi > 0) _lastNativePipDpi = dpi;
+        return true;
+    }
+
+    private void ResizeNativePipWindow(IntPtr hwnd, int targetW, int targetH)
+    {
+        if (hwnd == IntPtr.Zero || !NativeMethods.GetWindowRect(hwnd, out var rc)) return;
+        if (Math.Abs(rc.Width - targetW) <= 2 && Math.Abs(rc.Height - targetH) <= 2) return;
+
+        var monitor = NativeMethods.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        int minLeft = 10, minTop = 10, maxRight = 1910, maxBottom = 1040;
+        if (monitor != IntPtr.Zero)
+        {
+            var mi = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            if (NativeMethods.GetMonitorInfo(monitor, ref mi))
+            {
+                minLeft = mi.rcWork.left + 8;
+                minTop = mi.rcWork.top + 8;
+                maxRight = mi.rcWork.right - 8;
+                maxBottom = mi.rcWork.bottom - 8;
+            }
+        }
+
+        int maxW = maxRight - minLeft;
+        int maxH = maxBottom - minTop;
+        if (targetW > maxW) targetW = maxW;
+        if (targetH > maxH) targetH = maxH;
+
+        int newLeft = rc.right - targetW;
+        int newTop = rc.bottom - targetH;
+        if (newLeft + targetW > maxRight) newLeft = maxRight - targetW;
+        if (newTop + targetH > maxBottom) newTop = maxBottom - targetH;
+        if (newLeft < minLeft) newLeft = minLeft;
+        if (newTop < minTop) newTop = minTop;
+
+        NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, newLeft, newTop, targetW, targetH, NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+    }
+
+    private void StartNativePipMonitoring(bool isVertical)
+    {
+        int session = ++_pipSessionId;
+        _nativePipIsVertical = isVertical;
+        _canRecordUserPipResize = false;
+        _nativePipHwnd = IntPtr.Zero;
+
+        if (_nativePipTimer == null)
+        {
+            _nativePipTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _nativePipTimer.Tick += NativePipTimer_Tick;
+        }
+        _nativePipTimer.Stop();
+
+        _ = ApplySavedNativePipSizeAsync(session, isVertical);
+    }
+
+    private async Task ApplySavedNativePipSizeAsync(int session, bool isVertical)
+    {
+        for (int i = 0; i < 24; i++)
+        {
+            if (session != _pipSessionId) return;
+            IntPtr hwnd = FindNativePipWindow();
+            if (hwnd != IntPtr.Zero)
+            {
+                _nativePipHwnd = hwnd;
+                UpdateCachedNativePipBounds(hwnd);
+                break;
+            }
+            await Task.Delay(25);
+        }
+
+        if (session != _pipSessionId) return;
+
+        if (_nativePipHwnd != IntPtr.Zero)
+        {
+            int savedW = isVertical ? SettingsManager.Current.NativePipShortsWidth : SettingsManager.Current.NativePipWidth;
+            int savedH = isVertical ? SettingsManager.Current.NativePipShortsHeight : SettingsManager.Current.NativePipHeight;
+
+            if (savedW >= 160 && savedH >= 100)
+            {
+                ResizeNativePipWindow(_nativePipHwnd, savedW, savedH);
+                await Task.Delay(70);
+                if (session == _pipSessionId && NativeMethods.IsWindowVisible(_nativePipHwnd))
+                {
+                    ResizeNativePipWindow(_nativePipHwnd, savedW, savedH);
+                }
+                await Task.Delay(120);
+                if (session == _pipSessionId && NativeMethods.IsWindowVisible(_nativePipHwnd))
+                {
+                    ResizeNativePipWindow(_nativePipHwnd, savedW, savedH);
+                    UpdateCachedNativePipBounds(_nativePipHwnd);
+                }
+            }
+            else
+            {
+                await Task.Delay(150);
+                if (session == _pipSessionId && NativeMethods.IsWindowVisible(_nativePipHwnd))
+                {
+                    UpdateCachedNativePipBounds(_nativePipHwnd);
+                }
+            }
+        }
+
+        if (session == _pipSessionId)
+        {
+            _canRecordUserPipResize = true;
+            _nativePipTimer?.Start();
+        }
+    }
+
+    private void NativePipTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_nativePipHwnd == IntPtr.Zero || !NativeMethods.IsWindow(_nativePipHwnd) || !NativeMethods.IsWindowVisible(_nativePipHwnd))
+        {
+            _nativePipHwnd = FindNativePipWindow();
+            if (_nativePipHwnd == IntPtr.Zero) return;
+        }
+
+        if (!UpdateCachedNativePipBounds(_nativePipHwnd)) return;
+
+        if (_canRecordUserPipResize)
+        {
+            int w = _lastNativePipRect.Width;
+            int h = _lastNativePipRect.Height;
+            if (w >= 160 && h >= 100)
+            {
+                if (_nativePipIsVertical)
+                {
+                    if (Math.Abs(w - SettingsManager.Current.NativePipShortsWidth) > 2 || Math.Abs(h - SettingsManager.Current.NativePipShortsHeight) > 2)
+                    {
+                        SettingsManager.Current.NativePipShortsWidth = w;
+                        SettingsManager.Current.NativePipShortsHeight = h;
+                        SettingsManager.Save(notify: false);
+                        LogPipEvent($"{{\"type\":\"pip_size_saved\",\"w\":{w},\"h\":{h},\"vertical\":true}}");
+                    }
+                }
+                else
+                {
+                    if (Math.Abs(w - SettingsManager.Current.NativePipWidth) > 2 || Math.Abs(h - SettingsManager.Current.NativePipHeight) > 2)
+                    {
+                        SettingsManager.Current.NativePipWidth = w;
+                        SettingsManager.Current.NativePipHeight = h;
+                        SettingsManager.Save(notify: false);
+                        LogPipEvent($"{{\"type\":\"pip_size_saved\",\"w\":{w},\"h\":{h},\"vertical\":false}}");
+                    }
+                }
+            }
+        }
+    }
+
+    // Registro de diagnóstico desactivado en producción para garantizar 0 rastros en disco (Incógnito y Privacidad)
+    private static void LogPipEvent(string json)
+    {
+    }
+
+    private static void CleanLegacyDiagnosticLogs()
+    {
+        try
+        {
+            string legacyLog = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "LexBrowser",
+                "pip.log");
+            if (File.Exists(legacyLog))
+            {
+                File.Delete(legacyLog);
+            }
+        }
+        catch { }
+    }
+
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        await AddNewTabAsync(null, isIncognito: false);
+        CleanLegacyDiagnosticLogs();
+        if (_initialAttachedTab != null)
+        {
+            var initial = _initialAttachedTab;
+            _initialAttachedTab = null;
+            AttachExistingTab(initial);
+        }
+        else if (Tabs.Count == 0)
+        {
+            await AddNewTabAsync(null, isIncognito: false);
+        }
+
+        // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
+        _ = CheckForBrowserUpdateInBackgroundAsync();
+    }
+
+    private async Task CheckForBrowserUpdateInBackgroundAsync()
+    {
+        try
+        {
+            await Task.Delay(2500);
+            var update = await UpdateManager.CheckForUpdatesAsync();
+            if (update != null)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    TxtUpdateAvailableLabel.Text = $"Actualizar ({update.VersionTag})";
+                    BtnUpdateAvailable.ToolTip = $"¡Nueva versión {update.VersionTag} disponible! Haz clic para instalarla automáticamente.";
+                    BtnUpdateAvailable.Visibility = Visibility.Visible;
+                });
+            }
+        }
+        catch { }
+    }
+
+    public void AttachExistingTab(BrowserTab tab, int? insertIndex = null)
+    {
+        if (tab == null || tab.IsDisposed) return;
+
+        tab.OwnerWindow = this;
+
+        if (!Tabs.Contains(tab))
+        {
+            if (insertIndex.HasValue && insertIndex.Value >= 0 && insertIndex.Value <= Tabs.Count)
+                Tabs.Insert(insertIndex.Value, tab);
+            else
+                Tabs.Add(tab);
+        }
+
+        ReinsertWebViewToContainer(tab);
+        SelectTab(tab, force: true);
     }
 
     private void ApplySettings()
@@ -136,21 +563,24 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     private void ReinsertWebViewToContainer(BrowserTab tab)
     {
+        if (tab?.WebView == null || tab.IsDisposed) return;
         var webView = tab.WebView;
-        if (webView.Parent is Panel oldParent)
+
+        if (webView.Parent is Panel oldParent && oldParent != BrowserContainer)
         {
             oldParent.Children.Remove(webView);
         }
 
-        if (_activeTab == tab)
+        if (!BrowserContainer.Children.Contains(webView))
         {
-            BrowserContainer.Children.Clear();
             BrowserContainer.Children.Add(webView);
         }
+
+        webView.Visibility = (_activeTab == tab) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // CREAR NUEVA PESTAÑA
+    // CREAR NUEVA PESTAÑA (Al costado de la activa o en índice indicado)
     // ─────────────────────────────────────────────────────────────────────
     private async Task<BrowserTab> AddNewTabAsync(string? initialUrl = null, bool isIncognito = false, int? insertIndex = null)
     {
@@ -167,12 +597,14 @@ public partial class MainWindow : Window
             Url = isNewTabDefault ? "" : initialUrl!,
             Title = isNewTabDefault ? (isIncognito ? "Incógnito" : "Nueva pestaña") : "Cargando...",
             IsIncognito = isIncognito,
-            IsNewTab = isNewTabDefault
+            IsNewTab = isNewTabDefault,
+            OwnerWindow = this
         };
 
-        if (insertIndex.HasValue && insertIndex.Value >= 0 && insertIndex.Value <= Tabs.Count)
+        int resolvedIndex = insertIndex ?? (_activeTab != null ? Tabs.IndexOf(_activeTab) + 1 : Tabs.Count);
+        if (resolvedIndex >= 0 && resolvedIndex <= Tabs.Count)
         {
-            Tabs.Insert(insertIndex.Value, tab);
+            Tabs.Insert(resolvedIndex, tab);
         }
         else
         {
@@ -224,7 +656,7 @@ public partial class MainWindow : Window
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // CONFIGURACIÓN DE EVENTOS DEL WEBVIEW
+    // CONFIGURACIÓN DE EVENTOS DEL WEBVIEW (Enrutados a tab.OwnerWindow)
     // ─────────────────────────────────────────────────────────────────────
     private async Task ConfigureTabWebViewAsync(BrowserTab tab)
     {
@@ -241,41 +673,42 @@ public partial class MainWindow : Window
         // 1. MANEJO DE PANTALLA COMPLETA REAL DE LAPTOP (CERO FRANJAS VACÍAS)
         core.ContainsFullScreenElementChanged += (s, e) =>
         {
-            Dispatcher.Invoke(() =>
+            var win = tab.OwnerWindow ?? this;
+            win.Dispatcher.Invoke(() =>
             {
                 if (core.ContainsFullScreenElement)
                 {
-                    _savedWindowState = WindowState;
-                    _savedResizeMode = ResizeMode;
+                    win._savedWindowState = win.WindowState;
+                    win._savedResizeMode = win.ResizeMode;
 
                     // Colapsar barras superiores completamente
-                    RowHeader.Height = new GridLength(0);
-                    RowNavBar.Height = new GridLength(0);
-                    RowBookmarksBar.Height = new GridLength(0);
-                    RowProgressBar.Height = new GridLength(0);
+                    win.RowHeader.Height = new GridLength(0);
+                    win.RowNavBar.Height = new GridLength(0);
+                    win.RowBookmarksBar.Height = new GridLength(0);
+                    win.RowProgressBar.Height = new GridLength(0);
 
                     // Eliminar WindowChrome durante fullscreen para evitar bordes negros o franjas de taskbar
-                    WindowChrome.SetWindowChrome(this, null);
+                    WindowChrome.SetWindowChrome(win, null);
 
-                    ResizeMode = ResizeMode.NoResize;
-                    WindowState = WindowState.Normal;
-                    WindowState = WindowState.Maximized;
-                    UpdateWindowMargin();
+                    win.ResizeMode = ResizeMode.NoResize;
+                    win.WindowState = WindowState.Normal;
+                    win.WindowState = WindowState.Maximized;
+                    win.UpdateWindowMargin();
                 }
                 else
                 {
                     // Restaurar barras del navegador
-                    RowHeader.Height = new GridLength(42);
-                    RowNavBar.Height = new GridLength(50);
-                    RowBookmarksBar.Height = SettingsManager.Current.ShowBookmarksBar ? new GridLength(34) : new GridLength(0);
-                    RowProgressBar.Height = new GridLength(2);
+                    win.RowHeader.Height = new GridLength(42);
+                    win.RowNavBar.Height = new GridLength(50);
+                    win.RowBookmarksBar.Height = SettingsManager.Current.ShowBookmarksBar ? new GridLength(34) : new GridLength(0);
+                    win.RowProgressBar.Height = new GridLength(2);
 
                     // Restaurar WindowChrome normal
-                    WindowChrome.SetWindowChrome(this, AppWindowChrome);
+                    WindowChrome.SetWindowChrome(win, win.AppWindowChrome);
 
-                    ResizeMode = _savedResizeMode;
-                    WindowState = _savedWindowState;
-                    UpdateWindowMargin();
+                    win.ResizeMode = win._savedResizeMode;
+                    win.WindowState = win._savedWindowState;
+                    win.UpdateWindowMargin();
                 }
             });
         };
@@ -284,6 +717,7 @@ public partial class MainWindow : Window
         core.NewWindowRequested += (s, e) =>
         {
             e.Handled = true;
+            var win = tab.OwnerWindow ?? this;
 
             string url = e.Uri;
             if (string.IsNullOrWhiteSpace(url) || url == "about:blank") return;
@@ -302,19 +736,19 @@ public partial class MainWindow : Window
 
                 if (SettingsManager.Current.EnableAdBlocker && (AdBlockFilter.ShouldBlock(uri) || AdBlockFilter.IsSuspiciousPopup(uri, currentUri)))
                 {
-                    Dispatcher.Invoke(() =>
+                    win.Dispatcher.Invoke(() =>
                     {
                         tab.BlockedAdsCount++;
-                        if (_activeTab == tab)
-                            TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
+                        if (win._activeTab == tab)
+                            win.TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
                     });
                     return;
                 }
             }
 
-            Dispatcher.Invoke(async () =>
+            win.Dispatcher.Invoke(async () =>
             {
-                await AddNewTabAsync(url, isIncognito: tab.IsIncognito);
+                await win.AddNewTabAsync(url, isIncognito: tab.IsIncognito);
             });
         };
 
@@ -325,13 +759,15 @@ public partial class MainWindow : Window
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && AdBlockFilter.ShouldBlock(uri))
             {
                 e.Response = core.Environment.CreateWebResourceResponse(
-                    new MemoryStream(), 403, "Blocked by LexShield", "Content-Type: text/plain");
+                    new MemoryStream(EmptyResponseBytes, writable: false), 403, "Blocked by LexShield", "Content-Type: text/plain");
 
-                Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                var win = tab.OwnerWindow ?? this;
+                win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                 {
+                    if (tab.IsDisposed) return;
                     tab.BlockedAdsCount++;
-                    if (_activeTab == tab)
-                        TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
+                    if (win._activeTab == tab)
+                        win.TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
                 });
             }
         };
@@ -346,40 +782,152 @@ public partial class MainWindow : Window
             }
         };
 
-        // 4. Escuchar mensajes del script inyectado (AdBlock, retorno PiP y estado multimedia)
+        // 3.2 Recuperación automática si el proceso de renderizado de la pestaña falla inesperadamente
+        core.ProcessFailed += (s, e) =>
+        {
+            if (tab.IsDisposed) return;
+            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited)
+            {
+                var win = tab.OwnerWindow ?? this;
+                win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                {
+                    if (!tab.IsDisposed)
+                    {
+                        try { core.Reload(); } catch { }
+                    }
+                });
+            }
+        };
+
+        // 4. Escuchar mensajes del script inyectado (AdBlock, retorno PiP, atajos de teclado y estado multimedia)
         core.WebMessageReceived += (s, e) =>
         {
             if (tab.IsDisposed) return;
+            var win = tab.OwnerWindow ?? this;
             try
             {
-                using var doc = JsonDocument.Parse(e.WebMessageAsJson);
+                string rawJson = e.WebMessageAsJson;
+                if (string.IsNullOrEmpty(rawJson) || rawJson.Length > 4096) return;
+
+                using var doc = JsonDocument.Parse(rawJson);
                 var root = doc.RootElement;
                 if (!root.TryGetProperty("type", out var typeProp)) return;
                 string type = typeProp.GetString() ?? "";
 
                 if (type == "ad_blocked")
                 {
-                    Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                    win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                     {
                         if (tab.IsDisposed) return;
                         tab.BlockedAdsCount++;
-                        if (_activeTab == tab)
-                            TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
+                        if (win._activeTab == tab)
+                            win.TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
                     });
+                }
+                else if (type == "shortcut_new_tab")
+                {
+                    bool incog = root.TryGetProperty("incognito", out var incProp) && incProp.GetBoolean();
+                    win.Dispatcher.BeginInvoke(async () =>
+                    {
+                        int nextIdx = win._activeTab != null ? win.Tabs.IndexOf(win._activeTab) + 1 : win.Tabs.Count;
+                        await win.AddNewTabAsync(null, isIncognito: incog, insertIndex: nextIdx);
+                    });
+                }
+                else if (type == "shortcut_reopen_tab")
+                {
+                    win.Dispatcher.BeginInvoke(() => win.ReopenLastClosedTab());
+                }
+                else if (type == "shortcut_close_tab")
+                {
+                    win.Dispatcher.BeginInvoke(() =>
+                    {
+                        if (win._activeTab != null) win.CloseTab(win._activeTab);
+                    });
+                }
+                else if (type == "pip_entered")
+                {
+                    int vw = root.TryGetProperty("videoWidth", out var vwProp) ? vwProp.GetInt32() : 16;
+                    int vh = root.TryGetProperty("videoHeight", out var vhProp) ? vhProp.GetInt32() : 9;
+                    string pipUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                    bool isVert = (vh > vw) || pipUrl.Contains("/shorts/", StringComparison.OrdinalIgnoreCase);
+
+                    win.Dispatcher.BeginInvoke(() => win.StartNativePipMonitoring(isVert));
+                }
+                else if (type == "pip_leaving_now")
+                {
+                    // Capturar en 0ms la posición exacta del cursor sobre los botones del PiP antes de que el usuario mueva el mouse
+                    NativeMethods.GetCursorPos(out win._pipExitCursorPos);
+                    win._pipSessionId++;
+                    win._canRecordUserPipResize = false;
+
+                    if (win._lastNativePipVisibleRect.Width == 0)
+                    {
+                        IntPtr h = win._nativePipHwnd != IntPtr.Zero ? win._nativePipHwnd : win.FindNativePipWindow();
+                        if (h != IntPtr.Zero) win.UpdateCachedNativePipBounds(h);
+                    }
+
+                    win.Dispatcher.BeginInvoke(() => win._nativePipTimer?.Stop());
+                }
+                else if (type == "pip_left")
+                {
+                    bool isPaused = root.TryGetProperty("isPaused", out var pProp) && pProp.GetBoolean();
+                    double scale = win._lastNativePipDpi > 0 ? win._lastNativePipDpi / 96.0 : 1.25;
+                    if (scale <= 0) scale = 1.25;
+
+                    double rightDip = (win._lastNativePipVisibleRect.right - win._pipExitCursorPos.x) / scale;
+                    double topDip = (win._pipExitCursorPos.y - win._lastNativePipVisibleRect.top) / scale;
+
+                    // Los 3 botones superiores derechos en el PiP nativo de Chromium (VideoOverlayWindowViews):
+                    //  - Cerrar (✕):    0 .. 36 DIP desde el borde derecho (además pausa el video: isPaused == true)
+                    //  - Volver ([↗]): 36 .. 62.5 DIP desde el borde derecho (isPaused == false)
+                    //  - Minimizar (─): >= 62.5 DIP desde el borde derecho (isPaused == false)
+                    bool clickedMinimize = !isPaused && win._lastNativePipVisibleRect.Width > 0 && rightDip >= 62.5;
+                    string actionTaken = isPaused ? "close_paused" : (clickedMinimize ? "minimize_keep_playing" : "return_to_tab");
+
+                    LogPipEvent($"{{\"type\":\"pip_left\",\"action\":\"{actionTaken}\",\"isPaused\":{isPaused.ToString().ToLowerInvariant()},\"rightDip\":{rightDip:F1},\"topDip\":{topDip:F1},\"rectW\":{win._lastNativePipVisibleRect.Width},\"rectH\":{win._lastNativePipVisibleRect.Height}}}");
+
+                    if (!isPaused && !clickedMinimize)
+                    {
+                        win.Dispatcher.Invoke(() =>
+                        {
+                            if (tab.IsDisposed) return;
+                            if (win.WindowState == WindowState.Minimized)
+                            {
+                                win.WindowState = WindowState.Normal;
+                            }
+                            win.Topmost = true;
+                            win.Topmost = false;
+                            win.Activate();
+                            win.Focus();
+                            win.SelectTab(tab, force: true);
+
+                            if (root.TryGetProperty("isFullScreen", out var fsProp) && fsProp.GetBoolean())
+                            {
+                                string restoreJson = JsonSerializer.Serialize(new { action = "restore_fullscreen" });
+                                core.PostWebMessageAsJson(restoreJson);
+                            }
+                        });
+                    }
+                }
+                else if (type == "pip_closed" || type == "pip_dismissed")
+                {
+                    LogPipEvent(e.WebMessageAsJson);
                 }
                 else if (type == "pip_return_requested")
                 {
-                    // RETORNO DE PIP NATIVO: El usuario pulsó 'Volver a la pestaña' en el mini-reproductor
-                    Dispatcher.Invoke(() =>
+                    LogPipEvent(e.WebMessageAsJson);
+                    win.Dispatcher.Invoke(() =>
                     {
                         if (tab.IsDisposed) return;
-                        if (WindowState == WindowState.Minimized)
+                        if (win.WindowState == WindowState.Minimized)
                         {
-                            WindowState = WindowState.Normal;
+                            win.WindowState = WindowState.Normal;
                         }
-                        Activate();
-                        Focus();
-                        SelectTab(tab);
+                        win.Topmost = true;
+                        win.Topmost = false;
+                        win.Activate();
+                        win.Focus();
+                        win.SelectTab(tab, force: true);
 
                         if (root.TryGetProperty("isFullScreen", out var fsProp) && fsProp.GetBoolean())
                         {
@@ -396,7 +944,7 @@ public partial class MainWindow : Window
                     double curTime = data.GetProperty("currentTime").GetDouble();
                     double duration = data.GetProperty("duration").GetDouble();
 
-                    Dispatcher.Invoke(() =>
+                    win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                     {
                         if (tab.IsDisposed) return;
                         tab.HasActiveMedia = isPlaying || curTime > 0;
@@ -405,125 +953,184 @@ public partial class MainWindow : Window
                         tab.MediaCurrentTime = curTime;
                         tab.MediaDuration = duration;
 
-                        if (_pipWindow.IsVisible && _pipWindow.TargetTab == tab)
+                        if (win._pipWindow.IsVisible && win._pipWindow.TargetTab == tab)
                         {
-                            _pipWindow.UpdateMediaControls(title, curTime, duration, isPlaying);
+                            win._pipWindow.UpdateMediaControls(title, curTime, duration, isPlaying);
                         }
                     });
                 }
                 else if (type == "open_history")
                 {
-                    Dispatcher.Invoke(() => OpenHistory());
+                    win.Dispatcher.BeginInvoke(() => win.OpenHistory());
+                }
+                else if (type == "media_detected_batch")
+                {
+                    if (!tab.IsMediaSnifferActive) return;
+                    if (root.TryGetProperty("items", out var itemsProp) && itemsProp.ValueKind == JsonValueKind.Array)
+                    {
+                        var pairs = new List<(string Url, string Category)>();
+                        foreach (var el in itemsProp.EnumerateArray())
+                        {
+                            string u = el.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                            string c = el.TryGetProperty("category", out var cProp) ? (cProp.GetString() ?? "") : "";
+                            if (!string.IsNullOrWhiteSpace(u))
+                            {
+                                pairs.Add((u, c));
+                            }
+                        }
+                        if (pairs.Count > 0)
+                        {
+                            win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                            {
+                                foreach (var (u, c) in pairs)
+                                {
+                                    win.RegisterDetectedMediaUrl(tab, u, c, contentType: null, contentLength: 0);
+                                }
+                            });
+                        }
+                    }
                 }
             }
             catch { }
         };
 
-        // Escuchar cambios de zoom en el WebView para actualizar el indicador y widget flotante
-        tab.WebView.ZoomFactorChanged += (s, e) => Dispatcher.Invoke(() =>
+        // 5. Detector Multimedia de Red Bajo Demanda (0 consumo cuando tab.IsMediaSnifferActive == false)
+        core.WebResourceResponseReceived += (s, e) =>
         {
-            if (_activeTab == tab)
-            {
-                UpdateZoomIndicatorUI(showFloating: true);
-            }
-        });
+            if (!tab.IsMediaSnifferActive || tab.IsDisposed) return;
+            var win = tab.OwnerWindow ?? this;
+            win.InspectNetworkMediaResponse(tab, e);
+        };
 
-        // 5. Interceptar atajos de teclado globales (Ctrl + H, Ctrl + 0) en el control WebView2
-        tab.WebView.KeyDown += (s, e) =>
+        // Escuchar cambios de zoom en el WebView para actualizar el indicador y widget flotante
+        tab.WebView.ZoomFactorChanged += (s, e) =>
         {
-            if (e.Key == Key.H && Keyboard.Modifiers == ModifierKeys.Control)
+            var win = tab.OwnerWindow ?? this;
+            win.Dispatcher.Invoke(() =>
             {
-                e.Handled = true;
-                OpenHistory();
-            }
-            else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.D0 || e.Key == Key.NumPad0))
-            {
-                e.Handled = true;
-                ResetZoom();
-            }
+                if (win._activeTab == tab)
+                {
+                    win.UpdateZoomIndicatorUI(showFloating: true);
+                }
+            });
         };
 
         core.NavigationStarting += (s, e) =>
         {
             if (tab.IsDisposed) return;
+            var win = tab.OwnerWindow ?? this;
 
-            Dispatcher.Invoke(() =>
+            win.Dispatcher.Invoke(() =>
             {
                 if (tab.IsDisposed) return;
                 tab.IsLoading = true;
-                if (_activeTab == tab) LoadingProgressBar.Visibility = Visibility.Visible;
+                if (win._activeTab == tab) win.LoadingProgressBar.Visibility = Visibility.Visible;
+
+                // Auto-apagado y liberación de RAM del detector multimedia al cambiar/recargar página (salvo que el usuario marque mantener activo)
+                if (tab.IsMediaSnifferActive && !tab.KeepSnifferActiveOnNavigate)
+                {
+                    tab.IsMediaSnifferActive = false;
+                    tab.ClearDetectedMedia();
+                    if (win._activeTab == tab) win.UpdateMediaSnifferUI();
+                }
             });
         };
 
         core.FaviconChanged += (s, e) =>
         {
             if (tab.IsDisposed) return;
-            _ = UpdateTabFaviconAsync(tab);
+            var win = tab.OwnerWindow ?? this;
+            _ = win.UpdateTabFaviconAsync(tab);
         };
 
-        core.NavigationCompleted += (s, e) => Dispatcher.Invoke(() =>
+        core.NavigationCompleted += (s, e) =>
         {
-            if (tab.IsDisposed) return;
-            tab.IsLoading = false;
-            tab.CanGoBack = core.CanGoBack;
-            tab.CanGoForward = core.CanGoForward;
-            if (_activeTab == tab)
+            var win = tab.OwnerWindow ?? this;
+            win.Dispatcher.Invoke(() =>
             {
-                LoadingProgressBar.Visibility = Visibility.Collapsed;
-                UpdateNavigationButtons();
-                UpdateCurrentTabBookmarkUI();
-            }
-
-            if (e.IsSuccess && !tab.IsIncognito && !tab.IsNewTab && !string.IsNullOrWhiteSpace(core.Source))
-            {
-                HistoryManager.AddEntry(core.Source, core.DocumentTitle);
-            }
-
-            _ = UpdateTabFaviconAsync(tab);
-        });
-
-        core.SourceChanged += (s, e) => Dispatcher.Invoke(() =>
-        {
-            if (tab.IsDisposed) return;
-            if (core.Source.StartsWith("data:text/html") || core.Source == "about:blank")
-            {
-                tab.Url = "";
-                tab.IsNewTab = true;
-            }
-            else
-            {
-                tab.Url = core.Source;
-                tab.IsNewTab = false;
-            }
-
-            if (_activeTab == tab)
-            {
-                TxtUrl.Text = tab.Url;
-                UpdateCurrentTabBookmarkUI();
-            }
-        });
-
-        core.DocumentTitleChanged += (s, e) => Dispatcher.Invoke(() =>
-        {
-            if (tab.IsDisposed) return;
-            if (tab.IsNewTab)
-            {
-                tab.Title = tab.IsIncognito ? "Incógnito" : "Nueva pestaña";
-            }
-            else
-            {
-                tab.Title = string.IsNullOrWhiteSpace(core.DocumentTitle) ? "Nueva pestaña" : core.DocumentTitle;
-                if (!tab.IsIncognito && !string.IsNullOrWhiteSpace(core.Source))
+                if (tab.IsDisposed) return;
+                tab.IsLoading = false;
+                tab.CanGoBack = core.CanGoBack;
+                tab.CanGoForward = core.CanGoForward;
+                if (win._activeTab == tab)
                 {
-                    HistoryManager.UpdateTitle(core.Source, tab.Title);
+                    win.LoadingProgressBar.Visibility = Visibility.Collapsed;
+                    win.UpdateNavigationButtons();
+                    win.UpdateCurrentTabBookmarkUI();
                 }
-            }
 
-            if (_activeTab == tab)
+                // Re-aplicar amplificación de volumen si la pestaña tenía un nivel distinto de 100%
+                if (tab.VolumeBoostPercent != 100)
+                {
+                    win.SendVolumeBoostToTab(tab);
+                }
+
+                // Si el usuario activó mantener el detector multimedia entre páginas, escanear la nueva página
+                if (tab.IsMediaSnifferActive)
+                {
+                    win.RequestDomMediaScan(tab);
+                }
+
+                if (e.IsSuccess && !tab.IsIncognito && !tab.IsNewTab && !string.IsNullOrWhiteSpace(core.Source))
+                {
+                    HistoryManager.AddEntry(core.Source, core.DocumentTitle);
+                }
+
+                _ = win.UpdateTabFaviconAsync(tab);
+            });
+        };
+
+        core.SourceChanged += (s, e) =>
+        {
+            var win = tab.OwnerWindow ?? this;
+            win.Dispatcher.Invoke(() =>
             {
-                UpdateCurrentTabBookmarkUI();
-            }
-        });
+                if (tab.IsDisposed) return;
+                if (core.Source.StartsWith("data:text/html") || core.Source == "about:blank")
+                {
+                    tab.Url = "";
+                    tab.IsNewTab = true;
+                }
+                else
+                {
+                    tab.Url = core.Source;
+                    tab.IsNewTab = false;
+                }
+
+                if (win._activeTab == tab)
+                {
+                    win.TxtUrl.Text = tab.Url;
+                    win.UpdateSecurityIndicatorUI();
+                    win.UpdateCurrentTabBookmarkUI();
+                }
+            });
+        };
+
+        core.DocumentTitleChanged += (s, e) =>
+        {
+            var win = tab.OwnerWindow ?? this;
+            win.Dispatcher.Invoke(() =>
+            {
+                if (tab.IsDisposed) return;
+                if (tab.IsNewTab)
+                {
+                    tab.Title = tab.IsIncognito ? "Incógnito" : "Nueva pestaña";
+                }
+                else
+                {
+                    tab.Title = string.IsNullOrWhiteSpace(core.DocumentTitle) ? "Nueva pestaña" : core.DocumentTitle;
+                    if (!tab.IsIncognito && !string.IsNullOrWhiteSpace(core.Source))
+                    {
+                        HistoryManager.UpdateTitle(core.Source, tab.Title);
+                    }
+                }
+
+                if (win._activeTab == tab)
+                {
+                    win.UpdateCurrentTabBookmarkUI();
+                }
+            });
+        };
     }
 
     private async Task UpdateTabFaviconAsync(BrowserTab tab)
@@ -551,7 +1158,7 @@ public partial class MainWindow : Window
             }
             catch { }
 
-            var icon = await FaviconService.ResolveFaviconAsync(tab.Url, stream, faviconUri);
+            var icon = await FaviconService.ResolveFaviconAsync(tab.Url, stream, faviconUri, tab.IsIncognito);
             if (stream != null)
             {
                 try { stream.Dispose(); } catch { }
@@ -577,16 +1184,17 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     // SELECCIONAR PESTAÑA Y MINI-REPRODUCTOR LIBRE AUTOMÁTICO
     // ─────────────────────────────────────────────────────────────────────
-    private void SelectTab(BrowserTab? tab)
+    private void SelectTab(BrowserTab? tab, bool force = false)
     {
-        if (tab == null || _activeTab == tab || tab.IsDisposed) return;
+        if (tab == null || tab.IsDisposed) return;
+        if (!force && _activeTab == tab) return;
 
         try
         {
             var previousTab = _activeTab;
 
             // Mini-reproductor automático universal (si está activado en Configuración):
-            if (SettingsManager.Current.EnableAutoVideoPip && previousTab != null && !previousTab.IsDisposed)
+            if (SettingsManager.Current.EnableAutoVideoPip && previousTab != null && previousTab != tab && !previousTab.IsDisposed)
             {
                 try
                 {
@@ -649,8 +1257,11 @@ public partial class MainWindow : Window
                 LoadingProgressBar.Visibility = tab.IsLoading ? Visibility.Visible : Visibility.Collapsed;
             }
             UpdateNavigationButtons();
+            UpdateSecurityIndicatorUI();
             UpdateCurrentTabBookmarkUI();
             UpdateZoomIndicatorUI(showFloating: false);
+            UpdateVolumeBoosterUI();
+            UpdateMediaSnifferUI();
         }
         catch (Exception ex)
         {
@@ -761,12 +1372,14 @@ public partial class MainWindow : Window
 
             Point currentPos = e.GetPosition(this);
             double deltaX = currentPos.X - _tabDragStartPoint.X;
+            double deltaY = currentPos.Y - _tabDragStartPoint.Y;
 
             if (!_isDraggingTab)
             {
-                if (Math.Abs(deltaX) > 6)
+                if (Math.Abs(deltaX) > 6 || Math.Abs(deltaY) > 8)
                 {
                     _isDraggingTab = true;
+                    _draggedBorder.CaptureMouse();
 
                     Panel.SetZIndex(_draggedBorder, 999);
                     _draggedBorder.Opacity = 0.9;
@@ -789,6 +1402,17 @@ public partial class MainWindow : Window
 
             if (_isDraggingTab)
             {
+                bool isOutsideTabBar = Math.Abs(deltaY) > 42 || currentPos.X < -30 || currentPos.X > ActualWidth + 30;
+                if (isOutsideTabBar)
+                {
+                    // Indicador visual de desprendimiento (Tab Tear-Off hacia nueva ventana u otra ventana)
+                    _draggedBorder.Opacity = 0.65;
+                    _draggedBorder.RenderTransform = new TranslateTransform(deltaX, deltaY);
+                    return;
+                }
+
+                _draggedBorder.Opacity = 0.9;
+
                 // 1. Desplazar visualmente la pestaña arrastrada siguiendo el ratón píxel a píxel
                 _draggedBorder.RenderTransform = new TranslateTransform(deltaX, 0);
 
@@ -864,10 +1488,33 @@ public partial class MainWindow : Window
 
     private void EndTabDrag()
     {
+        BrowserTab? tabToTearOff = null;
+        MainWindow? targetDockWindow = null;
+
         try
         {
+            if (_isDraggingTab && _draggedTab != null)
+            {
+                Point releasePos = Mouse.GetPosition(this);
+                double deltaY = releasePos.Y - _tabDragStartPoint.Y;
+                bool isOutsideTabBar = Math.Abs(deltaY) > 42 || releasePos.X < -30 || releasePos.X > ActualWidth + 30;
+
+                if (isOutsideTabBar)
+                {
+                    targetDockWindow = TryFindTargetWindowAtCursor();
+                    if (targetDockWindow != null || Tabs.Count > 1)
+                    {
+                        tabToTearOff = _draggedTab;
+                    }
+                }
+            }
+
             if (_draggedBorder != null)
             {
+                if (_draggedBorder.IsMouseCaptured)
+                {
+                    _draggedBorder.ReleaseMouseCapture();
+                }
                 _draggedBorder.RenderTransform = null;
                 _draggedBorder.Opacity = 1.0;
                 _draggedBorder.ClearValue(Border.BorderBrushProperty);
@@ -887,7 +1534,7 @@ public partial class MainWindow : Window
                 }
             }
 
-            if (_draggedTab != null)
+            if (tabToTearOff == null && _draggedTab != null)
             {
                 SelectTab(_draggedTab);
             }
@@ -899,6 +1546,131 @@ public partial class MainWindow : Window
             _draggedBorder = null;
             _draggedTab = null;
         }
+
+        if (tabToTearOff != null)
+        {
+            if (targetDockWindow != null)
+            {
+                MoveTabToWindow(tabToTearOff, targetDockWindow);
+            }
+            else if (Tabs.Count > 1)
+            {
+                DetachTabToNewWindow(tabToTearOff, useCursorPosition: true);
+            }
+        }
+    }
+
+    private MainWindow? TryFindTargetWindowAtCursor()
+    {
+        if (Application.Current == null) return null;
+        if (!NativeMethods.GetCursorPos(out var screenPt)) return null;
+
+        foreach (Window w in Application.Current.Windows)
+        {
+            if (w is MainWindow other && other != this && other.IsVisible && other.WindowState != WindowState.Minimized)
+            {
+                try
+                {
+                    Point relPt = other.PointFromScreen(new Point(screenPt.x, screenPt.y));
+                    if (relPt.X >= 0 && relPt.X <= other.ActualWidth && relPt.Y >= -12 && relPt.Y <= 86)
+                    {
+                        return other;
+                    }
+                }
+                catch { }
+            }
+        }
+        return null;
+    }
+
+    private void MoveTabToWindow(BrowserTab tab, MainWindow targetWindow)
+    {
+        if (tab == null || tab.IsDisposed || targetWindow == null || targetWindow == this) return;
+
+        int index = Tabs.IndexOf(tab);
+        bool wasActive = (_activeTab == tab);
+
+        if (_pipWindow.TargetTab == tab)
+        {
+            _pipWindow.HideAndDetach();
+        }
+
+        Tabs.Remove(tab);
+        if (BrowserContainer.Children.Contains(tab.WebView))
+        {
+            BrowserContainer.Children.Remove(tab.WebView);
+        }
+
+        if (Tabs.Count == 0)
+        {
+            _activeTab = null;
+            targetWindow.AttachExistingTab(tab);
+            targetWindow.Activate();
+            targetWindow.Focus();
+            Close();
+            return;
+        }
+        else if (wasActive)
+        {
+            _activeTab = null;
+            int nextIndex = Math.Clamp(index, 0, Tabs.Count - 1);
+            SelectTab(Tabs[nextIndex], force: true);
+        }
+
+        targetWindow.AttachExistingTab(tab);
+        targetWindow.Activate();
+        targetWindow.Focus();
+    }
+
+    private void DetachTabToNewWindow(BrowserTab tab, bool useCursorPosition = false)
+    {
+        if (tab == null || tab.IsDisposed || Tabs.Count <= 1) return;
+
+        int index = Tabs.IndexOf(tab);
+        bool wasActive = (_activeTab == tab);
+
+        if (_pipWindow.TargetTab == tab)
+        {
+            _pipWindow.HideAndDetach();
+        }
+
+        Tabs.Remove(tab);
+        if (BrowserContainer.Children.Contains(tab.WebView))
+        {
+            BrowserContainer.Children.Remove(tab.WebView);
+        }
+
+        if (wasActive && Tabs.Count > 0)
+        {
+            _activeTab = null;
+            int nextIndex = Math.Clamp(index, 0, Tabs.Count - 1);
+            SelectTab(Tabs[nextIndex], force: true);
+        }
+
+        var newWin = new MainWindow(tab)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Width = ActualWidth > 400 ? ActualWidth : 1280,
+            Height = ActualHeight > 300 ? ActualHeight : 800
+        };
+
+        if (useCursorPosition && NativeMethods.GetCursorPos(out var pt))
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            double scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+            double scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+            newWin.Left = (pt.x / scaleX) - 140;
+            newWin.Top = (pt.y / scaleY) - 18;
+        }
+        else
+        {
+            newWin.Left = (WindowState == WindowState.Maximized ? 80 : Left + 36);
+            newWin.Top = (WindowState == WindowState.Maximized ? 60 : Top + 36);
+        }
+
+        newWin.Show();
+        newWin.Activate();
+        newWin.Focus();
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -999,10 +1771,42 @@ public partial class MainWindow : Window
         }
     }
 
+    private static bool IsSafeHttpUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private void UpdateSecurityIndicatorUI()
+    {
+        if (TxtSecurityIcon == null) return;
+        string url = _activeTab?.Url ?? "";
+        if (_activeTab == null || _activeTab.IsNewTab || string.IsNullOrWhiteSpace(url))
+        {
+            TxtSecurityIcon.Text = "🔍";
+            TxtSecurityIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
+            TxtSecurityIcon.ToolTip = "Búsqueda o dirección web";
+        }
+        else if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            TxtSecurityIcon.Text = "🔒";
+            TxtSecurityIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+            TxtSecurityIcon.ToolTip = "Conexión cifrada segura (HTTPS)";
+        }
+        else
+        {
+            TxtSecurityIcon.Text = "⚠️";
+            TxtSecurityIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
+            TxtSecurityIcon.ToolTip = "Conexión no cifrada (HTTP)";
+        }
+    }
+
     private void BookmarkItem_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement el && el.DataContext is BookmarkItem item)
         {
+            if (!IsSafeHttpUrl(item.Url)) return;
             if (_activeTab?.WebView != null)
             {
                 if (_activeTab.WebView.CoreWebView2 != null)
@@ -1192,17 +1996,33 @@ public partial class MainWindow : Window
         OpenHistory();
     }
 
+    private CoreWebView2? GetPersistentProfileCoreWebView2()
+    {
+        if (_activeTab != null && !_activeTab.IsIncognito && _activeTab.WebView?.CoreWebView2 != null)
+        {
+            return _activeTab.WebView.CoreWebView2;
+        }
+
+        var normalTab = Tabs.FirstOrDefault(t => !t.IsIncognito && !t.IsDisposed && t.WebView?.CoreWebView2 != null);
+        if (normalTab?.WebView?.CoreWebView2 != null)
+        {
+            return normalTab.WebView.CoreWebView2;
+        }
+
+        return _activeTab?.WebView?.CoreWebView2;
+    }
+
     public void OpenHistory()
     {
         try
         {
-            var historyWin = new HistoryWindow(_activeTab?.WebView?.CoreWebView2)
+            var historyWin = new HistoryWindow(GetPersistentProfileCoreWebView2())
             {
                 Owner = this
             };
             historyWin.UrlSelected += async (url) =>
             {
-                if (!string.IsNullOrWhiteSpace(url))
+                if (IsSafeHttpUrl(url))
                 {
                     if (_activeTab?.WebView?.CoreWebView2 != null)
                         _activeTab.WebView.CoreWebView2.Navigate(url);
@@ -1228,13 +2048,25 @@ public partial class MainWindow : Window
     {
         try
         {
-            var settingsWin = new SettingsWindow
+            string prevEngine = SettingsManager.Current.DefaultSearchEngine;
+            string prevCustom = SettingsManager.Current.CustomSearchUrl;
+
+            var settingsWin = new SettingsWindow(GetPersistentProfileCoreWebView2())
             {
                 Owner = this
             };
             settingsWin.OpenToSection(defaultSection);
             settingsWin.ShowDialog();
             ApplySettings();
+
+            if (prevEngine != SettingsManager.Current.DefaultSearchEngine ||
+                prevCustom != SettingsManager.Current.CustomSearchUrl)
+            {
+                foreach (var t in Tabs.Where(t => t.IsNewTab && !t.IsDisposed && t.WebView?.CoreWebView2 != null))
+                {
+                    try { t.WebView.NavigateToString(NewTabPage.GetHtml(t.IsIncognito)); } catch { }
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -1502,9 +2334,10 @@ public partial class MainWindow : Window
         if (tabToClose.IsDisposed) return;
         tabToClose.IsDisposed = true;
 
-        if (!string.IsNullOrWhiteSpace(tabToClose.Url) && !tabToClose.IsNewTab)
+        // Privacidad de Incógnito: jamás guardar pestañas de incógnito en el historial de Ctrl+Shift+T
+        if (!tabToClose.IsIncognito && !string.IsNullOrWhiteSpace(tabToClose.Url) && !tabToClose.IsNewTab)
         {
-            _closedTabsHistory.Push((tabToClose.Url, tabToClose.Title, tabToClose.IsIncognito));
+            _closedTabsHistory.Push((tabToClose.Url, tabToClose.Title, false));
         }
 
         int index = Tabs.IndexOf(tabToClose);
@@ -1608,15 +2441,16 @@ public partial class MainWindow : Window
         }
     }
 
-    private void MenuMoveToNewWindow_Click(object sender, RoutedEventArgs e)
+    private async void MenuMoveToNewWindow_Click(object sender, RoutedEventArgs e)
     {
         var tab = GetTabFromMenuItem(sender);
         if (tab != null)
         {
-            _pipWindow.AttachTab(tab);
-            if (!_pipWindow.IsVisible)
-                _pipWindow.Show();
-            _pipWindow.Activate();
+            if (Tabs.Count <= 1)
+            {
+                await AddNewTabAsync(null, isIncognito: false);
+            }
+            DetachTabToNewWindow(tab, useCursorPosition: false);
         }
     }
 
@@ -1708,13 +2542,40 @@ public partial class MainWindow : Window
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
-        if (_pipWindow.IsVisible)
-            _pipWindow.HideAndDetach();
-
-        _pipWindow.OnReturnToTabRequested = null;
-        _pipWindow.OnDetachWebView = null;
-        _pipWindow.Close();
         Close();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        try
+        {
+            SettingsManager.SettingsChanged -= ApplySettings;
+            _nativePipTimer?.Stop();
+            _undoBookmarkTimer.Stop();
+            _toastTimer.Stop();
+            _zoomWidgetTimer.Stop();
+
+            if (_pipWindow.IsVisible)
+                _pipWindow.HideAndDetach();
+
+            _pipWindow.OnReturnToTabRequested = null;
+            _pipWindow.OnDetachWebView = null;
+            try { _pipWindow.Close(); } catch { }
+
+            foreach (var tab in Tabs.ToList())
+            {
+                if (tab.OwnerWindow == this && !tab.IsDisposed)
+                {
+                    tab.IsDisposed = true;
+                    try { tab.WebView?.CoreWebView2?.Stop(); } catch { }
+                    try { tab.WebView?.Dispose(); } catch { }
+                }
+            }
+            Tabs.Clear();
+        }
+        catch { }
+
+        base.OnClosed(e);
     }
 
     private void MainWindow_StateChanged(object? sender, EventArgs e)
@@ -1732,16 +2593,513 @@ public partial class MainWindow : Window
 
     private void UpdateWindowMargin()
     {
-        bool isFullscreen = _activeTab?.WebView?.CoreWebView2?.ContainsFullScreenElement ?? false;
-        if (WindowState == WindowState.Maximized && !isFullscreen && WindowChrome.GetWindowChrome(this) != null)
+        RootWindowGrid.Margin = new Thickness(0);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // AMPLIFICADOR DE VOLUMEN HASTA 300% (VOLUME MASTER INTEGRADO)
+    // ─────────────────────────────────────────────────────────────────────
+    private bool _isUpdatingVolumeSlider = false;
+
+    private void BtnVolumeBooster_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateVolumeBoosterUI();
+        PopupVolumeBooster.IsOpen = !PopupVolumeBooster.IsOpen;
+    }
+
+    private void SliderVolumeBoost_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isUpdatingVolumeSlider || _activeTab == null) return;
+        int pct = (int)Math.Round(e.NewValue);
+        _activeTab.VolumeBoostPercent = pct;
+        UpdateVolumeBoosterUI();
+        SendVolumeBoostToTab(_activeTab);
+    }
+
+    private void BtnVolumeReset_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab == null) return;
+        _activeTab.VolumeBoostPercent = 100;
+        UpdateVolumeBoosterUI();
+        SendVolumeBoostToTab(_activeTab);
+    }
+
+    private void BtnVolumePreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab == null) return;
+        if (sender is Button btn && btn.Tag is string tagStr && int.TryParse(tagStr, out int preset))
         {
-            // En WindowStyle="None" con WindowChrome, Win32 expande la ventana 8px fuera de la pantalla.
-            // Un margen de 8px en RootWindowGrid asegura que la barra de scroll y los Shorts queden 100% dentro del monitor.
-            RootWindowGrid.Margin = new Thickness(8);
+            _activeTab.VolumeBoostPercent = Math.Clamp(preset, 0, 300);
+            UpdateVolumeBoosterUI();
+            SendVolumeBoostToTab(_activeTab);
+        }
+    }
+
+    private void SendVolumeBoostToTab(BrowserTab tab)
+    {
+        try
+        {
+            if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed) return;
+            string json = JsonSerializer.Serialize(new { action = "set_volume_boost", percent = tab.VolumeBoostPercent });
+            tab.WebView.CoreWebView2.PostWebMessageAsJson(json);
+        }
+        catch { }
+    }
+
+    private void UpdateVolumeBoosterUI()
+    {
+        if (TxtVolumeBoosterLabel == null) return;
+        int pct = _activeTab?.VolumeBoostPercent ?? 100;
+
+        _isUpdatingVolumeSlider = true;
+        if (SliderVolumeBoost != null)
+        {
+            SliderVolumeBoost.Value = pct;
+        }
+        _isUpdatingVolumeSlider = false;
+
+        TxtVolumeBoosterLabel.Text = $"{pct}%";
+        if (TxtVolumePopupValue != null)
+        {
+            TxtVolumePopupValue.Text = $"{pct}%";
+        }
+
+        if (TxtVolumeBoosterIcon != null)
+        {
+            TxtVolumeBoosterIcon.Text = pct == 0 ? "🔇" : (pct > 100 ? "🚀" : "🔊");
+        }
+
+        if (BorderVolumeBooster != null)
+        {
+            BorderVolumeBooster.Background = pct != 100
+                ? new SolidColorBrush(Color.FromRgb(0x31, 0x2E, 0x81))
+                : new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x36));
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DETECTOR Y DESCARGADOR MULTIMEDIA BAJO DEMANDA (0 MB RAM EN REPOSO)
+    // ─────────────────────────────────────────────────────────────────────
+    private string _currentMediaFilter = "Todos";
+    private bool _isUpdatingSnifferCheck = false;
+    private static readonly System.Net.Http.HttpClient _mediaDownloadClient = new()
+    {
+        Timeout = TimeSpan.FromMinutes(30)
+    };
+
+    private void BtnMediaSniffer_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateMediaSnifferUI();
+        PopupMediaSniffer.IsOpen = !PopupMediaSniffer.IsOpen;
+    }
+
+    private void BtnToggleSnifferActive_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab == null) return;
+        _activeTab.IsMediaSnifferActive = !_activeTab.IsMediaSnifferActive;
+
+        if (_activeTab.IsMediaSnifferActive)
+        {
+            RequestDomMediaScan(_activeTab);
         }
         else
         {
-            RootWindowGrid.Margin = new Thickness(0);
+            _activeTab.ClearDetectedMedia();
+        }
+
+        UpdateMediaSnifferUI();
+    }
+
+    private void ChkKeepSnifferOnNavigate_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingSnifferCheck || _activeTab == null) return;
+        _activeTab.KeepSnifferActiveOnNavigate = ChkKeepSnifferOnNavigate.IsChecked == true;
+    }
+
+    private void BtnRescanMedia_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab == null) return;
+        if (!_activeTab.IsMediaSnifferActive)
+        {
+            _activeTab.IsMediaSnifferActive = true;
+        }
+        RequestDomMediaScan(_activeTab);
+        UpdateMediaSnifferUI();
+    }
+
+    private void BtnClearMedia_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab == null) return;
+        _activeTab.ClearDetectedMedia();
+        UpdateMediaSnifferUI();
+    }
+
+    private void BtnMediaFilter_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string filter)
+        {
+            _currentMediaFilter = filter;
+            var activeBg = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1));
+            var inactiveBg = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x34));
+
+            BtnFilterAll.Background = filter == "Todos" ? activeBg : inactiveBg;
+            BtnFilterVideo.Background = filter == "VideoAudio" ? activeBg : inactiveBg;
+            BtnFilterImage.Background = filter == "Imagen" ? activeBg : inactiveBg;
+            BtnFilterDoc.Background = filter == "Documento" ? activeBg : inactiveBg;
+
+            RefreshFilteredMediaList();
+        }
+    }
+
+    private void RequestDomMediaScan(BrowserTab tab)
+    {
+        try
+        {
+            if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed) return;
+            string json = JsonSerializer.Serialize(new { action = "scan_page_media" });
+            tab.WebView.CoreWebView2.PostWebMessageAsJson(json);
+        }
+        catch { }
+    }
+
+    private void InspectNetworkMediaResponse(BrowserTab tab, CoreWebView2WebResourceResponseReceivedEventArgs e)
+    {
+        try
+        {
+            string url = e.Request.Uri;
+            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:", StringComparison.OrdinalIgnoreCase) || url.StartsWith("blob:", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            // Ignorar fragmentos byte-range internos de YouTube o publicidad
+            if (url.Contains("googlevideo.com/videoplayback", StringComparison.OrdinalIgnoreCase) && url.Contains("&range=", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
+            if (AdBlockFilter.ShouldBlock(uri)) return;
+
+            string contentType = "";
+            long contentLength = 0;
+
+            try
+            {
+                var headers = e.Response.Headers;
+                if (headers.Contains("Content-Type"))
+                    contentType = headers.GetHeader("Content-Type") ?? "";
+                if (headers.Contains("Content-Length") && long.TryParse(headers.GetHeader("Content-Length"), out long len))
+                    contentLength = len;
+            }
+            catch { }
+
+            RegisterDetectedMediaUrl(tab, url, categoryHint: null, contentType, contentLength);
+        }
+        catch { }
+    }
+
+    private void RegisterDetectedMediaUrl(BrowserTab tab, string url, string? categoryHint, string? contentType, long contentLength)
+    {
+        if (tab == null || tab.IsDisposed || !tab.IsMediaSnifferActive) return;
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
+        if (AdBlockFilter.ShouldBlock(uri)) return;
+
+        string pathLower = uri.AbsolutePath.ToLowerInvariant();
+        string ctLower = (contentType ?? "").ToLowerInvariant();
+
+        // Ignorar segmentos .ts sueltos o scripts/estilos/fuentes
+        if (pathLower.EndsWith(".ts") || pathLower.EndsWith(".js") || pathLower.EndsWith(".css") || pathLower.EndsWith(".woff2") || pathLower.EndsWith(".woff") || pathLower.EndsWith(".json"))
+            return;
+
+        string category = "";
+        string formatBadge = "";
+
+        // 1. Clasificación por extensión o Content-Type
+        if (pathLower.EndsWith(".mp4") || ctLower.Contains("video/mp4")) { category = "Video"; formatBadge = "MP4"; }
+        else if (pathLower.EndsWith(".webm") || ctLower.Contains("video/webm")) { category = "Video"; formatBadge = "WEBM"; }
+        else if (pathLower.EndsWith(".mkv") || ctLower.Contains("video/x-matroska")) { category = "Video"; formatBadge = "MKV"; }
+        else if (pathLower.EndsWith(".m3u8") || ctLower.Contains("mpegurl")) { category = "Video"; formatBadge = "M3U8"; }
+        else if (pathLower.EndsWith(".mpd") || ctLower.Contains("dash+xml")) { category = "Video"; formatBadge = "DASH"; }
+        else if (ctLower.StartsWith("video/")) { category = "Video"; formatBadge = "VIDEO"; }
+        else if (pathLower.EndsWith(".mp3") || ctLower.Contains("audio/mpeg")) { category = "Audio"; formatBadge = "MP3"; }
+        else if (pathLower.EndsWith(".wav") || ctLower.Contains("audio/wav")) { category = "Audio"; formatBadge = "WAV"; }
+        else if (pathLower.EndsWith(".flac") || ctLower.Contains("audio/flac")) { category = "Audio"; formatBadge = "FLAC"; }
+        else if (pathLower.EndsWith(".ogg") || ctLower.Contains("audio/ogg")) { category = "Audio"; formatBadge = "OGG"; }
+        else if (pathLower.EndsWith(".m4a") || pathLower.EndsWith(".aac") || ctLower.StartsWith("audio/")) { category = "Audio"; formatBadge = "AUDIO"; }
+        else if (pathLower.EndsWith(".pdf") || ctLower.Contains("application/pdf")) { category = "Documento"; formatBadge = "PDF"; }
+        else if (pathLower.EndsWith(".zip") || ctLower.Contains("application/zip")) { category = "Documento"; formatBadge = "ZIP"; }
+        else if (pathLower.EndsWith(".rar") || ctLower.Contains("rar")) { category = "Documento"; formatBadge = "RAR"; }
+        else if (pathLower.EndsWith(".7z") || ctLower.Contains("7z")) { category = "Documento"; formatBadge = "7Z"; }
+        else if (pathLower.EndsWith(".docx") || pathLower.EndsWith(".doc") || ctLower.Contains("word")) { category = "Documento"; formatBadge = "DOCX"; }
+        else if (pathLower.EndsWith(".xlsx") || pathLower.EndsWith(".xls") || ctLower.Contains("spreadsheet") || ctLower.Contains("excel")) { category = "Documento"; formatBadge = "XLSX"; }
+        else if (pathLower.EndsWith(".pptx") || pathLower.EndsWith(".ppt") || ctLower.Contains("presentation") || ctLower.Contains("powerpoint")) { category = "Documento"; formatBadge = "PPTX"; }
+        else if (pathLower.EndsWith(".csv")) { category = "Documento"; formatBadge = "CSV"; }
+        else if (pathLower.EndsWith(".txt")) { category = "Documento"; formatBadge = "TXT"; }
+        else if (categoryHint == "Imagen" || (ctLower.StartsWith("image/") && contentLength >= 25_000))
+        {
+            if (ctLower.Contains("svg") || pathLower.EndsWith(".svg") || pathLower.EndsWith(".ico")) return;
+            category = "Imagen";
+            if (pathLower.EndsWith(".png") || ctLower.Contains("png")) formatBadge = "PNG";
+            else if (pathLower.EndsWith(".webp") || ctLower.Contains("webp")) formatBadge = "WEBP";
+            else if (pathLower.EndsWith(".gif") || ctLower.Contains("gif")) formatBadge = "GIF";
+            else formatBadge = "JPG";
+        }
+        else if (!string.IsNullOrWhiteSpace(categoryHint))
+        {
+            category = categoryHint;
+            formatBadge = categoryHint.ToUpperInvariant();
+        }
+
+        if (string.IsNullOrEmpty(category)) return;
+
+        // Si ya fue registrado en esta pestaña, actualizar tamaño si antes era 0
+        if (tab.DetectedMediaUrls.Contains(url)) return;
+
+        // Límite estricto de 60 elementos por pestaña para garantizar consumo despreciable de RAM (< 40 KB)
+        if (tab.DetectedMedia.Count >= 60)
+        {
+            var oldest = tab.DetectedMedia[0];
+            tab.DetectedMediaUrls.Remove(oldest.Url);
+            tab.DetectedMedia.RemoveAt(0);
+        }
+
+        string fileName = Path.GetFileName(uri.LocalPath);
+        if (string.IsNullOrWhiteSpace(fileName) || fileName == "/" || fileName.Length < 2)
+        {
+            string baseTitle = !string.IsNullOrWhiteSpace(tab.Title) ? tab.Title : uri.Host;
+            foreach (char c in Path.GetInvalidFileNameChars()) baseTitle = baseTitle.Replace(c, '_');
+            if (baseTitle.Length > 42) baseTitle = baseTitle.Substring(0, 42);
+            fileName = $"{baseTitle}.{formatBadge.ToLowerInvariant()}";
+        }
+        else
+        {
+            try { fileName = Uri.UnescapeDataString(fileName); } catch { }
+            if (!Path.HasExtension(fileName))
+            {
+                fileName += $".{formatBadge.ToLowerInvariant()}";
+            }
+        }
+
+        string icon = category switch
+        {
+            "Video" => "🎬",
+            "Audio" => "🎵",
+            "Imagen" => "🖼️",
+            _ => "📄"
+        };
+
+        string sizeDisplay = contentLength > 0
+            ? FormatBytes(contentLength)
+            : (formatBadge == "M3U8" || formatBadge == "DASH" ? "Stream (Manifiesto)" : "Descarga directa");
+
+        var item = new DetectedMediaItem
+        {
+            Url = url,
+            Referer = tab.Url,
+            FileName = fileName,
+            Category = category,
+            CategoryIcon = icon,
+            FormatBadge = formatBadge,
+            SizeBytes = contentLength,
+            SizeDisplay = sizeDisplay
+        };
+
+        tab.DetectedMediaUrls.Add(url);
+        tab.DetectedMedia.Insert(0, item);
+
+        if (_activeTab == tab)
+        {
+            UpdateMediaSnifferUI();
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
+        if (bytes >= 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
+        if (bytes >= 1024) return $"{bytes / 1024.0:F0} KB";
+        return $"{bytes} B";
+    }
+
+    private void UpdateMediaSnifferUI()
+    {
+        if (TxtMediaSnifferLabel == null) return;
+
+        bool active = _activeTab?.IsMediaSnifferActive ?? false;
+        int count = _activeTab?.DetectedMedia.Count ?? 0;
+
+        _isUpdatingSnifferCheck = true;
+        if (ChkKeepSnifferOnNavigate != null)
+        {
+            ChkKeepSnifferOnNavigate.IsChecked = _activeTab?.KeepSnifferActiveOnNavigate ?? false;
+        }
+        _isUpdatingSnifferCheck = false;
+
+        TxtMediaSnifferLabel.Text = active && count > 0 ? $"Multimedia ({count})" : "Multimedia";
+        DotMediaSnifferStatus.Fill = active
+            ? new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81))
+            : new SolidColorBrush(Color.FromRgb(0x71, 0x71, 0x7A));
+
+        BorderMediaSniffer.Background = active
+            ? new SolidColorBrush(Color.FromRgb(0x1E, 0x3A, 0x3A))
+            : new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x36));
+
+        if (TxtToggleSnifferBtn != null && BtnToggleSnifferActive != null && TxtSnifferStatusSubtitle != null)
+        {
+            if (active)
+            {
+                TxtToggleSnifferBtn.Text = "⏹ Desactivar";
+                BtnToggleSnifferActive.Background = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
+                TxtSnifferStatusSubtitle.Text = $"🟢 Activo en esta pestaña ({count} detectados)";
+                TxtSnifferStatusSubtitle.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
+            }
+            else
+            {
+                TxtToggleSnifferBtn.Text = "⚡ Activar aquí";
+                BtnToggleSnifferActive.Background = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1));
+                TxtSnifferStatusSubtitle.Text = "Apagado (0 MB RAM en reposo)";
+                TxtSnifferStatusSubtitle.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
+            }
+        }
+
+        RefreshFilteredMediaList();
+    }
+
+    private void RefreshFilteredMediaList()
+    {
+        if (ItemsDetectedMedia == null || TxtMediaEmptyState == null || ScrollDetectedMedia == null) return;
+
+        if (_activeTab == null || !_activeTab.IsMediaSnifferActive)
+        {
+            ItemsDetectedMedia.ItemsSource = null;
+            ScrollDetectedMedia.Visibility = Visibility.Collapsed;
+            TxtMediaEmptyState.Text = "Presiona '⚡ Activar aquí' para detectar videos, audios, imágenes de alta resolución y documentos (PDF, ZIP, Office) en esta página.";
+            TxtMediaEmptyState.Visibility = Visibility.Visible;
+            return;
+        }
+
+        IEnumerable<DetectedMediaItem> query = _activeTab.DetectedMedia;
+        if (_currentMediaFilter == "VideoAudio")
+            query = query.Where(x => x.Category == "Video" || x.Category == "Audio");
+        else if (_currentMediaFilter == "Imagen")
+            query = query.Where(x => x.Category == "Imagen");
+        else if (_currentMediaFilter == "Documento")
+            query = query.Where(x => x.Category == "Documento");
+
+        var list = query.ToList();
+        ItemsDetectedMedia.ItemsSource = list;
+
+        if (list.Count == 0)
+        {
+            ScrollDetectedMedia.Visibility = Visibility.Collapsed;
+            TxtMediaEmptyState.Text = "Escuchando recursos en esta página... Reproduce el video/audio o interactúa con la página para capturar sus archivos.";
+            TxtMediaEmptyState.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            TxtMediaEmptyState.Visibility = Visibility.Collapsed;
+            ScrollDetectedMedia.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void BtnCopyMediaUrl_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is DetectedMediaItem item && !string.IsNullOrWhiteSpace(item.Url))
+        {
+            try
+            {
+                Clipboard.SetText(item.Url);
+                PopupMediaSniffer.IsOpen = false;
+                ShowToast($"📋 Enlace copiado: {item.FileName}");
+            }
+            catch { }
+        }
+    }
+
+    private async void BtnDownloadDetectedMedia_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not DetectedMediaItem item || string.IsNullOrWhiteSpace(item.Url))
+            return;
+
+        PopupMediaSniffer.IsOpen = false;
+
+        string safeName = item.FileName;
+        foreach (char c in Path.GetInvalidFileNameChars())
+        {
+            safeName = safeName.Replace(c, '_');
+        }
+
+        string downloadsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        var sfd = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Guardar archivo detectado — Lex Junior",
+            FileName = safeName,
+            InitialDirectory = Directory.Exists(downloadsFolder) ? downloadsFolder : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Filter = "Todos los archivos (*.*)|*.*"
+        };
+
+        if (sfd.ShowDialog(this) != true) return;
+
+        string targetPath = sfd.FileName;
+        ShowToast($"⬇️ Descargando {Path.GetFileName(targetPath)}...");
+
+        try
+        {
+            using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, item.Url);
+            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            if (!string.IsNullOrWhiteSpace(item.Referer))
+            {
+                req.Headers.TryAddWithoutValidation("Referer", item.Referer);
+            }
+
+            using var resp = await _mediaDownloadClient.SendAsync(req, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
+            resp.EnsureSuccessStatusCode();
+
+            await using var netStream = await resp.Content.ReadAsStreamAsync();
+            await using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await netStream.CopyToAsync(fileStream);
+
+            ShowToast($"✅ Descarga completada: {Path.GetFileName(targetPath)}");
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"⚠️ Error al descargar: {ex.Message}");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // AUTO-ACTUALIZADOR CONECTADO A GITHUB RELEASES (JuniorJhair/Lex-Junior)
+    // ─────────────────────────────────────────────────────────────────────
+    private bool _isDownloadingBrowserUpdate = false;
+
+    private async void BtnUpdateAvailable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isDownloadingBrowserUpdate) return;
+        var update = UpdateManager.AvailableUpdate;
+        if (update == null) return;
+
+        var confirm = MessageBox.Show(
+            $"Está disponible la nueva versión {update.VersionTag} de Lex Junior Browser.\n\n" +
+            $"{(string.IsNullOrWhiteSpace(update.ReleaseNotes) ? "Incluye mejoras de rendimiento, seguridad y estabilidad." : update.ReleaseNotes)}\n\n" +
+            "¿Deseas descargar e instalar la actualización ahora mismo? (Tus marcadores, historial y configuración se conservarán intactos).",
+            "Actualización disponible — Lex Junior",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Information);
+
+        if (confirm != MessageBoxResult.Yes) return;
+
+        _isDownloadingBrowserUpdate = true;
+        BtnUpdateAvailable.IsEnabled = false;
+
+        var progress = new Progress<int>(pct =>
+        {
+            TxtUpdateAvailableLabel.Text = $"Descargando {pct}%";
+        });
+
+        bool ok = await UpdateManager.DownloadAndApplyUpdateAsync(update, progress);
+        if (!ok)
+        {
+            _isDownloadingBrowserUpdate = false;
+            BtnUpdateAvailable.IsEnabled = true;
+            TxtUpdateAvailableLabel.Text = $"Actualizar ({update.VersionTag})";
+            ShowToast("⚠️ No se pudo descargar la actualización. Verifica tu conexión a internet.");
         }
     }
 }

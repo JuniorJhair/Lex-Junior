@@ -12,8 +12,9 @@ $exePath = Join-Path $projectDir "bin\$Configuration\net8.0-windows\LexBrowser.e
 Get-Process -Name "LexBrowser" -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 300
 
-Write-Host "Compilando Lex Junior Browser ($Configuration)..." -ForegroundColor Cyan
-dotnet build $project -c $Configuration --verbosity minimal
+Write-Host "Compilando Lex Junior Browser (Debug y Release)..." -ForegroundColor Cyan
+dotnet build $project -c Debug --verbosity minimal
+dotnet build $project -c Release --verbosity minimal
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: la compilación falló." -ForegroundColor Red
