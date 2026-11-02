@@ -42,21 +42,30 @@ public static class YouTubeOptimizer
             });
         } catch(_) {}
 
-        // Navegación SPA: tras el primer video, YouTube ya no recarga la página; pide el player por fetch.
+        // Navegación SPA: tras el primer video, YouTube ya no recarga la página; pide el player por fetch o XHR.
         // Sin esto el pre-hook de arriba solo protege al primer video.
         try {
             const cleanPlayerPayload = function(data) {
                 if (!data || typeof data !== 'object') return data;
                 try {
-                    if (data.adPlacements) data.adPlacements = [];
-                    if (data.playerAds) data.playerAds = [];
-                    if (data.adSlots) data.adSlots = [];
+                    if (Array.isArray(data.adPlacements)) data.adPlacements = [];
+                    if (Array.isArray(data.playerAds)) data.playerAds = [];
+                    if (Array.isArray(data.adSlots)) data.adSlots = [];
                     if (data.playerResponse) cleanPlayerPayload(data.playerResponse);
+                    if (data.contents) cleanPlayerPayload(data.contents);
+                    if (data.playbackTracking && data.playbackTracking.videostatsPlaybackUrl) {
+                        data.playbackTracking.videostatsPlaybackUrl.baseUrl = '';
+                    }
                 } catch(_) {}
                 return data;
             };
-            const isPlayerEndpoint = (u) => typeof u === 'string' && (u.indexOf('/youtubei/v1/player') !== -1 || u.indexOf('/youtubei/v1/reel/reel_item_watch') !== -1);
+            const isPlayerEndpoint = (u) => typeof u === 'string' && (
+                u.indexOf('/youtubei/v1/player') !== -1 ||
+                u.indexOf('/youtubei/v1/reel/reel_item_watch') !== -1 ||
+                u.indexOf('/youtubei/v1/next') !== -1
+            );
 
+            // 1. Interceptar fetch
             const origFetch = window.fetch;
             window.fetch = function(input, init) {
                 const url = (typeof input === 'string') ? input : (input && input.url);
@@ -70,12 +79,37 @@ public static class YouTubeOptimizer
                 });
             };
 
-            // Respuestas del reproductor que YouTube entrega parseando JSON (ytInitialPlayerResponse tardío, /next)
+            // 2. Interceptar XMLHttpRequest (utilizado por el reproductor base de YouTube)
+            const origXhrOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                this.__lex_url = url;
+                return origXhrOpen.apply(this, arguments);
+            };
+
+            const origResponseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
+            if (origResponseTextDesc && origResponseTextDesc.get) {
+                Object.defineProperty(XMLHttpRequest.prototype, 'responseText', {
+                    get: function() {
+                        const raw = origResponseTextDesc.get.call(this);
+                        if (isPlayerEndpoint(this.__lex_url) && typeof raw === 'string' && raw.includes('adPlacements')) {
+                            try {
+                                return JSON.stringify(cleanPlayerPayload(JSON.parse(raw)));
+                            } catch(_) {}
+                        }
+                        return raw;
+                    },
+                    configurable: true
+                });
+            }
+
+            // 3. Interceptar JSON.parse para atrapar respuestas de anuncios parseadas directamente
             const origParse = JSON.parse;
             JSON.parse = function() {
                 const out = origParse.apply(this, arguments);
-                if (out && typeof out === 'object' && (out.adPlacements || out.playerAds || out.adSlots)) {
-                    return cleanPlayerPayload(out);
+                if (out && typeof out === 'object') {
+                    if (out.adPlacements || out.playerAds || out.adSlots || out.playerResponse) {
+                        return cleanPlayerPayload(out);
+                    }
                 }
                 return out;
             };
@@ -378,16 +412,19 @@ public static class YouTubeOptimizer
 
     const skipYouTubeAds = () => {
         if (!isYouTube) return;
-        const now = Date.now();
-        if (now - lastAdCheckTime < 120) return; // Límite de tasa a 120ms
-        lastAdCheckTime = now;
 
         const moviePlayer = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
         const video = document.querySelector('video');
         if (!video || !moviePlayer) return;
 
-        // Detección estricta oficial: YouTube siempre asigna 'ad-showing' o 'ad-interrupting'
-        const isAdShowing = moviePlayer.classList.contains('ad-showing') || moviePlayer.classList.contains('ad-interrupting');
+        // Detección oficial estricta: YouTube únicamente asigna 'ad-showing' o 'ad-interrupting' cuando un anuncio está activo
+        const isAdShowing = moviePlayer.classList.contains('ad-showing') ||
+                            moviePlayer.classList.contains('ad-interrupting');
+
+        const now = Date.now();
+        // Solo limitar tasa si NO hay anuncio activo (para no saturar en reproducción normal)
+        if (!isAdShowing && (now - lastAdCheckTime < 150)) return;
+        lastAdCheckTime = now;
 
         if (isAdShowing) {
             if (isHandlingAd) return;
@@ -427,7 +464,7 @@ public static class YouTubeOptimizer
                 }
 
                 // 6. Clic en botón de skip si está presente
-                const skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-skip-button-slot button, button[class*=""skip""]');
+                const skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, .ytp-ad-skip-button-slot button, button[class*=""skip""], [class*=""skip-button""]');
                 if (skipBtn) {
                     try {
                         const opts = { bubbles: true, cancelable: true, view: window };
@@ -487,8 +524,8 @@ public static class YouTubeOptimizer
             ytPlayerObserver.observe(player, {
                 attributes: true,
                 attributeFilter: ['class'],
-                childList: false,
-                subtree: false
+                childList: true,
+                subtree: true
             });
 
             // Neutralización inmediata en el primer milisegundo al encontrar el reproductor
@@ -701,22 +738,41 @@ public static class YouTubeOptimizer
                                     html, body {
                                         overflow: hidden !important;
                                         background: #000000 !important;
+                                        margin: 0 !important;
+                                        padding: 0 !important;
                                     }
-                                    video {
+                                    #masthead-container, ytd-mini-guide-renderer, #guide, #sidebar, #below, #comments, #secondary, ytd-shorts #actions {
+                                        display: none !important;
+                                    }
+                                    ytd-app, #page-manager, ytd-watch-flexy, #primary, #primary-inner, #player, #player-container-outer, #player-container, #movie_player, .html5-video-player {
+                                        width: 100vw !important;
+                                        height: 100vh !important;
+                                        max-width: 100vw !important;
+                                        max-height: 100vh !important;
                                         position: fixed !important;
                                         top: 0 !important;
                                         left: 0 !important;
+                                        margin: 0 !important;
+                                        padding: 0 !important;
+                                        z-index: 2147483640 !important;
+                                        background: #000000 !important;
+                                    }
+                                    ytd-shorts, #shorts-container, ytd-reel-video-renderer {
                                         width: 100vw !important;
                                         height: 100vh !important;
-                                        max-width: none !important;
-                                        max-height: none !important;
-                                        object-fit: contain !important;
-                                        z-index: 2147483647 !important;
+                                        max-width: 100vw !important;
+                                        max-height: 100vh !important;
+                                        position: fixed !important;
+                                        top: 0 !important;
+                                        left: 0 !important;
                                         background: #000000 !important;
-                                        cursor: pointer !important;
                                     }
-                                    #masthead-container, ytd-mini-guide-renderer, #guide, #sidebar, #below, #comments, #secondary, ytd-shorts #actions, #shorts-inner-container > ytd-reel-video-renderer:not([is-active]) {
-                                        display: none !important;
+                                    video {
+                                        width: 100% !important;
+                                        height: 100% !important;
+                                        max-width: 100% !important;
+                                        max-height: 100% !important;
+                                        object-fit: contain !important;
                                     }
                                 `;
                                 (document.head || document.documentElement).appendChild(pipStyle);
@@ -768,20 +824,30 @@ public static class YouTubeOptimizer
         const style = document.createElement('style');
         style.id = 'lex-adblock-styles';
         style.textContent = `
-            /* Cortina visual fantasma: Oculta el video mientras corre el anuncio para que nunca se vea */
+            /* Cortina visual fantasma: Oculta el video y todo el módulo de anuncio al 100% mientras corre el anuncio */
             .html5-video-player.ad-showing video,
-            .html5-video-player.ad-interrupting video {
+            .html5-video-player.ad-interrupting video,
+            #movie_player.ad-showing video,
+            #movie_player.ad-interrupting video {
                 opacity: 0 !important;
                 visibility: hidden !important;
+                filter: brightness(0) !important;
             }
-            /* Ocultar todos los banners, overlays, promos y botones de compra */
+
+            /* Ocultar ABSOLUTAMENTE TODOS los contenedores de publicidad, textos, banners y overlays para no ver nada */
+            .video-ads,
+            .ytp-ad-module,
+            .ytp-ad-player-overlay,
+            .ytp-ad-player-overlay-layout,
+            .ytp-ad-preview-container,
+            .ytp-ad-text,
+            .ytp-ad-duration-remaining,
+            .ytp-ad-hover-text-container,
+            .ytp-ad-action-interstitial,
+            .ytp-ad-image-overlay,
             .ytp-ad-overlay-container,
             .ytp-ad-message-container,
             .ytp-ad-survey-container,
-            .ytp-ad-action-interstitial,
-            .ytp-ad-player-overlay,
-            .ytp-ad-preview-container,
-            .ytp-ad-text,
             ytd-action-companion-ad-renderer,
             ytd-display-ad-renderer,
             ytd-video-masthead-ad-v3-renderer,
@@ -796,6 +862,7 @@ public static class YouTubeOptimizer
             ytd-banner-promo-renderer {
                 display: none !important;
                 visibility: hidden !important;
+                opacity: 0 !important;
                 height: 0 !important;
                 pointer-events: none !important;
             }
