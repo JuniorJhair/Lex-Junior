@@ -17,6 +17,11 @@ public class BrowserSettings
     public int NativePipHeight { get; set; } = 0;
     public int NativePipShortsWidth { get; set; } = 0;
     public int NativePipShortsHeight { get; set; } = 0;
+    public bool HasCustomMainWindowBounds { get; set; } = false;
+    public double MainWindowWidth { get; set; } = 1280;
+    public double MainWindowHeight { get; set; } = 800;
+    public double MainWindowLeft { get; set; } = double.NaN;
+    public double MainWindowTop { get; set; } = double.NaN;
     public string DefaultSearchEngine { get; set; } = "Google";
     public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
 }

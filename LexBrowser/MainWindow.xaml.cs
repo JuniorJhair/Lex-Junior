@@ -121,6 +121,8 @@ public partial class MainWindow : Window
         Loaded += MainWindow_Loaded;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         StateChanged += MainWindow_StateChanged;
+        SizeChanged += MainWindow_SizeOrLocationChanged;
+        LocationChanged += MainWindow_SizeOrLocationChanged;
         UpdateWindowMargin();
     }
 
@@ -2570,6 +2572,8 @@ public partial class MainWindow : Window
         WindowState = WindowState.Minimized;
     }
 
+    private bool _isApplyingNormalBounds = false;
+
     private void BtnMaximize_Click(object sender, RoutedEventArgs e)
     {
         if (WindowState == WindowState.Maximized)
@@ -2579,6 +2583,7 @@ public partial class MainWindow : Window
         }
         else
         {
+            RecordCurrentNormalBounds(saveToDisk: true);
             WindowState = WindowState.Maximized;
             BtnMaxRestore.Content = "❐";
         }
@@ -2593,6 +2598,12 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (WindowState == WindowState.Normal)
+            {
+                RecordCurrentNormalBounds(saveToDisk: false);
+            }
+            SettingsManager.Save(notify: false);
+
             SettingsManager.SettingsChanged -= ApplySettings;
             DownloadManager.DownloadsChanged -= OnDownloadsChanged;
             DownloadManager.Flush();
@@ -2634,6 +2645,94 @@ public partial class MainWindow : Window
         else if (WindowState == WindowState.Normal)
         {
             BtnMaxRestore.Content = "□";
+            ApplyRestoredWindowBounds();
+        }
+    }
+
+    private void MainWindow_SizeOrLocationChanged(object? sender, EventArgs e)
+    {
+        if (!IsLoaded || _isApplyingNormalBounds || WindowState != WindowState.Normal)
+            return;
+
+        RecordCurrentNormalBounds(saveToDisk: false);
+    }
+
+    private void RecordCurrentNormalBounds(bool saveToDisk)
+    {
+        if (_isApplyingNormalBounds || WindowState != WindowState.Normal)
+            return;
+
+        double w = ActualWidth > 0 ? ActualWidth : Width;
+        double h = ActualHeight > 0 ? ActualHeight : Height;
+        if (w < MinWidth || h < MinHeight || double.IsNaN(Left) || double.IsNaN(Top))
+            return;
+
+        var workArea = SystemParameters.WorkArea;
+        if (w >= workArea.Width - 4 && h >= workArea.Height - 4)
+            return;
+
+        var s = SettingsManager.Current;
+        s.MainWindowWidth = w;
+        s.MainWindowHeight = h;
+        s.MainWindowLeft = Left;
+        s.MainWindowTop = Top;
+        s.HasCustomMainWindowBounds = true;
+
+        if (saveToDisk)
+        {
+            SettingsManager.Save(notify: false);
+        }
+    }
+
+    private void ApplyRestoredWindowBounds()
+    {
+        _isApplyingNormalBounds = true;
+        try
+        {
+            var workArea = SystemParameters.WorkArea;
+            var s = SettingsManager.Current;
+
+            if (!s.HasCustomMainWindowBounds ||
+                double.IsNaN(s.MainWindowLeft) ||
+                double.IsNaN(s.MainWindowTop) ||
+                s.MainWindowWidth < MinWidth ||
+                s.MainWindowHeight < MinHeight)
+            {
+                // Primera vez que el usuario restaura la ventana tras instalar: centrar en pantalla
+                double defaultW = Math.Min(1280, workArea.Width * 0.85);
+                double defaultH = Math.Min(800, workArea.Height * 0.85);
+                double centeredLeft = workArea.Left + (workArea.Width - defaultW) / 2.0;
+                double centeredTop = workArea.Top + (workArea.Height - defaultH) / 2.0;
+
+                Width = defaultW;
+                Height = defaultH;
+                Left = centeredLeft;
+                Top = centeredTop;
+
+                s.MainWindowWidth = defaultW;
+                s.MainWindowHeight = defaultH;
+                s.MainWindowLeft = centeredLeft;
+                s.MainWindowTop = centeredTop;
+                s.HasCustomMainWindowBounds = true;
+                SettingsManager.Save(notify: false);
+            }
+            else
+            {
+                // Restaurar exactamente el tamaño y posición donde el usuario la dejó
+                double savedW = Math.Clamp(s.MainWindowWidth, MinWidth, workArea.Width);
+                double savedH = Math.Clamp(s.MainWindowHeight, MinHeight, workArea.Height);
+                double savedLeft = Math.Clamp(s.MainWindowLeft, workArea.Left - savedW + 120, workArea.Right - 120);
+                double savedTop = Math.Clamp(s.MainWindowTop, workArea.Top, workArea.Bottom - 80);
+
+                Width = savedW;
+                Height = savedH;
+                Left = savedLeft;
+                Top = savedTop;
+            }
+        }
+        finally
+        {
+            _isApplyingNormalBounds = false;
         }
     }
 
