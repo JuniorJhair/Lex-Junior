@@ -633,16 +633,18 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- Filtros por tipo -->
-                            <UniformGrid Columns="4" Margin="0,0,0,8">
+                            <!-- Filtros por tipo (Separados: Todos, Video, Audio, Imagen, Docs) -->
+                            <UniformGrid Columns="5" Margin="0,0,0,8">
                                 <Button x:Name="BtnFilterAll" Content="Todos" Tag="Todos" Click="BtnMediaFilter_Click"
-                                        Background="#6366F1" Foreground="#FFFFFF" FontSize="10.5" FontWeight="Bold" Padding="4,4" Margin="0,0,3,0" BorderThickness="0" Cursor="Hand"/>
-                                <Button x:Name="BtnFilterVideo" Content="🎬 Video/Audio" Tag="VideoAudio" Click="BtnMediaFilter_Click"
+                                        Background="#6366F1" Foreground="#FFFFFF" FontSize="10.5" FontWeight="Bold" Padding="4,4" Margin="0,0,2,0" BorderThickness="0" Cursor="Hand"/>
+                                <Button x:Name="BtnFilterVideo" Content="🎬 Video" Tag="Video" Click="BtnMediaFilter_Click"
                                         Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="2,0" BorderThickness="0" Cursor="Hand"/>
-                                <Button x:Name="BtnFilterImage" Content="🖼️ Imágenes" Tag="Imagen" Click="BtnMediaFilter_Click"
+                                <Button x:Name="BtnFilterAudio" Content="🎵 Audio" Tag="Audio" Click="BtnMediaFilter_Click"
                                         Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="2,0" BorderThickness="0" Cursor="Hand"/>
-                                <Button x:Name="BtnFilterDoc" Content="📄 Docs/Otros" Tag="Documento" Click="BtnMediaFilter_Click"
-                                        Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="3,0,0,0" BorderThickness="0" Cursor="Hand"/>
+                                <Button x:Name="BtnFilterImage" Content="🖼️ Imagen" Tag="Imagen" Click="BtnMediaFilter_Click"
+                                        Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="2,0" BorderThickness="0" Cursor="Hand"/>
+                                <Button x:Name="BtnFilterDoc" Content="📄 Docs" Tag="Documento" Click="BtnMediaFilter_Click"
+                                        Background="#252534" Foreground="#D4D4D8" FontSize="10.5" Padding="4,4" Margin="2,0,0,0" BorderThickness="0" Cursor="Hand"/>
                             </UniformGrid>
 
                             <!-- Lista de archivos detectados -->
@@ -787,6 +789,8 @@
                                                                 <TextBlock Text="{Binding FileName}" Foreground="#F4F4F5" FontSize="11" FontWeight="SemiBold"
                                                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding FilePath}"/>
                                                                 <TextBlock Text="{Binding StatusDisplay}" Foreground="#9CA3AF" FontSize="9.5" Margin="0,1,0,0"/>
+                                                                <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100" Height="3.5" Foreground="#10B981" Background="#27273A" BorderThickness="0" Margin="0,3,0,0"
+                                                                             Visibility="{Binding IsInProgress, Converter={StaticResource BoolToVis}}"/>
                                                             </StackPanel>
 
                                                             <Button Grid.Column="2" Content="▶" Tag="{Binding}" Click="BtnOpenDownloadedFile_Click"
@@ -1212,19 +1216,23 @@
             </StackPanel>
         </Border>
 
-        <!-- Toast / Notificación flotante informativa (ej. cuando se oculta la barra) -->
-        <Border x:Name="ToastNotification" Grid.Row="4" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                Background="#252538" BorderBrush="#6366F1" BorderThickness="1.5" CornerRadius="10"
-                Padding="16,10" Margin="0,0,0,24" Visibility="Collapsed">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="20" ShadowDepth="4" Color="#000000" Opacity="0.7"/>
-            </Border.Effect>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock x:Name="TxtToastMessage" Text="Barra de accesos directos oculta. Para volver a activarla ve a Configuración (o presiona Ctrl+Shift+B)" 
-                           Foreground="#FFFFFF" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                <Button Content="Ir a Configuración" Foreground="#818CF8" FontWeight="Bold" FontSize="11" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToastGoSettings_Click" Margin="12,0,0,0"/>
-                <Button Content="✕" Foreground="#71717A" FontSize="10" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToastClose_Click" Margin="10,0,0,0"/>
-            </StackPanel>
-        </Border>
+        <!-- Toast / Notificación flotante informativa sobre WebView2 (Airspace-safe) -->
+        <Popup x:Name="PopupToast" PlacementTarget="{Binding ElementName=BrowserContainer}" Placement="Bottom"
+               VerticalOffset="-65" AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade">
+            <Border x:Name="ToastNotification"
+                    Background="#1E1E2E" BorderBrush="#6366F1" BorderThickness="1.5" CornerRadius="10"
+                    Padding="16,10" Margin="0,0,0,0">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20" ShadowDepth="4" Color="#000000" Opacity="0.7"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtToastMessage" Text="Notificación" 
+                               Foreground="#FFFFFF" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button x:Name="BtnToastAction" Content="Detalles ⬇" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" 
+                            Background="#262B40" Padding="8,4" BorderThickness="0" Cursor="Hand" Click="ToastAction_Click" Margin="12,0,0,0"/>
+                    <Button Content="✕" Foreground="#71717A" FontSize="10" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToastClose_Click" Margin="10,0,0,0"/>
+                </StackPanel>
+            </Border>
+        </Popup>
     </Grid>
 </Window>

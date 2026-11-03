@@ -77,8 +77,7 @@ public partial class MainWindow : Window
         _toastTimer.Interval = TimeSpan.FromSeconds(6);
         _toastTimer.Tick += (s, e) =>
         {
-            _toastTimer.Stop();
-            ToastNotification.Visibility = Visibility.Collapsed;
+            HideToast();
         };
 
         // Configurar temporizador para el widget flotante de zoom (4 segundos)
@@ -1142,6 +1141,18 @@ public partial class MainWindow : Window
                 long total = (long)(op.TotalBytesToReceive ?? 0UL);
                 var entry = DownloadManager.RegisterDownload(fileName, resultPath, op.Uri, total, "En progreso", tab.IsIncognito);
 
+                var win = tab.OwnerWindow ?? this;
+                win.Dispatcher.Invoke(() =>
+                {
+                    win.RefreshDownloadsPopupUI();
+                    win.PopupDownloads.IsOpen = true;
+                    win.ShowToast($"⬇️ Descargando: {fileName}", "Detalles ⬇", () =>
+                    {
+                        win.RefreshDownloadsPopupUI();
+                        win.PopupDownloads.IsOpen = true;
+                    });
+                });
+
                 op.BytesReceivedChanged += (senderOp, args) =>
                 {
                     long received = op.BytesReceived;
@@ -1160,6 +1171,18 @@ public partial class MainWindow : Window
                         _ => "En progreso"
                     };
                     DownloadManager.UpdateDownload(entry.Id, received, tot, stateStr);
+
+                    if (op.State == CoreWebView2DownloadState.Completed)
+                    {
+                        win.Dispatcher.Invoke(() =>
+                        {
+                            win.ShowToast($"✅ Descarga completada: {fileName}", "Ver archivo 📂", () =>
+                            {
+                                win.RefreshDownloadsPopupUI();
+                                win.PopupDownloads.IsOpen = true;
+                            });
+                        });
+                    }
                 };
             }
             catch { }
@@ -2056,24 +2079,55 @@ public partial class MainWindow : Window
         ShowToast("Barra de accesos directos oculta. Para volver a activarla ve a Configuración (o presiona Ctrl+Shift+B)");
     }
 
-    private void ShowToast(string message)
+    private Action? _toastActionCallback;
+
+    private void ShowToast(string message, string? actionLabel = null, Action? onAction = null)
     {
+        if (TxtToastMessage == null || PopupToast == null || ToastNotification == null) return;
+
         TxtToastMessage.Text = message;
+        _toastActionCallback = onAction;
+
+        if (!string.IsNullOrWhiteSpace(actionLabel) && BtnToastAction != null)
+        {
+            BtnToastAction.Content = actionLabel;
+            BtnToastAction.Visibility = Visibility.Visible;
+        }
+        else if (BtnToastAction != null)
+        {
+            BtnToastAction.Visibility = Visibility.Collapsed;
+        }
+
         ToastNotification.Visibility = Visibility.Visible;
+        PopupToast.IsOpen = true;
         _toastTimer.Stop();
         _toastTimer.Start();
     }
 
+    private void ToastAction_Click(object sender, RoutedEventArgs e)
+    {
+        var cb = _toastActionCallback;
+        HideToast();
+        cb?.Invoke();
+    }
+
     private void ToastGoSettings_Click(object sender, RoutedEventArgs e)
     {
-        ToastNotification.Visibility = Visibility.Collapsed;
+        HideToast();
         OpenSettings("Bookmarks");
     }
 
     private void ToastClose_Click(object sender, RoutedEventArgs e)
     {
+        HideToast();
+    }
+
+    private void HideToast()
+    {
         _toastTimer.Stop();
-        ToastNotification.Visibility = Visibility.Collapsed;
+        if (PopupToast != null) PopupToast.IsOpen = false;
+        if (ToastNotification != null) ToastNotification.Visibility = Visibility.Collapsed;
+        _toastActionCallback = null;
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -3304,10 +3358,11 @@ public partial class MainWindow : Window
             var activeBg = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1));
             var inactiveBg = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x34));
 
-            BtnFilterAll.Background = filter == "Todos" ? activeBg : inactiveBg;
-            BtnFilterVideo.Background = filter == "VideoAudio" ? activeBg : inactiveBg;
-            BtnFilterImage.Background = filter == "Imagen" ? activeBg : inactiveBg;
-            BtnFilterDoc.Background = filter == "Documento" ? activeBg : inactiveBg;
+            if (BtnFilterAll != null) BtnFilterAll.Background = filter == "Todos" ? activeBg : inactiveBg;
+            if (BtnFilterVideo != null) BtnFilterVideo.Background = filter == "Video" ? activeBg : inactiveBg;
+            if (BtnFilterAudio != null) BtnFilterAudio.Background = filter == "Audio" ? activeBg : inactiveBg;
+            if (BtnFilterImage != null) BtnFilterImage.Background = filter == "Imagen" ? activeBg : inactiveBg;
+            if (BtnFilterDoc != null) BtnFilterDoc.Background = filter == "Documento" ? activeBg : inactiveBg;
 
             RefreshFilteredMediaList();
         }
@@ -3681,8 +3736,10 @@ public partial class MainWindow : Window
         }
 
         IEnumerable<DetectedMediaItem> query = _activeTab.DetectedMedia;
-        if (_currentMediaFilter == "VideoAudio")
-            query = query.Where(x => x.Category == "Video" || x.Category == "Audio");
+        if (_currentMediaFilter == "Video")
+            query = query.Where(x => x.Category == "Video");
+        else if (_currentMediaFilter == "Audio")
+            query = query.Where(x => x.Category == "Audio");
         else if (_currentMediaFilter == "Imagen")
             query = query.Where(x => x.Category == "Imagen");
         else if (_currentMediaFilter == "Documento")
@@ -3748,7 +3805,13 @@ public partial class MainWindow : Window
         string displayName = Path.GetFileName(targetPath);
         bool isIncog = _activeTab?.IsIncognito == true;
         var dlEntry = DownloadManager.RegisterDownload(displayName, targetPath, item.Url, item.SizeBytes, "En progreso", isIncog);
-        ShowToast($"⬇️ Descargando {displayName}...");
+        RefreshDownloadsPopupUI();
+        PopupDownloads.IsOpen = true;
+        ShowToast($"⬇️ Descargando: {displayName}", "Detalles ⬇", () =>
+        {
+            RefreshDownloadsPopupUI();
+            PopupDownloads.IsOpen = true;
+        });
 
         try
         {
@@ -3782,12 +3845,20 @@ public partial class MainWindow : Window
                 });
 
             DownloadManager.UpdateDownload(dlEntry.Id, finalSize, finalSize, "Completado");
-            ShowToast($"✅ Descarga completada: {displayName}");
+            ShowToast($"✅ Descarga completada: {displayName}", "Ver archivo 📂", () =>
+            {
+                RefreshDownloadsPopupUI();
+                PopupDownloads.IsOpen = true;
+            });
         }
         catch (Exception ex)
         {
             DownloadManager.UpdateDownload(dlEntry.Id, 0, item.SizeBytes, "Error");
-            ShowToast($"⚠️ Error al descargar: {ex.Message}");
+            ShowToast($"⚠️ Error al descargar: {ex.Message}", "Detalles ⬇", () =>
+            {
+                RefreshDownloadsPopupUI();
+                PopupDownloads.IsOpen = true;
+            });
         }
     }
 
@@ -3817,7 +3888,10 @@ public partial class MainWindow : Window
             return;
 
         var entries = DownloadManager.GetEntries();
-        ItemsDownloadsHistory.ItemsSource = entries;
+        if (ItemsDownloadsHistory.ItemsSource != entries)
+        {
+            ItemsDownloadsHistory.ItemsSource = entries;
+        }
 
         if (TxtDownloadsCountSubtitle != null)
         {

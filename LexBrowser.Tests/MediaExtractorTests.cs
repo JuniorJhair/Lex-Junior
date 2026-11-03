@@ -105,17 +105,28 @@ public class MediaExtractorTests
             "Fallback",
             "TestUA");
 
-        Assert.Equal(4, items.Count);
+        Assert.Equal(5, items.Count);
         Assert.Equal("MP4 1080p HD", items[0].FormatBadge);
+        Assert.Equal("Video", items[0].Category);
         Assert.NotNull(items[0].AudioPairUrl);
         Assert.Equal(52428800, items[0].VideoSizeBytes);
         Assert.Equal(3407872, items[0].AudioSizeBytes);
+
         Assert.Equal("MP4 720p HD", items[1].FormatBadge);
+        Assert.Equal("Video", items[1].Category);
         Assert.NotNull(items[1].AudioPairUrl);
+
         Assert.Equal("MP4 360p", items[2].FormatBadge);
+        Assert.Equal("Video", items[2].Category);
         Assert.Null(items[2].AudioPairUrl);
-        Assert.Equal("AUDIO HQ", items[3].FormatBadge);
+
+        Assert.Equal("AUDIO MP3", items[3].FormatBadge);
+        Assert.Equal("Audio", items[3].Category);
         Assert.Equal(3407872, items[3].VideoSizeBytes);
+
+        Assert.Equal("AUDIO M4A", items[4].FormatBadge);
+        Assert.Equal("Audio", items[4].Category);
+        Assert.Equal(3407872, items[4].VideoSizeBytes);
     }
 
     [Fact]
@@ -222,6 +233,50 @@ public class MediaExtractorTests
         using var ms = new MemoryStream();
         foreach (var arr in arrays) ms.Write(arr, 0, arr.Length);
         return ms.ToArray();
+    }
+
+    [Fact]
+    public async Task ExtractYouTubeStreamsAsync_RealWorldVideo_ExtractsVideoAndAudioWithVisitorData()
+    {
+        string targetUrl = "https://www.youtube.com/watch?v=pCPYb7KPoUc";
+        var items = await MediaExtractorService.ExtractYouTubeStreamsAsync(targetUrl, "Jósean Log - Doma");
+
+        Assert.NotEmpty(items);
+        Assert.Contains(items, x => x.Category == "Video" && x.FormatBadge.Contains("MP4"));
+        Assert.Contains(items, x => x.Category == "Audio" && x.FormatBadge.Contains("AUDIO"));
+
+        var videoItem = items.First(x => x.Category == "Video");
+        Assert.False(string.IsNullOrWhiteSpace(videoItem.Url));
+        Assert.Contains("googlevideo.com", videoItem.Url);
+    }
+
+    [Fact]
+    public async Task DownloadMediaItemAsync_RealWorldYouTube_DownloadsAudioSuccessfully()
+    {
+        string targetUrl = "https://www.youtube.com/watch?v=pCPYb7KPoUc";
+        var items = await MediaExtractorService.ExtractYouTubeStreamsAsync(targetUrl, "Jósean Log - Doma");
+        var audioItem = items.FirstOrDefault(x => x.Category == "Audio" && x.FormatBadge == "AUDIO M4A")
+                     ?? items.FirstOrDefault(x => x.Category == "Audio");
+
+        Assert.NotNull(audioItem);
+
+        string tempFile = Path.Combine(Path.GetTempPath(), $"LexTest_Doma_{Guid.NewGuid():N}.m4a");
+        try
+        {
+            long bytesDownloaded = await MediaExtractorService.DownloadMediaItemAsync(audioItem, tempFile);
+
+            Assert.True(File.Exists(tempFile), "El archivo de audio descargado debe existir en disco.");
+            long diskSize = new FileInfo(tempFile).Length;
+            Assert.True(diskSize > 1_000_000, $"El archivo debe tener al menos 1 MB. Tamaño real: {diskSize} bytes.");
+            Assert.Equal(diskSize, bytesDownloaded);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
     }
 }
 

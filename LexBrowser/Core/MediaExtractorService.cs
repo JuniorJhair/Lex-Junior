@@ -213,48 +213,175 @@ public static class MediaExtractorService
         return false;
     }
 
+    private static string? _cachedVisitorData;
+    private static DateTime _cachedVisitorDataExpiry = DateTime.MinValue;
+    private static readonly object _logLock = new();
+
+    private static string DiagnosticLogPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "LexBrowser",
+        "media_downloader.log");
+
     /// <summary>
-    /// Extrae todas las calidades limpias de un video o Short de YouTube (1080p HD, 720p HD, 480p, 360p y Solo Audio M4A)
-    /// consultando los clientes InnerTube (VISIONOS / IOS / ANDROID_VR) bajo demanda.
+    /// Registra eventos y errores del motor de extracción/descarga multimedia en %LOCALAPPDATA%\LexBrowser\media_downloader.log.
     /// </summary>
-    public static async Task<List<DetectedMediaItem>> ExtractYouTubeStreamsAsync(string pageUrl, string? fallbackTitle = null, CancellationToken ct = default)
+    public static void LogMediaDiagnostic(string message)
+    {
+        try
+        {
+            lock (_logLock)
+            {
+                string path = DiagnosticLogPath;
+                string? dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+                var fi = new FileInfo(path);
+                if (fi.Exists && fi.Length > 512 * 1024)
+                {
+                    File.WriteAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [LOG ROTATED]{Environment.NewLine}");
+                }
+
+                File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Obtiene el token VISITOR_DATA de YouTube necesario para que el cliente VISIONOS no reciba LOGIN_REQUIRED en videos musicales.
+    /// </summary>
+    public static async Task<string?> FetchYouTubeVisitorDataAsync(string videoId, CancellationToken ct = default)
+    {
+        if (!string.IsNullOrWhiteSpace(_cachedVisitorData) && DateTime.UtcNow < _cachedVisitorDataExpiry)
+        {
+            return _cachedVisitorData;
+        }
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"https://www.youtube.com/watch?v={videoId}&hl=es");
+            req.Headers.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+            req.Headers.TryAddWithoutValidation("Accept-Language", "es-ES,es;q=0.9,en;q=0.8");
+
+            using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!resp.IsSuccessStatusCode) return _cachedVisitorData;
+
+            string html = await resp.Content.ReadAsStringAsync(ct);
+            var m = Regex.Match(html, "\"VISITOR_DATA\"\\s*:\\s*\"([^\"]+)\"");
+            if (m.Success && !string.IsNullOrWhiteSpace(m.Groups[1].Value))
+            {
+                _cachedVisitorData = m.Groups[1].Value;
+                _cachedVisitorDataExpiry = DateTime.UtcNow.AddMinutes(15);
+                LogMediaDiagnostic($"[YouTube] VISITOR_DATA obtenido para videoId={videoId} (len={_cachedVisitorData.Length})");
+                return _cachedVisitorData;
+            }
+        }
+        catch (Exception ex)
+        {
+            LogMediaDiagnostic($"[YouTube] Aviso al obtener VISITOR_DATA: {ex.Message}");
+        }
+
+        return _cachedVisitorData;
+    }
+
+    /// <summary>
+    /// Extrae todas las calidades limpias de un video o Short de YouTube (1080p HD, 720p HD, 480p, 360p y Solo Audio MP3/M4A)
+    /// consultando VISIONOS con VISITOR_DATA (idéntico al flujo interno de Video DownloadHelper 10.6.7.2).
+    /// </summary>
+    public static async Task<List<DetectedMediaItem>> ExtractYouTubeStreamsAsync(
+        string pageUrl,
+        string? fallbackTitle = null,
+        string? pageVisitorData = null,
+        string? pageCookieHeader = null,
+        CancellationToken ct = default)
     {
         var results = new List<DetectedMediaItem>();
         string? videoId = TryExtractYouTubeVideoId(pageUrl);
         if (string.IsNullOrWhiteSpace(videoId)) return results;
 
-        // Intentar clientes InnerTube en orden de fiabilidad de URLs directas sin cifrado ni bloqueo 403
-        // 1. VISIONOS (idéntico a Video DownloadHelper 10.6.7.2: devuelve 1080p/720p/480p/360p + Audio M4A + HLS con 200 OK inmediato)
-        // 2. IOS
-        // 3. ANDROID_VR
-        var clients = new (string Name, string ClientNameId, string Version, string UserAgent, object ContextObj)[]
+        string? visitorData = !string.IsNullOrWhiteSpace(pageVisitorData)
+            ? pageVisitorData
+            : await FetchYouTubeVisitorDataAsync(videoId, ct);
+
+        if (!string.IsNullOrWhiteSpace(pageVisitorData))
         {
-            (
-                "VISIONOS",
-                "101",
-                "1.02",
-                VisionOsUserAgent,
-                new
+            _cachedVisitorData = pageVisitorData;
+            _cachedVisitorDataExpiry = DateTime.UtcNow.AddMinutes(15);
+        }
+
+        // 1. Intentar VISIONOS (sin cookies primero + con VISITOR_DATA, y luego con cookies si el video requiere cuenta/edad)
+        var visionAttempts = new List<string?> { null };
+        if (!string.IsNullOrWhiteSpace(pageCookieHeader))
+        {
+            visionAttempts.Add(pageCookieHeader);
+        }
+
+        foreach (var cookieAttempt in visionAttempts)
+        {
+            try
+            {
+                var payload = new
                 {
-                    client = new
+                    videoId = videoId,
+                    context = new
                     {
-                        clientName = "VISIONOS",
-                        clientVersion = "1.02",
-                        deviceMake = "Apple",
-                        deviceModel = "RealityDevice17,1",
-                        osName = "visionOS",
-                        osVersion = "26.5.23O471",
-                        hl = "es",
-                        gl = "US"
-                    }
+                        client = new
+                        {
+                            clientName = "VISIONOS",
+                            clientVersion = "1.02",
+                            deviceMake = "Apple",
+                            deviceModel = "RealityDevice17,1",
+                            osName = "visionOS",
+                            osVersion = "26.5.23O471",
+                            visitorData = visitorData,
+                            hl = "es",
+                            gl = "US"
+                        }
+                    },
+                    contentCheckOk = true,
+                    racyCheckOk = true
+                };
+
+                using var req = new HttpRequestMessage(HttpMethod.Post, "https://www.youtube.com/youtubei/v1/player?prettyPrint=false");
+                req.Headers.TryAddWithoutValidation("User-Agent", VisionOsUserAgent);
+                req.Headers.TryAddWithoutValidation("X-YouTube-Client-Name", "101");
+                req.Headers.TryAddWithoutValidation("X-YouTube-Client-Version", "1.02");
+                req.Headers.TryAddWithoutValidation("Origin", "https://www.youtube.com");
+                if (!string.IsNullOrWhiteSpace(visitorData))
+                {
+                    req.Headers.TryAddWithoutValidation("X-Goog-Visitor-Id", visitorData);
                 }
-            ),
-            (
-                "IOS",
-                "5",
-                "20.11.6",
-                IosUserAgent,
-                new
+                if (!string.IsNullOrWhiteSpace(cookieAttempt))
+                {
+                    req.Headers.TryAddWithoutValidation("Cookie", cookieAttempt);
+                }
+
+                req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+                using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                if (!resp.IsSuccessStatusCode) continue;
+
+                string json = await resp.Content.ReadAsStringAsync(ct);
+                var parsed = ParseYouTubePlayerResponseJson(json, pageUrl, fallbackTitle, VisionOsUserAgent, allowAdaptiveFormats: true);
+                if (parsed.Count > 0)
+                {
+                    LogMediaDiagnostic($"[YouTube] VISIONOS extrajo {parsed.Count} calidades limpias para videoId={videoId}");
+                    return parsed;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMediaDiagnostic($"[YouTube] Error en cliente VISIONOS para {videoId}: {ex.Message}");
+            }
+        }
+
+        // 2. Respaldo IOS únicamente vía HLS Manifest (en IOS adaptiveFormats da 403 sin poToken de hardware, igual que en VDH)
+        try
+        {
+            var iosPayload = new
+            {
+                videoId = videoId,
+                context = new
                 {
                     client = new
                     {
@@ -264,76 +391,69 @@ public static class MediaExtractorService
                         deviceModel = "iPhone16,2",
                         osName = "iPhone",
                         osVersion = "18.3.2.22D82",
+                        visitorData = visitorData,
                         hl = "es",
                         gl = "US"
                     }
-                }
-            ),
-            (
-                "ANDROID_VR",
-                "28",
-                "1.65.10",
-                AndroidVrUserAgent,
-                new
-                {
-                    client = new
-                    {
-                        clientName = "ANDROID_VR",
-                        clientVersion = "1.65.10",
-                        deviceMake = "Oculus",
-                        deviceModel = "Quest 3",
-                        osName = "Android",
-                        osVersion = "12L",
-                        androidSdkVersion = 32,
-                        hl = "es",
-                        gl = "US"
-                    }
-                }
-            )
-        };
+                },
+                contentCheckOk = true,
+                racyCheckOk = true
+            };
 
-        foreach (var clientInfo in clients)
-        {
-            try
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://www.youtube.com/youtubei/v1/player?prettyPrint=false");
+            req.Headers.TryAddWithoutValidation("User-Agent", IosUserAgent);
+            req.Headers.TryAddWithoutValidation("X-YouTube-Client-Name", "5");
+            req.Headers.TryAddWithoutValidation("X-YouTube-Client-Version", "20.11.6");
+            req.Headers.TryAddWithoutValidation("Origin", "https://www.youtube.com");
+            if (!string.IsNullOrWhiteSpace(visitorData))
             {
-                var payload = new
-                {
-                    videoId = videoId,
-                    context = clientInfo.ContextObj,
-                    contentCheckOk = true,
-                    racyCheckOk = true
-                };
+                req.Headers.TryAddWithoutValidation("X-Goog-Visitor-Id", visitorData);
+            }
+            req.Content = new StringContent(JsonSerializer.Serialize(iosPayload), Encoding.UTF8, "application/json");
 
-                using var req = new HttpRequestMessage(HttpMethod.Post, "https://www.youtube.com/youtubei/v1/player?prettyPrint=false");
-                req.Headers.TryAddWithoutValidation("User-Agent", clientInfo.UserAgent);
-                req.Headers.TryAddWithoutValidation("X-YouTube-Client-Name", clientInfo.ClientNameId);
-                req.Headers.TryAddWithoutValidation("X-YouTube-Client-Version", clientInfo.Version);
-                req.Headers.TryAddWithoutValidation("Origin", "https://www.youtube.com");
-                req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-
-                using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-                if (!resp.IsSuccessStatusCode) continue;
-
+            using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (resp.IsSuccessStatusCode)
+            {
                 string json = await resp.Content.ReadAsStringAsync(ct);
-                var parsed = ParseYouTubePlayerResponseJson(json, pageUrl, fallbackTitle, clientInfo.UserAgent);
-                if (parsed.Count > 0)
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("streamingData", out var sd) &&
+                    sd.TryGetProperty("hlsManifestUrl", out var hlsEl) &&
+                    !string.IsNullOrWhiteSpace(hlsEl.GetString()))
                 {
-                    return parsed;
+                    string title = fallbackTitle ?? "Video de YouTube";
+                    if (doc.RootElement.TryGetProperty("videoDetails", out var vd) &&
+                        vd.TryGetProperty("title", out var tEl) &&
+                        !string.IsNullOrWhiteSpace(tEl.GetString()))
+                    {
+                        title = tEl.GetString()!;
+                    }
+                    var hlsItems = await ExpandHlsPlaylistAsync(hlsEl.GetString()!, pageUrl, title, ct);
+                    if (hlsItems.Count > 0)
+                    {
+                        LogMediaDiagnostic($"[YouTube] IOS HLS extrajo {hlsItems.Count} variantes para videoId={videoId}");
+                        return hlsItems;
+                    }
                 }
             }
-            catch
-            {
-                // Intentar siguiente cliente InnerTube
-            }
+        }
+        catch (Exception ex)
+        {
+            LogMediaDiagnostic($"[YouTube] Error en respaldo IOS HLS para {videoId}: {ex.Message}");
         }
 
         return results;
     }
 
     /// <summary>
-    /// Parsea la respuesta JSON de InnerTube (/youtubei/v1/player) y construye la lista ordenada de calidades descargables.
+    /// Parsea la respuesta JSON de InnerTube (/youtubei/v1/player) y construye la lista ordenada de calidades descargables,
+    /// separando explícitamente las opciones de Video (MP4 1080p, 720p, 480p, 360p) y las opciones de Audio (MP3 / M4A).
     /// </summary>
-    public static List<DetectedMediaItem> ParseYouTubePlayerResponseJson(string json, string pageUrl, string? fallbackTitle, string clientUserAgent)
+    public static List<DetectedMediaItem> ParseYouTubePlayerResponseJson(
+        string json,
+        string pageUrl,
+        string? fallbackTitle,
+        string clientUserAgent,
+        bool allowAdaptiveFormats = true)
     {
         var results = new List<DetectedMediaItem>();
         if (string.IsNullOrWhiteSpace(json)) return results;
@@ -347,6 +467,8 @@ public static class MediaExtractorService
                 statusEl.TryGetProperty("status", out var statusVal) &&
                 statusVal.GetString() != "OK")
             {
+                string reason = statusEl.TryGetProperty("reason", out var rProp) ? (rProp.GetString() ?? "") : "";
+                LogMediaDiagnostic($"[YouTube] playabilityStatus={statusVal.GetString()} ({reason})");
                 return results;
             }
 
@@ -375,13 +497,15 @@ public static class MediaExtractorService
                 ? hlsProp.GetString()
                 : null;
 
-            // 1. Buscar la mejor pista de audio M4A (itag 140 = AAC 128kbps en contenedor MP4/M4A)
+            // 1. Buscar las pistas de audio M4A (itag 140 = AAC 128kbps HQ, itag 139 = AAC 48kbps Ligero)
             string? bestAudioM4aUrl = null;
             long bestAudioM4aBytes = 0;
             int bestAudioBitrate = 0;
 
             var adaptiveStreams = new List<JsonElement>();
-            if (streamingData.TryGetProperty("adaptiveFormats", out var adaptiveArr) && adaptiveArr.ValueKind == JsonValueKind.Array)
+            if (allowAdaptiveFormats &&
+                streamingData.TryGetProperty("adaptiveFormats", out var adaptiveArr) &&
+                adaptiveArr.ValueKind == JsonValueKind.Array)
             {
                 foreach (var el in adaptiveArr.EnumerateArray())
                 {
@@ -407,7 +531,6 @@ public static class MediaExtractorService
             var addedHeights = new HashSet<int>();
 
             // 2. Registrar formatos adaptativos MP4 en Alta Definición (1080p HD, 720p HD, 480p, 360p) unidos con el audio M4A
-            //    Se priorizan sobre "formats" porque en clientes modernos las pistas adaptativas tienen mucha mejor tasa de bits y 0 bloqueos 403
             if (!string.IsNullOrWhiteSpace(bestAudioM4aUrl))
             {
                 int[] targetResolutions = { 1080, 720, 480, 360 };
@@ -521,9 +644,25 @@ public static class MediaExtractorService
                 }
             }
 
-            // 4. Registrar opción de Solo Audio en alta calidad (M4A / AAC)
+            // 4. Registrar opciones separadas de Solo Audio en alta calidad (MP3 y M4A Original)
             if (!string.IsNullOrWhiteSpace(bestAudioM4aUrl))
             {
+                results.Add(new DetectedMediaItem
+                {
+                    Url = bestAudioM4aUrl,
+                    Referer = pageUrl,
+                    CustomUserAgent = clientUserAgent,
+                    IsYouTubeStream = true,
+                    FileName = $"{videoTitle}.mp3",
+                    Category = "Audio",
+                    CategoryIcon = "🎵",
+                    FormatBadge = "AUDIO MP3",
+                    SizeBytes = bestAudioM4aBytes,
+                    VideoSizeBytes = bestAudioM4aBytes,
+                    SizeDisplay = bestAudioM4aBytes > 0 ? $"{FormatBytes(bestAudioM4aBytes)} • Solo Audio (Alta Calidad)" : "Solo Audio MP3",
+                    PriorityScore = 960
+                });
+
                 results.Add(new DetectedMediaItem
                 {
                     Url = bestAudioM4aUrl,
@@ -533,18 +672,19 @@ public static class MediaExtractorService
                     FileName = $"{videoTitle} (Audio HQ).m4a",
                     Category = "Audio",
                     CategoryIcon = "🎵",
-                    FormatBadge = "AUDIO HQ",
+                    FormatBadge = "AUDIO M4A",
                     SizeBytes = bestAudioM4aBytes,
                     VideoSizeBytes = bestAudioM4aBytes,
-                    SizeDisplay = bestAudioM4aBytes > 0 ? $"{FormatBytes(bestAudioM4aBytes)} • Solo Audio (128 kbps)" : "Solo Audio M4A",
+                    SizeDisplay = bestAudioM4aBytes > 0 ? $"{FormatBytes(bestAudioM4aBytes)} • Audio Original AAC (128 kbps)" : "Solo Audio M4A",
                     PriorityScore = 950
                 });
             }
 
             return results.OrderByDescending(x => x.PriorityScore).ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            LogMediaDiagnostic($"[YouTube] Error parseando respuesta InnerTube: {ex.Message}");
             return results;
         }
     }
@@ -685,108 +825,123 @@ public static class MediaExtractorService
         Action<long, long>? onProgress = null,
         CancellationToken ct = default)
     {
-        if (item.IsHlsStream)
+        LogMediaDiagnostic($"[DownloadStart] File={item.FileName} | Badge={item.FormatBadge} | YT={item.IsYouTubeStream} | HLS={item.IsHlsStream} | HasAudioPair={!string.IsNullOrEmpty(item.AudioPairUrl)} | Size={item.SizeBytes}");
+        try
         {
-            return await DownloadHlsStreamToFileAsync(
-                item.Url,
-                item.Referer,
-                item.CustomUserAgent,
-                item.CustomCookieHeader,
-                item.CustomOriginHeader,
-                targetPath,
-                onProgress,
-                ct);
-        }
-
-        string userAgent = !string.IsNullOrWhiteSpace(item.CustomUserAgent) ? item.CustomUserAgent : BrowserUserAgent;
-
-        // Caso YouTube HD con pista de video y pista de audio separadas: descargar ambas y unirlas en un solo .mp4 con sonido
-        if (!string.IsNullOrWhiteSpace(item.AudioPairUrl))
-        {
-            string tempVideoPath = targetPath + ".v_tmp";
-            string tempAudioPath = targetPath + ".a_tmp";
-
-            try
+            if (item.IsHlsStream)
             {
-                long videoReceived = 0;
-                long audioReceived = 0;
-                long expectedTotal = item.SizeBytes;
-
-                await DownloadStreamFastAsync(
+                long hlsBytes = await DownloadHlsStreamToFileAsync(
                     item.Url,
                     item.Referer,
-                    userAgent,
-                    item.CustomCookieHeader,
-                    item.CustomOriginHeader,
-                    item.CustomAuthorizationHeader,
-                    tempVideoPath,
-                    item.IsYouTubeStream,
-                    item.VideoSizeBytes,
-                    (rec, tot) =>
-                    {
-                        videoReceived = rec;
-                        if (expectedTotal <= 0 && tot > 0) expectedTotal = tot + item.AudioSizeBytes;
-                        onProgress?.Invoke(videoReceived + audioReceived, expectedTotal);
-                    },
-                    ct);
-
-                await DownloadStreamFastAsync(
-                    item.AudioPairUrl,
-                    item.Referer,
-                    userAgent,
-                    item.CustomCookieHeader,
-                    item.CustomOriginHeader,
-                    item.CustomAuthorizationHeader,
-                    tempAudioPath,
-                    item.IsYouTubeStream,
-                    item.AudioSizeBytes,
-                    (rec, tot) =>
-                    {
-                        audioReceived = rec;
-                        onProgress?.Invoke(videoReceived + audioReceived, Math.Max(expectedTotal, videoReceived + tot));
-                    },
-                    ct);
-
-                // Unir video fMP4 + audio fMP4 en el archivo final .mp4
-                await Task.Run(() => MuxFragmentedMp4(tempVideoPath, tempAudioPath, targetPath), ct);
-
-                var fi = new FileInfo(targetPath);
-                return fi.Exists ? fi.Length : (videoReceived + audioReceived);
-            }
-            catch when (!string.IsNullOrWhiteSpace(item.FallbackHlsUrl) && !ct.IsCancellationRequested)
-            {
-                // Si por algún motivo de red fallara el stream adaptativo y hay manifiesto HLS muxado de respaldo, usarlo
-                return await DownloadHlsStreamToFileAsync(
-                    item.FallbackHlsUrl!,
-                    item.Referer,
-                    userAgent,
+                    item.CustomUserAgent,
                     item.CustomCookieHeader,
                     item.CustomOriginHeader,
                     targetPath,
                     onProgress,
                     ct);
+                LogMediaDiagnostic($"[DownloadSuccess] HLS File={item.FileName} | Written={hlsBytes} bytes");
+                return hlsBytes;
             }
-            finally
-            {
-                TryDeleteFile(tempVideoPath);
-                TryDeleteFile(tempAudioPath);
-            }
-        }
 
-        // Caso descarga de un solo flujo (MP4 combinado, M4A audio, MP3, documento o imagen)
-        long singleKnownSize = item.VideoSizeBytes > 0 ? item.VideoSizeBytes : item.SizeBytes;
-        return await DownloadStreamFastAsync(
-            item.Url,
-            item.Referer,
-            userAgent,
-            item.CustomCookieHeader,
-            item.CustomOriginHeader,
-            item.CustomAuthorizationHeader,
-            targetPath,
-            item.IsYouTubeStream,
-            singleKnownSize,
-            onProgress,
-            ct);
+            string userAgent = !string.IsNullOrWhiteSpace(item.CustomUserAgent) ? item.CustomUserAgent : BrowserUserAgent;
+
+            // Caso YouTube HD con pista de video y pista de audio separadas: descargar ambas y unirlas en un solo .mp4 con sonido
+            if (!string.IsNullOrWhiteSpace(item.AudioPairUrl))
+            {
+                string tempVideoPath = targetPath + ".v_tmp";
+                string tempAudioPath = targetPath + ".a_tmp";
+
+                try
+                {
+                    long videoReceived = 0;
+                    long audioReceived = 0;
+                    long expectedTotal = item.SizeBytes;
+
+                    await DownloadStreamFastAsync(
+                        item.Url,
+                        item.Referer,
+                        userAgent,
+                        item.CustomCookieHeader,
+                        item.CustomOriginHeader,
+                        item.CustomAuthorizationHeader,
+                        tempVideoPath,
+                        item.IsYouTubeStream,
+                        item.VideoSizeBytes,
+                        (rec, tot) =>
+                        {
+                            videoReceived = rec;
+                            if (expectedTotal <= 0 && tot > 0) expectedTotal = tot + item.AudioSizeBytes;
+                            onProgress?.Invoke(videoReceived + audioReceived, expectedTotal);
+                        },
+                        ct);
+
+                    await DownloadStreamFastAsync(
+                        item.AudioPairUrl,
+                        item.Referer,
+                        userAgent,
+                        item.CustomCookieHeader,
+                        item.CustomOriginHeader,
+                        item.CustomAuthorizationHeader,
+                        tempAudioPath,
+                        item.IsYouTubeStream,
+                        item.AudioSizeBytes,
+                        (rec, tot) =>
+                        {
+                            audioReceived = rec;
+                            onProgress?.Invoke(videoReceived + audioReceived, Math.Max(expectedTotal, videoReceived + tot));
+                        },
+                        ct);
+
+                    // Unir video fMP4 + audio fMP4 en el archivo final .mp4
+                    await Task.Run(() => MuxFragmentedMp4(tempVideoPath, tempAudioPath, targetPath), ct);
+
+                    var fi = new FileInfo(targetPath);
+                    long finalLen = fi.Exists ? fi.Length : (videoReceived + audioReceived);
+                    LogMediaDiagnostic($"[DownloadSuccess] Muxed MP4 File={item.FileName} | FinalSize={finalLen} bytes (V={videoReceived}, A={audioReceived})");
+                    return finalLen;
+                }
+                catch (Exception ex) when (!string.IsNullOrWhiteSpace(item.FallbackHlsUrl) && !ct.IsCancellationRequested)
+                {
+                    LogMediaDiagnostic($"[DownloadFallback] Adaptive stream falló ({ex.Message}), usando FallbackHlsUrl para {item.FileName}");
+                    return await DownloadHlsStreamToFileAsync(
+                        item.FallbackHlsUrl!,
+                        item.Referer,
+                        userAgent,
+                        item.CustomCookieHeader,
+                        item.CustomOriginHeader,
+                        targetPath,
+                        onProgress,
+                        ct);
+                }
+                finally
+                {
+                    TryDeleteFile(tempVideoPath);
+                    TryDeleteFile(tempAudioPath);
+                }
+            }
+
+            // Caso descarga de un solo flujo (MP4 combinado, M4A audio, MP3, documento o imagen)
+            long singleKnownSize = item.VideoSizeBytes > 0 ? item.VideoSizeBytes : item.SizeBytes;
+            long singleBytes = await DownloadStreamFastAsync(
+                item.Url,
+                item.Referer,
+                userAgent,
+                item.CustomCookieHeader,
+                item.CustomOriginHeader,
+                item.CustomAuthorizationHeader,
+                targetPath,
+                item.IsYouTubeStream,
+                singleKnownSize,
+                onProgress,
+                ct);
+            LogMediaDiagnostic($"[DownloadSuccess] Single Stream File={item.FileName} | Written={singleBytes} bytes");
+            return singleBytes;
+        }
+        catch (Exception ex)
+        {
+            LogMediaDiagnostic($"[DownloadError] File={item.FileName} | Error={ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
     }
 
     /// <summary>

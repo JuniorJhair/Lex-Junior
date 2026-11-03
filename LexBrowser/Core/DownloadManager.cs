@@ -1,22 +1,89 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace LexBrowser.Core;
 
-public class DownloadEntry
+public class DownloadEntry : INotifyPropertyChanged
 {
+    private long _totalBytes;
+    private long _bytesReceived;
+    private string _state = "Completado";
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string FileName { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
-    public long TotalBytes { get; set; }
-    public long BytesReceived { get; set; }
-    public string State { get; set; } = "Completado"; // "En progreso", "Completado", "Cancelado", "Error"
+
+    public long TotalBytes
+    {
+        get => _totalBytes;
+        set
+        {
+            if (_totalBytes != value)
+            {
+                _totalBytes = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ProgressPercent));
+                OnPropertyChanged(nameof(StatusDisplay));
+            }
+        }
+    }
+
+    public long BytesReceived
+    {
+        get => _bytesReceived;
+        set
+        {
+            if (_bytesReceived != value)
+            {
+                _bytesReceived = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ProgressPercent));
+                OnPropertyChanged(nameof(StatusDisplay));
+            }
+        }
+    }
+
+    public string State
+    {
+        get => _state;
+        set
+        {
+            if (_state != value)
+            {
+                _state = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsCompleted));
+                OnPropertyChanged(nameof(IsInProgress));
+                OnPropertyChanged(nameof(ProgressPercent));
+                OnPropertyChanged(nameof(StatusDisplay));
+            }
+        }
+    }
+
     public DateTime StartedAt { get; set; } = DateTime.Now;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public void NotifyProgressUpdated()
+    {
+        OnPropertyChanged(nameof(BytesReceived));
+        OnPropertyChanged(nameof(TotalBytes));
+        OnPropertyChanged(nameof(State));
+        OnPropertyChanged(nameof(IsCompleted));
+        OnPropertyChanged(nameof(IsInProgress));
+        OnPropertyChanged(nameof(ProgressPercent));
+        OnPropertyChanged(nameof(StatusDisplay));
+    }
+
+    protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
     [JsonIgnore]
     public bool IsIncognito { get; set; }
