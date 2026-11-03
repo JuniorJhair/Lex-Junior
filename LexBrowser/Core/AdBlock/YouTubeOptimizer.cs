@@ -717,11 +717,14 @@ public static class YouTubeOptimizer
     // ─────────────────────────────────────────────────────────────────
     const scanPageMediaOnDemand = () => {
         try {
+            // En YouTube, la extracción principal limpia (1080p/720p/Audio) la realiza MediaExtractorService en C#
+            if (isYouTube) return;
+
             const items = [];
             const seen = new Set();
             const addUrl = (rawUrl, category) => {
                 if (!rawUrl || typeof rawUrl !== 'string') return;
-                if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:')) return;
+                if (rawUrl.startsWith('blob:') || rawUrl.startsWith('data:') || rawUrl.startsWith('javascript:')) return;
                 let abs = rawUrl;
                 try { abs = new URL(rawUrl, window.location.href).href; } catch (_) { return; }
                 if (!abs.startsWith('http')) return;
@@ -730,31 +733,48 @@ public static class YouTubeOptimizer
                 items.push({ url: abs, category: category || '' });
             };
 
-            // 1. Videos y Audios en el DOM
+            // 1. Videos y Audios reales en el DOM (ignorando anuncios o micro-loops decorativos sin pista)
             document.querySelectorAll('video, audio').forEach(m => {
-                const cat = m.tagName === 'AUDIO' ? 'Audio' : 'Video';
+                const isAudio = m.tagName === 'AUDIO';
+                if (!isAudio) {
+                    const w = m.videoWidth || m.offsetWidth || 0;
+                    const h = m.videoHeight || m.offsetHeight || 0;
+                    if (w > 0 && h > 0 && w < 120 && h < 120) return;
+                }
+                const cat = isAudio ? 'Audio' : 'Video';
                 if (m.currentSrc) addUrl(m.currentSrc, cat);
                 if (m.src) addUrl(m.src, cat);
                 m.querySelectorAll('source').forEach(s => addUrl(s.src, cat));
             });
 
-            // 2. Imágenes de alta resolución y portadas OpenGraph
-            const ogImg = document.querySelector('meta[property=""og:image""]');
-            if (ogImg && ogImg.content) addUrl(ogImg.content, 'Imagen');
-
-            document.querySelectorAll('img').forEach(img => {
-                const w = img.naturalWidth || img.width || 0;
-                const h = img.naturalHeight || img.height || 0;
-                if (w >= 180 || h >= 180) {
-                    addUrl(img.currentSrc || img.src, 'Imagen');
-                }
+            // 2. Metadatos de video OpenGraph / Twitter Player / JSON-LD (Redes sociales y sitios de video)
+            const videoMetas = [
+                'meta[property=""og:video""]',
+                'meta[property=""og:video:url""]',
+                'meta[property=""og:video:secure_url""]',
+                'meta[name=""twitter:player:stream""]'
+            ];
+            videoMetas.forEach(sel => {
+                document.querySelectorAll(sel).forEach(meta => {
+                    if (meta.content) addUrl(meta.content, 'Video');
+                });
             });
 
-            // 3. Enlaces directos a documentos, comprimidos, audios y videos
-            const docRegex = /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|csv|txt|mp4|mkv|webm|mp3|wav|flac|ogg)(\?|#|$)/i;
+            document.querySelectorAll('script[type=""application/ld+json""]').forEach(scr => {
+                try {
+                    const txt = scr.textContent || '';
+                    const match = txt.match(/""contentUrl""\s*:\s*""(https?:\\?\/\\?\/[^""]+)""/i);
+                    if (match && match[1]) {
+                        addUrl(match[1].replace(/\\\//g, '/'), 'Video');
+                    }
+                } catch (_) {}
+            });
+
+            // 3. Enlaces directos a documentos, comprimidos, audios y videos reales
+            const docRegex = /\.(pdf|docx?|xlsx?|pptx?|zip|rar|7z|mp4|mkv|webm|mp3|wav|flac|m4a)(\?|#|$)/i;
             document.querySelectorAll('a[href]').forEach(a => {
                 const href = a.getAttribute('href') || '';
-                if (docRegex.test(href) || a.hasAttribute('download')) {
+                if (docRegex.test(href)) {
                     addUrl(a.href, '');
                 }
             });
@@ -762,11 +782,11 @@ public static class YouTubeOptimizer
             if (items.length > 0 && window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
                     type: 'media_detected_batch',
-                    items: items.slice(0, 45)
+                    items: items.slice(0, 30)
                 });
             }
 
-            // Solicitar escaneo a iframes hijos
+            // Solicitar escaneo a iframes hijos (reproductores embebidos de anime, películas, etc.)
             document.querySelectorAll('iframe').forEach(ifr => {
                 try {
                     if (ifr.contentWindow) {

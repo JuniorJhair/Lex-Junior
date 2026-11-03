@@ -1253,6 +1253,7 @@ public partial class MainWindow : Window
             win.Dispatcher.Invoke(() =>
             {
                 if (tab.IsDisposed) return;
+                string prevUrl = tab.Url;
                 if (core.Source.StartsWith("data:text/html") || core.Source == "about:blank")
                 {
                     tab.Url = "";
@@ -1264,6 +1265,23 @@ public partial class MainWindow : Window
                     tab.IsNewTab = false;
                 }
 
+                if (tab.IsMediaSnifferActive && !string.Equals(prevUrl, tab.Url, StringComparison.OrdinalIgnoreCase))
+                {
+                    string? prevYtId = MediaExtractorService.TryExtractYouTubeVideoId(prevUrl);
+                    string? newYtId = MediaExtractorService.TryExtractYouTubeVideoId(tab.Url);
+
+                    if (tab.KeepSnifferActiveOnNavigate || (prevYtId == null && newYtId != null))
+                    {
+                        tab.ClearDetectedMedia();
+                        win.RequestDomMediaScan(tab);
+                    }
+                    else if (prevYtId != newYtId)
+                    {
+                        tab.IsMediaSnifferActive = false;
+                        tab.ClearDetectedMedia();
+                    }
+                }
+
                 if (win._activeTab == tab)
                 {
                     win._isUpdatingOmniboxTextProgrammatically = true;
@@ -1272,6 +1290,7 @@ public partial class MainWindow : Window
                     win.PopupOmniboxSuggestions.IsOpen = false;
                     win.UpdateSecurityIndicatorUI();
                     win.UpdateCurrentTabBookmarkUI();
+                    win.UpdateMediaSnifferUI();
                 }
             });
         };
@@ -3230,10 +3249,7 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     private string _currentMediaFilter = "Todos";
     private bool _isUpdatingSnifferCheck = false;
-    private static readonly System.Net.Http.HttpClient _mediaDownloadClient = new()
-    {
-        Timeout = TimeSpan.FromMinutes(30)
-    };
+    private bool _isExtractingYouTube = false;
 
     private void BtnMediaSniffer_Click(object sender, RoutedEventArgs e)
     {
@@ -3267,10 +3283,8 @@ public partial class MainWindow : Window
     private void BtnRescanMedia_Click(object sender, RoutedEventArgs e)
     {
         if (_activeTab == null) return;
-        if (!_activeTab.IsMediaSnifferActive)
-        {
-            _activeTab.IsMediaSnifferActive = true;
-        }
+        _activeTab.IsMediaSnifferActive = true;
+        _activeTab.ClearDetectedMedia();
         RequestDomMediaScan(_activeTab);
         UpdateMediaSnifferUI();
     }
@@ -3303,24 +3317,84 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed) return;
+            if (tab == null || tab.IsDisposed) return;
+
+            // 1. Si estamos en un video o Short de YouTube, extraer todas las calidades limpias (1080p HD, 720p HD, 360p, Audio HQ)
+            string? ytVideoId = MediaExtractorService.TryExtractYouTubeVideoId(tab.Url);
+            if (!string.IsNullOrWhiteSpace(ytVideoId))
+            {
+                _ = ExtractAndRegisterYouTubeStreamsAsync(tab, tab.Url, tab.Title);
+                return;
+            }
+
+            // 2. En otros sitios web, solicitar escaneo bajo demanda al DOM e iframes
+            if (tab.WebView?.CoreWebView2 == null) return;
             string json = JsonSerializer.Serialize(new { action = "scan_page_media" });
             tab.WebView.CoreWebView2.PostWebMessageAsJson(json);
         }
         catch { }
     }
 
+    private async Task ExtractAndRegisterYouTubeStreamsAsync(BrowserTab tab, string pageUrl, string fallbackTitle)
+    {
+        try
+        {
+            _isExtractingYouTube = true;
+            if (_activeTab == tab) RefreshFilteredMediaList();
+
+            var items = await MediaExtractorService.ExtractYouTubeStreamsAsync(pageUrl, fallbackTitle);
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                _isExtractingYouTube = false;
+                if (tab.IsDisposed || !tab.IsMediaSnifferActive) return;
+
+                foreach (var item in items)
+                {
+                    string uniqueKey = $"{item.FormatBadge}|{item.Url}";
+                    if (tab.DetectedMediaUrls.Add(uniqueKey))
+                    {
+                        InsertMediaItemSorted(tab, item);
+                    }
+                }
+
+                if (_activeTab == tab)
+                {
+                    UpdateMediaSnifferUI();
+                }
+            });
+        }
+        catch
+        {
+            _isExtractingYouTube = false;
+            if (_activeTab == tab) Dispatcher.Invoke(UpdateMediaSnifferUI);
+        }
+    }
+
+    private static void InsertMediaItemSorted(BrowserTab tab, DetectedMediaItem item)
+    {
+        int idx = 0;
+        while (idx < tab.DetectedMedia.Count && tab.DetectedMedia[idx].PriorityScore >= item.PriorityScore)
+        {
+            idx++;
+        }
+        tab.DetectedMedia.Insert(idx, item);
+    }
+
     private void InspectNetworkMediaResponse(BrowserTab tab, CoreWebView2WebResourceResponseReceivedEventArgs e)
     {
         try
         {
-            string url = e.Request.Uri;
-            if (string.IsNullOrWhiteSpace(url) || url.StartsWith("data:", StringComparison.OrdinalIgnoreCase) || url.StartsWith("blob:", StringComparison.OrdinalIgnoreCase))
+            // En YouTube usamos exclusivamente el extractor limpio InnerTube para evitar capturar segmentos/basura
+            if (!string.IsNullOrWhiteSpace(tab.Url) &&
+                (tab.Url.Contains("youtube.com/", StringComparison.OrdinalIgnoreCase) ||
+                 tab.Url.Contains("youtu.be/", StringComparison.OrdinalIgnoreCase)))
+            {
                 return;
+            }
 
-            // Ignorar fragmentos byte-range internos de YouTube o publicidad
-            if (url.Contains("googlevideo.com/videoplayback", StringComparison.OrdinalIgnoreCase) && url.Contains("&range=", StringComparison.OrdinalIgnoreCase))
-                return;
+            string url = e.Request.Uri;
+            if (string.IsNullOrWhiteSpace(url)) return;
 
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
             if (AdBlockFilter.ShouldBlock(uri)) return;
@@ -3338,6 +3412,9 @@ public partial class MainWindow : Window
             }
             catch { }
 
+            if (MediaExtractorService.IsGarbageMediaUrl(url, contentType, contentLength, categoryHint: null))
+                return;
+
             RegisterDetectedMediaUrl(tab, url, categoryHint: null, contentType, contentLength);
         }
         catch { }
@@ -3348,81 +3425,86 @@ public partial class MainWindow : Window
         if (tab == null || tab.IsDisposed || !tab.IsMediaSnifferActive) return;
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
         if (AdBlockFilter.ShouldBlock(uri)) return;
+        if (MediaExtractorService.IsGarbageMediaUrl(url, contentType, contentLength, categoryHint)) return;
 
         string pathLower = uri.AbsolutePath.ToLowerInvariant();
         string ctLower = (contentType ?? "").ToLowerInvariant();
 
-        // Ignorar segmentos .ts sueltos o scripts/estilos/fuentes
-        if (pathLower.EndsWith(".ts") || pathLower.EndsWith(".js") || pathLower.EndsWith(".css") || pathLower.EndsWith(".woff2") || pathLower.EndsWith(".woff") || pathLower.EndsWith(".json"))
+        // Si es un manifiesto HLS (.m3u8), expandirlo asíncronamente en sus calidades reales (1080p, 720p, etc.)
+        if (pathLower.EndsWith(".m3u8") || ctLower.Contains("mpegurl"))
+        {
+            if (tab.DetectedMediaUrls.Add(url))
+            {
+                _ = ExpandAndRegisterHlsAsync(tab, url);
+            }
             return;
+        }
 
         string category = "";
         string formatBadge = "";
+        int priority = 500;
 
-        // 1. Clasificación por extensión o Content-Type
-        if (pathLower.EndsWith(".mp4") || ctLower.Contains("video/mp4")) { category = "Video"; formatBadge = "MP4"; }
-        else if (pathLower.EndsWith(".webm") || ctLower.Contains("video/webm")) { category = "Video"; formatBadge = "WEBM"; }
-        else if (pathLower.EndsWith(".mkv") || ctLower.Contains("video/x-matroska")) { category = "Video"; formatBadge = "MKV"; }
-        else if (pathLower.EndsWith(".m3u8") || ctLower.Contains("mpegurl")) { category = "Video"; formatBadge = "M3U8"; }
-        else if (pathLower.EndsWith(".mpd") || ctLower.Contains("dash+xml")) { category = "Video"; formatBadge = "DASH"; }
-        else if (ctLower.StartsWith("video/")) { category = "Video"; formatBadge = "VIDEO"; }
-        else if (pathLower.EndsWith(".mp3") || ctLower.Contains("audio/mpeg")) { category = "Audio"; formatBadge = "MP3"; }
-        else if (pathLower.EndsWith(".wav") || ctLower.Contains("audio/wav")) { category = "Audio"; formatBadge = "WAV"; }
-        else if (pathLower.EndsWith(".flac") || ctLower.Contains("audio/flac")) { category = "Audio"; formatBadge = "FLAC"; }
-        else if (pathLower.EndsWith(".ogg") || ctLower.Contains("audio/ogg")) { category = "Audio"; formatBadge = "OGG"; }
-        else if (pathLower.EndsWith(".m4a") || pathLower.EndsWith(".aac") || ctLower.StartsWith("audio/")) { category = "Audio"; formatBadge = "AUDIO"; }
-        else if (pathLower.EndsWith(".pdf") || ctLower.Contains("application/pdf")) { category = "Documento"; formatBadge = "PDF"; }
-        else if (pathLower.EndsWith(".zip") || ctLower.Contains("application/zip")) { category = "Documento"; formatBadge = "ZIP"; }
-        else if (pathLower.EndsWith(".rar") || ctLower.Contains("rar")) { category = "Documento"; formatBadge = "RAR"; }
-        else if (pathLower.EndsWith(".7z") || ctLower.Contains("7z")) { category = "Documento"; formatBadge = "7Z"; }
-        else if (pathLower.EndsWith(".docx") || pathLower.EndsWith(".doc") || ctLower.Contains("word")) { category = "Documento"; formatBadge = "DOCX"; }
-        else if (pathLower.EndsWith(".xlsx") || pathLower.EndsWith(".xls") || ctLower.Contains("spreadsheet") || ctLower.Contains("excel")) { category = "Documento"; formatBadge = "XLSX"; }
-        else if (pathLower.EndsWith(".pptx") || pathLower.EndsWith(".ppt") || ctLower.Contains("presentation") || ctLower.Contains("powerpoint")) { category = "Documento"; formatBadge = "PPTX"; }
-        else if (pathLower.EndsWith(".csv")) { category = "Documento"; formatBadge = "CSV"; }
-        else if (pathLower.EndsWith(".txt")) { category = "Documento"; formatBadge = "TXT"; }
-        else if (categoryHint == "Imagen" || (ctLower.StartsWith("image/") && contentLength >= 25_000))
+        // 1. Clasificación por extensión o Content-Type (estricta para evitar archivos basura)
+        if (pathLower.EndsWith(".mp4") || ctLower.Contains("video/mp4")) { category = "Video"; formatBadge = "MP4"; priority = 700; }
+        else if (pathLower.EndsWith(".webm") || ctLower.Contains("video/webm")) { category = "Video"; formatBadge = "WEBM"; priority = 690; }
+        else if (pathLower.EndsWith(".mkv") || ctLower.Contains("video/x-matroska")) { category = "Video"; formatBadge = "MKV"; priority = 690; }
+        else if (ctLower.StartsWith("video/") && contentLength >= 350_000) { category = "Video"; formatBadge = "VIDEO"; priority = 650; }
+        else if (pathLower.EndsWith(".mp3") || ctLower.Contains("audio/mpeg")) { category = "Audio"; formatBadge = "MP3"; priority = 600; }
+        else if (pathLower.EndsWith(".m4a") || pathLower.EndsWith(".aac") || ctLower.Contains("audio/mp4")) { category = "Audio"; formatBadge = "M4A"; priority = 600; }
+        else if (pathLower.EndsWith(".wav") || ctLower.Contains("audio/wav")) { category = "Audio"; formatBadge = "WAV"; priority = 590; }
+        else if (pathLower.EndsWith(".flac") || ctLower.Contains("audio/flac")) { category = "Audio"; formatBadge = "FLAC"; priority = 590; }
+        else if (pathLower.EndsWith(".ogg") || ctLower.Contains("audio/ogg")) { category = "Audio"; formatBadge = "OGG"; priority = 580; }
+        else if (pathLower.EndsWith(".pdf") || ctLower.Contains("application/pdf")) { category = "Documento"; formatBadge = "PDF"; priority = 550; }
+        else if (pathLower.EndsWith(".zip") || ctLower.Contains("application/zip")) { category = "Documento"; formatBadge = "ZIP"; priority = 540; }
+        else if (pathLower.EndsWith(".rar") || ctLower.Contains("rar")) { category = "Documento"; formatBadge = "RAR"; priority = 540; }
+        else if (pathLower.EndsWith(".7z") || ctLower.Contains("7z")) { category = "Documento"; formatBadge = "7Z"; priority = 540; }
+        else if (pathLower.EndsWith(".docx") || pathLower.EndsWith(".doc") || ctLower.Contains("word")) { category = "Documento"; formatBadge = "DOCX"; priority = 530; }
+        else if (pathLower.EndsWith(".xlsx") || pathLower.EndsWith(".xls") || ctLower.Contains("spreadsheet") || ctLower.Contains("excel")) { category = "Documento"; formatBadge = "XLSX"; priority = 530; }
+        else if (pathLower.EndsWith(".pptx") || pathLower.EndsWith(".ppt") || ctLower.Contains("presentation") || ctLower.Contains("powerpoint")) { category = "Documento"; formatBadge = "PPTX"; priority = 530; }
+        else if (ctLower.StartsWith("image/") && contentLength >= 250_000)
         {
-            if (ctLower.Contains("svg") || pathLower.EndsWith(".svg") || pathLower.EndsWith(".ico")) return;
             category = "Imagen";
+            priority = 300;
             if (pathLower.EndsWith(".png") || ctLower.Contains("png")) formatBadge = "PNG";
             else if (pathLower.EndsWith(".webp") || ctLower.Contains("webp")) formatBadge = "WEBP";
-            else if (pathLower.EndsWith(".gif") || ctLower.Contains("gif")) formatBadge = "GIF";
             else formatBadge = "JPG";
         }
-        else if (!string.IsNullOrWhiteSpace(categoryHint))
+        else if (categoryHint == "Video" && (pathLower.Contains(".mp4") || pathLower.Contains("video")))
         {
-            category = categoryHint;
-            formatBadge = categoryHint.ToUpperInvariant();
+            category = "Video";
+            formatBadge = "MP4";
+            priority = 680;
         }
 
         if (string.IsNullOrEmpty(category)) return;
+        if (!tab.DetectedMediaUrls.Add(url)) return;
 
-        // Si ya fue registrado en esta pestaña, actualizar tamaño si antes era 0
-        if (tab.DetectedMediaUrls.Contains(url)) return;
-
-        // Límite estricto de 60 elementos por pestaña para garantizar consumo despreciable de RAM (< 40 KB)
-        if (tab.DetectedMedia.Count >= 60)
+        // Límite estricto de 50 elementos por pestaña para garantizar consumo despreciable de RAM (< 35 KB)
+        if (tab.DetectedMedia.Count >= 50)
         {
-            var oldest = tab.DetectedMedia[0];
-            tab.DetectedMediaUrls.Remove(oldest.Url);
-            tab.DetectedMedia.RemoveAt(0);
+            var last = tab.DetectedMedia[^1];
+            tab.DetectedMediaUrls.Remove(last.Url);
+            tab.DetectedMedia.RemoveAt(tab.DetectedMedia.Count - 1);
         }
 
-        string fileName = Path.GetFileName(uri.LocalPath);
-        if (string.IsNullOrWhiteSpace(fileName) || fileName == "/" || fileName.Length < 2)
+        string baseTitle = MediaExtractorService.SanitizeTitle(!string.IsNullOrWhiteSpace(tab.Title) ? tab.Title : uri.Host);
+        if (string.IsNullOrWhiteSpace(baseTitle)) baseTitle = "Archivo";
+
+        string rawFileName = Path.GetFileName(uri.LocalPath);
+        string fileName;
+        if (!string.IsNullOrWhiteSpace(rawFileName) && rawFileName.Length >= 4 && rawFileName.Length <= 64 &&
+            !System.Text.RegularExpressions.Regex.IsMatch(rawFileName, @"^[0-9a-fA-F_-]{16,}(\.[a-z0-9]+)?$"))
         {
-            string baseTitle = !string.IsNullOrWhiteSpace(tab.Title) ? tab.Title : uri.Host;
-            foreach (char c in Path.GetInvalidFileNameChars()) baseTitle = baseTitle.Replace(c, '_');
-            if (baseTitle.Length > 42) baseTitle = baseTitle.Substring(0, 42);
-            fileName = $"{baseTitle}.{formatBadge.ToLowerInvariant()}";
-        }
-        else
-        {
-            try { fileName = Uri.UnescapeDataString(fileName); } catch { }
+            try { rawFileName = Uri.UnescapeDataString(rawFileName); } catch { }
+            fileName = MediaExtractorService.SanitizeTitle(rawFileName);
             if (!Path.HasExtension(fileName))
             {
                 fileName += $".{formatBadge.ToLowerInvariant()}";
             }
+        }
+        else
+        {
+            fileName = $"{baseTitle}.{formatBadge.ToLowerInvariant()}";
         }
 
         string icon = category switch
@@ -3434,8 +3516,8 @@ public partial class MainWindow : Window
         };
 
         string sizeDisplay = contentLength > 0
-            ? FormatBytes(contentLength)
-            : (formatBadge == "M3U8" || formatBadge == "DASH" ? "Stream (Manifiesto)" : "Descarga directa");
+            ? $"{FormatBytes(contentLength)} • Descarga directa"
+            : "Descarga directa";
 
         var item = new DetectedMediaItem
         {
@@ -3446,11 +3528,11 @@ public partial class MainWindow : Window
             CategoryIcon = icon,
             FormatBadge = formatBadge,
             SizeBytes = contentLength,
-            SizeDisplay = sizeDisplay
+            SizeDisplay = sizeDisplay,
+            PriorityScore = priority + (int)Math.Min(99, contentLength / (1024 * 1024))
         };
 
-        tab.DetectedMediaUrls.Add(url);
-        tab.DetectedMedia.Insert(0, item);
+        InsertMediaItemSorted(tab, item);
 
         if (_activeTab == tab)
         {
@@ -3458,13 +3540,35 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string FormatBytes(long bytes)
+    private async Task ExpandAndRegisterHlsAsync(BrowserTab tab, string m3u8Url)
     {
-        if (bytes >= 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
-        if (bytes >= 1024 * 1024) return $"{bytes / (1024.0 * 1024):F1} MB";
-        if (bytes >= 1024) return $"{bytes / 1024.0:F0} KB";
-        return $"{bytes} B";
+        try
+        {
+            string pageUrl = tab.Url;
+            string pageTitle = tab.Title;
+            var hlsItems = await MediaExtractorService.ExpandHlsPlaylistAsync(m3u8Url, pageUrl, pageTitle);
+            if (hlsItems.Count == 0) return;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (tab.IsDisposed || !tab.IsMediaSnifferActive) return;
+                foreach (var item in hlsItems)
+                {
+                    if (tab.DetectedMediaUrls.Add(item.Url))
+                    {
+                        InsertMediaItemSorted(tab, item);
+                    }
+                }
+                if (_activeTab == tab)
+                {
+                    UpdateMediaSnifferUI();
+                }
+            });
+        }
+        catch { }
     }
+
+    private static string FormatBytes(long bytes) => MediaExtractorService.FormatBytes(bytes);
 
     private void UpdateMediaSnifferUI()
     {
@@ -3495,7 +3599,9 @@ public partial class MainWindow : Window
             {
                 TxtToggleSnifferBtn.Text = "⏹ Desactivar";
                 BtnToggleSnifferActive.Background = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
-                TxtSnifferStatusSubtitle.Text = $"🟢 Activo en esta pestaña ({count} detectados)";
+                TxtSnifferStatusSubtitle.Text = _isExtractingYouTube
+                    ? "⏳ Analizando calidades HD del video..."
+                    : $"🟢 Activo en esta pestaña ({count} listos para descargar)";
                 TxtSnifferStatusSubtitle.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
             }
             else
@@ -3518,7 +3624,7 @@ public partial class MainWindow : Window
         {
             ItemsDetectedMedia.ItemsSource = null;
             ScrollDetectedMedia.Visibility = Visibility.Collapsed;
-            TxtMediaEmptyState.Text = "Presiona '⚡ Activar aquí' para detectar videos, audios, imágenes de alta resolución y documentos (PDF, ZIP, Office) en esta página.";
+            TxtMediaEmptyState.Text = "Presiona '⚡ Activar aquí' para extraer videos (YouTube 1080p/720p, Shorts, redes sociales, streams HLS), audios y documentos sin archivos basura.";
             TxtMediaEmptyState.Visibility = Visibility.Visible;
             return;
         }
@@ -3537,7 +3643,9 @@ public partial class MainWindow : Window
         if (list.Count == 0)
         {
             ScrollDetectedMedia.Visibility = Visibility.Collapsed;
-            TxtMediaEmptyState.Text = "Escuchando recursos en esta página... Reproduce el video/audio o interactúa con la página para capturar sus archivos.";
+            TxtMediaEmptyState.Text = _isExtractingYouTube
+                ? "⏳ Extrayendo calidades 1080p HD, 720p HD y Audio del video de YouTube..."
+                : "Escuchando videos y audios reales en esta página... Dale Play al video para capturar el flujo limpio.";
             TxtMediaEmptyState.Visibility = Visibility.Visible;
         }
         else
@@ -3593,22 +3701,20 @@ public partial class MainWindow : Window
 
         try
         {
-            using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, item.Url);
-            req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            if (!string.IsNullOrWhiteSpace(item.Referer))
-            {
-                req.Headers.TryAddWithoutValidation("Referer", item.Referer);
-            }
+            long lastReportTick = 0;
+            long finalSize = await MediaExtractorService.DownloadMediaItemAsync(
+                item,
+                targetPath,
+                onProgress: (received, total) =>
+                {
+                    long now = Environment.TickCount64;
+                    if (now - lastReportTick >= 180 || (total > 0 && received >= total))
+                    {
+                        lastReportTick = now;
+                        DownloadManager.UpdateDownload(dlEntry.Id, received, total > 0 ? total : item.SizeBytes, "En progreso");
+                    }
+                });
 
-            using var resp = await _mediaDownloadClient.SendAsync(req, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
-            resp.EnsureSuccessStatusCode();
-
-            long totalLen = resp.Content.Headers.ContentLength ?? item.SizeBytes;
-            await using var netStream = await resp.Content.ReadAsStreamAsync();
-            await using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-            await netStream.CopyToAsync(fileStream);
-
-            long finalSize = fileStream.Length > 0 ? fileStream.Length : totalLen;
             DownloadManager.UpdateDownload(dlEntry.Id, finalSize, finalSize, "Completado");
             ShowToast($"✅ Descarga completada: {displayName}");
         }

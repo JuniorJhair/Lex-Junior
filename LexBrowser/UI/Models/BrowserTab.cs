@@ -18,6 +18,11 @@ public enum TabPinMode
 public class DetectedMediaItem
 {
     public string Url { get; set; } = "";
+    public string? AudioPairUrl { get; set; }
+    public string? CustomUserAgent { get; set; }
+    public bool IsHlsStream { get; set; } = false;
+    public bool IsYouTubeStream { get; set; } = false;
+    public int PriorityScore { get; set; } = 100;
     public string Referer { get; set; } = "";
     public string FileName { get; set; } = "";
     public string Category { get; set; } = "Video"; // "Video", "Audio", "Imagen", "Documento"
