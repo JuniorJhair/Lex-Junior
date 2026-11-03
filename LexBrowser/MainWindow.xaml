@@ -220,11 +220,11 @@
             </Grid.ColumnDefinitions>
 
             <!-- Brand Logo LJ -->
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,14,0" WindowChrome.IsHitTestVisibleInChrome="False">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,10,0" WindowChrome.IsHitTestVisibleInChrome="False">
                 <Border CornerRadius="7" Width="26" Height="26" Margin="0,0,8,0" ClipToBounds="True">
                     <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                 </Border>
-                <TextBlock Text="LEX JUNIOR" FontWeight="Black" FontSize="11" Foreground="#818CF8" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtBrandTitle" Text="LEX JUNIOR" FontWeight="Black" FontSize="11" Foreground="#818CF8" VerticalAlignment="Center"/>
             </StackPanel>
 
             <!-- Lista de Pestañas con Drag & Drop y botones pegados a la última pestaña -->
@@ -434,23 +434,22 @@
             </Border>
 
             <!-- Botones a la derecha: Página Flotante, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
-            <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                <StackPanel Orientation="Horizontal" Margin="8,0,12,0">
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,8,0">
                 <!-- Botón Página Flotante (Controlable desde configuración) -->
-                <Button x:Name="BtnTogglePip" Style="{StaticResource NavBtn}" Width="118" Margin="4,0" 
+                <Button x:Name="BtnTogglePip" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0" 
                         ToolTip="Página Flotante: ver la página web completa en una mini ventana flotante" Click="BtnTogglePip_Click">
-                    <Border Background="#252536" CornerRadius="8" Padding="6,4">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🗖" FontSize="12" Margin="0,0,5,0" Foreground="{StaticResource AccentHover}"/>
-                            <TextBlock Text="Página Flotante" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}"/>
+                    <Border Background="#252536" CornerRadius="8" Padding="8,4">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🗖" FontSize="12" Foreground="{StaticResource AccentHover}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtPipBtnLabel" Text="Página Flotante" Margin="5,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>
 
                 <!-- Botón Amplificador de Volumen (Hasta 300% estilo Volume Master) -->
-                <Button x:Name="BtnVolumeBooster" Style="{StaticResource NavBtn}" Width="74" Margin="2,0"
+                <Button x:Name="BtnVolumeBooster" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
                         ToolTip="Amplificador de Volumen: ajusta el volumen de esta pestaña hasta 300%" Click="BtnVolumeBooster_Click">
-                    <Border x:Name="BorderVolumeBooster" Background="#252536" CornerRadius="8" Padding="7,4">
+                    <Border x:Name="BorderVolumeBooster" Background="#252536" CornerRadius="8" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtVolumeBoosterIcon" Text="🔊" FontSize="11" Margin="0,0,4,0" Foreground="#38BDF8"/>
                             <TextBlock x:Name="TxtVolumeBoosterLabel" Text="100%" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextLight}"/>
@@ -505,14 +504,14 @@
                 </Popup>
 
                 <!-- Botón Detector Multimedia y Archivos Bajo Demanda -->
-                <Button x:Name="BtnMediaSniffer" Style="{StaticResource NavBtn}" Width="106" Margin="2,0,4,0"
+                <Button x:Name="BtnMediaSniffer" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
                         ToolTip="Detector Multimedia Bajo Demanda: detecta y descarga videos, audios, imágenes y documentos de la página"
                         Click="BtnMediaSniffer_Click">
-                    <Border x:Name="BorderMediaSniffer" Background="#252536" CornerRadius="8" Padding="7,4">
+                    <Border x:Name="BorderMediaSniffer" Background="#252536" CornerRadius="8" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse x:Name="DotMediaSnifferStatus" Width="6" Height="6" Fill="#71717A" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="📥" FontSize="11" Margin="0,0,4,0"/>
-                            <TextBlock x:Name="TxtMediaSnifferLabel" Text="Multimedia" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}"/>
+                            <TextBlock Text="📥" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtMediaSnifferLabel" Text="Multimedia" Margin="4,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -629,11 +628,11 @@
                 </Popup>
 
                 <!-- Pill 0 Telemetría (Clic abre la pestaña explicativa en Configuración) -->
-                <Border Background="#16161D" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="4,0" 
+                <Border x:Name="BorderTelemetryBadge" Background="#16161D" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="2,0" 
                         Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="0 Telemetría: haz clic para ver cómo te protege y sus ventajas">
-                    <StackPanel Orientation="Horizontal">
-                        <Ellipse Width="7" Height="7" Fill="#10B981" Margin="0,0,6,0"/>
-                        <TextBlock Text="0 Telemetría" FontSize="10" Foreground="#A1A1AA" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtTelemetryLabel" Text="0 Telemetría" Margin="6,0,0,0" FontSize="10" Foreground="#A1A1AA" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -743,7 +742,6 @@
                     <TextBlock Text="⚙" FontSize="15" Foreground="#A1A1AA"/>
                 </Button>
             </StackPanel>
-            </ScrollViewer>
         </Grid>
 
         <!-- Fila 2: Barra de Accesos Directos Pro (Bookmarks Bar) -->

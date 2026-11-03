@@ -81,12 +81,14 @@ public static class NewTabPage
       background: " + bg + @";
       color: #E4E4E7;
       font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-      height: 100vh;
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
+      justify-content: space-between;
+      padding: clamp(14px, 3vh, 36px) 16px 14px;
+      overflow-x: hidden;
+      overflow-y: auto;
       user-select: none;
     }
 
@@ -98,15 +100,20 @@ public static class NewTabPage
       pointer-events: none; z-index: 0;
     }
 
-    .content { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; }
+    .content {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column; align-items: center;
+      margin: auto 0;
+      width: 100%;
+    }
 
     .brand-wrap {
       display: flex; align-items: center; gap: 14px;
-      margin-bottom: 22px;
+      margin-bottom: clamp(10px, 2.2vh, 22px);
     }
 
     .logo-img {
-      width: 72px; height: 72px; object-fit: contain;
+      width: clamp(52px, 8vh, 72px); height: clamp(52px, 8vh, 72px); object-fit: contain;
       filter: drop-shadow(0 0 18px rgba(99,102,241,0.4));
       border-radius: 16px;
     }
@@ -120,7 +127,7 @@ public static class NewTabPage
     }
 
     .brand-title {
-      font-size: 26px; font-weight: 800; letter-spacing: 1px;
+      font-size: clamp(20px, 3.2vh, 26px); font-weight: 800; letter-spacing: 1px;
       background: linear-gradient(135deg, #60A5FA 0%, #A855F7 100%);
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
@@ -132,11 +139,11 @@ public static class NewTabPage
       border: 1px solid rgba(139,92,246,0.25);
       border-radius: 20px; padding: 6px 16px;
       color: #A78BFA; font-size: 12px; font-weight: 600;
-      margin-bottom: 20px; letter-spacing: 0.5px;
+      margin-bottom: clamp(10px, 2vh, 20px); letter-spacing: 0.5px;
     }
 
     .clock {
-      font-size: 68px; font-weight: 200;
+      font-size: clamp(44px, 8.5vh, 68px); font-weight: 200;
       letter-spacing: -2px; color: #F4F4F5;
       margin-bottom: 4px; line-height: 1;
       font-variant-numeric: tabular-nums;
@@ -144,17 +151,17 @@ public static class NewTabPage
 
     .date {
       font-size: 13px; color: #52525B;
-      margin-bottom: 34px; letter-spacing: 0.5px;
+      margin-bottom: clamp(14px, 3.2vh, 34px); letter-spacing: 0.5px;
       text-transform: capitalize; font-weight: 400;
     }
 
-    .search-wrap { width: min(560px, 92vw); margin-bottom: 36px; }
+    .search-wrap { width: min(560px, 92vw); margin-bottom: clamp(16px, 3.4vh, 36px); }
 
     .search-bar {
       display: flex; align-items: center;
       background: #18181D;
       border: 1.5px solid #272730;
-      border-radius: 32px; padding: 12px 20px;
+      border-radius: 32px; padding: 10px 18px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
 
@@ -166,7 +173,7 @@ public static class NewTabPage
     .g-logo { width: 22px; height: 22px; margin-right: 12px; flex-shrink: 0; }
 
     .search-bar input {
-      flex: 1; background: transparent; border: none; outline: none;
+      flex: 1; min-width: 0; background: transparent; border: none; outline: none;
       color: #F4F4F5; font-size: 15px;
       caret-color: " + accent + @";
     }
@@ -184,12 +191,12 @@ public static class NewTabPage
 
     .quick-links {
       display: flex; gap: 12px; flex-wrap: wrap;
-      justify-content: center; max-width: min(620px, 94vw);
+      justify-content: center; max-width: min(680px, 94vw);
     }
 
     .quick-link {
       display: flex; flex-direction: column; align-items: center; gap: 8px;
-      padding: 14px 14px 11px;
+      padding: 13px 12px 10px;
       background: #18181D;
       border: 1px solid #1E1E28;
       border-radius: 14px; cursor: pointer;
@@ -210,7 +217,9 @@ public static class NewTabPage
     .quick-link .ico svg { width: 22px; height: 22px; display: block; }
 
     .footer {
-      position: fixed; bottom: 16px;
+      position: relative; z-index: 1;
+      margin-top: 16px;
+      text-align: center;
       color: #3F3F46; font-size: 11px; letter-spacing: 0.3px;
     }
     .footer b { color: " + accent + @"; font-weight: 600; }

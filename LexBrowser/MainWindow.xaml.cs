@@ -156,6 +156,12 @@ public partial class MainWindow : Window
         mmi.ptMaxPosition.y = info.rcWork.top - info.rcMonitor.top;
         mmi.ptMaxSize.x = info.rcWork.right - info.rcWork.left;
         mmi.ptMaxSize.y = info.rcWork.bottom - info.rcWork.top;
+
+        uint dpi = NativeMethods.GetDpiForWindow(hwnd);
+        double scale = dpi > 0 ? dpi / 96.0 : 1.0;
+        mmi.ptMinTrackSize.x = (int)Math.Ceiling(MinWidth * scale);
+        mmi.ptMinTrackSize.y = (int)Math.Ceiling(MinHeight * scale);
+
         System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, true);
         handled = true;
         return IntPtr.Zero;
@@ -743,7 +749,7 @@ public partial class MainWindow : Window
                     {
                         tab.BlockedAdsCount++;
                         if (win._activeTab == tab)
-                            win.TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
+                            win.UpdateShieldBadgeText();
                     });
                     return;
                 }
@@ -770,7 +776,7 @@ public partial class MainWindow : Window
                     if (tab.IsDisposed) return;
                     tab.BlockedAdsCount++;
                     if (win._activeTab == tab)
-                        win.TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
+                        win.UpdateShieldBadgeText();
                 });
             }
         };
@@ -824,7 +830,7 @@ public partial class MainWindow : Window
                         if (tab.IsDisposed) return;
                         tab.BlockedAdsCount++;
                         if (win._activeTab == tab)
-                            win.TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
+                            win.UpdateShieldBadgeText();
                     });
                 }
                 else if (type == "shortcut_new_tab")
@@ -1290,7 +1296,7 @@ public partial class MainWindow : Window
             if (tab != null)
             {
                 TxtUrl.Text = tab.IsNewTab ? "" : tab.Url;
-                TxtShieldBadge.Text = $"{tab.BlockedAdsCount} bloqueados";
+                UpdateShieldBadgeText();
                 LoadingProgressBar.Visibility = tab.IsLoading ? Visibility.Visible : Visibility.Collapsed;
             }
             UpdateNavigationButtons();
@@ -2647,14 +2653,51 @@ public partial class MainWindow : Window
             BtnMaxRestore.Content = "□";
             ApplyRestoredWindowBounds();
         }
+        UpdateResponsiveToolbarLayout();
     }
 
     private void MainWindow_SizeOrLocationChanged(object? sender, EventArgs e)
     {
+        UpdateResponsiveToolbarLayout();
         if (!IsLoaded || _isApplyingNormalBounds || WindowState != WindowState.Normal)
             return;
 
         RecordCurrentNormalBounds(saveToDisk: false);
+    }
+
+    private void UpdateResponsiveToolbarLayout()
+    {
+        double w = ActualWidth > 0 ? ActualWidth : Width;
+        if (double.IsNaN(w) || w <= 0) return;
+
+        bool isCompact = w < 1020;
+        bool isUltraCompact = w < 700;
+
+        if (TxtPipBtnLabel != null)
+            TxtPipBtnLabel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+
+        if (TxtMediaSnifferLabel != null)
+            TxtMediaSnifferLabel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+
+        if (TxtTelemetryLabel != null)
+            TxtTelemetryLabel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
+
+        if (TxtBrandTitle != null)
+            TxtBrandTitle.Visibility = isUltraCompact ? Visibility.Collapsed : Visibility.Visible;
+
+        if (BtnHome != null)
+            BtnHome.Visibility = isUltraCompact ? Visibility.Collapsed : Visibility.Visible;
+
+        UpdateShieldBadgeText();
+    }
+
+    private void UpdateShieldBadgeText()
+    {
+        if (TxtShieldBadge == null) return;
+        int count = _activeTab?.BlockedAdsCount ?? 0;
+        double w = ActualWidth > 0 ? ActualWidth : Width;
+        bool isCompact = !double.IsNaN(w) && w > 0 && w < 1020;
+        TxtShieldBadge.Text = isCompact ? $"{count}" : $"{count} bloqueados";
     }
 
     private void RecordCurrentNormalBounds(bool saveToDisk)
