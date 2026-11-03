@@ -392,8 +392,8 @@
                         ToolTip="Ir a YouTube" Click="BtnHome_Click"/>
             </StackPanel>
 
-            <!-- Barra de Direcciones / Omnibox (Estilo Chrome / Brave) -->
-            <Border Grid.Column="1" Background="{StaticResource SurfaceLighter}" CornerRadius="10" Margin="4,7" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
+            <!-- Barra de Direcciones / Omnibox (Estilo Chrome / Brave con logo G y autocompletado inteligente) -->
+            <Border x:Name="BorderOmnibox" Grid.Column="1" Background="{StaticResource SurfaceLighter}" CornerRadius="10" Margin="4,7" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
                 <Grid Margin="10,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -402,13 +402,30 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="TxtSecurityIcon" Grid.Column="0" Text="🔍" FontSize="11" Foreground="#9CA3AF" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip="Búsqueda o dirección web"/>
+                    <!-- Logo G multicolor de Google (visible al buscar o en Nueva Pestaña) + Icono de Seguridad HTTPS -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <Border x:Name="BadgeGoogleOmnibox" Width="18" Height="18" CornerRadius="9" Background="#1F2432" VerticalAlignment="Center" ToolTip="Búsqueda rápida con Google">
+                            <Viewbox Width="13" Height="13">
+                                <Canvas Width="24" Height="24">
+                                    <Path Fill="#4285F4" Data="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
+                                    <Path Fill="#34A853" Data="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/>
+                                    <Path Fill="#FBBC05" Data="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>
+                                    <Path Fill="#EA4335" Data="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z"/>
+                                </Canvas>
+                            </Viewbox>
+                        </Border>
+                        <TextBlock x:Name="TxtSecurityIcon" Text="🔒" FontSize="11" Foreground="#10B981" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Conexión cifrada segura (HTTPS)"/>
+                    </StackPanel>
 
-                    <!-- Input URL: Comportamiento exacto de Chrome/Brave implementado -->
+                    <!-- Input URL: Comportamiento exacto de Chrome/Brave con sugerencias en vivo -->
                     <TextBox x:Name="TxtUrl" Grid.Column="1" Background="Transparent" BorderThickness="0" 
                              Foreground="{StaticResource TextLight}" FontSize="13" VerticalAlignment="Center"
                              CaretBrush="#FFFFFF" SelectionBrush="{StaticResource AccentColor}"
+                             PreviewKeyDown="TxtUrl_PreviewKeyDown"
                              KeyDown="TxtUrl_KeyDown"
+                             TextChanged="TxtUrl_TextChanged"
+                             GotKeyboardFocus="TxtUrl_GotKeyboardFocus"
+                             LostKeyboardFocus="TxtUrl_LostKeyboardFocus"
                              PreviewMouseDown="TxtUrl_PreviewMouseDown"/>
 
                     <!-- Escudo de Anuncios en la barra -->
@@ -432,6 +449,64 @@
                     </Border>
                 </Grid>
             </Border>
+
+            <!-- Desplegable Inteligente de Sugerencias del Omnibox (Búsquedas recientes, Autocompletado de Google y Páginas visitadas) -->
+            <Popup x:Name="PopupOmniboxSuggestions" PlacementTarget="{Binding ElementName=BorderOmnibox}" Placement="Bottom"
+                   VerticalOffset="4" StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Background="#1D1D28" BorderBrush="#34344A" BorderThickness="1.5" CornerRadius="12" Padding="6,6"
+                        Width="{Binding ActualWidth, ElementName=BorderOmnibox}" MinWidth="360">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.78" Color="#000000"/>
+                    </Border.Effect>
+                    <ItemsControl x:Name="ItemsOmniboxSuggestions">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="SugRowBorder" Background="Transparent" CornerRadius="8" Padding="10,7" Margin="0,1" Cursor="Hand"
+                                        PreviewMouseLeftButtonDown="OmniboxSuggestionRow_MouseLeftButtonDown">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Icono (🕒 reciente, 🔍 búsqueda, ▶ YouTube en rojo, 🌐 web) -->
+                                        <Border Grid.Column="0" Width="22" Height="22" CornerRadius="5" Background="{Binding IconBgHex}" Margin="0,0,10,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding IconText}" Foreground="{Binding IconFgHex}" FontSize="10.5" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+
+                                        <!-- Texto principal + URL o subtítulo en azul -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True">
+                                            <TextBlock Text="{Binding PrimaryText}" Foreground="#F4F4F5" FontSize="12.5" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
+                                            <TextBlock Text="{Binding SecondaryText}" Foreground="#60A5FA" FontSize="12"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="380"
+                                                       Visibility="{Binding HasSecondaryText, Converter={StaticResource BoolToVis}}"/>
+                                        </StackPanel>
+
+                                        <!-- Botón ✕ para borrar búsqueda reciente o entrada del historial -->
+                                        <Button Grid.Column="2" Content="✕" Tag="{Binding}"
+                                                PreviewMouseLeftButtonDown="BtnDeleteOmniboxSuggestion_MouseDown"
+                                                Background="Transparent" BorderThickness="0" Foreground="#71717A" FontSize="10.5"
+                                                Padding="6,2" Cursor="Hand" VerticalAlignment="Center"
+                                                ToolTip="Eliminar esta sugerencia del historial"
+                                                Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"/>
+                                    </Grid>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter TargetName="SugRowBorder" Property="Background" Value="#2D2D42"/>
+                                    </DataTrigger>
+                                    <Trigger SourceName="SugRowBorder" Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="SugRowBorder" Property="Background" Value="#262638"/>
+                                    </Trigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </Popup>
 
             <!-- Botones a la derecha: Página Flotante, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,8,0">

@@ -216,11 +216,12 @@ public static class YouTubeOptimizer
     // ─────────────────────────────────────────────────────────────────
     const adDomainsRegex = /(propellerads|popcash|popads|adsterra|monetag|bet365|1xbet|clickadu|hilltopads|exoclick|juicyads|syndication|doubleclick|adservice|outbrain|taboola|criteo|adnxs|pubmatic|onclick|trafficstars|adcash|revcontent|smartadserver|r2ads|llvpn|streamtp|trkr|ppof\.net|visariomedia|qojseyonoj|hfryyynvqwgy)/i;
 
-    // 1.1 Defusor de window.open para popunders no solicitados
+    // 1.1 Defusor de window.open para popunders no solicitados (excluyendo dominios OAuth de confianza)
+    const trustedOAuthRegex = /^https:\/\/([a-z0-9-]+\.)?(google\.com|apple\.com|microsoft\.com|microsoftonline\.com|live\.com|github\.com|facebook\.com|discord\.com|x\.com|twitter\.com|paypal\.com)(\/|$)/i;
     try {
         const originalOpen = window.open;
         window.open = function(url, target, features) {
-            if (url && typeof url === 'string') {
+            if (url && typeof url === 'string' && !trustedOAuthRegex.test(url)) {
                 const isAd = adDomainsRegex.test(url) ||
                              url.includes('/ad/') ||
                              url.includes('/ads/') ||

@@ -602,7 +602,7 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     // CREAR NUEVA PESTAÑA (Al costado de la activa o en índice indicado)
     // ─────────────────────────────────────────────────────────────────────
-    private async Task<BrowserTab> AddNewTabAsync(string? initialUrl = null, bool isIncognito = false, int? insertIndex = null)
+    private async Task<BrowserTab> AddNewTabAsync(string? initialUrl = null, bool isIncognito = false, int? insertIndex = null, bool skipInitialNavigate = false)
     {
         if (_isGuestSession)
         {
@@ -615,11 +615,11 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Stretch
         };
 
-        bool isNewTabDefault = string.IsNullOrWhiteSpace(initialUrl);
+        bool isNewTabDefault = string.IsNullOrWhiteSpace(initialUrl) && !skipInitialNavigate;
 
         var tab = new BrowserTab(webView)
         {
-            Url = isNewTabDefault ? "" : initialUrl!,
+            Url = isNewTabDefault ? "" : (initialUrl ?? ""),
             Title = isNewTabDefault ? (isIncognito ? "Incógnito" : "Nueva pestaña") : "Cargando...",
             IsIncognito = isIncognito,
             IsNewTab = isNewTabDefault,
@@ -660,13 +660,16 @@ public partial class MainWindow : Window
 
             await ConfigureTabWebViewAsync(tab);
 
-            if (isNewTabDefault)
+            if (!skipInitialNavigate)
             {
-                webView.NavigateToString(NewTabPage.GetHtml(isIncognito));
-            }
-            else
-            {
-                webView.CoreWebView2.Navigate(initialUrl!);
+                if (isNewTabDefault)
+                {
+                    webView.NavigateToString(NewTabPage.GetHtml(isIncognito));
+                }
+                else if (!string.IsNullOrWhiteSpace(initialUrl))
+                {
+                    webView.CoreWebView2.Navigate(initialUrl!);
+                }
             }
         }
         catch (Exception ex)
@@ -739,29 +742,48 @@ public partial class MainWindow : Window
             });
         };
 
-        // 2. ESCUDO ANTI-POPUNDERS Y CLICK-JACKING
+        // 2. ESCUDO ANTI-POPUNDERS + CONEXIÓN NATIVA DE VENTANAS EMERGENTES OAUTH (Google, Apple, X/Twitter, Microsoft)
+        core.WindowCloseRequested += (s, e) =>
+        {
+            var win = tab.OwnerWindow ?? this;
+            win.Dispatcher.Invoke(() =>
+            {
+                if (!tab.IsDisposed && win.Tabs.Count > 1)
+                {
+                    win.CloseTab(tab);
+                }
+            });
+        };
+
         core.NewWindowRequested += (s, e) =>
         {
-            e.Handled = true;
             var win = tab.OwnerWindow ?? this;
+            string url = e.Uri ?? string.Empty;
 
-            string url = e.Uri;
-            if (string.IsNullOrWhiteSpace(url) || url == "about:blank") return;
-
-            if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            Uri? currentUri = null;
+            try
             {
-                Uri? currentUri = null;
-                try
+                if (tab.WebView?.Source != null)
                 {
-                    if (tab.WebView != null && tab.WebView.Source != null)
-                    {
-                        currentUri = tab.WebView.Source;
-                    }
+                    currentUri = tab.WebView.Source;
                 }
-                catch { }
+            }
+            catch { }
 
+            // 2.1 Si la URL es vacía o about:blank sin interacción del usuario en un sitio no confiable, bloquear popunder
+            if (string.IsNullOrWhiteSpace(url) || url == "about:blank")
+            {
+                if (!e.IsUserInitiated)
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+            else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
                 if (SettingsManager.Current.EnableAdBlocker && (AdBlockFilter.ShouldBlock(uri) || AdBlockFilter.IsSuspiciousPopup(uri, currentUri)))
                 {
+                    e.Handled = true;
                     win.Dispatcher.Invoke(() =>
                     {
                         tab.BlockedAdsCount++;
@@ -772,9 +794,70 @@ public partial class MainWindow : Window
                 }
             }
 
-            win.Dispatcher.Invoke(async () =>
+            // 2.2 Determinar si la página pidió una ventana emergente tipo OAuth / Login ("Continuar con Google / Apple")
+            bool hasPopupSize = false;
+            double? reqW = null;
+            double? reqH = null;
+            try
             {
-                await win.AddNewTabAsync(url, isIncognito: tab.IsIncognito);
+                if (e.WindowFeatures != null && e.WindowFeatures.HasSize)
+                {
+                    hasPopupSize = true;
+                    reqW = e.WindowFeatures.Width;
+                    reqH = e.WindowFeatures.Height;
+                }
+            }
+            catch { }
+
+            bool isOAuthUrl = url.Contains("accounts.google.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("appleid.apple.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("login.microsoftonline.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("login.live.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("/oauth", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("gsi/select", StringComparison.OrdinalIgnoreCase);
+
+            var deferral = e.GetDeferral();
+            win.Dispatcher.InvokeAsync(async () =>
+            {
+                try
+                {
+                    if (hasPopupSize || isOAuthUrl)
+                    {
+                        // Abrir ventana emergente conectada (OAuthPopupWindow) como en Chrome/Brave
+                        // preservando window.opener y postMessage para que el login se complete y cierre solo.
+                        var popupWin = new OAuthPopupWindow(tab.IsIncognito, url, reqW, reqH)
+                        {
+                            Owner = win
+                        };
+                        popupWin.PasswordSubmittedInPopup += (subUrl, subUser, subPwd) =>
+                        {
+                            win.PromptSaveOrUpdatePassword(subUrl, subUser, subPwd);
+                        };
+                        popupWin.Show();
+
+                        var popupCore = await popupWin.InitializePopupCoreAsync();
+                        e.NewWindow = popupCore;
+                        e.Handled = true;
+                    }
+                    else
+                    {
+                        // Enlace normal en nueva pestaña: conectar e.NewWindow sin doble navegación (abre solo 1 pestaña)
+                        var newTab = await win.AddNewTabAsync(url, isIncognito: tab.IsIncognito, skipInitialNavigate: true);
+                        if (newTab?.WebView?.CoreWebView2 != null)
+                        {
+                            e.NewWindow = newTab.WebView.CoreWebView2;
+                        }
+                        e.Handled = true;
+                    }
+                }
+                catch
+                {
+                    e.Handled = true;
+                }
+                finally
+                {
+                    try { deferral.Complete(); } catch { }
+                }
             });
         };
 
@@ -1177,7 +1260,10 @@ public partial class MainWindow : Window
 
                 if (win._activeTab == tab)
                 {
+                    win._isUpdatingOmniboxTextProgrammatically = true;
                     win.TxtUrl.Text = tab.Url;
+                    win._isUpdatingOmniboxTextProgrammatically = false;
+                    win.PopupOmniboxSuggestions.IsOpen = false;
                     win.UpdateSecurityIndicatorUI();
                     win.UpdateCurrentTabBookmarkUI();
                 }
@@ -1330,7 +1416,10 @@ public partial class MainWindow : Window
 
             if (tab != null)
             {
+                _isUpdatingOmniboxTextProgrammatically = true;
                 TxtUrl.Text = tab.IsNewTab ? "" : tab.Url;
+                _isUpdatingOmniboxTextProgrammatically = false;
+                PopupOmniboxSuggestions.IsOpen = false;
                 UpdateShieldBadgeText();
                 LoadingProgressBar.Visibility = tab.IsLoading ? Visibility.Visible : Visibility.Collapsed;
             }
@@ -1858,22 +1947,27 @@ public partial class MainWindow : Window
 
     private void UpdateSecurityIndicatorUI()
     {
-        if (TxtSecurityIcon == null) return;
+        if (TxtSecurityIcon == null || BadgeGoogleOmnibox == null) return;
         string url = _activeTab?.Url ?? "";
-        if (_activeTab == null || _activeTab.IsNewTab || string.IsNullOrWhiteSpace(url))
+        bool isTypingOrNewTab = _activeTab == null || _activeTab.IsNewTab || string.IsNullOrWhiteSpace(url) || (TxtUrl != null && TxtUrl.IsKeyboardFocusWithin);
+
+        if (isTypingOrNewTab)
         {
-            TxtSecurityIcon.Text = "🔍";
-            TxtSecurityIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xAF));
-            TxtSecurityIcon.ToolTip = "Búsqueda o dirección web";
+            BadgeGoogleOmnibox.Visibility = Visibility.Visible;
+            TxtSecurityIcon.Visibility = Visibility.Collapsed;
         }
         else if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
+            BadgeGoogleOmnibox.Visibility = Visibility.Collapsed;
+            TxtSecurityIcon.Visibility = Visibility.Visible;
             TxtSecurityIcon.Text = "🔒";
             TxtSecurityIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
             TxtSecurityIcon.ToolTip = "Conexión cifrada segura (HTTPS)";
         }
         else
         {
+            BadgeGoogleOmnibox.Visibility = Visibility.Collapsed;
+            TxtSecurityIcon.Visibility = Visibility.Visible;
             TxtSecurityIcon.Text = "⚠️";
             TxtSecurityIcon.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
             TxtSecurityIcon.ToolTip = "Conexión no cifrada (HTTP)";
@@ -1958,28 +2052,217 @@ public partial class MainWindow : Window
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // BARRA DE URL / OMNIBOX (COMPORTAMIENTO EXACTO CHROME Y BRAVE)
+    // BARRA DE URL / OMNIBOX INTELIGENTE (SUGERENCIAS EN VIVO + HISTORIAL)
     // ─────────────────────────────────────────────────────────────────────
+    private bool _isUpdatingOmniboxTextProgrammatically = false;
+    private readonly List<OmniboxSuggestionItem> _omniboxSuggestions = new();
+    private int _selectedOmniboxIndex = 0;
+    private System.Threading.CancellationTokenSource? _omniboxLiveSuggestCts;
+
     private void TxtUrl_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        // Si la barra de URL no tenía el foco, este es el 1er clic:
-        // Enfoca, selecciona todo el texto de la URL y previene que el clic desmarque la selección.
         if (!TxtUrl.IsKeyboardFocusWithin)
         {
             TxtUrl.Focus();
             TxtUrl.SelectAll();
-            e.Handled = true; // Impide que WPF desubraye y ubique el cursor inmediatamente
+            e.Handled = true;
         }
-        // Si ya tenía el foco, este es el 2do clic o doble clic:
-        // Se deja pasar normalmente para posicionar el palito parpadeante donde se hizo clic.
+    }
+
+    private void TxtUrl_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        UpdateSecurityIndicatorUI();
+        string current = TxtUrl.Text.Trim();
+        if (!string.IsNullOrEmpty(current) && !current.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !current.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = RefreshOmniboxSuggestionsAsync(current);
+        }
+    }
+
+    private void TxtUrl_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        _omniboxLiveSuggestCts?.Cancel();
+        PopupOmniboxSuggestions.IsOpen = false;
+        UpdateSecurityIndicatorUI();
+    }
+
+    private void TxtUrl_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isUpdatingOmniboxTextProgrammatically || !TxtUrl.IsKeyboardFocusWithin)
+            return;
+
+        string query = TxtUrl.Text.Trim();
+        if (string.IsNullOrEmpty(query))
+        {
+            _omniboxLiveSuggestCts?.Cancel();
+            PopupOmniboxSuggestions.IsOpen = false;
+            return;
+        }
+
+        _ = RefreshOmniboxSuggestionsAsync(query);
+    }
+
+    private async Task RefreshOmniboxSuggestionsAsync(string query)
+    {
+        _omniboxLiveSuggestCts?.Cancel();
+        var cts = new System.Threading.CancellationTokenSource();
+        _omniboxLiveSuggestCts = cts;
+        var token = cts.Token;
+
+        bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
+        var localHistory = isPrivate
+            ? (IReadOnlyList<HistoryEntry>)Array.Empty<HistoryEntry>()
+            : HistoryManager.GetEntries();
+        var localBookmarks = isPrivate
+            ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>()
+            : BookmarkManager.Bookmarks;
+
+        string engineName = SettingsManager.Current.DefaultSearchEngine;
+
+        // 1. Mostrar instantáneamente (< 0.5 ms) las búsquedas recientes y páginas/videos ya navegados del historial
+        var initialList = OmniboxSuggestionService.BuildSuggestions(
+            query,
+            localHistory,
+            localBookmarks,
+            liveGoogleSuggestions: null,
+            searchEngineName: engineName);
+
+        ApplyOmniboxSuggestionsToPopup(initialList);
+
+        // 2. Debounce de 120 ms y consulta ligera a las sugerencias predictivas de Google
+        try
+        {
+            await Task.Delay(120, token);
+            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
+
+            var liveSuggestions = await OmniboxSuggestionService.FetchGoogleAutocompleteAsync(query, token);
+            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin || liveSuggestions.Count == 0)
+                return;
+
+            var combinedList = OmniboxSuggestionService.BuildSuggestions(
+                query,
+                localHistory,
+                localBookmarks,
+                liveGoogleSuggestions: liveSuggestions,
+                searchEngineName: engineName);
+
+            ApplyOmniboxSuggestionsToPopup(combinedList);
+        }
+        catch { }
+    }
+
+    private void ApplyOmniboxSuggestionsToPopup(List<OmniboxSuggestionItem> items)
+    {
+        _omniboxSuggestions.Clear();
+        _omniboxSuggestions.AddRange(items);
+        _selectedOmniboxIndex = 0;
+
+        for (int i = 0; i < _omniboxSuggestions.Count; i++)
+        {
+            _omniboxSuggestions[i].IsSelected = (i == 0);
+        }
+
+        ItemsOmniboxSuggestions.ItemsSource = null;
+        ItemsOmniboxSuggestions.ItemsSource = _omniboxSuggestions;
+        PopupOmniboxSuggestions.IsOpen = _omniboxSuggestions.Count > 0 && TxtUrl.IsKeyboardFocusWithin;
+    }
+
+    private void TxtUrl_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!PopupOmniboxSuggestions.IsOpen || _omniboxSuggestions.Count == 0)
+        {
+            if (e.Key == Key.Escape)
+            {
+                PopupOmniboxSuggestions.IsOpen = false;
+            }
+            return;
+        }
+
+        if (e.Key == Key.Down)
+        {
+            e.Handled = true;
+            MoveOmniboxSelection(+1);
+        }
+        else if (e.Key == Key.Up)
+        {
+            e.Handled = true;
+            MoveOmniboxSelection(-1);
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            PopupOmniboxSuggestions.IsOpen = false;
+        }
+    }
+
+    private void MoveOmniboxSelection(int delta)
+    {
+        if (_omniboxSuggestions.Count == 0) return;
+
+        _selectedOmniboxIndex = (_selectedOmniboxIndex + delta + _omniboxSuggestions.Count) % _omniboxSuggestions.Count;
+        for (int i = 0; i < _omniboxSuggestions.Count; i++)
+        {
+            _omniboxSuggestions[i].IsSelected = (i == _selectedOmniboxIndex);
+        }
+
+        ItemsOmniboxSuggestions.ItemsSource = null;
+        ItemsOmniboxSuggestions.ItemsSource = _omniboxSuggestions;
+
+        var selected = _omniboxSuggestions[_selectedOmniboxIndex];
+        _isUpdatingOmniboxTextProgrammatically = true;
+        TxtUrl.Text = selected.TargetInputOrUrl;
+        TxtUrl.CaretIndex = TxtUrl.Text.Length;
+        _isUpdatingOmniboxTextProgrammatically = false;
+    }
+
+    private void OmniboxSuggestionRow_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is OmniboxSuggestionItem item)
+        {
+            e.Handled = true;
+            PopupOmniboxSuggestions.IsOpen = false;
+            NavigateOmniboxInput(item.TargetInputOrUrl);
+        }
+    }
+
+    private void BtnDeleteOmniboxSuggestion_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is OmniboxSuggestionItem item && !string.IsNullOrEmpty(item.HistoryEntryId))
+        {
+            e.Handled = true;
+            HistoryManager.DeleteEntry(item.HistoryEntryId);
+            _omniboxSuggestions.Remove(item);
+            ItemsOmniboxSuggestions.ItemsSource = null;
+            ItemsOmniboxSuggestions.ItemsSource = _omniboxSuggestions;
+            if (_omniboxSuggestions.Count == 0)
+            {
+                PopupOmniboxSuggestions.IsOpen = false;
+            }
+        }
     }
 
     private void TxtUrl_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter || _activeTab?.WebView == null) return;
 
+        e.Handled = true;
+        _omniboxLiveSuggestCts?.Cancel();
+
         string input = TxtUrl.Text.Trim();
-        if (string.IsNullOrEmpty(input)) return;
+        if (PopupOmniboxSuggestions.IsOpen &&
+            _selectedOmniboxIndex >= 0 &&
+            _selectedOmniboxIndex < _omniboxSuggestions.Count)
+        {
+            input = _omniboxSuggestions[_selectedOmniboxIndex].TargetInputOrUrl.Trim();
+        }
+
+        PopupOmniboxSuggestions.IsOpen = false;
+        NavigateOmniboxInput(input);
+    }
+
+    private void NavigateOmniboxInput(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input) || _activeTab?.WebView == null) return;
 
         string targetUrl;
         if (input.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
@@ -1996,9 +2279,14 @@ public partial class MainWindow : Window
             targetUrl = SettingsManager.GetSearchUrl(input);
         }
 
+        _isUpdatingOmniboxTextProgrammatically = true;
+        TxtUrl.Text = targetUrl;
+        _isUpdatingOmniboxTextProgrammatically = false;
+
         if (_activeTab.WebView.CoreWebView2 != null)
         {
             _activeTab.WebView.CoreWebView2.Navigate(targetUrl);
+            _activeTab.WebView.Focus();
         }
         else if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var navUri))
         {

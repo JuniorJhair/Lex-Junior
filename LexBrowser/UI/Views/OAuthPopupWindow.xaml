@@ -1,0 +1,75 @@
+<Window x:Class="LexBrowser.UI.Views.OAuthPopupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Inicia sesión — Lex Junior"
+        Width="520" Height="650"
+        MinWidth="360" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        Background="#0F0F14"
+        Foreground="#E4E4E7"
+        Icon="pack://application:,,,/Assets/logo.png">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="38" ResizeBorderThickness="6" CornerRadius="0" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Fila 0: Barra de título de ventana emergente -->
+            <RowDefinition Height="38"/>
+            <!-- Fila 1: Barra de dirección de solo lectura con candado HTTPS -->
+            <RowDefinition Height="34"/>
+            <!-- Fila 2: WebView2 conectado al window.opener -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Barra de título -->
+        <Border Grid.Row="0" Background="#14141C" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid Margin="12,0,4,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" CornerRadius="5" Width="18" Height="18" Margin="0,0,8,0" ClipToBounds="True" VerticalAlignment="Center">
+                    <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill"/>
+                </Border>
+
+                <TextBlock x:Name="TxtPopupTitle" Grid.Column="1" Text="Conectando cuenta..." FontSize="12" FontWeight="SemiBold"
+                           Foreground="#E4E4E7" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Content="─" Width="36" Height="32" Background="Transparent" BorderThickness="0"
+                            Foreground="#A1A1AA" Cursor="Hand" Click="BtnMinimize_Click"/>
+                    <Button Content="□" Width="36" Height="32" Background="Transparent" BorderThickness="0"
+                            Foreground="#A1A1AA" Cursor="Hand" Click="BtnMaximize_Click"/>
+                    <Button Content="✕" Width="38" Height="32" Background="Transparent" BorderThickness="0"
+                            Foreground="#F4F4F5" Cursor="Hand" Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Barra de URL segura de solo lectura (como Chrome/Brave en ventanas de OAuth) -->
+        <Border Grid.Row="1" Background="#1B1B26" BorderBrush="#2A2A3C" BorderThickness="0,1,0,1" Padding="12,0">
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtPopupLockIcon" Grid.Column="0" Text="🔒" FontSize="11" Foreground="#10B981" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtPopupUrl" Grid.Column="1" Text="https://accounts.google.com/..." FontSize="11.5"
+                           Foreground="#A1A1AA" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </Grid>
+        </Border>
+
+        <!-- WebView2 de la ventana emergente -->
+        <Grid x:Name="PopupWebViewHost" Grid.Row="2" Background="#0A0A0E">
+            <wv2:WebView2 x:Name="PopupWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+        </Grid>
+    </Grid>
+</Window>
+
