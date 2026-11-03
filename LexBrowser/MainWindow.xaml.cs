@@ -2640,6 +2640,14 @@ public partial class MainWindow : Window
     private void UpdateWindowMargin()
     {
         RootWindowGrid.Margin = new Thickness(0);
+        if (BrowserContainer != null)
+        {
+            // En ventana restaurada (Normal), dejamos los 6px del borde de agarre (ResizeBorderThickness="6")
+            // libres del HWND hijo de WebView2 para poder estirar desde cualquier costado, borde inferior o esquina.
+            BrowserContainer.Margin = WindowState == WindowState.Normal
+                ? new Thickness(6, 0, 6, 6)
+                : new Thickness(0);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
