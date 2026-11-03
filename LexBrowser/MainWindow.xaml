@@ -648,6 +648,90 @@
                     </Border>
                 </Button>
 
+                <!-- Botón Historial de Descargas ⬇ (0% CPU en reposo) -->
+                <Button x:Name="BtnDownloads" Style="{StaticResource NavBtn}" ToolTip="Historial de Descargas (Ctrl+J)" Click="BtnDownloads_Click">
+                    <TextBlock x:Name="TxtDownloadsBtnIcon" Text="⬇" FontSize="13.5" FontWeight="Bold" Foreground="#A1A1AA"/>
+                </Button>
+
+                <!-- Popup del Historial de Descargas -->
+                <Popup x:Name="PopupDownloads" PlacementTarget="{Binding ElementName=BtnDownloads}" Placement="Bottom"
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" VerticalOffset="6" HorizontalOffset="-330">
+                    <Border Background="#181822" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="12" Padding="14,12" Width="400">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.65" Color="#000000"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="⬇ Historial de Descargas" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtDownloadsCountSubtitle" Text="Ligero · 0% consumo en segundo plano" Foreground="#9CA3AF" FontSize="10" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button Content="📂 Carpeta" Click="BtnOpenDownloadsFolder_Click"
+                                            Background="#252536" Foreground="#D4D4D8" FontSize="10.5" FontWeight="SemiBold"
+                                            Padding="8,4" Margin="0,0,5,0" BorderThickness="0" Cursor="Hand"
+                                            ToolTip="Abrir la carpeta de Descargas de Windows"/>
+                                    <Button Content="🗑️ Limpiar" Click="BtnClearDownloadsHistory_Click"
+                                            Background="#252536" Foreground="#A1A1AA" FontSize="10.5" FontWeight="SemiBold"
+                                            Padding="8,4" BorderThickness="0" Cursor="Hand"
+                                            ToolTip="Limpiar la lista del historial de descargas (no borra tus archivos del disco)"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Background="#12121A" BorderBrush="#272736" BorderThickness="1" CornerRadius="8" Padding="6" Height="250">
+                                <Grid>
+                                    <TextBlock x:Name="TxtDownloadsEmptyState"
+                                               Text="Aún no hay descargas recientes."
+                                               Foreground="#71717A" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center" Margin="18"/>
+
+                                    <ScrollViewer x:Name="ScrollDownloadsHistory" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                                        <ItemsControl x:Name="ItemsDownloadsHistory">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="#1B1B26" BorderBrush="#2A2A3C" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,0,0,5">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <Border Grid.Column="0" Background="#252538" CornerRadius="6" Width="28" Height="28" Margin="0,0,8,0" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding CategoryIcon}" FontSize="13" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+
+                                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                                <TextBlock Text="{Binding FileName}" Foreground="#F4F4F5" FontSize="11" FontWeight="SemiBold"
+                                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding FilePath}"/>
+                                                                <TextBlock Text="{Binding StatusDisplay}" Foreground="#9CA3AF" FontSize="9.5" Margin="0,1,0,0"/>
+                                                            </StackPanel>
+
+                                                            <Button Grid.Column="2" Content="▶" Tag="{Binding}" Click="BtnOpenDownloadedFile_Click"
+                                                                    Background="#1E1B4B" Foreground="#A5B4FC" FontSize="10.5" FontWeight="Bold" Padding="7,4" Margin="0,0,4,0"
+                                                                    BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Abrir archivo"/>
+
+                                                            <Button Grid.Column="3" Content="📂" Tag="{Binding}" Click="BtnShowDownloadedFileInFolder_Click"
+                                                                    Background="#262638" Foreground="#D4D4D8" FontSize="10.5" Padding="7,4" Margin="0,0,4,0"
+                                                                    BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Mostrar en carpeta"/>
+
+                                                            <Button Grid.Column="4" Content="✕" Tag="{Binding}" Click="BtnRemoveDownloadEntry_Click"
+                                                                    Background="Transparent" Foreground="#71717A" FontSize="10" Padding="5,4"
+                                                                    BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Quitar de la lista"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
                 <!-- Botón Historial 🕒 -->
                 <Button x:Name="BtnHistory" Style="{StaticResource NavBtn}" ToolTip="Historial de Navegación y Limpieza (Ctrl+H)" Click="BtnHistory_Click">
                     <TextBlock Text="🕒" FontSize="13" Foreground="#A1A1AA"/>

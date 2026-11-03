@@ -89,8 +89,9 @@ public partial class MainWindow : Window
             FloatingZoomWidget.Visibility = Visibility.Collapsed;
         };
 
-        // Escuchar cambios de configuración
+        // Escuchar cambios de configuración y descargas
         SettingsManager.SettingsChanged += ApplySettings;
+        DownloadManager.DownloadsChanged += OnDownloadsChanged;
         ApplySettings();
 
         // Callback cuando el usuario pulsa "⇱ Volver" en la Página Flotante manual
@@ -1000,6 +1001,40 @@ public partial class MainWindow : Window
             if (!tab.IsMediaSnifferActive || tab.IsDisposed) return;
             var win = tab.OwnerWindow ?? this;
             win.InspectNetworkMediaResponse(tab, e);
+        };
+
+        // 6. Historial de Descargas Ligero (0% CPU en reposo; se dispara solo al iniciar/avanzar una descarga)
+        core.DownloadStarting += (s, e) =>
+        {
+            try
+            {
+                var op = e.DownloadOperation;
+                string resultPath = e.ResultFilePath ?? string.Empty;
+                string fileName = Path.GetFileName(resultPath);
+                long total = (long)(op.TotalBytesToReceive ?? 0UL);
+                var entry = DownloadManager.RegisterDownload(fileName, resultPath, op.Uri, total, "En progreso", tab.IsIncognito);
+
+                op.BytesReceivedChanged += (senderOp, args) =>
+                {
+                    long received = op.BytesReceived;
+                    long tot = (long)(op.TotalBytesToReceive ?? 0UL);
+                    DownloadManager.UpdateDownload(entry.Id, received, tot, "En progreso");
+                };
+
+                op.StateChanged += (senderOp, args) =>
+                {
+                    long received = op.BytesReceived;
+                    long tot = (long)(op.TotalBytesToReceive ?? 0UL);
+                    string stateStr = op.State switch
+                    {
+                        CoreWebView2DownloadState.Completed => "Completado",
+                        CoreWebView2DownloadState.Interrupted => "Cancelado",
+                        _ => "En progreso"
+                    };
+                    DownloadManager.UpdateDownload(entry.Id, received, tot, stateStr);
+                };
+            }
+            catch { }
         };
 
         // Escuchar cambios de zoom en el WebView para actualizar el indicador y widget flotante
@@ -2260,6 +2295,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 10.1b Ctrl + J: Abrir Historial de Descargas
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.J)
+        {
+            e.Handled = true;
+            RefreshDownloadsPopupUI();
+            PopupDownloads.IsOpen = !PopupDownloads.IsOpen;
+            return;
+        }
+
         // 10.2 Ctrl + 0: Restablecer zoom a 100%
         if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.D0 || e.Key == Key.NumPad0))
         {
@@ -2550,6 +2594,8 @@ public partial class MainWindow : Window
         try
         {
             SettingsManager.SettingsChanged -= ApplySettings;
+            DownloadManager.DownloadsChanged -= OnDownloadsChanged;
+            DownloadManager.Flush();
             _nativePipTimer?.Stop();
             _undoBookmarkTimer.Stop();
             _toastTimer.Stop();
@@ -3038,7 +3084,10 @@ public partial class MainWindow : Window
         if (sfd.ShowDialog(this) != true) return;
 
         string targetPath = sfd.FileName;
-        ShowToast($"⬇️ Descargando {Path.GetFileName(targetPath)}...");
+        string displayName = Path.GetFileName(targetPath);
+        bool isIncog = _activeTab?.IsIncognito == true;
+        var dlEntry = DownloadManager.RegisterDownload(displayName, targetPath, item.Url, item.SizeBytes, "En progreso", isIncog);
+        ShowToast($"⬇️ Descargando {displayName}...");
 
         try
         {
@@ -3052,15 +3101,161 @@ public partial class MainWindow : Window
             using var resp = await _mediaDownloadClient.SendAsync(req, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
             resp.EnsureSuccessStatusCode();
 
+            long totalLen = resp.Content.Headers.ContentLength ?? item.SizeBytes;
             await using var netStream = await resp.Content.ReadAsStreamAsync();
             await using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
             await netStream.CopyToAsync(fileStream);
 
-            ShowToast($"✅ Descarga completada: {Path.GetFileName(targetPath)}");
+            long finalSize = fileStream.Length > 0 ? fileStream.Length : totalLen;
+            DownloadManager.UpdateDownload(dlEntry.Id, finalSize, finalSize, "Completado");
+            ShowToast($"✅ Descarga completada: {displayName}");
         }
         catch (Exception ex)
         {
+            DownloadManager.UpdateDownload(dlEntry.Id, 0, item.SizeBytes, "Error");
             ShowToast($"⚠️ Error al descargar: {ex.Message}");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HISTORIAL DE DESCARGAS LIGERO (0% CPU EN REPOSO)
+    // ─────────────────────────────────────────────────────────────────────
+    private void OnDownloadsChanged()
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+        {
+            if (PopupDownloads != null && PopupDownloads.IsOpen)
+            {
+                RefreshDownloadsPopupUI();
+            }
+        });
+    }
+
+    private void BtnDownloads_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshDownloadsPopupUI();
+        PopupDownloads.IsOpen = !PopupDownloads.IsOpen;
+    }
+
+    private void RefreshDownloadsPopupUI()
+    {
+        if (ItemsDownloadsHistory == null || TxtDownloadsEmptyState == null || ScrollDownloadsHistory == null)
+            return;
+
+        var entries = DownloadManager.GetEntries();
+        ItemsDownloadsHistory.ItemsSource = entries;
+
+        if (TxtDownloadsCountSubtitle != null)
+        {
+            TxtDownloadsCountSubtitle.Text = entries.Count == 0
+                ? "Ligero · 0% consumo en segundo plano"
+                : $"{entries.Count} {(entries.Count == 1 ? "archivo registrado" : "archivos registrados")} · 0% CPU en reposo";
+        }
+
+        if (entries.Count == 0)
+        {
+            ScrollDownloadsHistory.Visibility = Visibility.Collapsed;
+            TxtDownloadsEmptyState.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            TxtDownloadsEmptyState.Visibility = Visibility.Collapsed;
+            ScrollDownloadsHistory.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void BtnOpenDownloadsFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            if (!Directory.Exists(folder))
+            {
+                folder = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            }
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = folder,
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
+    private void BtnClearDownloadsHistory_Click(object sender, RoutedEventArgs e)
+    {
+        DownloadManager.ClearAll();
+        RefreshDownloadsPopupUI();
+    }
+
+    private void BtnOpenDownloadedFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is DownloadEntry entry && !string.IsNullOrWhiteSpace(entry.FilePath))
+        {
+            if (!File.Exists(entry.FilePath))
+            {
+                ShowToast("⚠️ El archivo ya no se encuentra en esa ubicación.");
+                return;
+            }
+            try
+            {
+                PopupDownloads.IsOpen = false;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = entry.FilePath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                ShowToast($"⚠️ No se pudo abrir el archivo: {ex.Message}");
+            }
+        }
+    }
+
+    private void BtnShowDownloadedFileInFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is DownloadEntry entry && !string.IsNullOrWhiteSpace(entry.FilePath))
+        {
+            try
+            {
+                PopupDownloads.IsOpen = false;
+                if (File.Exists(entry.FilePath))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"/select,\"{entry.FilePath}\"",
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    string? dir = Path.GetDirectoryName(entry.FilePath);
+                    if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = dir,
+                            UseShellExecute = true
+                        });
+                    }
+                    else
+                    {
+                        ShowToast("⚠️ El archivo o la carpeta ya no existen.");
+                    }
+                }
+            }
+            catch { }
+        }
+    }
+
+    private void BtnRemoveDownloadEntry_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is DownloadEntry entry)
+        {
+            DownloadManager.DeleteEntry(entry.Id);
+            RefreshDownloadsPopupUI();
         }
     }
 
