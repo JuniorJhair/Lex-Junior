@@ -148,7 +148,7 @@ public static class NewTabPage
       text-transform: capitalize; font-weight: 400;
     }
 
-    .search-wrap { width: 560px; margin-bottom: 36px; }
+    .search-wrap { width: min(560px, 92vw); margin-bottom: 36px; }
 
     .search-bar {
       display: flex; align-items: center;
@@ -184,7 +184,7 @@ public static class NewTabPage
 
     .quick-links {
       display: flex; gap: 12px; flex-wrap: wrap;
-      justify-content: center; max-width: 620px;
+      justify-content: center; max-width: min(620px, 94vw);
     }
 
     .quick-link {
