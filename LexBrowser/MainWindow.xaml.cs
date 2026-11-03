@@ -504,8 +504,14 @@ public partial class MainWindow : Window
     {
         CleanLegacyDiagnosticLogs();
 
-        // Verificar si debe mostrarse el bloqueo por PIN al iniciar el navegador
-        if (_initialAttachedTab == null && PasswordManager.ShouldRequireUnlockOnStartup())
+        // Verificar si es la primera vez que abre el navegador (para ofrecer configurar PIN o elegir "No me gustaría usar contraseña")
+        if (_initialAttachedTab == null &&
+            !SettingsManager.Current.HasCompletedInitialSecuritySetup &&
+            !PasswordManager.HasMasterPasswordConfigured())
+        {
+            ShowFirstTimeSecuritySetupOverlay();
+        }
+        else if (_initialAttachedTab == null && PasswordManager.ShouldRequireUnlockOnStartup())
         {
             ShowBrowserLockOverlay();
         }
@@ -4016,8 +4022,64 @@ public partial class MainWindow : Window
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // PANTALLA DE BLOQUEO AL INICIAR Y MODO INVITADO AISLADO EN RAM
+    // PANTALLA DE BLOQUEO AL INICIAR, CONFIGURACIÓN INICIAL Y MODO INVITADO
     // ─────────────────────────────────────────────────────────────────────
+    private void ShowFirstTimeSecuritySetupOverlay()
+    {
+        LockOverlayFirstTimeSetupPanel.Visibility = Visibility.Visible;
+        LockOverlayPinPanel.Visibility = Visibility.Collapsed;
+        LockOverlayRecoveryPanel.Visibility = Visibility.Collapsed;
+        TxtFirstSetupError.Visibility = Visibility.Collapsed;
+        PwdFirstSetupPin.Password = string.Empty;
+        BrowserLockOverlay.Visibility = Visibility.Visible;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PwdFirstSetupPin.Focus());
+    }
+
+    private void BtnFirstSetupSavePin_Click(object sender, RoutedEventArgs e)
+    {
+        string pin = PwdFirstSetupPin.Password;
+        if (string.IsNullOrWhiteSpace(pin))
+        {
+            TxtFirstSetupError.Text = "⚠️ Escribe un PIN o contraseña (ej. 6 dígitos o letras) o pulsa abajo 'No me gustaría usar contraseña'.";
+            TxtFirstSetupError.Visibility = Visibility.Visible;
+            PwdFirstSetupPin.Focus();
+            return;
+        }
+
+        string mode = "SmartSession";
+        if (CmbFirstSetupLockMode.SelectedItem is ComboBoxItem item && item.Tag is string tag && !string.IsNullOrWhiteSpace(tag))
+        {
+            mode = tag;
+        }
+
+        string question = TxtFirstSetupQuestion.Text.Trim();
+        string answer = TxtFirstSetupAnswer.Text.Trim();
+
+        string recoveryCode = PasswordManager.ConfigureMasterPassword(pin, mode, question, answer);
+
+        MessageBox.Show(
+            $"¡Tu PIN/contraseña ha quedado activado con éxito!\n\n" +
+            $"• Código de Recuperación de Emergencia: {recoveryCode}\n" +
+            $"(Guárdalo o recuérdalo junto con tu respuesta secreta por si algún día olvidas tu PIN; así podrás recuperar el acceso sin perder tus contraseñas guardadas).",
+            "Protección Activada — Lex Junior",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+
+        CompleteOverlayUnlock();
+        ShowToast("🔒 Protección con PIN activada. Puedes cambiar tus opciones cuando quieras en el botón 🔑.");
+    }
+
+    private void BtnFirstSetupSkipNoPassword_Click(object sender, RoutedEventArgs e)
+    {
+        SettingsManager.Current.BrowserLockMode = "None";
+        SettingsManager.Current.HasCompletedInitialSecuritySetup = true;
+        SettingsManager.Save();
+
+        CompleteOverlayUnlock();
+        ShowToast("🔓 Configurado sin contraseña al abrir. Puedes activarla cuando quieras desde el botón 🔑.");
+    }
+
     private void ShowBrowserLockOverlay()
     {
         var s = SettingsManager.Current;
@@ -4025,6 +4087,7 @@ public partial class MainWindow : Window
             ? "Modo Inteligente activo (Sesión de Windows nueva o reanudada)"
             : "Protección siempre activa al abrir el navegador";
 
+        LockOverlayFirstTimeSetupPanel.Visibility = Visibility.Collapsed;
         LockOverlayRecoveryPanel.Visibility = Visibility.Collapsed;
         LockOverlayPinPanel.Visibility = Visibility.Visible;
         TxtOverlayPinError.Visibility = Visibility.Collapsed;

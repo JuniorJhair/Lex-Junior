@@ -602,6 +602,7 @@ public static class PasswordManager
         s.RecoveryCodeHash = ComputeSaltedHash(NormalizeRecoveryText(recoveryCode), salt);
         s.RecoveryCodeHint = $"LEX-****-{recoveryCode[^4..]}";
         s.LastUnlockedBootId = GetCurrentWindowsBootId();
+        s.HasCompletedInitialSecuritySetup = true;
         IsUnlockedInCurrentProcess = true;
 
         SettingsManager.Save();
@@ -620,6 +621,7 @@ public static class PasswordManager
         s.RecoveryCodeHash = string.Empty;
         s.RecoveryCodeHint = string.Empty;
         s.LastUnlockedBootId = 0;
+        s.HasCompletedInitialSecuritySetup = true;
         IsUnlockedInCurrentProcess = false;
         SettingsManager.Save();
     }

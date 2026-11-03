@@ -1009,14 +1009,82 @@
             </StackPanel>
         </Border>
 
-        <!-- Pantalla de Bloqueo al Iniciar / Reanudar Windows (Con Modo Invitado y Recuperación) -->
+        <!-- Pantalla de Bloqueo al Iniciar / Reanudar Windows (Con Configuración Inicial, Modo Invitado y Recuperación) -->
         <Border x:Name="BrowserLockOverlay" Grid.Row="1" Grid.RowSpan="4" Background="#0C0C12" Visibility="Collapsed" Panel.ZIndex="2500">
-            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="460">
-                <Border Background="#14141E" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Padding="28,24">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="500">
+                <Border Background="#14141E" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Padding="28,22">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.8" Color="#000000"/>
                     </Border.Effect>
                     <Grid>
+                        <!-- VISTA DE BIENVENIDA / CONFIGURACIÓN INICIAL AL INSTALAR O ABRIR POR PRIMERA VEZ -->
+                        <StackPanel x:Name="LockOverlayFirstTimeSetupPanel" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                                <Border CornerRadius="10" Width="36" Height="36" Margin="0,0,10,0" ClipToBounds="True">
+                                    <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="CONFIGURACIÓN DE SEGURIDAD" FontWeight="Black" FontSize="14.5" Foreground="#818CF8"/>
+                                    <TextBlock Text="Elige cómo deseas proteger tu navegador y tus contraseñas" FontSize="11" Foreground="#9CA3AF"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border Background="#191927" BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="10" Padding="14,12" Margin="0,0,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="🔒 Opción 1: Proteger con PIN o Contraseña" FontWeight="Bold" FontSize="12.5" Foreground="#FFFFFF" Margin="0,0,0,4"/>
+                                    <TextBlock Text="Acepta 6 dígitos (ej. 123456), números o letras sin obligarte a usar mayúsculas ni símbolos especiales. Si alguien no sabe tu PIN, podrá entrar solo en Modo Invitado."
+                                               FontSize="10.5" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                    <TextBlock Text="¿Cuándo deseas que te pida la contraseña?" FontSize="11" FontWeight="SemiBold" Foreground="#D4D4D8" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="CmbFirstSetupLockMode" SelectedIndex="0" Margin="0,0,0,8" Padding="8,5" FontSize="11.5">
+                                        <ComboBoxItem Tag="SmartSession" Content="⚡ Inteligente: Solo al encender la PC o tras bloquear Windows (Recomendado)"/>
+                                        <ComboBoxItem Tag="AlwaysOnStartup" Content="🔒 Siempre: Pedir contraseña cada vez que cierre y abra el navegador"/>
+                                        <ComboBoxItem Tag="VaultOnly" Content="🔑 Solo en Bóveda: Abrir navegador directo y pedir PIN solo al ver contraseñas"/>
+                                    </ComboBox>
+
+                                    <TextBlock Text="Crea tu PIN o contraseña (ej. 6 dígitos o letras):" FontSize="11" FontWeight="SemiBold" Foreground="#D4D4D8" Margin="0,0,0,3"/>
+                                    <PasswordBox x:Name="PwdFirstSetupPin" Background="#0F0F16" BorderBrush="#3B3B58" BorderThickness="1.5"
+                                                 Foreground="#FFFFFF" FontSize="14" Padding="10,6" Margin="0,0,0,8"/>
+
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="8"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="Pregunta secreta (recuperación):" FontSize="10.5" Foreground="#A1A1AA" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtFirstSetupQuestion" Text="¿Nombre de mi primera mascota?" Background="#0F0F16" BorderBrush="#2E2E46" BorderThickness="1"
+                                                     Foreground="#FFFFFF" FontSize="11" Padding="7,5"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="Tu respuesta secreta:" FontSize="10.5" Foreground="#A1A1AA" Margin="0,0,0,3"/>
+                                            <TextBox x:Name="TxtFirstSetupAnswer" Background="#0F0F16" BorderBrush="#2E2E46" BorderThickness="1"
+                                                     Foreground="#FFFFFF" FontSize="11" Padding="7,5"/>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <TextBlock x:Name="TxtFirstSetupError" Text="" Foreground="#F87171" FontSize="11" FontWeight="SemiBold"
+                                               Visibility="Collapsed" Margin="0,0,0,6"/>
+
+                                    <Button Content="✅ Activar contraseña y continuar" Click="BtnFirstSetupSavePin_Click"
+                                            Background="#6366F1" Foreground="#FFFFFF" FontWeight="Bold" FontSize="12" Padding="12,9"
+                                            BorderThickness="0" Cursor="Hand"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Opción 2: No me gustaría usar contraseña -->
+                            <Border Background="#181822" BorderBrush="#2A2A3C" BorderThickness="1" CornerRadius="10" Padding="14,10">
+                                <StackPanel>
+                                    <Button Content="🔓 No me gustaría usar contraseña (Entrar directo)" Click="BtnFirstSetupSkipNoPassword_Click"
+                                            Background="#27273A" Foreground="#E4E4E7" FontWeight="Bold" FontSize="12" Padding="12,8"
+                                            BorderThickness="0" Cursor="Hand" Margin="0,0,0,5"/>
+                                    <TextBlock Text="¿Qué ocurrirá? Entrarás directo sin pedir PIN al abrir el navegador y este aviso no volverá a aparecer. Si más adelante deseas poner contraseña, podrás activarla en cualquier momento desde el botón 🔑 de la barra superior."
+                                               FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap" TextAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
                         <!-- VISTA PRINCIPAL DE DESBLOQUEO -->
                         <StackPanel x:Name="LockOverlayPinPanel" Visibility="Visible">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">

@@ -38,6 +38,7 @@ public class BrowserSettings
     public string RecoveryCodeHash { get; set; } = "";
     public string RecoveryCodeHint { get; set; } = "";
     public long LastUnlockedBootId { get; set; } = 0;
+    public bool HasCompletedInitialSecuritySetup { get; set; } = false;
 }
 
 public static class SettingsManager
