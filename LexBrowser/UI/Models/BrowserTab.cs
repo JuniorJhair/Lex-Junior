@@ -19,7 +19,11 @@ public class DetectedMediaItem
 {
     public string Url { get; set; } = "";
     public string? AudioPairUrl { get; set; }
+    public string? FallbackHlsUrl { get; set; }
     public string? CustomUserAgent { get; set; }
+    public string? CustomCookieHeader { get; set; }
+    public string? CustomOriginHeader { get; set; }
+    public string? CustomAuthorizationHeader { get; set; }
     public bool IsHlsStream { get; set; } = false;
     public bool IsYouTubeStream { get; set; } = false;
     public int PriorityScore { get; set; } = 100;
@@ -30,6 +34,8 @@ public class DetectedMediaItem
     public string FormatBadge { get; set; } = "MP4";
     public string SizeDisplay { get; set; } = "Directo";
     public long SizeBytes { get; set; } = 0;
+    public long VideoSizeBytes { get; set; } = 0;
+    public long AudioSizeBytes { get; set; } = 0;
 }
 
 public class BrowserTab : INotifyPropertyChanged

@@ -108,11 +108,14 @@ public class MediaExtractorTests
         Assert.Equal(4, items.Count);
         Assert.Equal("MP4 1080p HD", items[0].FormatBadge);
         Assert.NotNull(items[0].AudioPairUrl);
+        Assert.Equal(52428800, items[0].VideoSizeBytes);
+        Assert.Equal(3407872, items[0].AudioSizeBytes);
         Assert.Equal("MP4 720p HD", items[1].FormatBadge);
         Assert.NotNull(items[1].AudioPairUrl);
         Assert.Equal("MP4 360p", items[2].FormatBadge);
         Assert.Null(items[2].AudioPairUrl);
         Assert.Equal("AUDIO HQ", items[3].FormatBadge);
+        Assert.Equal(3407872, items[3].VideoSizeBytes);
     }
 
     [Fact]
@@ -221,3 +224,4 @@ public class MediaExtractorTests
         return ms.ToArray();
     }
 }
+

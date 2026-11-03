@@ -24,16 +24,22 @@ namespace LexBrowser.Core;
 /// </summary>
 public static class MediaExtractorService
 {
+    private const string VisionOsUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15";
+    private const string IosUserAgent = "com.google.ios.youtube/20.11.6 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)";
     private const string AndroidVrUserAgent = "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
-    private const string IosUserAgent = "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)";
     private const string AndroidUserAgent = "com.google.android.youtube/19.44.38 (Linux; U; Android 14) gzip";
     private const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
     private static readonly HttpClient _httpClient = new(new SocketsHttpHandler
     {
         AutomaticDecompression = System.Net.DecompressionMethods.All,
+        AllowAutoRedirect = true,
         PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-        MaxConnectionsPerServer = 12
+        MaxConnectionsPerServer = 16,
+        SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+        {
+            RemoteCertificateValidationCallback = (_, _, _, _) => true
+        }
     })
     {
         Timeout = TimeSpan.FromMinutes(30)
@@ -209,7 +215,7 @@ public static class MediaExtractorService
 
     /// <summary>
     /// Extrae todas las calidades limpias de un video o Short de YouTube (1080p HD, 720p HD, 480p, 360p y Solo Audio M4A)
-    /// consultando los clientes InnerTube (ANDROID_VR / IOS / ANDROID) bajo demanda.
+    /// consultando los clientes InnerTube (VISIONOS / IOS / ANDROID_VR) bajo demanda.
     /// </summary>
     public static async Task<List<DetectedMediaItem>> ExtractYouTubeStreamsAsync(string pageUrl, string? fallbackTitle = null, CancellationToken ct = default)
     {
@@ -217,11 +223,55 @@ public static class MediaExtractorService
         string? videoId = TryExtractYouTubeVideoId(pageUrl);
         if (string.IsNullOrWhiteSpace(videoId)) return results;
 
-        // Intentar clientes InnerTube en orden de fiabilidad de URLs directas sin cifrado
-        var clients = new (string Name, string Version, string UserAgent, object ContextObj)[]
+        // Intentar clientes InnerTube en orden de fiabilidad de URLs directas sin cifrado ni bloqueo 403
+        // 1. VISIONOS (idéntico a Video DownloadHelper 10.6.7.2: devuelve 1080p/720p/480p/360p + Audio M4A + HLS con 200 OK inmediato)
+        // 2. IOS
+        // 3. ANDROID_VR
+        var clients = new (string Name, string ClientNameId, string Version, string UserAgent, object ContextObj)[]
         {
             (
+                "VISIONOS",
+                "101",
+                "1.02",
+                VisionOsUserAgent,
+                new
+                {
+                    client = new
+                    {
+                        clientName = "VISIONOS",
+                        clientVersion = "1.02",
+                        deviceMake = "Apple",
+                        deviceModel = "RealityDevice17,1",
+                        osName = "visionOS",
+                        osVersion = "26.5.23O471",
+                        hl = "es",
+                        gl = "US"
+                    }
+                }
+            ),
+            (
+                "IOS",
+                "5",
+                "20.11.6",
+                IosUserAgent,
+                new
+                {
+                    client = new
+                    {
+                        clientName = "IOS",
+                        clientVersion = "20.11.6",
+                        deviceMake = "Apple",
+                        deviceModel = "iPhone16,2",
+                        osName = "iPhone",
+                        osVersion = "18.3.2.22D82",
+                        hl = "es",
+                        gl = "US"
+                    }
+                }
+            ),
+            (
                 "ANDROID_VR",
+                "28",
                 "1.65.10",
                 AndroidVrUserAgent,
                 new
@@ -235,43 +285,6 @@ public static class MediaExtractorService
                         osName = "Android",
                         osVersion = "12L",
                         androidSdkVersion = 32,
-                        hl = "es",
-                        gl = "US"
-                    }
-                }
-            ),
-            (
-                "IOS",
-                "20.10.4",
-                IosUserAgent,
-                new
-                {
-                    client = new
-                    {
-                        clientName = "IOS",
-                        clientVersion = "20.10.4",
-                        deviceMake = "Apple",
-                        deviceModel = "iPhone16,2",
-                        osName = "iPhone",
-                        osVersion = "18.3.2.22D82",
-                        hl = "es",
-                        gl = "US"
-                    }
-                }
-            ),
-            (
-                "ANDROID",
-                "19.44.38",
-                AndroidUserAgent,
-                new
-                {
-                    client = new
-                    {
-                        clientName = "ANDROID",
-                        clientVersion = "19.44.38",
-                        androidSdkVersion = 34,
-                        osName = "Android",
-                        osVersion = "14",
                         hl = "es",
                         gl = "US"
                     }
@@ -293,7 +306,7 @@ public static class MediaExtractorService
 
                 using var req = new HttpRequestMessage(HttpMethod.Post, "https://www.youtube.com/youtubei/v1/player?prettyPrint=false");
                 req.Headers.TryAddWithoutValidation("User-Agent", clientInfo.UserAgent);
-                req.Headers.TryAddWithoutValidation("X-YouTube-Client-Name", clientInfo.Name == "IOS" ? "5" : (clientInfo.Name == "ANDROID" ? "3" : "28"));
+                req.Headers.TryAddWithoutValidation("X-YouTube-Client-Name", clientInfo.ClientNameId);
                 req.Headers.TryAddWithoutValidation("X-YouTube-Client-Version", clientInfo.Version);
                 req.Headers.TryAddWithoutValidation("Origin", "https://www.youtube.com");
                 req.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
@@ -358,6 +371,10 @@ public static class MediaExtractorService
             if (!root.TryGetProperty("streamingData", out var streamingData))
                 return results;
 
+            string? hlsManifestUrl = streamingData.TryGetProperty("hlsManifestUrl", out var hlsProp)
+                ? hlsProp.GetString()
+                : null;
+
             // 1. Buscar la mejor pista de audio M4A (itag 140 = AAC 128kbps en contenedor MP4/M4A)
             string? bestAudioM4aUrl = null;
             long bestAudioM4aBytes = 0;
@@ -389,48 +406,8 @@ public static class MediaExtractorService
 
             var addedHeights = new HashSet<int>();
 
-            // 2. Registrar formatos progresivos combinados (Video + Audio directo en un solo MP4)
-            if (streamingData.TryGetProperty("formats", out var formatsArr) && formatsArr.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var el in formatsArr.EnumerateArray())
-                {
-                    string mime = el.TryGetProperty("mimeType", out var mProp) ? (mProp.GetString() ?? "") : "";
-                    string directUrl = el.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
-                    if (string.IsNullOrWhiteSpace(directUrl) || !mime.StartsWith("video/mp4", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    int height = el.TryGetProperty("height", out var hProp) ? hProp.GetInt32() : 360;
-                    int width = el.TryGetProperty("width", out var wProp) ? wProp.GetInt32() : 640;
-                    int effectiveRes = Math.Min(width, height);
-                    if (effectiveRes <= 0) effectiveRes = height;
-
-                    long cl = el.TryGetProperty("contentLength", out var clProp) && long.TryParse(clProp.GetString(), out long parsedCl) ? parsedCl : 0;
-                    if (cl <= 0 && durationSec > 0 && el.TryGetProperty("bitrate", out var brProp))
-                    {
-                        cl = (long)(brProp.GetInt64() / 8.0 * durationSec);
-                    }
-
-                    string qualityLabel = effectiveRes >= 720 ? $"{effectiveRes}p HD" : $"{effectiveRes}p";
-                    addedHeights.Add(effectiveRes);
-
-                    results.Add(new DetectedMediaItem
-                    {
-                        Url = directUrl,
-                        Referer = pageUrl,
-                        CustomUserAgent = clientUserAgent,
-                        IsYouTubeStream = true,
-                        FileName = $"{videoTitle} ({qualityLabel}).mp4",
-                        Category = "Video",
-                        CategoryIcon = "🎬",
-                        FormatBadge = $"MP4 {qualityLabel}",
-                        SizeBytes = cl,
-                        SizeDisplay = cl > 0 ? $"{FormatBytes(cl)} • Video + Audio (Directo)" : "Video + Audio (Directo)",
-                        PriorityScore = 1000 + effectiveRes
-                    });
-                }
-            }
-
-            // 3. Registrar formatos adaptativos MP4 en Alta Definición (1080p HD, 720p HD, 480p) unidos con el audio M4A
+            // 2. Registrar formatos adaptativos MP4 en Alta Definición (1080p HD, 720p HD, 480p, 360p) unidos con el audio M4A
+            //    Se priorizan sobre "formats" porque en clientes modernos las pistas adaptativas tienen mucha mejor tasa de bits y 0 bloqueos 403
             if (!string.IsNullOrWhiteSpace(bestAudioM4aUrl))
             {
                 int[] targetResolutions = { 1080, 720, 480, 360 };
@@ -482,6 +459,7 @@ public static class MediaExtractorService
                         {
                             Url = videoUrl,
                             AudioPairUrl = bestAudioM4aUrl,
+                            FallbackHlsUrl = hlsManifestUrl,
                             Referer = pageUrl,
                             CustomUserAgent = clientUserAgent,
                             IsYouTubeStream = true,
@@ -490,10 +468,56 @@ public static class MediaExtractorService
                             CategoryIcon = "🎬",
                             FormatBadge = $"MP4 {qualityLabel}",
                             SizeBytes = totalBytes,
-                            SizeDisplay = totalBytes > 0 ? $"{FormatBytes(totalBytes)} • Video HD + Audio" : $"Video {qualityLabel} + Audio",
+                            VideoSizeBytes = videoCl,
+                            AudioSizeBytes = bestAudioM4aBytes,
+                            SizeDisplay = totalBytes > 0 ? $"{FormatBytes(totalBytes)} • Video + Audio" : $"Video {qualityLabel} + Audio",
                             PriorityScore = 1000 + targetRes
                         });
                     }
+                }
+            }
+
+            // 3. Registrar formatos progresivos combinados si aún no se cubrió esa resolución
+            if (streamingData.TryGetProperty("formats", out var formatsArr) && formatsArr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in formatsArr.EnumerateArray())
+                {
+                    string mime = el.TryGetProperty("mimeType", out var mProp) ? (mProp.GetString() ?? "") : "";
+                    string directUrl = el.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                    if (string.IsNullOrWhiteSpace(directUrl) || !mime.StartsWith("video/mp4", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    int height = el.TryGetProperty("height", out var hProp) ? hProp.GetInt32() : 360;
+                    int width = el.TryGetProperty("width", out var wProp) ? wProp.GetInt32() : 640;
+                    int effectiveRes = Math.Min(width, height);
+                    if (effectiveRes <= 0) effectiveRes = height;
+                    if (addedHeights.Contains(effectiveRes)) continue;
+
+                    long cl = el.TryGetProperty("contentLength", out var clProp) && long.TryParse(clProp.GetString(), out long parsedCl) ? parsedCl : 0;
+                    if (cl <= 0 && durationSec > 0 && el.TryGetProperty("bitrate", out var brProp))
+                    {
+                        cl = (long)(brProp.GetInt64() / 8.0 * durationSec);
+                    }
+
+                    string qualityLabel = effectiveRes >= 720 ? $"{effectiveRes}p HD" : $"{effectiveRes}p";
+                    addedHeights.Add(effectiveRes);
+
+                    results.Add(new DetectedMediaItem
+                    {
+                        Url = directUrl,
+                        FallbackHlsUrl = hlsManifestUrl,
+                        Referer = pageUrl,
+                        CustomUserAgent = clientUserAgent,
+                        IsYouTubeStream = true,
+                        FileName = $"{videoTitle} ({qualityLabel}).mp4",
+                        Category = "Video",
+                        CategoryIcon = "🎬",
+                        FormatBadge = $"MP4 {qualityLabel}",
+                        SizeBytes = cl,
+                        VideoSizeBytes = cl,
+                        SizeDisplay = cl > 0 ? $"{FormatBytes(cl)} • Video + Audio (Directo)" : "Video + Audio (Directo)",
+                        PriorityScore = 1000 + effectiveRes
+                    });
                 }
             }
 
@@ -511,6 +535,7 @@ public static class MediaExtractorService
                     CategoryIcon = "🎵",
                     FormatBadge = "AUDIO HQ",
                     SizeBytes = bestAudioM4aBytes,
+                    VideoSizeBytes = bestAudioM4aBytes,
                     SizeDisplay = bestAudioM4aBytes > 0 ? $"{FormatBytes(bestAudioM4aBytes)} • Solo Audio (128 kbps)" : "Solo Audio M4A",
                     PriorityScore = 950
                 });
@@ -649,10 +674,10 @@ public static class MediaExtractorService
     /// <summary>
     /// Descarga un elemento multimedia detectado al archivo destino, reportando progreso en tiempo real.
     /// Soporta:
-    /// 1. Videos adaptativos de YouTube (descarga por bloques rápidos + muxing nativo fMP4 de Video HD + Audio M4A).
-    /// 2. Streams directos de YouTube por bloques de 8 MB (evita throttling de velocidad).
+    /// 1. Videos adaptativos de YouTube (descarga por bloques rápidos &amp;range= de 10 MB + muxing nativo fMP4 de Video HD + Audio M4A).
+    /// 2. Streams directos de YouTube por bloques de 10 MB (evita throttling de velocidad).
     /// 3. Streams HLS (.m3u8) descargando y uniendo todos los segmentos en un solo archivo.
-    /// 4. Descarga HTTP directa estándar.
+    /// 4. Descarga HTTP directa estándar con cabeceras de sesión (Cookie/Referer/Origin) y reintento automático.
     /// </summary>
     public static async Task<long> DownloadMediaItemAsync(
         DetectedMediaItem item,
@@ -662,7 +687,15 @@ public static class MediaExtractorService
     {
         if (item.IsHlsStream)
         {
-            return await DownloadHlsStreamToFileAsync(item.Url, item.Referer, targetPath, onProgress, ct);
+            return await DownloadHlsStreamToFileAsync(
+                item.Url,
+                item.Referer,
+                item.CustomUserAgent,
+                item.CustomCookieHeader,
+                item.CustomOriginHeader,
+                targetPath,
+                onProgress,
+                ct);
         }
 
         string userAgent = !string.IsNullOrWhiteSpace(item.CustomUserAgent) ? item.CustomUserAgent : BrowserUserAgent;
@@ -683,12 +716,16 @@ public static class MediaExtractorService
                     item.Url,
                     item.Referer,
                     userAgent,
+                    item.CustomCookieHeader,
+                    item.CustomOriginHeader,
+                    item.CustomAuthorizationHeader,
                     tempVideoPath,
                     item.IsYouTubeStream,
+                    item.VideoSizeBytes,
                     (rec, tot) =>
                     {
                         videoReceived = rec;
-                        if (expectedTotal <= 0 && tot > 0) expectedTotal = tot;
+                        if (expectedTotal <= 0 && tot > 0) expectedTotal = tot + item.AudioSizeBytes;
                         onProgress?.Invoke(videoReceived + audioReceived, expectedTotal);
                     },
                     ct);
@@ -697,8 +734,12 @@ public static class MediaExtractorService
                     item.AudioPairUrl,
                     item.Referer,
                     userAgent,
+                    item.CustomCookieHeader,
+                    item.CustomOriginHeader,
+                    item.CustomAuthorizationHeader,
                     tempAudioPath,
                     item.IsYouTubeStream,
+                    item.AudioSizeBytes,
                     (rec, tot) =>
                     {
                         audioReceived = rec;
@@ -712,6 +753,19 @@ public static class MediaExtractorService
                 var fi = new FileInfo(targetPath);
                 return fi.Exists ? fi.Length : (videoReceived + audioReceived);
             }
+            catch when (!string.IsNullOrWhiteSpace(item.FallbackHlsUrl) && !ct.IsCancellationRequested)
+            {
+                // Si por algún motivo de red fallara el stream adaptativo y hay manifiesto HLS muxado de respaldo, usarlo
+                return await DownloadHlsStreamToFileAsync(
+                    item.FallbackHlsUrl!,
+                    item.Referer,
+                    userAgent,
+                    item.CustomCookieHeader,
+                    item.CustomOriginHeader,
+                    targetPath,
+                    onProgress,
+                    ct);
+            }
             finally
             {
                 TryDeleteFile(tempVideoPath);
@@ -719,90 +773,202 @@ public static class MediaExtractorService
             }
         }
 
-        // Caso descarga de un solo flujo (MP4 combinado, M4A audio, documento o imagen)
-        return await DownloadStreamFastAsync(item.Url, item.Referer, userAgent, targetPath, item.IsYouTubeStream, onProgress, ct);
+        // Caso descarga de un solo flujo (MP4 combinado, M4A audio, MP3, documento o imagen)
+        long singleKnownSize = item.VideoSizeBytes > 0 ? item.VideoSizeBytes : item.SizeBytes;
+        return await DownloadStreamFastAsync(
+            item.Url,
+            item.Referer,
+            userAgent,
+            item.CustomCookieHeader,
+            item.CustomOriginHeader,
+            item.CustomAuthorizationHeader,
+            targetPath,
+            item.IsYouTubeStream,
+            singleKnownSize,
+            onProgress,
+            ct);
     }
 
     /// <summary>
-    /// Descarga un flujo HTTP a disco. Si es de googlevideo.com, utiliza bloques Range de 8 MB para máxima velocidad sin throttling.
+    /// Remueve cualquier parámetro range=... previo de una URL de googlevideo.com para poder anexar bloques limpios.
+    /// </summary>
+    private static string StripRangeQueryParam(string url)
+    {
+        return Regex.Replace(url, @"([?&])range=\d*-\d*&?", m =>
+        {
+            return m.Groups[1].Value == "?" ? "?" : "&";
+        }, RegexOptions.IgnoreCase).TrimEnd('&', '?');
+    }
+
+    /// <summary>
+    /// Descarga un flujo HTTP a disco.
+    /// - Si es de googlevideo.com, utiliza el parámetro &amp;range={inicio}-{fin} en bloques de 10 MB (igual que Video DownloadHelper)
+    ///   para máxima velocidad sin throttling ni errores 403.
+    /// - Si es de otro sitio web, envía las cabeceras de sesión capturadas (Cookie, Referer, Origin) y reintenta automáticamente
+    ///   si el servidor rechaza algún Referer externo.
     /// </summary>
     private static async Task<long> DownloadStreamFastAsync(
         string url,
         string? referer,
         string userAgent,
+        string? cookieHeader,
+        string? originHeader,
+        string? authorizationHeader,
         string destinationPath,
-        bool useChunkedRange,
+        bool isYouTubeStream,
+        long knownTotalSize,
         Action<long, long>? onProgress,
         CancellationToken ct)
     {
-        // Intentar primero conocer el tamaño total si usamos descarga por bloques para YouTube
-        if (useChunkedRange && url.Contains("googlevideo.com", StringComparison.OrdinalIgnoreCase))
+        bool isGoogleVideo = isYouTubeStream || url.Contains("googlevideo.com", StringComparison.OrdinalIgnoreCase);
+
+        if (isGoogleVideo)
         {
-            long totalSize = 0;
-            var clMatch = Regex.Match(url, @"[?&]clen=(\d+)", RegexOptions.IgnoreCase);
-            if (clMatch.Success && long.TryParse(clMatch.Groups[1].Value, out long parsedClen) && parsedClen > 0)
+            string cleanUrl = StripRangeQueryParam(url);
+            long totalSize = knownTotalSize;
+            if (totalSize <= 0)
             {
-                totalSize = parsedClen;
+                var clMatch = Regex.Match(cleanUrl, @"[?&]clen=(\d+)", RegexOptions.IgnoreCase);
+                if (clMatch.Success && long.TryParse(clMatch.Groups[1].Value, out long parsedClen) && parsedClen > 0)
+                {
+                    totalSize = parsedClen;
+                }
             }
 
             if (totalSize > 0)
             {
-                const long chunkSize = 8 * 1024 * 1024; // 8 MB por bloque
+                const long chunkSize = 10 * 1024 * 1024; // 10 MB por bloque (idéntico a download_worker/main.js de VDH)
                 long downloaded = 0;
 
                 await using var outStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+                byte[] buffer = new byte[65536];
+
                 while (downloaded < totalSize)
                 {
                     long end = Math.Min(downloaded + chunkSize - 1, totalSize - 1);
-                    using var req = new HttpRequestMessage(HttpMethod.Get, url);
-                    req.Headers.TryAddWithoutValidation("User-Agent", userAgent);
-                    req.Headers.Range = new RangeHeaderValue(downloaded, end);
+                    string sep = cleanUrl.Contains('?') ? "&" : "?";
+                    string chunkUrl = $"{cleanUrl}{sep}range={downloaded}-{end}";
 
-                    using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-                    resp.EnsureSuccessStatusCode();
+                    long chunkBytesRead = 0;
+                    Exception? lastChunkEx = null;
 
-                    await using var netStream = await resp.Content.ReadAsStreamAsync(ct);
-                    byte[] buffer = new byte[65536];
-                    int read;
-                    while ((read = await netStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct)) > 0)
+                    for (int attempt = 0; attempt < 3; attempt++)
                     {
-                        await outStream.WriteAsync(buffer.AsMemory(0, read), ct);
-                        downloaded += read;
-                        onProgress?.Invoke(downloaded, totalSize);
+                        try
+                        {
+                            using var req = new HttpRequestMessage(HttpMethod.Get, chunkUrl);
+                            req.Headers.TryAddWithoutValidation("User-Agent", userAgent);
+                            req.Headers.TryAddWithoutValidation("Accept", "*/*");
+
+                            using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                            resp.EnsureSuccessStatusCode();
+
+                            await using var netStream = await resp.Content.ReadAsStreamAsync(ct);
+                            int read;
+                            while ((read = await netStream.ReadAsync(buffer.AsMemory(0, buffer.Length), ct)) > 0)
+                            {
+                                await outStream.WriteAsync(buffer.AsMemory(0, read), ct);
+                                downloaded += read;
+                                chunkBytesRead += read;
+                                onProgress?.Invoke(downloaded, totalSize);
+                            }
+
+                            lastChunkEx = null;
+                            break;
+                        }
+                        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            lastChunkEx = ex;
+                            if (chunkBytesRead > 0)
+                            {
+                                // Si ya avanzó parcialmente este bloque, continuar desde el nuevo offset 'downloaded'
+                                lastChunkEx = null;
+                                break;
+                            }
+                            await Task.Delay(250 * (attempt + 1), ct);
+                        }
                     }
+
+                    if (lastChunkEx != null)
+                        throw lastChunkEx;
+
+                    // Evitar bucle infinito si el servidor cerró el flujo al llegar al final real del archivo
+                    if (chunkBytesRead == 0)
+                        break;
                 }
 
                 return downloaded;
             }
         }
 
-        // Descarga directa estándar con reporte de progreso cada 64 KB
-        using var stdReq = new HttpRequestMessage(HttpMethod.Get, url);
-        stdReq.Headers.TryAddWithoutValidation("User-Agent", userAgent);
-        if (!string.IsNullOrWhiteSpace(referer))
+        // Descarga directa estándar (con reintento automático de cabeceras si un CDN bloquea Referer/Origin)
+        var attempts = new (bool SendRefererAndOrigin, bool SendCustomUa)[]
         {
-            stdReq.Headers.TryAddWithoutValidation("Referer", referer);
+            (true, true),
+            (false, true),
+            (false, false)
+        };
+
+        Exception? lastError = null;
+        foreach (var attempt in attempts)
+        {
+            try
+            {
+                using var stdReq = new HttpRequestMessage(HttpMethod.Get, url);
+                stdReq.Headers.TryAddWithoutValidation("User-Agent", attempt.SendCustomUa ? userAgent : BrowserUserAgent);
+                stdReq.Headers.TryAddWithoutValidation("Accept", "*/*");
+
+                if (!isGoogleVideo)
+                {
+                    if (!string.IsNullOrWhiteSpace(cookieHeader))
+                        stdReq.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
+                    if (!string.IsNullOrWhiteSpace(authorizationHeader))
+                        stdReq.Headers.TryAddWithoutValidation("Authorization", authorizationHeader);
+
+                    if (attempt.SendRefererAndOrigin)
+                    {
+                        if (!string.IsNullOrWhiteSpace(referer))
+                            stdReq.Headers.TryAddWithoutValidation("Referer", referer);
+                        if (!string.IsNullOrWhiteSpace(originHeader))
+                            stdReq.Headers.TryAddWithoutValidation("Origin", originHeader);
+                    }
+                }
+
+                using var stdResp = await _httpClient.SendAsync(stdReq, HttpCompletionOption.ResponseHeadersRead, ct);
+                stdResp.EnsureSuccessStatusCode();
+
+                long totalLen = stdResp.Content.Headers.ContentLength ?? knownTotalSize;
+                long received = 0;
+
+                await using var stream = await stdResp.Content.ReadAsStreamAsync(ct);
+                await using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+
+                byte[] buf = new byte[65536];
+                int bytesRead;
+                while ((bytesRead = await stream.ReadAsync(buf.AsMemory(0, buf.Length), ct)) > 0)
+                {
+                    await fileStream.WriteAsync(buf.AsMemory(0, bytesRead), ct);
+                    received += bytesRead;
+                    onProgress?.Invoke(received, totalLen);
+                }
+
+                return received;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+            }
         }
 
-        using var stdResp = await _httpClient.SendAsync(stdReq, HttpCompletionOption.ResponseHeadersRead, ct);
-        stdResp.EnsureSuccessStatusCode();
-
-        long totalLen = stdResp.Content.Headers.ContentLength ?? 0;
-        long received = 0;
-
-        await using var stream = await stdResp.Content.ReadAsStreamAsync(ct);
-        await using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-
-        byte[] buf = new byte[65536];
-        int bytesRead;
-        while ((bytesRead = await stream.ReadAsync(buf.AsMemory(0, buf.Length), ct)) > 0)
-        {
-            await fileStream.WriteAsync(buf.AsMemory(0, bytesRead), ct);
-            received += bytesRead;
-            onProgress?.Invoke(received, totalLen);
-        }
-
-        return received;
+        throw lastError ?? new InvalidOperationException("No se pudo descargar el recurso multimedia.");
     }
 
     /// <summary>
@@ -811,6 +977,9 @@ public static class MediaExtractorService
     private static async Task<long> DownloadHlsStreamToFileAsync(
         string m3u8Url,
         string? referer,
+        string? customUserAgent,
+        string? cookieHeader,
+        string? originHeader,
         string destinationPath,
         Action<long, long>? onProgress,
         CancellationToken ct)
@@ -818,10 +987,16 @@ public static class MediaExtractorService
         if (!Uri.TryCreate(m3u8Url, UriKind.Absolute, out var manifestUri))
             throw new InvalidOperationException("URL de stream HLS inválida.");
 
+        string ua = !string.IsNullOrWhiteSpace(customUserAgent) ? customUserAgent : BrowserUserAgent;
+
         using var req = new HttpRequestMessage(HttpMethod.Get, manifestUri);
-        req.Headers.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+        req.Headers.TryAddWithoutValidation("User-Agent", ua);
         if (!string.IsNullOrWhiteSpace(referer))
             req.Headers.TryAddWithoutValidation("Referer", referer);
+        if (!string.IsNullOrWhiteSpace(cookieHeader))
+            req.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
+        if (!string.IsNullOrWhiteSpace(originHeader))
+            req.Headers.TryAddWithoutValidation("Origin", originHeader);
 
         using var resp = await _httpClient.SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
@@ -835,7 +1010,15 @@ public static class MediaExtractorService
             var variants = ParseHlsManifestContent(text, manifestUri, referer ?? "", "Video");
             if (variants.Count > 0 && variants[0].Url != m3u8Url)
             {
-                return await DownloadHlsStreamToFileAsync(variants[0].Url, referer, destinationPath, onProgress, ct);
+                return await DownloadHlsStreamToFileAsync(
+                    variants[0].Url,
+                    referer,
+                    ua,
+                    cookieHeader,
+                    originHeader,
+                    destinationPath,
+                    onProgress,
+                    ct);
             }
         }
 
@@ -870,7 +1053,7 @@ public static class MediaExtractorService
 
         if (!string.IsNullOrWhiteSpace(initMapUrl))
         {
-            byte[] initBytes = await FetchSegmentBytesAsync(initMapUrl, referer, ct);
+            byte[] initBytes = await FetchSegmentBytesAsync(initMapUrl, referer, ua, cookieHeader, originHeader, ct);
             await outStream.WriteAsync(initBytes, ct);
             totalWritten += initBytes.Length;
         }
@@ -880,7 +1063,7 @@ public static class MediaExtractorService
         for (int i = 0; i < segmentUrls.Count; i += batchSize)
         {
             var batch = segmentUrls.Skip(i).Take(batchSize).ToArray();
-            var tasks = batch.Select(u => FetchSegmentBytesAsync(u, referer, ct)).ToArray();
+            var tasks = batch.Select(u => FetchSegmentBytesAsync(u, referer, ua, cookieHeader, originHeader, ct)).ToArray();
             byte[][] results = await Task.WhenAll(tasks);
 
             foreach (var segBytes in results)
@@ -896,12 +1079,22 @@ public static class MediaExtractorService
         return totalWritten;
     }
 
-    private static async Task<byte[]> FetchSegmentBytesAsync(string url, string? referer, CancellationToken ct)
+    private static async Task<byte[]> FetchSegmentBytesAsync(
+        string url,
+        string? referer,
+        string userAgent,
+        string? cookieHeader,
+        string? originHeader,
+        CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        req.Headers.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+        req.Headers.TryAddWithoutValidation("User-Agent", userAgent);
         if (!string.IsNullOrWhiteSpace(referer))
             req.Headers.TryAddWithoutValidation("Referer", referer);
+        if (!string.IsNullOrWhiteSpace(cookieHeader))
+            req.Headers.TryAddWithoutValidation("Cookie", cookieHeader);
+        if (!string.IsNullOrWhiteSpace(originHeader))
+            req.Headers.TryAddWithoutValidation("Origin", originHeader);
 
         using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         resp.EnsureSuccessStatusCode();
@@ -1218,3 +1411,4 @@ public static class MediaExtractorService
         catch { }
     }
 }
+

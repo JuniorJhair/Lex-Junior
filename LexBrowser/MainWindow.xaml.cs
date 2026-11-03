@@ -3401,26 +3401,62 @@ public partial class MainWindow : Window
 
             string contentType = "";
             long contentLength = 0;
+            string? reqReferer = null;
+            string? reqOrigin = null;
+            string? reqCookie = null;
+            string? reqAuth = null;
+            string? reqUserAgent = null;
 
             try
             {
                 var headers = e.Response.Headers;
                 if (headers.Contains("Content-Type"))
                     contentType = headers.GetHeader("Content-Type") ?? "";
-                if (headers.Contains("Content-Length") && long.TryParse(headers.GetHeader("Content-Length"), out long len))
+
+                // Si es respuesta parcial 206 (ej. Content-Range: bytes 0-65535/15482910), tomar el tamaño total real tras la barra '/'
+                if (headers.Contains("Content-Range"))
+                {
+                    string cr = headers.GetHeader("Content-Range") ?? "";
+                    int slashIdx = cr.LastIndexOf('/');
+                    if (slashIdx >= 0 && slashIdx + 1 < cr.Length &&
+                        long.TryParse(cr.AsSpan(slashIdx + 1).Trim(), out long totalFromRange) &&
+                        totalFromRange > 0)
+                    {
+                        contentLength = totalFromRange;
+                    }
+                }
+
+                if (contentLength <= 0 && headers.Contains("Content-Length") && long.TryParse(headers.GetHeader("Content-Length"), out long len))
                     contentLength = len;
+
+                var reqHeaders = e.Request.Headers;
+                if (reqHeaders.Contains("Referer")) reqReferer = reqHeaders.GetHeader("Referer");
+                if (reqHeaders.Contains("Origin")) reqOrigin = reqHeaders.GetHeader("Origin");
+                if (reqHeaders.Contains("Cookie")) reqCookie = reqHeaders.GetHeader("Cookie");
+                if (reqHeaders.Contains("Authorization")) reqAuth = reqHeaders.GetHeader("Authorization");
+                if (reqHeaders.Contains("User-Agent")) reqUserAgent = reqHeaders.GetHeader("User-Agent");
             }
             catch { }
 
             if (MediaExtractorService.IsGarbageMediaUrl(url, contentType, contentLength, categoryHint: null))
                 return;
 
-            RegisterDetectedMediaUrl(tab, url, categoryHint: null, contentType, contentLength);
+            RegisterDetectedMediaUrl(tab, url, categoryHint: null, contentType, contentLength, reqReferer, reqOrigin, reqCookie, reqAuth, reqUserAgent);
         }
         catch { }
     }
 
-    private void RegisterDetectedMediaUrl(BrowserTab tab, string url, string? categoryHint, string? contentType, long contentLength)
+    private void RegisterDetectedMediaUrl(
+        BrowserTab tab,
+        string url,
+        string? categoryHint,
+        string? contentType,
+        long contentLength,
+        string? reqReferer = null,
+        string? reqOrigin = null,
+        string? reqCookie = null,
+        string? reqAuth = null,
+        string? reqUserAgent = null)
     {
         if (tab == null || tab.IsDisposed || !tab.IsMediaSnifferActive) return;
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
@@ -3429,13 +3465,14 @@ public partial class MainWindow : Window
 
         string pathLower = uri.AbsolutePath.ToLowerInvariant();
         string ctLower = (contentType ?? "").ToLowerInvariant();
+        string effectiveReferer = !string.IsNullOrWhiteSpace(reqReferer) ? reqReferer : tab.Url;
 
         // Si es un manifiesto HLS (.m3u8), expandirlo asíncronamente en sus calidades reales (1080p, 720p, etc.)
         if (pathLower.EndsWith(".m3u8") || ctLower.Contains("mpegurl"))
         {
             if (tab.DetectedMediaUrls.Add(url))
             {
-                _ = ExpandAndRegisterHlsAsync(tab, url);
+                _ = ExpandAndRegisterHlsAsync(tab, url, effectiveReferer, reqOrigin, reqCookie, reqUserAgent);
             }
             return;
         }
@@ -3522,12 +3559,17 @@ public partial class MainWindow : Window
         var item = new DetectedMediaItem
         {
             Url = url,
-            Referer = tab.Url,
+            Referer = effectiveReferer,
+            CustomOriginHeader = reqOrigin,
+            CustomCookieHeader = reqCookie,
+            CustomAuthorizationHeader = reqAuth,
+            CustomUserAgent = reqUserAgent,
             FileName = fileName,
             Category = category,
             CategoryIcon = icon,
             FormatBadge = formatBadge,
             SizeBytes = contentLength,
+            VideoSizeBytes = contentLength,
             SizeDisplay = sizeDisplay,
             PriorityScore = priority + (int)Math.Min(99, contentLength / (1024 * 1024))
         };
@@ -3540,11 +3582,17 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task ExpandAndRegisterHlsAsync(BrowserTab tab, string m3u8Url)
+    private async Task ExpandAndRegisterHlsAsync(
+        BrowserTab tab,
+        string m3u8Url,
+        string? customReferer = null,
+        string? customOrigin = null,
+        string? customCookie = null,
+        string? customUserAgent = null)
     {
         try
         {
-            string pageUrl = tab.Url;
+            string pageUrl = !string.IsNullOrWhiteSpace(customReferer) ? customReferer : tab.Url;
             string pageTitle = tab.Title;
             var hlsItems = await MediaExtractorService.ExpandHlsPlaylistAsync(m3u8Url, pageUrl, pageTitle);
             if (hlsItems.Count == 0) return;
@@ -3554,6 +3602,9 @@ public partial class MainWindow : Window
                 if (tab.IsDisposed || !tab.IsMediaSnifferActive) return;
                 foreach (var item in hlsItems)
                 {
+                    item.CustomOriginHeader = customOrigin;
+                    item.CustomCookieHeader = customCookie;
+                    item.CustomUserAgent = customUserAgent;
                     if (tab.DetectedMediaUrls.Add(item.Url))
                     {
                         InsertMediaItemSorted(tab, item);
@@ -3701,6 +3752,21 @@ public partial class MainWindow : Window
 
         try
         {
+            if (!item.IsYouTubeStream &&
+                string.IsNullOrWhiteSpace(item.CustomCookieHeader) &&
+                _activeTab?.WebView?.CoreWebView2?.CookieManager != null)
+            {
+                try
+                {
+                    var cookies = await _activeTab.WebView.CoreWebView2.CookieManager.GetCookiesAsync(item.Url);
+                    if (cookies != null && cookies.Count > 0)
+                    {
+                        item.CustomCookieHeader = string.Join("; ", cookies.Select(c => $"{c.Name}={c.Value}"));
+                    }
+                }
+                catch { }
+            }
+
             long lastReportTick = 0;
             long finalSize = await MediaExtractorService.DownloadMediaItemAsync(
                 item,
