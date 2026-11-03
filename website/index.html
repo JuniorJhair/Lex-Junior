@@ -80,6 +80,7 @@
 
         <div class="hero-trust-badges reveal">
           <div class="trust-item">🛡️ <strong>LexShield</strong> integrado de fábrica</div>
+          <div class="trust-item">🔑 <strong>Bóveda Cifrada + PIN</strong> y Modo Invitado</div>
           <div class="trust-item">🟢 <strong>0 Telemetría</strong> verificable</div>
           <div class="trust-item">🚀 <strong>Volume Master 300%</strong> nativo</div>
           <div class="trust-item">🧹 <strong>Desinstalador 100% limpio</strong> incluido</div>
@@ -152,6 +153,7 @@
               <div class="bw-util-btn bw-media-btn" id="mock-btn-media"><span class="dot-green"></span>📥 Multimedia (4)</div>
               <div class="bw-telemetry-pill"><span class="dot-green"></span>0 Telemetría</div>
               <span class="bw-icon-btn" title="Historial de Descargas (Ctrl+J)">⬇</span>
+              <span class="bw-icon-btn" title="Bóveda de Contraseñas (Ctrl+Shift+K)">🔑</span>
               <span class="bw-icon-btn" title="Historial (Ctrl+H)">🕒</span>
               <span class="bw-icon-btn" title="Configuración (Ctrl+,)">⚙</span>
             </div>
@@ -400,6 +402,14 @@
               Arrastra cualquier pestaña hacia afuera para convertirla en una nueva ventana independiente sin recargar la página ni cortar tu video, o vuelve a acoplarla en otra ventana.
             </p>
           </article>
+
+          <article class="bento-card bento-wide reveal">
+            <div class="card-icon">🔑</div>
+            <h3>Bóveda de Contraseñas Cifrada, Bloqueo con PIN &amp; Modo Invitado</h3>
+            <p>
+              Guarda y autocompleta tus accesos con cifrado nativo de Windows (<code>DPAPI</code>) agrupando rutas inteligentemente por dominio raíz (<code>eTLD+1</code>). Protege tu navegador con un PIN de 6 caracteres (al abrir o por sesión/bloqueo de Windows), permite entrar en <strong>Modo Invitado</strong> sin exponer tus contraseñas, incluye recuperación por pregunta secreta y limpia el portapapeles automáticamente a los <strong>20 segundos</strong> de copiar una clave.
+            </p>
+          </article>
         </div>
       </div>
     </section>
@@ -512,6 +522,11 @@
           <details class="faq-item reveal">
             <summary>¿El detector de archivos multimedia pone lento el navegador?</summary>
             <p>No, porque funciona <strong>bajo demanda</strong>. Mientras no lo actives, consume exactamente <strong>0 MB de RAM y 0% de procesador</strong>. Cuando lo activas en una página para descargar un video o documento y luego cambias de página, se apaga y limpia su memoria automáticamente.</p>
+          </details>
+
+          <details class="faq-item reveal">
+            <summary>¿Cómo funciona la Bóveda de Contraseñas, el PIN y el Modo Invitado?</summary>
+            <p>Tus contraseñas se cifran en tu equipo mediante <strong>Windows DPAPI</strong> (0 servidores externos). Puedes elegir no usar PIN, pedirlo siempre al abrir el navegador, o el <strong>Modo Inteligente por Sesión de Windows</strong> (solo lo pide una vez al encender la PC o si bloqueas tu usuario con <code>Win + L</code>). Si prestas tu PC, otra persona puede elegir <strong>"Entrar como Invitado"</strong> para navegar sin ver ni autocompletar tus contraseñas.</p>
           </details>
 
           <details class="faq-item reveal">
