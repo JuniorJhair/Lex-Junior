@@ -228,8 +228,8 @@
             </StackPanel>
 
             <!-- Lista de Pestañas con Drag & Drop y botones pegados a la última pestaña -->
-            <Grid Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" 
+            <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Stretch">
+                <ScrollViewer HorizontalAlignment="Left" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" 
                               WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- ItemsControl de pestañas con soporte Drag & Drop -->
