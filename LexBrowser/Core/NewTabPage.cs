@@ -12,6 +12,20 @@ public static class NewTabPage
         if (_logoBase64 != null) return _logoBase64;
         try
         {
+            var resourceUri = new Uri("pack://application:,,,/Assets/logo.png", UriKind.Absolute);
+            var streamInfo = System.Windows.Application.GetResourceStream(resourceUri);
+            if (streamInfo?.Stream != null)
+            {
+                using var ms = new MemoryStream();
+                streamInfo.Stream.CopyTo(ms);
+                _logoBase64 = Convert.ToBase64String(ms.ToArray());
+                return _logoBase64;
+            }
+        }
+        catch { }
+
+        try
+        {
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.png");
             if (File.Exists(path))
             {
