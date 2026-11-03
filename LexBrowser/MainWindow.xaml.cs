@@ -503,7 +503,13 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         CleanLegacyDiagnosticLogs();
-        if (_initialAttachedTab != null)
+
+        // Verificar si debe mostrarse el bloqueo por PIN al iniciar el navegador
+        if (_initialAttachedTab == null && PasswordManager.ShouldRequireUnlockOnStartup())
+        {
+            ShowBrowserLockOverlay();
+        }
+        else if (_initialAttachedTab != null)
         {
             var initial = _initialAttachedTab;
             _initialAttachedTab = null;
@@ -511,7 +517,7 @@ public partial class MainWindow : Window
         }
         else if (Tabs.Count == 0)
         {
-            await AddNewTabAsync(null, isIncognito: false);
+            await AddNewTabAsync(null, isIncognito: _isGuestSession);
         }
 
         // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
@@ -562,9 +568,14 @@ public partial class MainWindow : Window
         // Mostrar / Ocultar botón de Página Flotante en Navbar
         BtnTogglePip.Visibility = s.ShowFloatingPageButton ? Visibility.Visible : Visibility.Collapsed;
 
-        // Mostrar / Ocultar Barra de Accesos Directos
-        RowBookmarksBar.Height = s.ShowBookmarksBar ? new GridLength(34) : new GridLength(0);
-        RowBookmarksGrid.Visibility = s.ShowBookmarksBar ? Visibility.Visible : Visibility.Collapsed;
+        // Mostrar / Ocultar Barra de Accesos Directos (en Modo Invitado siempre mostramos el banner de invitado)
+        bool showBar = s.ShowBookmarksBar || _isGuestSession;
+        RowBookmarksBar.Height = showBar ? new GridLength(34) : new GridLength(0);
+        RowBookmarksGrid.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
+        if (BorderGuestSessionBanner != null)
+        {
+            BorderGuestSessionBanner.Visibility = _isGuestSession ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -593,6 +604,11 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     private async Task<BrowserTab> AddNewTabAsync(string? initialUrl = null, bool isIncognito = false, int? insertIndex = null)
     {
+        if (_isGuestSession)
+        {
+            isIncognito = true;
+        }
+
         var webView = new WebView2
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -672,10 +688,11 @@ public partial class MainWindow : Window
         var core = tab.WebView.CoreWebView2;
         if (core == null) return;
 
-        // Inyectar script universal de optimización, anti-anuncios, iframes y PiP
+        // Inyectar script universal de optimización, anti-anuncios, iframes, PiP y captura/autocompletado pasivo de contraseñas
         try
         {
             await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(PasswordManager.InjectedPasswordScript);
         }
         catch { }
 
@@ -972,6 +989,20 @@ public partial class MainWindow : Window
                 {
                     win.Dispatcher.BeginInvoke(() => win.OpenHistory());
                 }
+                else if (type == "password_submitted")
+                {
+                    if (tab.IsIncognito || win._isGuestSession || !SettingsManager.Current.EnablePasswordManager)
+                        return;
+
+                    string submittedUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                    string submittedUser = root.TryGetProperty("username", out var usrProp) ? (usrProp.GetString() ?? "") : "";
+                    string submittedPwd = root.TryGetProperty("password", out var pwdProp) ? (pwdProp.GetString() ?? "") : "";
+
+                    if (!string.IsNullOrWhiteSpace(submittedUrl) && !string.IsNullOrEmpty(submittedPwd))
+                    {
+                        win.Dispatcher.BeginInvoke(() => win.PromptSaveOrUpdatePassword(submittedUrl, submittedUser, submittedPwd));
+                    }
+                }
                 else if (type == "media_detected_batch")
                 {
                     if (!tab.IsMediaSnifferActive) return;
@@ -1117,6 +1148,10 @@ public partial class MainWindow : Window
                 if (e.IsSuccess && !tab.IsIncognito && !tab.IsNewTab && !string.IsNullOrWhiteSpace(core.Source))
                 {
                     HistoryManager.AddEntry(core.Source, core.DocumentTitle);
+                    if (!win._isGuestSession && SettingsManager.Current.EnablePasswordManager)
+                    {
+                        win.TryAutofillSavedCredentials(tab, core.Source);
+                    }
                 }
 
                 _ = win.UpdateTabFaviconAsync(tab);
@@ -2057,6 +2092,11 @@ public partial class MainWindow : Window
 
     public void OpenHistory()
     {
+        if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial personal"))
+        {
+            return;
+        }
+
         try
         {
             var historyWin = new HistoryWindow(GetPersistentProfileCoreWebView2())
@@ -2089,6 +2129,11 @@ public partial class MainWindow : Window
 
     private void OpenSettings(string defaultSection = "General")
     {
+        if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para abrir la Configuración personal"))
+        {
+            return;
+        }
+
         try
         {
             string prevEngine = SettingsManager.Current.DefaultSearchEngine;
@@ -2198,6 +2243,19 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     private async void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (BrowserLockOverlay != null && BrowserLockOverlay.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+
+        // 0. Ctrl + Shift + K: Abrir Bóveda de Contraseñas
+        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.K)
+        {
+            e.Handled = true;
+            OpenPasswordVault();
+            return;
+        }
+
         // 1. Ctrl + Tab: Cambiar a la siguiente pestaña cíclicamente
         if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Tab)
         {
@@ -3445,6 +3503,394 @@ public partial class MainWindow : Window
             BtnUpdateAvailable.IsEnabled = true;
             TxtUpdateAvailableLabel.Text = $"Actualizar ({update.VersionTag})";
             ShowToast("⚠️ No se pudo descargar la actualización. Verifica tu conexión a internet.");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // BÓVEDA DE CONTRASEÑAS, BLOQUEO INTELIGENTE Y MODO INVITADO (0% CPU)
+    // ─────────────────────────────────────────────────────────────────────
+    private bool _isGuestSession = false;
+    private string _pendingSaveOriginUrl = string.Empty;
+    private DispatcherTimer? _promptPeekTimer;
+    private DispatcherTimer? _clipboardShieldTimer;
+    private string _lastCopiedSecretPassword = string.Empty;
+
+    private void BtnPasswordVault_Click(object sender, RoutedEventArgs e)
+    {
+        OpenPasswordVault();
+    }
+
+    public void OpenPasswordVault(string initialSection = "Vault")
+    {
+        if (_isGuestSession)
+        {
+            if (!TryUnlockFromGuestMode("Desbloquea con tu PIN de propietario para acceder a la Bóveda de Contraseñas"))
+                return;
+        }
+        else if (PasswordManager.ShouldRequireUnlockForVaultAction())
+        {
+            var pinDialog = new PinPromptDialog("Confirma tu PIN para abrir la Bóveda de Contraseñas") { Owner = this };
+            if (pinDialog.ShowDialog() != true)
+                return;
+        }
+
+        var vaultWin = new PasswordVaultWindow(initialSection)
+        {
+            Owner = this
+        };
+        vaultWin.NavigateRequested += async (targetUrl) =>
+        {
+            if (IsSafeHttpUrl(targetUrl))
+            {
+                if (_activeTab?.WebView?.CoreWebView2 != null && _activeTab.IsNewTab)
+                {
+                    _activeTab.WebView.CoreWebView2.Navigate(targetUrl);
+                }
+                else
+                {
+                    await AddNewTabAsync(targetUrl, isIncognito: _isGuestSession);
+                }
+            }
+        };
+        vaultWin.ClipboardShieldActivated += ActivateClipboardShield;
+        vaultWin.ShowDialog();
+        ApplySettings();
+    }
+
+    public void ActivateClipboardShield(string secretPassword)
+    {
+        if (string.IsNullOrEmpty(secretPassword)) return;
+        try
+        {
+            Clipboard.SetText(secretPassword);
+            _lastCopiedSecretPassword = secretPassword;
+
+            if (_clipboardShieldTimer == null)
+            {
+                _clipboardShieldTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+                _clipboardShieldTimer.Tick += (_, _) =>
+                {
+                    _clipboardShieldTimer.Stop();
+                    try
+                    {
+                        if (!string.IsNullOrEmpty(_lastCopiedSecretPassword) &&
+                            Clipboard.ContainsText() &&
+                            Clipboard.GetText() == _lastCopiedSecretPassword)
+                        {
+                            Clipboard.Clear();
+                            ShowToast("🛡️ Escudo de Portapapeles: la contraseña copiada se limpió automáticamente (20s).");
+                        }
+                    }
+                    catch { }
+                    _lastCopiedSecretPassword = string.Empty;
+                };
+            }
+
+            _clipboardShieldTimer.Stop();
+            _clipboardShieldTimer.Start();
+            ShowToast("📋 Contraseña copiada — 🛡️ Escudo activo: se borrará sola del portapapeles en 20s.");
+        }
+        catch { }
+    }
+
+    private void PromptSaveOrUpdatePassword(string url, string username, string password)
+    {
+        if (_isGuestSession || !SettingsManager.Current.EnablePasswordManager)
+            return;
+
+        string baseDomain = PasswordVaultStore.ExtractBaseDomain(url);
+        if (string.IsNullOrEmpty(baseDomain) || PasswordManager.Store.IsDomainExcluded(baseDomain))
+            return;
+
+        var existing = PasswordManager.Store.FindExistingCredential(baseDomain, username);
+        if (existing != null && existing.Password == password)
+        {
+            // Ya está guardada exactamente con la misma contraseña: no molestar al usuario
+            return;
+        }
+
+        _pendingSaveOriginUrl = url;
+        TxtSavePwdPromptTitle.Text = existing != null
+            ? $"¿Actualizar contraseña para {baseDomain}?"
+            : $"¿Guardar contraseña para {baseDomain}?";
+
+        TxtSavePwdDomainSubtitle.Text = $"Se asociará al dominio '{baseDomain}' y funcionará en todas sus rutas.";
+        TxtPromptSaveUsername.Text = username;
+        PwdPromptSavePassword.Password = password;
+        TxtPromptSavePasswordPlain.Text = password;
+        TxtPromptSavePasswordPlain.Visibility = Visibility.Collapsed;
+        PwdPromptSavePassword.Visibility = Visibility.Visible;
+        BtnPromptPeekPassword.Content = "👁️";
+
+        SavePasswordBanner.Visibility = Visibility.Visible;
+    }
+
+    private void BtnPromptPeekPassword_Click(object sender, RoutedEventArgs e)
+    {
+        if (TxtPromptSavePasswordPlain.Visibility == Visibility.Visible)
+        {
+            _promptPeekTimer?.Stop();
+            PwdPromptSavePassword.Password = TxtPromptSavePasswordPlain.Text;
+            TxtPromptSavePasswordPlain.Visibility = Visibility.Collapsed;
+            PwdPromptSavePassword.Visibility = Visibility.Visible;
+            BtnPromptPeekPassword.Content = "👁️";
+            return;
+        }
+
+        TxtPromptSavePasswordPlain.Text = PwdPromptSavePassword.Password;
+        PwdPromptSavePassword.Visibility = Visibility.Collapsed;
+        TxtPromptSavePasswordPlain.Visibility = Visibility.Visible;
+        BtnPromptPeekPassword.Content = "🙈 5s";
+
+        if (_promptPeekTimer == null)
+        {
+            _promptPeekTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _promptPeekTimer.Tick += (_, _) =>
+            {
+                _promptPeekTimer.Stop();
+                if (TxtPromptSavePasswordPlain.Visibility == Visibility.Visible)
+                {
+                    PwdPromptSavePassword.Password = TxtPromptSavePasswordPlain.Text;
+                    TxtPromptSavePasswordPlain.Visibility = Visibility.Collapsed;
+                    PwdPromptSavePassword.Visibility = Visibility.Visible;
+                    BtnPromptPeekPassword.Content = "👁️";
+                }
+            };
+        }
+
+        _promptPeekTimer.Stop();
+        _promptPeekTimer.Start();
+    }
+
+    private void BtnConfirmSavePassword_Click(object sender, RoutedEventArgs e)
+    {
+        string pwd = TxtPromptSavePasswordPlain.Visibility == Visibility.Visible
+            ? TxtPromptSavePasswordPlain.Text
+            : PwdPromptSavePassword.Password;
+
+        string user = TxtPromptSaveUsername.Text.Trim();
+        string domain = PasswordVaultStore.ExtractBaseDomain(_pendingSaveOriginUrl);
+
+        if (!string.IsNullOrEmpty(domain) && !string.IsNullOrEmpty(pwd))
+        {
+            PasswordManager.Store.SaveOrUpdateCredential(_pendingSaveOriginUrl, user, pwd);
+            ShowToast($"🔑 Contraseña guardada para {domain} (disponible en tu Bóveda 🔑).");
+        }
+
+        _promptPeekTimer?.Stop();
+        SavePasswordBanner.Visibility = Visibility.Collapsed;
+    }
+
+    private void BtnDismissSavePassword_Click(object sender, RoutedEventArgs e)
+    {
+        _promptPeekTimer?.Stop();
+        SavePasswordBanner.Visibility = Visibility.Collapsed;
+    }
+
+    private void BtnNeverSaveForDomain_Click(object sender, RoutedEventArgs e)
+    {
+        string domain = PasswordVaultStore.ExtractBaseDomain(_pendingSaveOriginUrl);
+        if (!string.IsNullOrEmpty(domain))
+        {
+            PasswordManager.Store.AddExcludedDomain(domain);
+            ShowToast($"🚫 No se volverá a preguntar en {domain} (puedes revertirlo en la Bóveda 🔑).");
+        }
+
+        _promptPeekTimer?.Stop();
+        SavePasswordBanner.Visibility = Visibility.Collapsed;
+    }
+
+    private void TryAutofillSavedCredentials(BrowserTab tab, string pageUrl)
+    {
+        try
+        {
+            if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed || tab.IsIncognito || _isGuestSession)
+                return;
+
+            // Solo autocompletar en sitios HTTPS o localhost (protección anti-phishing)
+            if (!PasswordVaultStore.IsDomainMatch(pageUrl, pageUrl, requireHttpsForAutofill: true))
+                return;
+
+            var matches = PasswordManager.Store.GetCredentialsForUrl(pageUrl);
+            if (matches.Count == 0) return;
+
+            var primary = matches[0];
+            string payload = JsonSerializer.Serialize(new
+            {
+                action = "autofill_credentials",
+                username = primary.Username,
+                password = primary.Password
+            });
+
+            tab.WebView.CoreWebView2.PostWebMessageAsJson(payload);
+        }
+        catch { }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PANTALLA DE BLOQUEO AL INICIAR Y MODO INVITADO AISLADO EN RAM
+    // ─────────────────────────────────────────────────────────────────────
+    private void ShowBrowserLockOverlay()
+    {
+        var s = SettingsManager.Current;
+        TxtLockOverlayModeSubtitle.Text = s.BrowserLockMode == "SmartSession"
+            ? "Modo Inteligente activo (Sesión de Windows nueva o reanudada)"
+            : "Protección siempre activa al abrir el navegador";
+
+        LockOverlayRecoveryPanel.Visibility = Visibility.Collapsed;
+        LockOverlayPinPanel.Visibility = Visibility.Visible;
+        TxtOverlayPinError.Visibility = Visibility.Collapsed;
+        PwdOverlayPinInput.Password = string.Empty;
+        BrowserLockOverlay.Visibility = Visibility.Visible;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PwdOverlayPinInput.Focus());
+    }
+
+    private async void CompleteOverlayUnlock()
+    {
+        PasswordManager.MarkSessionUnlocked();
+        _isGuestSession = false;
+        BrowserLockOverlay.Visibility = Visibility.Collapsed;
+        ApplySettings();
+
+        if (Tabs.Count == 0)
+        {
+            await AddNewTabAsync(null, isIncognito: false);
+        }
+    }
+
+    private void PwdOverlayPinInput_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        TxtOverlayPinError.Visibility = Visibility.Collapsed;
+        string current = PwdOverlayPinInput.Password;
+        int expectedLen = SettingsManager.Current.MasterPasswordLength;
+
+        if (expectedLen > 0 && current.Length == expectedLen && PasswordManager.VerifyMasterPassword(current))
+        {
+            CompleteOverlayUnlock();
+        }
+    }
+
+    private void PwdOverlayPinInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            BtnOverlayUnlock_Click(sender, e);
+        }
+    }
+
+    private void BtnOverlayUnlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (PasswordManager.VerifyMasterPassword(PwdOverlayPinInput.Password))
+        {
+            CompleteOverlayUnlock();
+        }
+        else
+        {
+            TxtOverlayPinError.Text = "❌ PIN o contraseña incorrecta. Inténtalo de nuevo o entra como Invitado.";
+            TxtOverlayPinError.Visibility = Visibility.Visible;
+            PwdOverlayPinInput.SelectAll();
+            PwdOverlayPinInput.Focus();
+        }
+    }
+
+    private async void BtnEnterGuestMode_Click(object sender, RoutedEventArgs e)
+    {
+        _isGuestSession = true;
+        BrowserLockOverlay.Visibility = Visibility.Collapsed;
+        ApplySettings();
+
+        if (Tabs.Count == 0)
+        {
+            await AddNewTabAsync(null, isIncognito: true);
+        }
+
+        ShowToast("👤 Modo Invitado activo: navegas en una sesión aislada sin acceso a las contraseñas ni marcadores del propietario.");
+    }
+
+    private void BtnUnlockFromGuest_Click(object sender, RoutedEventArgs e)
+    {
+        TryUnlockFromGuestMode("Ingresa tu PIN de propietario para salir del Modo Invitado y restaurar tus marcadores y contraseñas");
+    }
+
+    private bool TryUnlockFromGuestMode(string reason)
+    {
+        var pinDialog = new PinPromptDialog(reason) { Owner = this };
+        if (pinDialog.ShowDialog() == true)
+        {
+            _isGuestSession = false;
+            ApplySettings();
+            ShowToast("🔓 Sesión de propietario desbloqueada: tus marcadores, historial y bóveda están disponibles.");
+            return true;
+        }
+        return false;
+    }
+
+    private void BtnOverlayShowRecovery_Click(object sender, RoutedEventArgs e)
+    {
+        var s = SettingsManager.Current;
+        TxtOverlayRecoveryQuestion.Text = string.IsNullOrWhiteSpace(s.SecurityQuestion)
+            ? "Ingresa tu Código de Recuperación de Emergencia (ej. LEX-XXXX-XXXX) para conservar tus contraseñas:"
+            : $"Pregunta secreta: \"{s.SecurityQuestion}\" (o ingresa tu Código de Recuperación {s.RecoveryCodeHint}):";
+
+        TxtOverlayRecoveryError.Visibility = Visibility.Collapsed;
+        TxtOverlayRecoveryAnswer.Text = string.Empty;
+        PwdOverlayNewPin.Password = string.Empty;
+        LockOverlayPinPanel.Visibility = Visibility.Collapsed;
+        LockOverlayRecoveryPanel.Visibility = Visibility.Visible;
+        TxtOverlayRecoveryAnswer.Focus();
+    }
+
+    private void BtnOverlayBackToPin_Click(object sender, RoutedEventArgs e)
+    {
+        LockOverlayRecoveryPanel.Visibility = Visibility.Collapsed;
+        LockOverlayPinPanel.Visibility = Visibility.Visible;
+        PwdOverlayPinInput.Focus();
+    }
+
+    private void BtnOverlayApplyRecovery_Click(object sender, RoutedEventArgs e)
+    {
+        string answer = TxtOverlayRecoveryAnswer.Text;
+        string newPin = PwdOverlayNewPin.Password;
+
+        if (!PasswordManager.VerifyRecoveryAnswerOrCode(answer))
+        {
+            TxtOverlayRecoveryError.Text = "❌ La respuesta secreta o el código de recuperación no coinciden.";
+            TxtOverlayRecoveryError.Visibility = Visibility.Visible;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newPin))
+        {
+            TxtOverlayRecoveryError.Text = "⚠️ Escribe tu nuevo PIN o contraseña para continuar.";
+            TxtOverlayRecoveryError.Visibility = Visibility.Visible;
+            return;
+        }
+
+        var s = SettingsManager.Current;
+        PasswordManager.ConfigureMasterPassword(newPin, s.BrowserLockMode, s.SecurityQuestion, answer);
+        CompleteOverlayUnlock();
+        ShowToast("✅ ¡PIN actualizado con éxito! Todas tus contraseñas guardadas siguen intactas.");
+    }
+
+    private void BtnOverlayEmergencyReset_Click(object sender, RoutedEventArgs e)
+    {
+        var confirm = MessageBox.Show(
+            "⚠️ CONFIRMACIÓN DE RESTABLECIMIENTO DE EMERGENCIA\n\n" +
+            "¿Qué ocurrirá ahora mismo?\n" +
+            "• SE ELIMINARÁN: Únicamente las contraseñas guardadas en la bóveda (por seguridad para que nadie ajeno vea tus cuentas).\n" +
+            "• SE CONSERVARÁN INTACTOS: Tus marcadores, páginas ancladas, historial, descargas y configuración del navegador.\n" +
+            "• El bloqueo por PIN se desactivará para que puedas usar tu navegador.\n\n" +
+            "¿Deseas continuar?",
+            "Restablecer acceso — Lex Junior",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (confirm == MessageBoxResult.Yes)
+        {
+            PasswordManager.EmergencyResetLockAndClearVault();
+            CompleteOverlayUnlock();
+            ShowToast("🔓 Acceso restablecido (se vació solo la bóveda de contraseñas; tus marcadores y ajustes siguen intactos).");
         }
     }
 }

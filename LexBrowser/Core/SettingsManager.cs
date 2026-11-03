@@ -24,6 +24,20 @@ public class BrowserSettings
     public double MainWindowTop { get; set; } = double.NaN;
     public string DefaultSearchEngine { get; set; } = "Google";
     public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
+
+    // Guardador de Contraseñas y Bloqueo Inteligente del Navegador (0% CPU en reposo)
+    public bool EnablePasswordManager { get; set; } = true;
+    // Modos: "None" (Sin contraseña), "SmartSession" (Solo al prender PC o tras bloquear/suspender Windows),
+    //        "AlwaysOnStartup" (Siempre al abrir el navegador), "VaultOnly" (Solo al abrir bóveda/ver claves)
+    public string BrowserLockMode { get; set; } = "None";
+    public string MasterPasswordHash { get; set; } = "";
+    public string MasterPasswordSalt { get; set; } = "";
+    public int MasterPasswordLength { get; set; } = 0;
+    public string SecurityQuestion { get; set; } = "";
+    public string SecurityAnswerHash { get; set; } = "";
+    public string RecoveryCodeHash { get; set; } = "";
+    public string RecoveryCodeHint { get; set; } = "";
+    public long LastUnlockedBootId { get; set; } = 0;
 }
 
 public static class SettingsManager

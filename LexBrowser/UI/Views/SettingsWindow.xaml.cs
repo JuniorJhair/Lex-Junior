@@ -28,6 +28,12 @@ public partial class SettingsWindow : Window
         ChkAdBlocker.IsChecked = s.EnableAdBlocker;
         ChkEnableHistory.IsChecked = s.EnableHistory;
         TxtSettingsHistoryStorage.Text = $"Espacio ocupado: {HistoryManager.GetHistoryFileSizeFormatted()}";
+        if (TxtSettingsVaultSummary != null)
+        {
+            int pwdCount = PasswordManager.Store.GetTotalCount();
+            string lockLabel = PasswordManager.HasMasterPasswordConfigured() ? "Con PIN activo" : "Sin PIN";
+            TxtSettingsVaultSummary.Text = $"Contraseñas guardadas: {pwdCount} · Estado: {lockLabel}";
+        }
 
         TxtCustomSearchUrl.Text = s.CustomSearchUrl;
 
@@ -134,6 +140,26 @@ public partial class SettingsWindow : Window
             };
             historyWin.ShowDialog();
             TxtSettingsHistoryStorage.Text = $"Espacio ocupado: {HistoryManager.GetHistoryFileSizeFormatted()}";
+        }
+        catch { }
+    }
+
+    private void BtnOpenVaultFromSettings_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (PasswordManager.ShouldRequireUnlockForVaultAction())
+            {
+                var pinPrompt = new PinPromptDialog("Confirma tu PIN para abrir la Bóveda de Contraseñas") { Owner = this };
+                if (pinPrompt.ShowDialog() != true) return;
+            }
+
+            var vaultWin = new PasswordVaultWindow { Owner = this };
+            vaultWin.ShowDialog();
+
+            int pwdCount = PasswordManager.Store.GetTotalCount();
+            string lockLabel = PasswordManager.HasMasterPasswordConfigured() ? "Con PIN activo" : "Sin PIN";
+            TxtSettingsVaultSummary.Text = $"Contraseñas guardadas: {pwdCount} · Estado: {lockLabel}";
         }
         catch { }
     }

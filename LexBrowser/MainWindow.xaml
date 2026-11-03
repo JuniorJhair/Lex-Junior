@@ -648,6 +648,11 @@
                     </Border>
                 </Button>
 
+                <!-- Botón Bóveda de Contraseñas y Seguridad 🔑 (0% CPU en reposo) -->
+                <Button x:Name="BtnPasswordVault" Style="{StaticResource NavBtn}" ToolTip="Bóveda de Contraseñas y Bloqueo por PIN (Ctrl+Shift+K)" Click="BtnPasswordVault_Click">
+                    <TextBlock Text="🔑" FontSize="13" Foreground="#A1A1AA"/>
+                </Button>
+
                 <!-- Botón Historial de Descargas ⬇ (0% CPU en reposo) -->
                 <Button x:Name="BtnDownloads" Style="{StaticResource NavBtn}" ToolTip="Historial de Descargas (Ctrl+J)" Click="BtnDownloads_Click">
                     <TextBlock x:Name="TxtDownloadsBtnIcon" Text="⬇" FontSize="13.5" FontWeight="Bold" Foreground="#A1A1AA"/>
@@ -846,6 +851,20 @@
                     <TextBlock Text="···" FontSize="13" Foreground="#71717A"/>
                 </Button>
             </StackPanel>
+
+            <!-- Banner de Modo Invitado (Cubre la barra de marcadores personales cuando alguien entra como Invitado) -->
+            <Border x:Name="BorderGuestSessionBanner" Grid.Column="0" Grid.ColumnSpan="4" Background="#171726" BorderBrush="#6366F1" BorderThickness="0,0,0,1" Visibility="Collapsed" Panel.ZIndex="10">
+                <Grid Margin="14,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="👤 Modo Invitado Activo:" FontWeight="Bold" FontSize="11.5" Foreground="#A5B4FC" Margin="0,0,6,0"/>
+                        <TextBlock Text="Tus marcadores personales, historial y contraseñas guardadas están ocultos. Al cerrar la ventana se borrará la sesión de invitado."
+                                   FontSize="11" Foreground="#D4D4D8" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button Content="🔑 Desbloquear mi cuenta con PIN" Click="BtnUnlockFromGuest_Click"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" Background="#6366F1" Foreground="#FFFFFF"
+                            FontSize="10.5" FontWeight="Bold" Padding="10,3" BorderThickness="0" Cursor="Hand"/>
+                </Grid>
+            </Border>
         </Grid>
 
         <!-- Fila 3: Barra de progreso sutil -->
@@ -856,6 +875,160 @@
         <Grid x:Name="BrowserContainer" Grid.Row="4" Background="#0A0A0E">
             <!-- Los WebViews de las pestañas se alojan aquí dinámicamente -->
         </Grid>
+
+        <!-- Banner Flotante para Guardar o Actualizar Contraseña al iniciar sesión (Esquina Superior Derecha) -->
+        <Border x:Name="SavePasswordBanner" Grid.Row="4" HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,14,24,0" Width="365" Background="#161622" BorderBrush="#6366F1" BorderThickness="1.5"
+                CornerRadius="12" Padding="16,14" Visibility="Collapsed" Panel.ZIndex="1100">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.75" Color="#000000"/>
+            </Border.Effect>
+            <StackPanel>
+                <Grid Margin="0,0,0,8">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="🔑 " FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtSavePwdPromptTitle" Text="¿Guardar contraseña para este sitio?" FontWeight="Bold" FontSize="12.5" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button Content="✕" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0"
+                            Foreground="#9CA3AF" Cursor="Hand" Click="BtnDismissSavePassword_Click"/>
+                </Grid>
+
+                <TextBlock x:Name="TxtSavePwdDomainSubtitle" Text="Se asociará al dominio raíz (.com) aunque cambie la ruta"
+                           FontSize="10.5" Foreground="#A5B4FC" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                <TextBlock Text="Usuario o correo:" FontSize="10.5" Foreground="#A1A1AA" Margin="0,0,0,3"/>
+                <TextBox x:Name="TxtPromptSaveUsername" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
+                         Foreground="#FFFFFF" FontSize="12" Padding="8,5" Margin="0,0,0,8"/>
+
+                <TextBlock Text="Contraseña:" FontSize="10.5" Foreground="#A1A1AA" Margin="0,0,0,3"/>
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="TxtPromptSavePasswordPlain" Grid.Column="0" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
+                             Foreground="#34D399" FontSize="12" FontWeight="Bold" Padding="8,5" Visibility="Collapsed"/>
+                    <PasswordBox x:Name="PwdPromptSavePassword" Grid.Column="0" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
+                                 Foreground="#FFFFFF" FontSize="12" Padding="8,5"/>
+                    <Button x:Name="BtnPromptPeekPassword" Grid.Column="1" Content="👁️" Click="BtnPromptPeekPassword_Click"
+                            Background="#242436" Foreground="#D4D4D8" FontSize="11" Padding="8,5" Margin="6,0,0,0"
+                            BorderThickness="0" Cursor="Hand" ToolTip="Ver por 5 segundos"/>
+                </Grid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="💾 Guardar" Click="BtnConfirmSavePassword_Click"
+                            Background="#6366F1" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11.5" Padding="12,7"
+                            BorderThickness="0" Cursor="Hand" Margin="0,0,6,0"/>
+                    <Button Grid.Column="1" Content="Ahora no" Click="BtnDismissSavePassword_Click"
+                            Background="#252536" Foreground="#D4D4D8" FontSize="11" Padding="10,7"
+                            BorderThickness="0" Cursor="Hand" Margin="0,0,6,0"/>
+                    <Button Grid.Column="2" Content="Nunca aquí" Click="BtnNeverSaveForDomain_Click"
+                            Background="#2A161D" Foreground="#FCA5A5" FontSize="11" Padding="10,7"
+                            BorderThickness="0" Cursor="Hand" ToolTip="No volver a preguntar en este dominio"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Pantalla de Bloqueo al Iniciar / Reanudar Windows (Con Modo Invitado y Recuperación) -->
+        <Border x:Name="BrowserLockOverlay" Grid.Row="1" Grid.RowSpan="4" Background="#0C0C12" Visibility="Collapsed" Panel.ZIndex="2500">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="460">
+                <Border Background="#14141E" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Padding="28,24">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.8" Color="#000000"/>
+                    </Border.Effect>
+                    <Grid>
+                        <!-- VISTA PRINCIPAL DE DESBLOQUEO -->
+                        <StackPanel x:Name="LockOverlayPinPanel" Visibility="Visible">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
+                                <Border CornerRadius="10" Width="38" Height="38" Margin="0,0,10,0" ClipToBounds="True">
+                                    <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="LEX JUNIOR PROTEGIDO" FontWeight="Black" FontSize="15" Foreground="#818CF8"/>
+                                    <TextBlock x:Name="TxtLockOverlayModeSubtitle" Text="Sesión protegida con PIN / Contraseña" FontSize="11" Foreground="#9CA3AF"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <Border Background="#1B1B2A" BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,0,0,14">
+                                <TextBlock Text="⚡ Entrada rápida activa: escribe tu PIN (ej. 6 dígitos) y se desbloqueará automáticamente al completar el último carácter."
+                                           FontSize="11" Foreground="#A5B4FC" TextWrapping="Wrap" TextAlignment="Center"/>
+                            </Border>
+
+                            <TextBlock Text="Ingresa tu PIN o contraseña:" FontSize="12" FontWeight="SemiBold" Foreground="#E4E4E7" Margin="0,0,0,6"/>
+                            <PasswordBox x:Name="PwdOverlayPinInput" Background="#0F0F16" BorderBrush="#3B3B58" BorderThickness="1.5"
+                                         Foreground="#FFFFFF" FontSize="18" Padding="12,9"
+                                         PasswordChanged="PwdOverlayPinInput_PasswordChanged"
+                                         KeyDown="PwdOverlayPinInput_KeyDown"/>
+
+                            <TextBlock x:Name="TxtOverlayPinError" Text="❌ PIN o contraseña incorrecta." Foreground="#F87171" FontSize="11.5" FontWeight="SemiBold"
+                                       Margin="0,6,0,0" Visibility="Collapsed"/>
+
+                            <Button Content="🔓 Desbloquear mi navegador" Click="BtnOverlayUnlock_Click"
+                                    Background="#6366F1" Foreground="#FFFFFF" FontWeight="Bold" FontSize="13" Padding="14,11"
+                                    BorderThickness="0" Cursor="Hand" Margin="0,14,0,10"/>
+
+                            <!-- Opción Modo Invitado si no sabe la contraseña -->
+                            <Border Background="#181824" BorderBrush="#2A2A3D" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,2,0,10">
+                                <StackPanel>
+                                    <TextBlock Text="¿No sabes la contraseña?" FontWeight="Bold" FontSize="11.5" Foreground="#D4D4D8" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Puedes entrar en Modo Invitado: navegarás libremente sin ver los marcadores, historial ni contraseñas del propietario."
+                                               FontSize="10.5" Foreground="#9CA3AF" TextWrapping="Wrap" TextAlignment="Center" Margin="0,2,0,8"/>
+                                    <Button Content="👤 Entrar como Invitado" Click="BtnEnterGuestMode_Click"
+                                            Background="#26263A" Foreground="#E0E7FF" FontWeight="Bold" FontSize="12" Padding="12,8"
+                                            BorderThickness="0" Cursor="Hand"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Button Content="🛟 ¿Olvidaste tu PIN o contraseña? Recuperar acceso" Click="BtnOverlayShowRecovery_Click"
+                                    Background="Transparent" Foreground="#818CF8" FontSize="11.5" FontWeight="SemiBold"
+                                    BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- VISTA DE RECUPERACIÓN EN LA PANTALLA DE BLOQUEO -->
+                        <StackPanel x:Name="LockOverlayRecoveryPanel" Visibility="Collapsed">
+                            <TextBlock Text="🛟 Recuperar Acceso al Navegador" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="TxtOverlayRecoveryQuestion"
+                                       Text="Responde tu pregunta secreta o ingresa tu Código de Recuperación (LEX-XXXX-XXXX) para conservar todas tus contraseñas:"
+                                       FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                            <TextBox x:Name="TxtOverlayRecoveryAnswer" Background="#0F0F16" BorderBrush="#3B3B58" BorderThickness="1"
+                                     Foreground="#FFFFFF" FontSize="12.5" Padding="10,7" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="Nuevo PIN o contraseña (ej. 6 dígitos o letras):" FontSize="11" Foreground="#D4D4D8" Margin="0,0,0,4"/>
+                            <PasswordBox x:Name="PwdOverlayNewPin" Background="#0F0F16" BorderBrush="#3B3B58" BorderThickness="1"
+                                         Foreground="#FFFFFF" FontSize="13" Padding="10,7" Margin="0,0,0,6"/>
+
+                            <TextBlock x:Name="TxtOverlayRecoveryError" Text="" Foreground="#F87171" FontSize="11" FontWeight="SemiBold"
+                                       Visibility="Collapsed" Margin="0,0,0,6"/>
+
+                            <Button Content="✅ Verificar y guardar nuevo PIN (Conserva mis contraseñas)" Click="BtnOverlayApplyRecovery_Click"
+                                    Background="#10B981" Foreground="#FFFFFF" FontWeight="Bold" FontSize="12" Padding="12,9"
+                                    BorderThickness="0" Cursor="Hand" Margin="0,2,0,12"/>
+
+                            <!-- Explicación clara de Restablecimiento de Emergencia -->
+                            <Border Background="#1F1218" BorderBrush="#7F1D1D" BorderThickness="1" CornerRadius="8" Padding="12,9" Margin="0,0,0,8">
+                                <StackPanel>
+                                    <TextBlock Text="⚠️ ¿Olvidaste tanto tu PIN como tu respuesta secreta?" FontWeight="Bold" FontSize="11.5" Foreground="#FCA5A5"/>
+                                    <TextBlock Text="• Se eliminarán: Únicamente las contraseñas guardadas en la bóveda (por seguridad)." FontSize="10.5" Foreground="#FECACA" Margin="0,3,0,1"/>
+                                    <TextBlock Text="• Se conservarán intactos: Tus marcadores, páginas ancladas, historial, descargas y ajustes." FontSize="10.5" Foreground="#D4D4D8"/>
+                                    <Button Content="🗑️ Restablecer acceso (Borrar solo contraseñas)" Click="BtnOverlayEmergencyReset_Click"
+                                            Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="10,6"
+                                            BorderThickness="0" Cursor="Hand" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Button Content="← Volver a ingresar PIN" Click="BtnOverlayBackToPin_Click"
+                                    Background="Transparent" Foreground="#A1A1AA" FontSize="11.5" BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
 
         <!-- Widget Flotante de Zoom en Esquina Superior Derecha -->
         <Border x:Name="FloatingZoomWidget" Grid.Row="4" HorizontalAlignment="Right" VerticalAlignment="Top"
