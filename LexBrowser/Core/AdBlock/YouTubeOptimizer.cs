@@ -621,21 +621,69 @@ public static class YouTubeOptimizer
         }
     };
 
-    // Desbloquear videos existentes y bajo demanda al reproducir
-    document.addEventListener('play', (e) => {
-        if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {
-            if (e.target.tagName === 'VIDEO') unlockVideoPiP(e.target);
-            if (typeof window.__lexVolumePercent === 'number' && window.__lexVolumePercent !== 100) {
-                applyVolumeBoostToElement(e.target, window.__lexVolumePercent);
+    // Desbloquear videos existentes y bajo demanda al reproducir o cargar metadatos
+    ['play', 'playing', 'loadedmetadata', 'canplay'].forEach(evt => {
+        document.addEventListener(evt, (e) => {
+            if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {
+                if (e.target.tagName === 'VIDEO') unlockVideoPiP(e.target);
+                if (typeof window.__lexVolumePercent === 'number' && window.__lexVolumePercent !== 100) {
+                    applyVolumeBoostToElement(e.target, window.__lexVolumePercent);
+                }
             }
-        }
-    }, true);
+        }, true);
+    });
     document.querySelectorAll('video').forEach(unlockVideoPiP);
 
     // ─────────────────────────────────────────────────────────────────
-    // 3.1 AMPLIFICADOR DE VOLUMEN HASTA 300% (Lazy AudioContext + GainNode: 0 MB RAM en reposo)
+    // 3.1 AMPLIFICADOR DE VOLUMEN UNIVERSAL HASTA 300% (Hi-Fi Dynamics Compressor + GainNode)
+    // Cero consumo en reposo: AudioContext y Compresor se inicializan bajo demanda solo al superar 100%.
     // ─────────────────────────────────────────────────────────────────
     window.__lexVolumePercent = 100;
+
+    const setupAudioGraph = (el) => {
+        if (!el || el.__lexGainNode || el.__lexAudioHookFailed) return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+
+            if (!window.__lexAudioCtx) {
+                window.__lexAudioCtx = new AudioCtx();
+            }
+            if (window.__lexAudioCtx.state === 'suspended') {
+                window.__lexAudioCtx.resume().catch(() => {});
+            }
+
+            const mediaSrc = el.currentSrc || el.src || '';
+            // Si el video apunta a un CDN externo y carece de crossOrigin, asignar anonymous para habilitar Web Audio
+            if (!el.crossOrigin && mediaSrc && !mediaSrc.startsWith('blob:') && !mediaSrc.startsWith('data:')) {
+                try {
+                    const u = new URL(mediaSrc, window.location.href);
+                    if (u.origin !== window.location.origin) {
+                        el.crossOrigin = 'anonymous';
+                    }
+                } catch(_) {}
+            }
+
+            const src = window.__lexAudioCtx.createMediaElementSource(el);
+            const gain = window.__lexAudioCtx.createGain();
+            const compressor = window.__lexAudioCtx.createDynamicsCompressor();
+
+            // Calibración acústica de precisión de estudio: evita distorsión armónica y saturación a alto volumen
+            compressor.threshold.value = -6; // dB
+            compressor.knee.value = 12;      // dB suavizado de curva
+            compressor.ratio.value = 4;      // Relación de compresión natural
+            compressor.attack.value = 0.003; // s respuesta ultra rápida
+            compressor.release.value = 0.25; // s recuperación musical limpia
+
+            src.connect(gain);
+            gain.connect(compressor);
+            compressor.connect(window.__lexAudioCtx.destination);
+            el.__lexGainNode = gain;
+        } catch (err) {
+            // Si el origen restringe estrictamente WebAudio o el elemento ya estaba enlazado, no interrumpir reproducción
+            el.__lexAudioHookFailed = true;
+        }
+    };
 
     const applyVolumeBoostToElement = (el, percent) => {
         if (!el) return;
@@ -657,37 +705,12 @@ public static class YouTubeOptimizer
                 return;
             }
 
-            // p > 100 (101% a 300%): Fijar volumen base al 100% y usar GainNode
+            // p > 100 (101% a 300%): Fijar volumen base al 100% y conectar cadena DSP de alta fidelidad
             el.volume = 1.0;
-            const mediaSrc = el.currentSrc || el.src || '';
-            const canUseWebAudio = !mediaSrc || mediaSrc.startsWith('blob:') || mediaSrc.startsWith('data:') || !!el.crossOrigin || (function() {
-                try { return new URL(mediaSrc, window.location.href).origin === window.location.origin; } catch(_) { return false; }
-            })();
-            if (canUseWebAudio && !el.__lexGainNode && !el.__lexAudioHookFailed) {
-                try {
-                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-                    if (AudioCtx) {
-                        if (!window.__lexAudioCtx) {
-                            window.__lexAudioCtx = new AudioCtx();
-                        }
-                        if (window.__lexAudioCtx.state === 'suspended') {
-                            window.__lexAudioCtx.resume().catch(() => {});
-                        }
-                        const src = window.__lexAudioCtx.createMediaElementSource(el);
-                        const gain = window.__lexAudioCtx.createGain();
-                        const compressor = window.__lexAudioCtx.createDynamicsCompressor();
-                        compressor.threshold.value = -6;
-                        compressor.knee.value = 12;
-                        compressor.ratio.value = 4;
-                        src.connect(gain);
-                        gain.connect(compressor);
-                        compressor.connect(window.__lexAudioCtx.destination);
-                        el.__lexGainNode = gain;
-                    }
-                } catch (err) {
-                    el.__lexAudioHookFailed = true;
-                }
+            if (!el.__lexGainNode && !el.__lexAudioHookFailed) {
+                setupAudioGraph(el);
             }
+
             if (el.__lexGainNode) {
                 if (window.__lexAudioCtx && window.__lexAudioCtx.state === 'suspended') {
                     window.__lexAudioCtx.resume().catch(() => {});
@@ -701,8 +724,11 @@ public static class YouTubeOptimizer
         const p = Math.max(0, Math.min(300, Number(percent) || 100));
         if (p === 0) window.__lexMutedByZeroVol = true;
         window.__lexVolumePercent = p;
+
+        // 1. Aplicar a todos los elementos multimedia del documento
         document.querySelectorAll('video, audio').forEach(el => applyVolumeBoostToElement(el, p));
-        // Propagar a iframes hijos (reproductores embebidos en sitios de anime/deportes)
+
+        // 2. Propagar recursivamente a todos los iframes hijos y anidados
         document.querySelectorAll('iframe').forEach(ifr => {
             try {
                 if (ifr.contentWindow) {
@@ -711,6 +737,44 @@ public static class YouTubeOptimizer
             } catch (_) {}
         });
     };
+
+    // Exponer función global para invocación directa desde C# en cualquier frame
+    window.__lexSetVolumeBoostGlobal = function(percent) {
+        applyVolumeBoostAll(percent);
+    };
+
+    // Observer reactivo para reproductores insertados dinámicamente en el DOM (reproductores de anime y streaming)
+    try {
+        const _lexMediaObserver = new MutationObserver((mutations) => {
+            if (window.__lexVolumePercent === 100) return;
+            for (let i = 0; i < mutations.length; i++) {
+                const added = mutations[i].addedNodes;
+                for (let j = 0; j < added.length; j++) {
+                    const node = added[j];
+                    if (node.nodeType === 1) {
+                        if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO') {
+                            applyVolumeBoostToElement(node, window.__lexVolumePercent);
+                        } else if (node.querySelectorAll) {
+                            node.querySelectorAll('video, audio').forEach(m => applyVolumeBoostToElement(m, window.__lexVolumePercent));
+                        }
+                    }
+                }
+            }
+        });
+        if (document.documentElement) {
+            _lexMediaObserver.observe(document.documentElement, { childList: true, subtree: true });
+        }
+    } catch (_) {}
+
+    // Handshake inicial para subframes (iframes de streamwish, vidhide, etc.): solicitar volumen actual al padre
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ __lex_cmd: 'req_volume_boost' }, '*');
+        }
+        if (window.top && window.top !== window && window.top !== window.parent) {
+            window.top.postMessage({ __lex_cmd: 'req_volume_boost' }, '*');
+        }
+    } catch (_) {}
 
     // ─────────────────────────────────────────────────────────────────
     // 3.2 DETECTOR MULTIMEDIA Y DE DOCUMENTOS BAJO DEMANDA (0 consumo cuando está apagado)
@@ -803,6 +867,12 @@ public static class YouTubeOptimizer
             if (!e.data || typeof e.data !== 'object') return;
             if (e.data.__lex_cmd === 'set_volume_boost') {
                 applyVolumeBoostAll(e.data.percent);
+            } else if (e.data.__lex_cmd === 'req_volume_boost') {
+                if (e.source && typeof window.__lexVolumePercent === 'number' && window.__lexVolumePercent !== 100) {
+                    try {
+                        e.source.postMessage({ __lex_cmd: 'set_volume_boost', percent: window.__lexVolumePercent }, '*');
+                    } catch (_) {}
+                }
             } else if (e.data.__lex_cmd === 'scan_page_media') {
                 scanPageMediaOnDemand();
             }

@@ -913,6 +913,25 @@ public partial class MainWindow : Window
             }
         };
 
+        // 3.3 Sincronización instantánea de iframes (reproductores externos, anime, streaming)
+        core.FrameCreated += (s, e) =>
+        {
+            if (tab.IsDisposed) return;
+            var frame = e.Frame;
+            tab.ActiveFrames.TryAdd(frame, 0);
+            frame.Destroyed += (fs, fe) => tab.ActiveFrames.TryRemove(frame, out _);
+
+            int currentBoost = tab.VolumeBoostPercent;
+            if (currentBoost != 100)
+            {
+                try
+                {
+                    _ = frame.ExecuteScriptAsync($"if (window.__lexSetVolumeBoostGlobal) window.__lexSetVolumeBoostGlobal({currentBoost});");
+                }
+                catch { }
+            }
+        };
+
         // 4. Escuchar mensajes del script inyectado (AdBlock, retorno PiP, atajos de teclado y estado multimedia)
         core.WebMessageReceived += (s, e) =>
         {
@@ -3279,8 +3298,23 @@ public partial class MainWindow : Window
         try
         {
             if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed) return;
-            string json = JsonSerializer.Serialize(new { action = "set_volume_boost", percent = tab.VolumeBoostPercent });
+            int pct = tab.VolumeBoostPercent;
+            string json = JsonSerializer.Serialize(new { action = "set_volume_boost", percent = pct });
             tab.WebView.CoreWebView2.PostWebMessageAsJson(json);
+
+            // Sincronizar directamente vía script en el frame principal
+            string script = $"if (window.__lexSetVolumeBoostGlobal) window.__lexSetVolumeBoostGlobal({pct});";
+            _ = tab.WebView.CoreWebView2.ExecuteScriptAsync(script);
+
+            // Despachar en paralelo a todos los subframes (iframes de reproductores) registrados
+            foreach (var frame in tab.ActiveFrames.Keys.ToArray())
+            {
+                try
+                {
+                    _ = frame.ExecuteScriptAsync(script);
+                }
+                catch { }
+            }
         }
         catch { }
     }

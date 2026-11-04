@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 
 namespace LexBrowser.UI.Models;
@@ -64,6 +66,9 @@ public class BrowserTab : INotifyPropertyChanged
     public WebView2 WebView { get; }
     public MainWindow? OwnerWindow { get; set; }
     public bool IsDisposed { get; set; } = false;
+
+    /// <summary>Registro en memoria de subframes (iframes) activos para sincronización instantánea de volumen y multimedia.</summary>
+    public ConcurrentDictionary<CoreWebView2Frame, byte> ActiveFrames { get; } = new();
 
     /// <summary>Nivel de amplificación de volumen de la pestaña (0% a 300%, por defecto 100%).</summary>
     public int VolumeBoostPercent
