@@ -640,29 +640,55 @@ public static class YouTubeOptimizer
     // ─────────────────────────────────────────────────────────────────
     window.__lexVolumePercent = 100;
 
+    const ensureAudioContextRunning = () => {
+        try {
+            if (window.__lexAudioCtx && window.__lexAudioCtx.state === 'suspended') {
+                window.__lexAudioCtx.resume().catch(() => {});
+            }
+        } catch(_) {}
+    };
+
+    ['pointerdown', 'click', 'keydown', 'play'].forEach(evt => {
+        window.addEventListener(evt, ensureAudioContextRunning, { capture: true, passive: true });
+    });
+
     const setupAudioGraph = (el) => {
         if (!el || el.__lexGainNode || el.__lexAudioHookFailed) return;
         try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
             if (!AudioCtx) return;
 
+            const mediaSrc = el.currentSrc || el.src || '';
+            const isBlobOrData = !mediaSrc || mediaSrc.startsWith('blob:') || mediaSrc.startsWith('data:');
+            let isSameOrigin = false;
+            try {
+                if (mediaSrc) {
+                    isSameOrigin = new URL(mediaSrc, window.location.href).origin === window.location.origin;
+                }
+            } catch(_) {}
+            const hasExplicitCors = !!el.crossOrigin && (el.crossOrigin === 'anonymous' || el.crossOrigin === 'use-credentials');
+
+            // CRÍTICO: createMediaElementSource es IRREVERSIBLE para ese elemento HTMLMediaElement.
+            // Si se enlaza a un video cross-origin sin cabeceras CORS, Chromium silencia el audio emitiendo ceros.
+            // Por ende, solo enlazamos si es blob/data, mismo origen o CORS explícito verificado.
+            const canSafelyRouteToWebAudio = isBlobOrData || isSameOrigin || hasExplicitCors;
+            if (!canSafelyRouteToWebAudio) {
+                console.warn('[LexAudio] Video cross-origin sin CORS explícito detectado; se mantiene en audio nativo para evitar silenciamiento por Chromium:', mediaSrc);
+                el.__lexAudioHookFailed = true;
+                return;
+            }
+
             if (!window.__lexAudioCtx) {
                 window.__lexAudioCtx = new AudioCtx();
             }
-            if (window.__lexAudioCtx.state === 'suspended') {
-                window.__lexAudioCtx.resume().catch(() => {});
-            }
 
-            const mediaSrc = el.currentSrc || el.src || '';
-            // Si el video apunta a un CDN externo y carece de crossOrigin, asignar anonymous para habilitar Web Audio
-            if (!el.crossOrigin && mediaSrc && !mediaSrc.startsWith('blob:') && !mediaSrc.startsWith('data:')) {
-                try {
-                    const u = new URL(mediaSrc, window.location.href);
-                    if (u.origin !== window.location.origin) {
-                        el.crossOrigin = 'anonymous';
-                    }
-                } catch(_) {}
-            }
+            console.log('[LexAudio] AudioContext inicializado:', {
+                state: window.__lexAudioCtx.state,
+                isBlob: isBlobOrData,
+                src: mediaSrc.substring(0, 90)
+            });
+
+            ensureAudioContextRunning();
 
             const src = window.__lexAudioCtx.createMediaElementSource(el);
             const gain = window.__lexAudioCtx.createGain();
@@ -680,7 +706,7 @@ public static class YouTubeOptimizer
             compressor.connect(window.__lexAudioCtx.destination);
             el.__lexGainNode = gain;
         } catch (err) {
-            // Si el origen restringe estrictamente WebAudio o el elemento ya estaba enlazado, no interrumpir reproducción
+            console.error('[LexAudio] Error en setupAudioGraph:', err);
             el.__lexAudioHookFailed = true;
         }
     };
@@ -705,17 +731,46 @@ public static class YouTubeOptimizer
                 return;
             }
 
-            // p > 100 (101% a 300%): Fijar volumen base al 100% y conectar cadena DSP de alta fidelidad
+            // p > 100 (101% a 300%): Fijar volumen base al 100% y conectar cadena DSP de alta fidelidad si es seguro
             el.volume = 1.0;
             if (!el.__lexGainNode && !el.__lexAudioHookFailed) {
                 setupAudioGraph(el);
             }
 
             if (el.__lexGainNode) {
-                if (window.__lexAudioCtx && window.__lexAudioCtx.state === 'suspended') {
-                    window.__lexAudioCtx.resume().catch(() => {});
-                }
+                ensureAudioContextRunning();
                 el.__lexGainNode.gain.value = p / 100.0;
+            }
+        } catch (_) {}
+    };
+
+    let _lexMediaObserver = null;
+    const updateObserverState = (percent) => {
+        try {
+            if (percent > 100) {
+                if (!_lexMediaObserver && document.documentElement) {
+                    _lexMediaObserver = new MutationObserver((mutations) => {
+                        for (let i = 0; i < mutations.length; i++) {
+                            const added = mutations[i].addedNodes;
+                            for (let j = 0; j < added.length; j++) {
+                                const node = added[j];
+                                if (node.nodeType === 1) {
+                                    if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO') {
+                                        applyVolumeBoostToElement(node, window.__lexVolumePercent);
+                                    } else if (node.querySelectorAll) {
+                                        node.querySelectorAll('video, audio').forEach(m => applyVolumeBoostToElement(m, window.__lexVolumePercent));
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    _lexMediaObserver.observe(document.documentElement, { childList: true, subtree: true });
+                }
+            } else {
+                if (_lexMediaObserver) {
+                    _lexMediaObserver.disconnect();
+                    _lexMediaObserver = null;
+                }
             }
         } catch (_) {}
     };
@@ -724,6 +779,8 @@ public static class YouTubeOptimizer
         const p = Math.max(0, Math.min(300, Number(percent) || 100));
         if (p === 0) window.__lexMutedByZeroVol = true;
         window.__lexVolumePercent = p;
+
+        updateObserverState(p);
 
         // 1. Aplicar a todos los elementos multimedia del documento
         document.querySelectorAll('video, audio').forEach(el => applyVolumeBoostToElement(el, p));
@@ -742,29 +799,6 @@ public static class YouTubeOptimizer
     window.__lexSetVolumeBoostGlobal = function(percent) {
         applyVolumeBoostAll(percent);
     };
-
-    // Observer reactivo para reproductores insertados dinámicamente en el DOM (reproductores de anime y streaming)
-    try {
-        const _lexMediaObserver = new MutationObserver((mutations) => {
-            if (window.__lexVolumePercent === 100) return;
-            for (let i = 0; i < mutations.length; i++) {
-                const added = mutations[i].addedNodes;
-                for (let j = 0; j < added.length; j++) {
-                    const node = added[j];
-                    if (node.nodeType === 1) {
-                        if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO') {
-                            applyVolumeBoostToElement(node, window.__lexVolumePercent);
-                        } else if (node.querySelectorAll) {
-                            node.querySelectorAll('video, audio').forEach(m => applyVolumeBoostToElement(m, window.__lexVolumePercent));
-                        }
-                    }
-                }
-            }
-        });
-        if (document.documentElement) {
-            _lexMediaObserver.observe(document.documentElement, { childList: true, subtree: true });
-        }
-    } catch (_) {}
 
     // Handshake inicial para subframes (iframes de streamwish, vidhide, etc.): solicitar volumen actual al padre
     try {

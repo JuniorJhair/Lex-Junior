@@ -45,11 +45,20 @@ public static class SettingsManager
 {
     private static readonly object _saveLock = new();
 
-    private static readonly string SettingsPath = Path.Combine(
+    private static readonly string DefaultSettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "LexBrowser",
         "settings.json"
     );
+
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "LexBrowser",
+        "settings.log"
+    );
+
+    public static string? CustomSettingsPath { get; set; }
+    public static string SettingsPath => CustomSettingsPath ?? DefaultSettingsPath;
 
     public static BrowserSettings Current { get; private set; } = new();
 
@@ -62,45 +71,128 @@ public static class SettingsManager
 
     public static void Load()
     {
+        string path = SettingsPath;
+        string tempPath = path + ".tmp";
+
+        // 1. Intentar cargar desde el archivo principal
+        if (TryLoadFromFile(path, out var loaded))
+        {
+            Current = loaded!;
+            return;
+        }
+
+        // 2. Si el archivo principal falló o está ausente, intentar recuperar desde el .tmp
+        if (File.Exists(tempPath) && TryLoadFromFile(tempPath, out var recovered))
+        {
+            LogSettingsEvent($"[RECOVERY] settings.json recuperado exitosamente desde {tempPath}");
+            Current = recovered!;
+            Save(notify: false);
+            return;
+        }
+
+        Current = new BrowserSettings();
+        Save(notify: false);
+    }
+
+    private static bool TryLoadFromFile(string filePath, out BrowserSettings? result)
+    {
+        result = null;
         try
         {
-            if (File.Exists(SettingsPath))
+            if (File.Exists(filePath))
             {
-                string json = File.ReadAllText(SettingsPath);
-                var loaded = JsonSerializer.Deserialize<BrowserSettings>(json);
-                if (loaded != null)
+                string json = File.ReadAllText(filePath);
+                if (!string.IsNullOrWhiteSpace(json))
                 {
-                    Current = loaded;
-                    return;
+                    var loaded = JsonSerializer.Deserialize<BrowserSettings>(json);
+                    if (loaded != null)
+                    {
+                        result = loaded;
+                        return true;
+                    }
                 }
             }
         }
-        catch { }
-
-        Current = new BrowserSettings();
-        Save();
+        catch (Exception ex)
+        {
+            LogSettingsEvent($"Error al leer configuración desde {filePath}: {ex.Message}");
+        }
+        return false;
     }
 
     public static void Save(bool notify = true)
     {
+        string path = SettingsPath;
+        string tempPath = path + ".tmp";
+        string? dir = Path.GetDirectoryName(path);
+
         try
         {
             lock (_saveLock)
             {
-                string? dir = Path.GetDirectoryName(SettingsPath);
                 if (!string.IsNullOrEmpty(dir))
                 {
                     Directory.CreateDirectory(dir);
                 }
+
                 string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
-                string tempPath = SettingsPath + ".tmp";
                 File.WriteAllText(tempPath, json);
-                File.Move(tempPath, SettingsPath, overwrite: true);
+
+                bool replaced = false;
+                Exception? lastEx = null;
+
+                for (int attempt = 0; attempt < 5; attempt++)
+                {
+                    try
+                    {
+                        if (File.Exists(path))
+                        {
+                            File.Replace(tempPath, path, null);
+                        }
+                        else
+                        {
+                            File.Move(tempPath, path);
+                        }
+                        replaced = true;
+                        break;
+                    }
+                    catch (IOException ex)
+                    {
+                        lastEx = ex;
+                        Thread.Sleep(25 * (attempt + 1));
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        lastEx = ex;
+                        Thread.Sleep(25 * (attempt + 1));
+                    }
+                }
+
+                if (!replaced)
+                {
+                    LogSettingsEvent($"[SAVE_FAILED] No se pudo reemplazar {path} tras 5 intentos. El estado seguro queda en {tempPath}. Detalle: {lastEx?.Message}");
+                }
             }
+
             if (notify)
             {
                 SettingsChanged?.Invoke();
             }
+        }
+        catch (Exception ex)
+        {
+            LogSettingsEvent($"[CRITICAL] Error inesperado en Save(): {ex}");
+        }
+    }
+
+    private static void LogSettingsEvent(string message)
+    {
+        try
+        {
+            string line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}";
+            string? dir = Path.GetDirectoryName(LogPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.AppendAllText(LogPath, line);
         }
         catch { }
     }

@@ -8,10 +8,14 @@ namespace LexBrowser.Tests;
 public class PasswordManagerTests : IDisposable
 {
     private readonly string _tempVaultPath;
+    private readonly string _tempSettingsPath;
 
     public PasswordManagerTests()
     {
         _tempVaultPath = Path.Combine(Path.GetTempPath(), $"lex_vault_test_{Guid.NewGuid():N}.dat");
+        _tempSettingsPath = Path.Combine(Path.GetTempPath(), $"lex_settings_test_{Guid.NewGuid():N}.json");
+        SettingsManager.CustomSettingsPath = _tempSettingsPath;
+        SettingsManager.Load();
     }
 
     public void Dispose()
@@ -20,8 +24,17 @@ public class PasswordManagerTests : IDisposable
         {
             if (File.Exists(_tempVaultPath))
                 File.Delete(_tempVaultPath);
+            if (File.Exists(_tempSettingsPath))
+                File.Delete(_tempSettingsPath);
+            if (File.Exists(_tempSettingsPath + ".tmp"))
+                File.Delete(_tempSettingsPath + ".tmp");
         }
         catch { }
+        finally
+        {
+            SettingsManager.CustomSettingsPath = null;
+            SettingsManager.Load();
+        }
     }
 
     [Theory]

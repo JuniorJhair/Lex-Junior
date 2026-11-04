@@ -866,8 +866,17 @@ public partial class MainWindow : Window
             });
         };
 
-        // 3. Filtro de red (bloqueo de recursos publicitarios)
-        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+        // 3. Filtro de red (bloqueo de recursos publicitarios y rastreadores)
+        // Optimización de rendimiento COM / RAM: Acotar a contextos que realmente transportan scripts,
+        // telemetría y banners (Script, XHR, Fetch, Image, Ping, Other).
+        // Se excluyen deliberadamente 'Media' (streaming de video/audio de cientos de MBs),
+        // 'Stylesheet' (CSS) y 'Font' para no saturar el bus COM ni retener buffers en memoria.
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Script);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.XmlHttpRequest);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Fetch);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Image);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Ping);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Other);
         core.WebResourceRequested += (s, e) =>
         {
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && AdBlockFilter.ShouldBlock(uri))
@@ -930,6 +939,34 @@ public partial class MainWindow : Window
                 }
                 catch { }
             }
+        };
+
+        // Al iniciar una navegación en el frame principal, descartar subframes obsoletos de la página previa
+        core.NavigationStarting += (s, e) =>
+        {
+            tab.ActiveFrames.Clear();
+        };
+
+        // Detección nativa de reproducción de audio para suspender o priorizar memoria
+        core.IsDocumentPlayingAudioChanged += (s, e) =>
+        {
+            var win = tab.OwnerWindow ?? this;
+            win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                if (tab.IsDisposed) return;
+                bool isPlayingAudio = core.IsDocumentPlayingAudio;
+                tab.HasActiveMedia = isPlayingAudio;
+                if (!tab.IsSelected && (_pipWindow?.TargetTab != tab))
+                {
+                    try
+                    {
+                        core.MemoryUsageTargetLevel = isPlayingAudio
+                            ? CoreWebView2MemoryUsageTargetLevel.Normal
+                            : CoreWebView2MemoryUsageTargetLevel.Low;
+                    }
+                    catch { }
+                }
+            });
         };
 
         // 4. Escuchar mensajes del script inyectado (AdBlock, retorno PiP, atajos de teclado y estado multimedia)
@@ -1462,8 +1499,8 @@ public partial class MainWindow : Window
             }
             catch { }
 
-            // Si la pestaña estaba en la ventana de Página Flotante manual, cerrarla y reinsertarla
-            if (_pipWindow.IsVisible && _pipWindow.TargetTab == tab)
+            // Si la pestaña seleccionada estaba en la ventana de Página Flotante manual, cerrarla y reinsertarla
+            if (_pipWindow?.IsVisible == true && _pipWindow.TargetTab == tab)
             {
                 _pipWindow.HideAndDetach();
                 ReinsertWebViewToContainer(tab);
@@ -1475,7 +1512,30 @@ public partial class MainWindow : Window
                 t.IsSelected = isCurrent;
                 if (t.WebView != null && !t.IsDisposed)
                 {
-                    t.WebView.Visibility = isCurrent ? Visibility.Visible : Visibility.Collapsed;
+                    // Si esta pestaña está actualmente flotando en _pipWindow, debe seguir Visible para no quedar negra
+                    bool isFloating = _pipWindow?.IsVisible == true && _pipWindow.TargetTab == t;
+                    t.WebView.Visibility = (isCurrent || isFloating) ? Visibility.Visible : Visibility.Collapsed;
+
+                    // Optimización activa de memoria RAM: podar working set en pestañas ocultas
+                    // CONDICIÓN CRÍTICA: Nunca degradar memoria si la pestaña está reproduciendo audio o está en ventana flotante
+                    try
+                    {
+                        if (t.WebView.CoreWebView2 != null)
+                        {
+                            if (!isCurrent && !isFloating)
+                            {
+                                bool isPlayingAudio = t.WebView.CoreWebView2.IsDocumentPlayingAudio;
+                                t.WebView.CoreWebView2.MemoryUsageTargetLevel = isPlayingAudio
+                                    ? CoreWebView2MemoryUsageTargetLevel.Normal
+                                    : CoreWebView2MemoryUsageTargetLevel.Low;
+                            }
+                            else if (isCurrent)
+                            {
+                                t.WebView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+                            }
+                        }
+                    }
+                    catch { }
                 }
             }
 
@@ -2491,12 +2551,32 @@ public partial class MainWindow : Window
         return _activeTab?.WebView?.CoreWebView2;
     }
 
+    /// <summary>
+    /// Reintegra la pestaña flotante a su contenedor original antes de abrir ventanas modales (Configuración, Historial),
+    /// evitando bloqueos de interfaz y aplicando la visibilidad correcta (Collapsed si no es la activa).
+    /// </summary>
+    private void EnsureFloatingTabReintegrated()
+    {
+        if (_pipWindow?.IsVisible == true && _pipWindow.TargetTab != null)
+        {
+            var floatingTab = _pipWindow.TargetTab;
+            _pipWindow.HideAndDetach();
+            ReinsertWebViewToContainer(floatingTab);
+            if (floatingTab != _activeTab && floatingTab.WebView != null)
+            {
+                floatingTab.WebView.Visibility = Visibility.Collapsed;
+            }
+        }
+    }
+
     public void OpenHistory()
     {
         if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial personal"))
         {
             return;
         }
+
+        EnsureFloatingTabReintegrated();
 
         try
         {
@@ -2534,6 +2614,8 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        EnsureFloatingTabReintegrated();
 
         try
         {
