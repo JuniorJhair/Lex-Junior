@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$Notes = "Lanzamiento oficial de Lex Junior Browser v1.0.0 con escudo anti-anuncios nativo, 0 telemetria, amplificador de volumen 300% y detector multimedia bajo demanda.",
 
-    [bool]$PublishToGitHub = $false
+    [switch]$PublishToGitHub
 )
 
 $ErrorActionPreference = "Stop"
