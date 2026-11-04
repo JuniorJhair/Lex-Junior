@@ -179,8 +179,7 @@ public class MediaExtractorTests
             string ascii = Encoding.ASCII.GetString(merged);
             Assert.Contains("ftyp", ascii);
             Assert.Contains("moov", ascii);
-            Assert.Contains("mvex", ascii);
-            Assert.Contains("moof", ascii);
+            Assert.Contains("stbl", ascii);
             Assert.Contains("mdat", ascii);
         }
         finally
@@ -199,7 +198,19 @@ public class MediaExtractorTests
 
         byte[] tkhdPayload = new byte[84];
         BinaryPrimitives.WriteUInt32BigEndian(tkhdPayload.AsSpan(12, 4), trackId);
-        byte[] trak = MakeBox("trak", MakeBox("tkhd", tkhdPayload));
+        byte[] tkhd = MakeBox("tkhd", tkhdPayload);
+
+        byte[] mdhdPayload = new byte[24];
+        BinaryPrimitives.WriteUInt32BigEndian(mdhdPayload.AsSpan(12, 4), 1000u); // timescale = 1000
+        byte[] mdhd = MakeBox("mdhd", mdhdPayload);
+
+        byte[] stsdPayload = new byte[16];
+        byte[] stsd = MakeBox("stsd", stsdPayload);
+        byte[] stbl = MakeBox("stbl", stsd);
+        byte[] minf = MakeBox("minf", stbl);
+        byte[] mdia = MakeBox("mdia", Combine(mdhd, minf));
+
+        byte[] trak = MakeBox("trak", Combine(tkhd, mdia));
 
         byte[] trexPayload = new byte[24];
         BinaryPrimitives.WriteUInt32BigEndian(trexPayload.AsSpan(4, 4), trackId);
@@ -213,7 +224,13 @@ public class MediaExtractorTests
         byte[] tfhdPayload = new byte[8];
         BinaryPrimitives.WriteUInt32BigEndian(tfhdPayload.AsSpan(4, 4), trackId);
 
-        byte[] moof = MakeBox("moof", Combine(MakeBox("mfhd", mfhdPayload), MakeBox("traf", MakeBox("tfhd", tfhdPayload))));
+        byte[] trunPayload = new byte[20];
+        BinaryPrimitives.WriteUInt32BigEndian(trunPayload.AsSpan(0, 4), 0x00000300u); // version 0, flags 0x300 (dur + size)
+        BinaryPrimitives.WriteUInt32BigEndian(trunPayload.AsSpan(4, 4), 1u); // 1 sample
+        BinaryPrimitives.WriteUInt32BigEndian(trunPayload.AsSpan(8, 4), 1000u); // duration 1000
+        BinaryPrimitives.WriteUInt32BigEndian(trunPayload.AsSpan(12, 4), (uint)samplePayload.Length); // size
+
+        byte[] moof = MakeBox("moof", Combine(MakeBox("mfhd", mfhdPayload), MakeBox("traf", Combine(MakeBox("tfhd", tfhdPayload), MakeBox("trun", trunPayload)))));
         byte[] mdat = MakeBox("mdat", samplePayload);
 
         return Combine(ftyp, moov, moof, mdat);
@@ -269,6 +286,45 @@ public class MediaExtractorTests
             long diskSize = new FileInfo(tempFile).Length;
             Assert.True(diskSize > 1_000_000, $"El archivo debe tener al menos 1 MB. Tamaño real: {diskSize} bytes.");
             Assert.Equal(diskSize, bytesDownloaded);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
+        }
+    }
+
+    [Fact]
+    public async Task DownloadMediaItemAsync_RealWorldYouTube_DownloadsAndRemuxesToStandardMp4()
+    {
+        string targetUrl = "https://www.youtube.com/watch?v=pCPYb7KPoUc";
+        var items = await MediaExtractorService.ExtractYouTubeStreamsAsync(targetUrl, "Jósean Log - Doma");
+
+        // Seleccionar un video con pista de audio para probar el remuxer completo
+        var videoItem = items.FirstOrDefault(x => x.Category == "Video" && !string.IsNullOrWhiteSpace(x.AudioPairUrl));
+        Assert.NotNull(videoItem);
+
+        string tempFile = Path.Combine(Path.GetTempPath(), $"LexTest_Remux_{Guid.NewGuid():N}.mp4");
+        try
+        {
+            long bytesDownloaded = await MediaExtractorService.DownloadMediaItemAsync(videoItem, tempFile);
+
+            Assert.True(File.Exists(tempFile), "El video MP4 remuxeado debe existir en disco.");
+            long diskSize = new FileInfo(tempFile).Length;
+            Assert.True(diskSize > 1_000_000, $"El archivo debe tener al menos 1 MB. Tamaño: {diskSize}");
+
+            // Verificar que el archivo generado sea un MP4 progresivo estándar (ftyp + moov con stbl)
+            byte[] header = new byte[Math.Min(16384, diskSize)];
+            using (var fs = File.OpenRead(tempFile))
+            {
+                fs.ReadExactly(header, 0, header.Length);
+            }
+            string ascii = Encoding.ASCII.GetString(header);
+            Assert.Contains("ftyp", ascii);
+            Assert.Contains("moov", ascii);
+            Assert.Contains("stbl", ascii);
         }
         finally
         {

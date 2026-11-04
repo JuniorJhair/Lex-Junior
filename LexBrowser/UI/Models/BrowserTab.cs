@@ -86,6 +86,9 @@ public class BrowserTab : INotifyPropertyChanged
         set => SetField(ref _keepSnifferActiveOnNavigate, value);
     }
 
+    /// <summary>Sesión CDP bajo demanda para captura profunda de streams e iframes de cualquier origen.</summary>
+    public LexBrowser.Core.MediaSnifferSession? SnifferSession { get; set; }
+
     /// <summary>Lista acotada de recursos multimedia/documentos detectados cuando el sniffer está activo.</summary>
     public ObservableCollection<DetectedMediaItem> DetectedMedia { get; } = new();
 

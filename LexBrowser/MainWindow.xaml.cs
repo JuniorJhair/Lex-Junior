@@ -1213,9 +1213,20 @@ public partial class MainWindow : Window
                 if (win._activeTab == tab) win.LoadingProgressBar.Visibility = Visibility.Visible;
 
                 // Auto-apagado y liberación de RAM del detector multimedia al cambiar/recargar página (salvo que el usuario marque mantener activo)
-                if (tab.IsMediaSnifferActive && !tab.KeepSnifferActiveOnNavigate)
+                if (tab.SnifferSession != null && tab.SnifferSession.ConsumeExpectedReload())
                 {
+                    // Recarga única iniciada por el sniffer para capturar el player desde el inicio
+                }
+                else if (tab.IsMediaSnifferActive && !tab.KeepSnifferActiveOnNavigate)
+                {
+                    win.StopSnifferSessionForTab(tab);
                     tab.IsMediaSnifferActive = false;
+                    tab.ClearDetectedMedia();
+                    if (win._activeTab == tab) win.UpdateMediaSnifferUI();
+                }
+                else if (tab.IsMediaSnifferActive && tab.KeepSnifferActiveOnNavigate)
+                {
+                    tab.SnifferSession?.ResetForNewPage();
                     tab.ClearDetectedMedia();
                     if (win._activeTab == tab) win.UpdateMediaSnifferUI();
                 }
@@ -1254,6 +1265,10 @@ public partial class MainWindow : Window
                 // Si el usuario activó mantener el detector multimedia entre páginas, escanear la nueva página
                 if (tab.IsMediaSnifferActive)
                 {
+                    if (tab.SnifferSession != null)
+                    {
+                        _ = tab.SnifferSession.RescanAsync();
+                    }
                     win.RequestDomMediaScan(tab);
                 }
 
@@ -2811,6 +2826,9 @@ public partial class MainWindow : Window
         if (tabToClose.IsDisposed) return;
         tabToClose.IsDisposed = true;
 
+        StopSnifferSessionForTab(tabToClose);
+        tabToClose.ClearDetectedMedia();
+
         // Privacidad de Incógnito: jamás guardar pestañas de incógnito en el historial de Ctrl+Shift+T
         if (!tabToClose.IsIncognito && !string.IsNullOrWhiteSpace(tabToClose.Url) && !tabToClose.IsNewTab)
         {
@@ -3318,14 +3336,65 @@ public partial class MainWindow : Window
 
         if (_activeTab.IsMediaSnifferActive)
         {
+            StartSnifferSessionForTab(_activeTab);
             RequestDomMediaScan(_activeTab);
         }
         else
         {
+            StopSnifferSessionForTab(_activeTab);
             _activeTab.ClearDetectedMedia();
         }
 
         UpdateMediaSnifferUI();
+    }
+
+    private void StartSnifferSessionForTab(BrowserTab tab)
+    {
+        try
+        {
+            StopSnifferSessionForTab(tab);
+            if (tab.WebView?.CoreWebView2 == null) return;
+
+            var session = new MediaSnifferSession(tab.WebView.CoreWebView2, () =>
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                {
+                    if (tab.IsDisposed || !tab.IsMediaSnifferActive || tab.SnifferSession == null) return;
+                    foreach (var item in tab.SnifferSession.Items)
+                    {
+                        string uniqueKey = $"{item.FormatBadge}|{item.Url}";
+                        if (tab.DetectedMediaUrls.Add(uniqueKey))
+                        {
+                            InsertMediaItemSorted(tab, item);
+                        }
+                    }
+                    if (_activeTab == tab)
+                    {
+                        UpdateMediaSnifferUI();
+                    }
+                });
+            })
+            {
+                PageTitle = tab.Title
+            };
+
+            tab.SnifferSession = session;
+            _ = session.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            MediaExtractorService.LogMediaDiagnostic($"[Sniffer] Error al iniciar sesión CDP: {ex.Message}");
+        }
+    }
+
+    private void StopSnifferSessionForTab(BrowserTab tab)
+    {
+        try
+        {
+            tab.SnifferSession?.Dispose();
+            tab.SnifferSession = null;
+        }
+        catch { }
     }
 
     private void ChkKeepSnifferOnNavigate_Changed(object sender, RoutedEventArgs e)
@@ -3339,6 +3408,14 @@ public partial class MainWindow : Window
         if (_activeTab == null) return;
         _activeTab.IsMediaSnifferActive = true;
         _activeTab.ClearDetectedMedia();
+        if (_activeTab.SnifferSession != null)
+        {
+            _ = _activeTab.SnifferSession.RescanAsync();
+        }
+        else
+        {
+            StartSnifferSessionForTab(_activeTab);
+        }
         RequestDomMediaScan(_activeTab);
         UpdateMediaSnifferUI();
     }
@@ -3347,6 +3424,10 @@ public partial class MainWindow : Window
     {
         if (_activeTab == null) return;
         _activeTab.ClearDetectedMedia();
+        if (_activeTab.SnifferSession != null)
+        {
+            _activeTab.SnifferSession.Items.Clear();
+        }
         UpdateMediaSnifferUI();
     }
 

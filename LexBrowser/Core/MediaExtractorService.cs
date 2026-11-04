@@ -90,10 +90,10 @@ public static class MediaExtractorService
         "/blank.",
         "/silent.",
         "/notification",
-        "/ telemetry",
+        "/telemetry",
         "/ptracking",
         "/log_event",
-        "/ generate_204",
+        "/generate_204",
         "init.mp4",
         "init.m4s",
         "seg-",
@@ -514,7 +514,8 @@ public static class MediaExtractorService
                     string directUrl = el.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
                     if (string.IsNullOrWhiteSpace(directUrl)) continue;
 
-                    if (mime.StartsWith("audio/mp4", StringComparison.OrdinalIgnoreCase))
+                    if (mime.StartsWith("audio/mp4", StringComparison.OrdinalIgnoreCase) &&
+                        mime.Contains("mp4a", StringComparison.OrdinalIgnoreCase))
                     {
                         int br = el.TryGetProperty("bitrate", out var brProp) ? brProp.GetInt32() : 0;
                         long cl = el.TryGetProperty("contentLength", out var clProp) && long.TryParse(clProp.GetString(), out long parsedCl) ? parsedCl : 0;
@@ -538,7 +539,7 @@ public static class MediaExtractorService
                 {
                     if (addedHeights.Contains(targetRes)) continue;
 
-                    // Elegir stream video/mp4 con codec avc1 (máxima compatibilidad universal en Windows/móviles)
+                    // Elegir stream video/mp4 con codec avc1 (H.264) indispensable para reproducción nativa en Windows Media Player sin errores
                     JsonElement? bestMatch = null;
                     int bestBr = 0;
 
@@ -546,7 +547,9 @@ public static class MediaExtractorService
                     {
                         string mime = el.TryGetProperty("mimeType", out var mProp) ? (mProp.GetString() ?? "") : "";
                         string directUrl = el.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
-                        if (string.IsNullOrWhiteSpace(directUrl) || !mime.StartsWith("video/mp4", StringComparison.OrdinalIgnoreCase))
+                        if (string.IsNullOrWhiteSpace(directUrl) ||
+                            !mime.StartsWith("video/mp4", StringComparison.OrdinalIgnoreCase) ||
+                            !mime.Contains("avc1", StringComparison.OrdinalIgnoreCase))
                             continue;
 
                         int h = el.TryGetProperty("height", out var hProp) ? hProp.GetInt32() : 0;
@@ -558,12 +561,9 @@ public static class MediaExtractorService
                         if (!matchesRes) continue;
 
                         int br = el.TryGetProperty("bitrate", out var brProp) ? brProp.GetInt32() : 0;
-                        bool isAvc1 = mime.Contains("avc1", StringComparison.OrdinalIgnoreCase);
-                        int score = (isAvc1 ? 10_000_000 : 0) + br;
-
-                        if (score > bestBr)
+                        if (br > bestBr)
                         {
-                            bestBr = score;
+                            bestBr = br;
                             bestMatch = el;
                         }
                     }
@@ -892,8 +892,8 @@ public static class MediaExtractorService
                         },
                         ct);
 
-                    // Unir video fMP4 + audio fMP4 en el archivo final .mp4
-                    await Task.Run(() => MuxFragmentedMp4(tempVideoPath, tempAudioPath, targetPath), ct);
+                    // Unir video fMP4 + audio fMP4 en el archivo final .mp4 progresivo estándar compatible con Windows Media Player
+                    await Task.Run(() => Mp4Remuxer.Mux(tempVideoPath, tempAudioPath, targetPath), ct);
 
                     var fi = new FileInfo(targetPath);
                     long finalLen = fi.Exists ? fi.Length : (videoReceived + audioReceived);
@@ -1260,280 +1260,248 @@ public static class MediaExtractorService
     // MUXER NATIVO ISO-BMFF (fMP4) EN C# PURO (VIDEO HD + AUDIO M4A)
     // ─────────────────────────────────────────────────────────────────────
 
-    private readonly struct Mp4BoxInfo
+    /// <summary>
+    /// Remuxea flujos fragmentados a un MP4 progresivo estándar con moov al inicio compatible 100% con Windows Media Player.
+    /// </summary>
+    public static void MuxFragmentedMp4(string videoPath, string audioPath, string outputPath)
     {
-        public readonly string Type;
-        public readonly long Offset;
-        public readonly long Size;
-        public readonly int HeaderSize;
+        Mp4Remuxer.Mux(videoPath, audioPath, outputPath);
+    }
 
-        public Mp4BoxInfo(string type, long offset, long size, int headerSize)
+    // ─────────────────────────────────────────────────────────────────────
+    // MOTOR DE RESOLUCIÓN DE EMBEDS E IFRAMES OFUSCADOS (AnimeYT, Streamwish, etc.)
+    // ─────────────────────────────────────────────────────────────────────
+
+    private static readonly Regex PackedRegex = new(
+        @"\}\('((?:[^'\\]|\\.)*)',\s*(\d+),\s*(\d+),\s*'((?:[^'\\]|\\.)*)'\.split\('\|'\)",
+        RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private static readonly Regex AbsMediaRegex = new(
+        @"https?://[^\s""'<>\\]+?\.(?:m3u8|mp4)(?:\?[^\s""'<>\\]*)?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex RelMediaRegex = new(
+        @"[""'](/[^""'\s<>\\]+?\.(?:m3u8|mp4)(?:\?[^""'\s<>\\]*)?)[""']",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly string[] NonPlayerEmbedHosts =
+    {
+        "google.", "youtube.", "facebook.", "twitter.", "disqus.", "recaptcha", "doubleclick", "gstatic.", "adservice"
+    };
+
+    /// <summary>Script de inspección ligera ejecutado bajo demanda en frames DOM.</summary>
+    public const string ScanJs = """
+    (() => {
+      const urls = new Set(), frames = new Set();
+      const add = (u) => { try { if (!u || typeof u !== 'string') return; if (/^(blob|data|javascript|about):/i.test(u)) return; urls.add(new URL(u, location.href).href); } catch (e) {} };
+      const media = /\.(m3u8|mp4|webm|mkv|m4v|mp3|m4a|aac|mov)(\?|#|$)/i;
+      try { document.querySelectorAll('video,audio,source').forEach(e => { add(e.currentSrc); add(e.getAttribute('src')); add(e.getAttribute('data-src')); }); } catch (e) {}
+      try { document.querySelectorAll('iframe').forEach(f => { const s = f.getAttribute('src') || f.getAttribute('data-src'); if (s && !/^(about|javascript|data):/i.test(s)) frames.add(new URL(s, location.href).href); }); } catch (e) {}
+      try { performance.getEntriesByType('resource').forEach(r => { if (media.test(r.name)) add(r.name); }); } catch (e) {}
+      try { if (window.jwplayer) { const p = jwplayer(); const pl = (p.getPlaylist && p.getPlaylist()) || []; pl.forEach(it => { add(it.file); (it.sources || []).forEach(s => add(s.file)); }); } } catch (e) {}
+      try { if (window.videojs && videojs.getPlayers) Object.values(videojs.getPlayers()).forEach(p => { if (p && p.currentSrc) add(p.currentSrc()); }); } catch (e) {}
+      try { for (const k of ['hls', 'player', 'plyr', 'flowplayer']) { const o = window[k]; if (o) { add(o.url); add(o.src); if (o.config) add(o.config.url); } } } catch (e) {}
+      try {
+        const rx = /(?:https?:)?\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4)(?:\?[^\s"'<>\\]*)?/gi;
+        document.querySelectorAll('script:not([src])').forEach(s => {
+          const t = (s.textContent || '').replace(/\\\//g, '/');
+          if (t.length > 2000000) return;
+          (t.match(rx) || []).forEach(add);
+        });
+      } catch (e) {}
+      return JSON.stringify({ page: location.href, ua: navigator.userAgent, title: document.title, urls: [...urls], frames: [...frames] });
+    })()
+    """;
+
+    public static bool IsHlsUrl(string url, string? contentType)
+    {
+        try { if (new Uri(url).AbsolutePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase)) return true; } catch { }
+        return (contentType ?? "").Contains("mpegurl", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string? CategorizeResource(string url, string? contentType)
+    {
+        string ext;
+        try { ext = Path.GetExtension(new Uri(url).AbsolutePath).ToLowerInvariant(); } catch { return null; }
+        string ct = (contentType ?? "").ToLowerInvariant();
+
+        if (ext == ".m3u8" || ct.Contains("mpegurl")) return "Video";
+        if (ext is ".mp4" or ".webm" or ".mkv" or ".mov" or ".m4v" or ".avi" or ".flv" || ct.StartsWith("video/")) return "Video";
+        if (ext is ".mp3" or ".m4a" or ".aac" or ".ogg" or ".opus" or ".wav" or ".flac" || ct.StartsWith("audio/")) return "Audio";
+        if (ext is ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" or ".avif" || ct.StartsWith("image/")) return "Imagen";
+        if (ext is ".pdf" or ".zip" or ".rar" or ".7z" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".epub" or ".csv"
+            || ct is "application/pdf" or "application/zip" or "application/x-rar-compressed" or "application/x-7z-compressed"
+            || ct.Contains("officedocument") || ct.Contains("msword") || ct.Contains("ms-excel") || ct.Contains("ms-powerpoint"))
+            return "Documento";
+        return null;
+    }
+
+    public static string DedupeKey(string url)
+    {
+        try { var u = new Uri(url); return u.Host + u.AbsolutePath; } catch { return url; }
+    }
+
+    public static string OriginOf(string url)
+    {
+        try { return new Uri(url).GetLeftPart(UriPartial.Authority); } catch { return ""; }
+    }
+
+    public static bool LooksLikePlayerEmbed(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || (u.Scheme != "http" && u.Scheme != "https")) return false;
+        string h = u.Host.ToLowerInvariant();
+        return !NonPlayerEmbedHosts.Any(k => h.Contains(k));
+    }
+
+    public static DetectedMediaItem BuildDirectItem(string url, string? contentType, long size, string category, string? referer, string? pageTitle)
+    {
+        string ext = "";
+        string rawName = "";
+        try
         {
-            Type = type;
-            Offset = offset;
-            Size = size;
-            HeaderSize = headerSize;
+            var u = new Uri(url);
+            ext = Path.GetExtension(u.AbsolutePath).ToLowerInvariant();
+            rawName = Uri.UnescapeDataString(Path.GetFileNameWithoutExtension(u.AbsolutePath));
+        }
+        catch { }
+
+        if (string.IsNullOrEmpty(ext))
+        {
+            string ct = (contentType ?? "").ToLowerInvariant();
+            ext = ct switch
+            {
+                "video/webm" => ".webm",
+                "audio/mpeg" => ".mp3",
+                "audio/mp4" => ".m4a",
+                "application/pdf" => ".pdf",
+                "image/png" => ".png",
+                "image/webp" => ".webp",
+                "image/jpeg" => ".jpg",
+                _ => category == "Video" ? ".mp4" : category == "Audio" ? ".m4a" : ".bin"
+            };
+        }
+
+        string baseName = (category == "Video" || category == "Audio") && !string.IsNullOrWhiteSpace(pageTitle)
+            ? SanitizeTitle(pageTitle!)
+            : SanitizeTitle(rawName);
+        if (string.IsNullOrWhiteSpace(baseName)) baseName = "archivo";
+
+        string icon = category switch { "Video" => "🎬", "Audio" => "🎵", "Imagen" => "🖼️", _ => "📄" };
+
+        return new DetectedMediaItem
+        {
+            Url = url,
+            Referer = referer ?? "",
+            FileName = baseName + ext,
+            Category = category,
+            CategoryIcon = icon,
+            FormatBadge = ext.TrimStart('.').ToUpperInvariant(),
+            SizeBytes = size,
+            SizeDisplay = size > 0 ? FormatBytes(size) : "Tamaño desconocido",
+            PriorityScore = category == "Video" ? 900 : category == "Audio" ? 700 : 500
+        };
+    }
+
+    /// <summary>Expande HLS playlist pasando Origin/UA/Cookie reales de la pestaña para CDNs con anti-hotlink.</summary>
+    public static async Task<List<DetectedMediaItem>> ExpandHlsPlaylistWithHeadersAsync(
+        string m3u8Url, string refererUrl, string pageTitle,
+        string? origin, string? userAgent, string? cookie, CancellationToken ct = default)
+    {
+        var items = new List<DetectedMediaItem>();
+        if (!Uri.TryCreate(m3u8Url, UriKind.Absolute, out var baseUri)) return items;
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(12));
+            using var req = new HttpRequestMessage(HttpMethod.Get, baseUri);
+            req.Headers.TryAddWithoutValidation("User-Agent", string.IsNullOrWhiteSpace(userAgent) ? BrowserUserAgent : userAgent);
+            if (!string.IsNullOrWhiteSpace(refererUrl)) req.Headers.TryAddWithoutValidation("Referer", refererUrl);
+            if (!string.IsNullOrWhiteSpace(origin)) req.Headers.TryAddWithoutValidation("Origin", origin);
+            if (!string.IsNullOrWhiteSpace(cookie)) req.Headers.TryAddWithoutValidation("Cookie", cookie);
+
+            using var resp = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token);
+            if (!resp.IsSuccessStatusCode) return items;
+            string content = await resp.Content.ReadAsStringAsync(cts.Token);
+            return ParseHlsManifestContent(content, baseUri, refererUrl, pageTitle);
+        }
+        catch (Exception ex)
+        {
+            LogMediaDiagnostic($"[HLS] No se pudo leer {m3u8Url}: {ex.Message}");
+            return items;
         }
     }
 
     /// <summary>
-    /// Une un archivo de video MP4 fragmentado (DASH/YouTube) y un archivo de audio M4A fragmentado
-    /// en un único contenedor .mp4 con ambas pistas (Video Track ID = 1, Audio Track ID = 2).
+    /// Resuelve una página embed (Streamwish, Vidhide, Mp4upload, Filemoon...) SIN ejecutar su JS:
+    /// descarga el HTML con Referer, desempaqueta eval(function(p,a,c,k,e,d)...) y extrae .m3u8/.mp4.
     /// </summary>
-    public static void MuxFragmentedMp4(string videoPath, string audioPath, string outputPath)
+    public static async Task<List<string>> ResolveEmbedPageAsync(string embedUrl, string referer, CancellationToken ct = default)
     {
-        byte[] videoBytes = File.ReadAllBytes(videoPath);
-        byte[] audioBytes = File.ReadAllBytes(audioPath);
-
-        var vBoxes = ParseBoxes(videoBytes, 0, videoBytes.Length);
-        var aBoxes = ParseBoxes(audioBytes, 0, audioBytes.Length);
-
-        var vFtyp = vBoxes.FirstOrDefault(b => b.Type == "ftyp");
-        var vMoov = vBoxes.FirstOrDefault(b => b.Type == "moov");
-        var aMoov = aBoxes.FirstOrDefault(b => b.Type == "moov");
-
-        if (vMoov.Size == 0 || aMoov.Size == 0)
+        var found = new List<string>();
+        if (!Uri.TryCreate(embedUrl, UriKind.Absolute, out var baseUri)) return found;
+        try
         {
-            // Fallback si alguno no es un MP4 válido
-            File.Copy(videoPath, outputPath, overwrite: true);
-            return;
-        }
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(8));
+            using var req = new HttpRequestMessage(HttpMethod.Get, baseUri);
+            req.Headers.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+            req.Headers.TryAddWithoutValidation("Accept", "text/html,application/xhtml+xml,*/*");
+            if (!string.IsNullOrWhiteSpace(referer)) req.Headers.TryAddWithoutValidation("Referer", referer);
 
-        // Construir la caja moov combinada con ambas pistas (Video ID=1, Audio ID=2)
-        byte[] mergedMoov = BuildMergedMoovBox(videoBytes, vMoov, audioBytes, aMoov);
+            using var resp = await _httpClient.SendAsync(req, cts.Token);
+            if (!resp.IsSuccessStatusCode) return found;
+            string html = await resp.Content.ReadAsStringAsync(cts.Token);
+            if (html.Length > 3_000_000) html = html[..3_000_000];
 
-        using var outFs = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920);
-
-        // 1. Escribir ftyp
-        if (vFtyp.Size > 0)
-        {
-            outFs.Write(videoBytes, (int)vFtyp.Offset, (int)vFtyp.Size);
-        }
-
-        // 2. Escribir moov combinado
-        outFs.Write(mergedMoov, 0, mergedMoov.Length);
-
-        // 3. Recolectar los pares (moof + mdat) de video (track 1) y de audio (parcheado a track 2)
-        var vFragments = ExtractMoofMdatPairs(videoBytes, vBoxes);
-        var aFragments = ExtractMoofMdatPairs(audioBytes, aBoxes);
-
-        uint seqNumber = 1;
-        int vIdx = 0;
-        int aIdx = 0;
-
-        // Intercalar fragmentos de video y audio proporcionalmente para reproducción fluida instantánea
-        while (vIdx < vFragments.Count || aIdx < aFragments.Count)
-        {
-            bool takeVideo;
-            if (vIdx < vFragments.Count && aIdx < aFragments.Count)
+            var texts = new List<string> { html };
+            foreach (Match m in PackedRegex.Matches(html))
             {
-                double vProgress = (double)vIdx / vFragments.Count;
-                double aProgress = (double)aIdx / aFragments.Count;
-                takeVideo = vProgress <= aProgress;
-            }
-            else
-            {
-                takeVideo = vIdx < vFragments.Count;
-            }
-
-            if (takeVideo)
-            {
-                var (moof, mdat) = vFragments[vIdx++];
-                PatchMoofSequenceAndTrack(videoBytes, moof, seqNumber++, targetTrackId: 1);
-                outFs.Write(videoBytes, (int)moof.Offset, (int)moof.Size);
-                outFs.Write(videoBytes, (int)mdat.Offset, (int)mdat.Size);
-            }
-            else
-            {
-                var (moof, mdat) = aFragments[aIdx++];
-                PatchMoofSequenceAndTrack(audioBytes, moof, seqNumber++, targetTrackId: 2);
-                outFs.Write(audioBytes, (int)moof.Offset, (int)moof.Size);
-                outFs.Write(audioBytes, (int)mdat.Offset, (int)mdat.Size);
-            }
-        }
-    }
-
-    private static List<Mp4BoxInfo> ParseBoxes(byte[] data, long start, long end)
-    {
-        var list = new List<Mp4BoxInfo>();
-        long pos = start;
-        while (pos + 8 <= end)
-        {
-            uint size32 = BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan((int)pos, 4));
-            string type = Encoding.ASCII.GetString(data, (int)pos + 4, 4);
-            long boxSize = size32;
-            int headerSize = 8;
-
-            if (size32 == 1)
-            {
-                if (pos + 16 > end) break;
-                boxSize = (long)BinaryPrimitives.ReadUInt64BigEndian(data.AsSpan((int)pos + 8, 8));
-                headerSize = 16;
-            }
-            else if (size32 == 0)
-            {
-                boxSize = end - pos;
-            }
-
-            if (boxSize < headerSize || pos + boxSize > end) break;
-            list.Add(new Mp4BoxInfo(type, pos, boxSize, headerSize));
-            pos += boxSize;
-        }
-        return list;
-    }
-
-    private static byte[] BuildMergedMoovBox(byte[] vBytes, Mp4BoxInfo vMoov, byte[] aBytes, Mp4BoxInfo aMoov)
-    {
-        var vChildren = ParseBoxes(vBytes, vMoov.Offset + vMoov.HeaderSize, vMoov.Offset + vMoov.Size);
-        var aChildren = ParseBoxes(aBytes, aMoov.Offset + aMoov.HeaderSize, aMoov.Offset + aMoov.Size);
-
-        var vMvhd = vChildren.FirstOrDefault(b => b.Type == "mvhd");
-        var vTrak = vChildren.FirstOrDefault(b => b.Type == "trak");
-        var aTrak = aChildren.FirstOrDefault(b => b.Type == "trak");
-        var vMvex = vChildren.FirstOrDefault(b => b.Type == "mvex");
-        var aMvex = aChildren.FirstOrDefault(b => b.Type == "mvex");
-
-        using var ms = new MemoryStream();
-
-        // 1. mvhd (con next_track_ID = 3)
-        if (vMvhd.Size > 0)
-        {
-            byte[] mvhdCopy = vBytes.AsSpan((int)vMvhd.Offset, (int)vMvhd.Size).ToArray();
-            if (mvhdCopy.Length >= 8)
-            {
-                BinaryPrimitives.WriteUInt32BigEndian(mvhdCopy.AsSpan(mvhdCopy.Length - 4, 4), 3u);
-            }
-            ms.Write(mvhdCopy);
-        }
-
-        // 2. Video trak (track_ID = 1)
-        if (vTrak.Size > 0)
-        {
-            byte[] vTrakCopy = vBytes.AsSpan((int)vTrak.Offset, (int)vTrak.Size).ToArray();
-            PatchTrakId(vTrakCopy, 1u);
-            ms.Write(vTrakCopy);
-        }
-
-        // 3. Audio trak (parcheado a track_ID = 2)
-        if (aTrak.Size > 0)
-        {
-            byte[] aTrakCopy = aBytes.AsSpan((int)aTrak.Offset, (int)aTrak.Size).ToArray();
-            PatchTrakId(aTrakCopy, 2u);
-            ms.Write(aTrakCopy);
-        }
-
-        // 4. mvex combinado (trex de video ID=1 + trex de audio ID=2)
-        if (vMvex.Size > 0 && aMvex.Size > 0)
-        {
-            var vMvexChildren = ParseBoxes(vBytes, vMvex.Offset + vMvex.HeaderSize, vMvex.Offset + vMvex.Size);
-            var aMvexChildren = ParseBoxes(aBytes, aMvex.Offset + aMvex.HeaderSize, aMvex.Offset + aMvex.Size);
-
-            using var mvexPayload = new MemoryStream();
-            foreach (var child in vMvexChildren)
-            {
-                byte[] copy = vBytes.AsSpan((int)child.Offset, (int)child.Size).ToArray();
-                if (child.Type == "trex" && copy.Length >= 16)
+                try
                 {
-                    BinaryPrimitives.WriteUInt32BigEndian(copy.AsSpan(12, 4), 1u);
+                    texts.Add(UnpackPacker(m.Groups[1].Value, int.Parse(m.Groups[2].Value),
+                                           int.Parse(m.Groups[3].Value), m.Groups[4].Value.Split('|')));
                 }
-                mvexPayload.Write(copy);
+                catch { }
             }
 
-            foreach (var child in aMvexChildren.Where(b => b.Type == "trex"))
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in texts)
             {
-                byte[] copy = aBytes.AsSpan((int)child.Offset, (int)child.Size).ToArray();
-                if (copy.Length >= 16)
+                string t = raw.Replace("\\/", "/").Replace("\\u0026", "&").Replace("&amp;", "&").Replace("\\'", "'");
+                foreach (Match m in AbsMediaRegex.Matches(t)) set.Add(m.Value);
+                foreach (Match m in RelMediaRegex.Matches(t))
                 {
-                    BinaryPrimitives.WriteUInt32BigEndian(copy.AsSpan(12, 4), 2u);
-                }
-                mvexPayload.Write(copy);
-            }
-
-            byte[] mvexBox = WrapMp4Box("mvex", mvexPayload.ToArray());
-            ms.Write(mvexBox);
-        }
-
-        return WrapMp4Box("moov", ms.ToArray());
-    }
-
-    private static void PatchTrakId(byte[] trakBoxBytes, uint trackId)
-    {
-        var children = ParseBoxes(trakBoxBytes, 8, trakBoxBytes.Length);
-        var tkhd = children.FirstOrDefault(b => b.Type == "tkhd");
-        if (tkhd.Size == 0) return;
-
-        int payloadOffset = (int)tkhd.Offset + tkhd.HeaderSize;
-        if (payloadOffset + 24 > trakBoxBytes.Length) return;
-
-        byte version = trakBoxBytes[payloadOffset];
-        // En tkhd: version(1) + flags(3) + creation_time(4 u 8) + modification_time(4 u 8) + track_ID(4)
-        int trackIdOffset = version == 1 ? payloadOffset + 4 + 16 : payloadOffset + 4 + 8;
-        if (trackIdOffset + 4 <= trakBoxBytes.Length)
-        {
-            BinaryPrimitives.WriteUInt32BigEndian(trakBoxBytes.AsSpan(trackIdOffset, 4), trackId);
-        }
-    }
-
-    private static List<(Mp4BoxInfo Moof, Mp4BoxInfo Mdat)> ExtractMoofMdatPairs(byte[] bytes, List<Mp4BoxInfo> topBoxes)
-    {
-        var pairs = new List<(Mp4BoxInfo, Mp4BoxInfo)>();
-        for (int i = 0; i < topBoxes.Count - 1; i++)
-        {
-            if (topBoxes[i].Type == "moof")
-            {
-                for (int j = i + 1; j < topBoxes.Count; j++)
-                {
-                    if (topBoxes[j].Type == "mdat")
-                    {
-                        pairs.Add((topBoxes[i], topBoxes[j]));
-                        i = j;
-                        break;
-                    }
-                    if (topBoxes[j].Type == "moof") break;
+                    if (Uri.TryCreate(baseUri, m.Groups[1].Value, out var abs)) set.Add(abs.AbsoluteUri);
                 }
             }
+            found.AddRange(set);
         }
-        return pairs;
-    }
-
-    private static void PatchMoofSequenceAndTrack(byte[] buffer, Mp4BoxInfo moofBox, uint sequenceNumber, uint targetTrackId)
-    {
-        var children = ParseBoxes(buffer, moofBox.Offset + moofBox.HeaderSize, moofBox.Offset + moofBox.Size);
-        foreach (var child in children)
+        catch (Exception ex)
         {
-            if (child.Type == "mfhd")
-            {
-                int seqOffset = (int)child.Offset + child.HeaderSize + 4; // version/flags (4) + sequence_number (4)
-                if (seqOffset + 4 <= buffer.Length)
-                {
-                    BinaryPrimitives.WriteUInt32BigEndian(buffer.AsSpan(seqOffset, 4), sequenceNumber);
-                }
-            }
-            else if (child.Type == "traf")
-            {
-                var trafChildren = ParseBoxes(buffer, child.Offset + child.HeaderSize, child.Offset + child.Size);
-                foreach (var tc in trafChildren)
-                {
-                    if (tc.Type == "tfhd")
-                    {
-                        int trackOffset = (int)tc.Offset + tc.HeaderSize + 4; // version/flags (4) + track_ID (4)
-                        if (trackOffset + 4 <= buffer.Length)
-                        {
-                            BinaryPrimitives.WriteUInt32BigEndian(buffer.AsSpan(trackOffset, 4), targetTrackId);
-                        }
-                    }
-                }
-            }
+            LogMediaDiagnostic($"[Embed] {embedUrl}: {ex.Message}");
         }
+        return found;
     }
 
-    private static byte[] WrapMp4Box(string type, byte[] payload)
+    /// <summary>Desempaquetador nativo Dean Edwards p.a.c.k.e.r.</summary>
+    private static string UnpackPacker(string payload, int radix, int count, string[] dict)
     {
-        byte[] result = new byte[8 + payload.Length];
-        BinaryPrimitives.WriteUInt32BigEndian(result.AsSpan(0, 4), (uint)result.Length);
-        Encoding.ASCII.GetBytes(type, 0, 4, result, 4);
-        Buffer.BlockCopy(payload, 0, result, 8, payload.Length);
-        return result;
+        string ToBase(int n)
+        {
+            const string digits = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            if (n == 0) return "0";
+            var sb = new StringBuilder();
+            while (n > 0) { sb.Insert(0, digits[n % radix]); n /= radix; }
+            return sb.ToString();
+        }
+
+        var map = new Dictionary<string, string>();
+        while (count-- > 0)
+        {
+            string key = ToBase(count);
+            map[key] = count < dict.Length && dict[count].Length > 0 ? dict[count] : key;
+        }
+        return Regex.Replace(payload.Replace("\\'", "'"), @"\b\w+\b", m => map.TryGetValue(m.Value, out var v) ? v : m.Value);
     }
 
     public static string SanitizeTitle(string raw)
