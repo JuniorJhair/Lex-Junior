@@ -114,7 +114,11 @@ public partial class MainWindow : Window
 
         _pipWindow.OnDetachWebView = (tab) =>
         {
-            Dispatcher.Invoke(() => ReinsertWebViewToContainer(tab));
+            Dispatcher.Invoke(() =>
+            {
+                SetMediaProgressReporting(tab, false);
+                ReinsertWebViewToContainer(tab);
+            });
         };
 
         Loaded += MainWindow_Loaded;
@@ -941,10 +945,12 @@ public partial class MainWindow : Window
             }
         };
 
-        // Al iniciar una navegación en el frame principal, descartar subframes obsoletos de la página previa
+        // Al iniciar una navegación en el frame principal, descartar subframes obsoletos y desbloqueadores de la página previa
         core.NavigationStarting += (s, e) =>
         {
             tab.ActiveFrames.Clear();
+            tab.CorsUnlocker?.Dispose();
+            tab.CorsUnlocker = null;
         };
 
         // Detección nativa de reproducción de audio para suspender o priorizar memoria
@@ -1128,6 +1134,30 @@ public partial class MainWindow : Window
                             win._pipWindow.UpdateMediaControls(title, curTime, duration, isPlaying);
                         }
                     });
+                }
+                else if (type == "cors_unlock_req")
+                {
+                    if (tab.VolumeBoostPercent <= 100) return;   // solo mientras el usuario amplifica
+                    string origin = root.TryGetProperty("origin", out var oP) ? (oP.GetString() ?? "") : "";
+                    win.Dispatcher.BeginInvoke(async () =>
+                    {
+                        if (tab.IsDisposed) return;
+                        tab.CorsUnlocker ??= new CorsMediaUnlocker(core);
+                        if (await tab.CorsUnlocker.AllowAsync(origin))
+                            win.BroadcastToFrames(tab, $"window.__lexCorsUnlockAck && window.__lexCorsUnlockAck({JsonSerializer.Serialize(origin)});");
+                    });
+                }
+                else if (type == "audio_status")
+                {
+                    string status = root.TryGetProperty("status", out var sP) ? (sP.GetString() ?? "") : "";
+                    string? msg = status switch
+                    {
+                        "drm" => "🔒 Contenido con protección DRM: no se puede amplificar por encima de 100%.",
+                        "cors_blocked" => "🔇 Este reproductor no permite amplificar sobre 100%. El audio sigue normal.",
+                        _ => null
+                    };
+                    if (msg != null && tab.VolumeBoostPercent > 100)
+                        win.Dispatcher.BeginInvoke(() => win.ShowToast(msg));
                 }
                 else if (type == "open_history")
                 {
@@ -1336,6 +1366,9 @@ public partial class MainWindow : Window
                         win.TryAutofillSavedCredentials(tab, core.Source);
                     }
                 }
+
+                if (_pipWindow?.IsVisible == true && _pipWindow.TargetTab == tab)
+                    win.SetMediaProgressReporting(tab, true);
 
                 _ = win.UpdateTabFaviconAsync(tab);
             });
@@ -2508,6 +2541,7 @@ public partial class MainWindow : Window
 
         if (_pipWindow.IsVisible && _pipWindow.TargetTab == _activeTab)
         {
+            SetMediaProgressReporting(_activeTab, false);
             _pipWindow.HideAndDetach();
             ReinsertWebViewToContainer(_activeTab);
         }
@@ -2517,6 +2551,7 @@ public partial class MainWindow : Window
             if (!_pipWindow.IsVisible)
                 _pipWindow.Show();
             _pipWindow.Activate();
+            SetMediaProgressReporting(_activeTab, true);
         }
     }
 
@@ -2928,6 +2963,8 @@ public partial class MainWindow : Window
         tabToClose.IsDisposed = true;
 
         StopSnifferSessionForTab(tabToClose);
+        tabToClose.CorsUnlocker?.Dispose();
+        tabToClose.CorsUnlocker = null;
         tabToClose.ClearDetectedMedia();
 
         // Privacidad de Incógnito: jamás guardar pestañas de incógnito en el historial de Ctrl+Shift+T
@@ -3375,28 +3412,33 @@ public partial class MainWindow : Window
         }
     }
 
+    public void BroadcastToFrames(BrowserTab tab, string script)
+    {
+        try { _ = tab.WebView.CoreWebView2.ExecuteScriptAsync(script); } catch { }
+        foreach (var f in tab.ActiveFrames.Keys.ToArray())
+        {
+            try { _ = f.ExecuteScriptAsync(script); } catch { }
+        }
+    }
+
+    public void SetMediaProgressReporting(BrowserTab tab, bool enabled)
+    {
+        try
+        {
+            if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed) return;
+            BroadcastToFrames(tab, $"window.__lexSetMediaProgress && window.__lexSetMediaProgress({(enabled ? "true" : "false")});");
+        }
+        catch { }
+    }
+
     private void SendVolumeBoostToTab(BrowserTab tab)
     {
         try
         {
             if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed) return;
             int pct = tab.VolumeBoostPercent;
-            string json = JsonSerializer.Serialize(new { action = "set_volume_boost", percent = pct });
-            tab.WebView.CoreWebView2.PostWebMessageAsJson(json);
-
-            // Sincronizar directamente vía script en el frame principal
             string script = $"if (window.__lexSetVolumeBoostGlobal) window.__lexSetVolumeBoostGlobal({pct});";
-            _ = tab.WebView.CoreWebView2.ExecuteScriptAsync(script);
-
-            // Despachar en paralelo a todos los subframes (iframes de reproductores) registrados
-            foreach (var frame in tab.ActiveFrames.Keys.ToArray())
-            {
-                try
-                {
-                    _ = frame.ExecuteScriptAsync(script);
-                }
-                catch { }
-            }
+            BroadcastToFrames(tab, script);
         }
         catch { }
     }

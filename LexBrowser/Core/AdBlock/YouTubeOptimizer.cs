@@ -452,17 +452,25 @@ public static class YouTubeOptimizer
     let isHandlingAd = false;
     let wasAdReported = false;
     let lastAdCheckTime = 0;
+    let adWatchdog = null;
 
     const skipYouTubeAds = () => {
         if (!isYouTube) return;
 
         const moviePlayer = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
         const video = document.querySelector('video');
-        if (!video || !moviePlayer) return;
+        if (!video || !moviePlayer) {
+            if (adWatchdog) { clearInterval(adWatchdog); adWatchdog = null; }
+            return;
+        }
 
         // Detección oficial estricta: YouTube únicamente asigna 'ad-showing' o 'ad-interrupting' cuando un anuncio está activo
         const isAdShowing = moviePlayer.classList.contains('ad-showing') ||
                             moviePlayer.classList.contains('ad-interrupting');
+
+        // Vigilante de vida corta: existe SOLO mientras hay un anuncio en pantalla
+        if (isAdShowing && !adWatchdog) adWatchdog = setInterval(skipYouTubeAds, 250);
+        else if (!isAdShowing && adWatchdog) { clearInterval(adWatchdog); adWatchdog = null; }
 
         const now = Date.now();
         // Solo limitar tasa si NO hay anuncio activo (para no saturar en reproducción normal)
@@ -544,34 +552,67 @@ public static class YouTubeOptimizer
         }
     };
 
-    // Escucha en fase de captura para eventos multimedia en YouTube (detección instantánea sin delay)
     if (isYouTube) {
-        document.addEventListener('play', () => skipYouTubeAds(), true);
-        document.addEventListener('timeupdate', () => skipYouTubeAds(), true);
-        document.addEventListener('yt-navigate-finish', () => {
-            skipYouTubeAds();
-            clearYouTubePopups();
-        }, true);
-    }
-
-    // Observer enfocado únicamente en la clase del player contenedor (sin bucles de DOM)
-    let ytPlayerObserver = null;
-    const initYouTubeObserver = () => {
-        if (!isYouTube || ytPlayerObserver) return;
-        const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
-        if (player) {
-            ytPlayerObserver = new MutationObserver(() => {
+        ['play', 'loadedmetadata', 'durationchange'].forEach(evt =>
+            document.addEventListener(evt, () => skipYouTubeAds(), true));
+        ['yt-navigate-finish', 'yt-page-data-updated'].forEach(evt =>
+            document.addEventListener(evt, () => {
                 skipYouTubeAds();
                 clearYouTubePopups();
-            });
-            ytPlayerObserver.observe(player, {
-                attributes: true,
-                attributeFilter: ['class']
-            });
+                armYouTubeObservers();
+            }, true));
+    }
 
+    const whenElement = (selector, cb, timeoutMs, onTimeout) => {
+        const found = document.querySelector(selector);
+        if (found) { cb(found); return; }
+        if (!document.documentElement) { if (onTimeout) onTimeout(); return; }
+        let tid = null;
+        const obs = new MutationObserver(() => {
+            const el = document.querySelector(selector);
+            if (el) { obs.disconnect(); clearTimeout(tid); cb(el); }
+        });
+        tid = setTimeout(() => { obs.disconnect(); if (onTimeout) onTimeout(); }, timeoutMs);
+        obs.observe(document.documentElement, { childList: true, subtree: true });
+    };
+
+    const ytWatch = {
+        player: { el: null, obs: null, arming: false },
+        popup:  { el: null, obs: null, arming: false }
+    };
+
+    const armWatch = (slot, selector, setup) => {
+        const w = ytWatch[slot];
+        if (w.el && w.el.isConnected) return;
+        if (w.obs) { w.obs.disconnect(); w.obs = null; }
+        w.el = null;
+        if (w.arming) return;
+        w.arming = true;
+        whenElement(selector, (el) => { w.arming = false; w.el = el; w.obs = setup(el); }, 8000, () => { w.arming = false; });
+    };
+
+    const armYouTubeObservers = () => {
+        if (!isYouTube) return;
+
+        armWatch('player', '#movie_player, .html5-video-player', (player) => {
+            const obs = new MutationObserver(() => { skipYouTubeAds(); clearYouTubePopups(); });
+            obs.observe(player, { attributes: true, attributeFilter: ['class'] });
             skipYouTubeAds();
             clearYouTubePopups();
-        }
+            return obs;
+        });
+
+        armWatch('popup', 'ytd-popup-container', (container) => {
+            let scheduled = false;
+            const obs = new MutationObserver(() => {
+                if (scheduled) return;
+                scheduled = true;
+                requestAnimationFrame(() => { scheduled = false; clearYouTubePopups(); });
+            });
+            obs.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['opened', 'aria-hidden'] });
+            clearYouTubePopups();
+            return obs;
+        });
     };
 
     // ─────────────────────────────────────────────────────────────────
@@ -641,108 +682,220 @@ public static class YouTubeOptimizer
     window.__lexVolumePercent = 100;
 
     const ensureAudioContextRunning = () => {
-        try {
-            if (window.__lexAudioCtx && window.__lexAudioCtx.state === 'suspended') {
-                window.__lexAudioCtx.resume().catch(() => {});
-            }
-        } catch(_) {}
+        try { const c = window.__lexAudioCtx; if (c && c.state === 'suspended') c.resume().catch(() => {}); } catch(_) {}
     };
-
     ['pointerdown', 'click', 'keydown', 'play'].forEach(evt => {
         window.addEventListener(evt, ensureAudioContextRunning, { capture: true, passive: true });
     });
 
-    const setupAudioGraph = (el) => {
-        if (!el || el.__lexGainNode || el.__lexAudioHookFailed) return;
+    const lexClamp = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(300, n)) : 100; };
+
+    // ── Mensajería hacia C# (los iframes pasan por el frame superior) ──
+    const toHost = (type, payload) => {
+        try {
+            if (window === window.top) {
+                if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(Object.assign({}, payload, { type: type }));
+            } else {
+                window.top.postMessage({ __lex_cmd: 'to_host', type: type, payload: payload }, '*');
+            }
+        } catch(_) {}
+    };
+    const lexReported = {};
+    const reportOnce = (status, src) => {
+        if (lexReported[status]) return;
+        lexReported[status] = true;
+        toHost('audio_status', { status: status, src: String(src || '').slice(0, 200) });
+    };
+
+    // ── Rastreo de medios sin retener memoria (WeakRef) y listeners de eventos ──
+    const lexSeen = new WeakSet();
+    const lexRefs = [];
+    const lexShadowRoots = [];
+    const lexListened = new WeakSet();
+    const listenMedia = (el) => {
+        if (lexListened.has(el)) return;
+        lexListened.add(el);
+        ['play', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied'].forEach(evt =>
+            el.addEventListener(evt, () => { if (window.__lexScheduleSync) window.__lexScheduleSync(); }));
+    };
+    const trackMedia = (el) => {
+        if (!el || lexSeen.has(el)) return;
+        lexSeen.add(el);
+        lexRefs.push(new WeakRef(el));
+        el.addEventListener('emptied', () => { if (el.__lexState === 'unsupported') el.__lexState = undefined; });
+        listenMedia(el);
+    };
+
+    try {
+        const origPlay = HTMLMediaElement.prototype.play;
+        HTMLMediaElement.prototype.play = function() {
+            trackMedia(this);
+            if (window.__lexVolumePercent !== 100) { const self = this; queueMicrotask(() => applyToElement(self, window.__lexVolumePercent)); }
+            return origPlay.apply(this, arguments);
+        };
+    } catch(_) {}
+
+    try {
+        const origAttach = Element.prototype.attachShadow;
+        Element.prototype.attachShadow = function(init) {
+            const root = origAttach.call(this, init);   // captura también roots 'closed'
+            try { lexShadowRoots.push(new WeakRef(root)); } catch(_) {}
+            return root;
+        };
+    } catch(_) {}
+
+    const collectAllMedia = () => {
+        const found = new Set();
+        const scan = (root) => { try { root.querySelectorAll('video, audio').forEach(e => found.add(e)); } catch(_) {} };
+        scan(document);
+        for (let i = lexShadowRoots.length - 1; i >= 0; i--) {
+            const r = lexShadowRoots[i].deref();
+            if (!r) { lexShadowRoots.splice(i, 1); continue; }
+            scan(r);
+        }
+        for (let i = lexRefs.length - 1; i >= 0; i--) {
+            const e = lexRefs[i].deref();
+            if (!e) { lexRefs.splice(i, 1); continue; }
+            found.add(e);
+        }
+        return found;
+    };
+
+    // ── Clasificación previa: NUNCA enrutar si no estamos seguros (es irreversible) ──
+    const classify = (el) => {
+        if (el.mediaKeys) return 'drm';                       // EME (Netflix...) => Web Audio daría silencio
+        if (el.srcObject) return 'safe';                      // MediaStream
+        const src = el.currentSrc || '';
+        if (!src) return 'pending';                           // aún no sabemos: NO decidir
+        if (/^(blob|data):/i.test(src)) return 'safe';        // MSE/HLS
+        try { if (new URL(src, location.href).origin === location.origin) return 'safe'; } catch(_) { return 'pending'; }
+        if (el.crossOrigin === 'anonymous' || el.crossOrigin === 'use-credentials') return 'safe';
+        return 'cross';
+    };
+    const armPending = (el) => {
+        if (el.__lexPendingArmed) return;
+        el.__lexPendingArmed = true;
+        const retry = () => { el.__lexPendingArmed = false; if (window.__lexVolumePercent > 100) applyToElement(el, window.__lexVolumePercent); };
+        el.addEventListener('loadedmetadata', retry, { once: true });
+        el.addEventListener('playing', retry, { once: true });
+    };
+
+    // ── Nivel A: sonda CORS + recarga con crossOrigin ──
+    const probeCors = async (src) => {
+        try {
+            const ctrl = new AbortController();
+            const r = await fetch(src, { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal });
+            ctrl.abort();
+            return r.ok || r.status === 206;
+        } catch(_) { return false; }
+    };
+    const reloadWithCors = (el) => new Promise((resolve) => {
+        const t = el.currentTime, wasPlaying = !el.paused, rate = el.playbackRate;
+        let done = false;
+        const finish = (ok) => {
+            if (done) return; done = true;
+            clearTimeout(timer);
+            el.removeEventListener('loadedmetadata', onOk);
+            el.removeEventListener('error', onErr);
+            if (!ok) { el.removeAttribute('crossorigin'); try { el.load(); } catch(_) {} }   // revertir
+            const restore = () => { try { if (t > 0) el.currentTime = t; el.playbackRate = rate; if (wasPlaying) el.play().catch(() => {}); } catch(_) {} };
+            if (el.readyState >= 1) restore(); else el.addEventListener('loadedmetadata', restore, { once: true });
+            resolve(ok);
+        };
+        const onOk = () => finish(true);
+        const onErr = () => finish(false);
+        const timer = setTimeout(() => finish(false), 5000);
+        el.addEventListener('loadedmetadata', onOk, { once: true });
+        el.addEventListener('error', onErr, { once: true });
+        try { el.crossOrigin = 'anonymous'; el.load(); } catch(_) { finish(false); }
+    });
+
+    // ── Nivel B: pedir al host que inyecte ACAO (CDP Fetch) ──
+    const pendingUnlock = new Map();
+    window.__lexCorsUnlockAck = (origin) => { const r = pendingUnlock.get(origin); if (r) { pendingUnlock.delete(origin); r(true); } };
+    const requestHostUnlock = (src) => new Promise((resolve) => {
+        let origin;
+        try { origin = new URL(src, location.href).origin; } catch(_) { return resolve(false); }
+        pendingUnlock.set(origin, resolve);
+        setTimeout(() => { if (pendingUnlock.delete(origin)) resolve(false); }, 3000);
+        toHost('cors_unlock_req', { origin: origin });
+    });
+
+    const unlockCross = async (el) => {
+        el.__lexBusy = true;
+        try {
+            const src = el.currentSrc;
+            let ok = await probeCors(src);
+            if (!ok) ok = await requestHostUnlock(src);           // si el host no responde, ok=false
+            if (ok && await reloadWithCors(el)) return routeElement(el);
+            el.__lexState = 'unsupported';
+            reportOnce('cors_blocked', src);                      // Nivel C: aviso honesto
+            return false;
+        } catch(_) { el.__lexState = 'unsupported'; return false; }
+        finally { el.__lexBusy = false; }
+    };
+
+    // ── Cadena de audio: el compresor SOLO está activo por encima de 100% ──
+    const routeElement = (el) => {
         try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (!AudioCtx) return;
-
-            const mediaSrc = el.currentSrc || el.src || '';
-            const isBlobOrData = !mediaSrc || mediaSrc.startsWith('blob:') || mediaSrc.startsWith('data:');
-            let isSameOrigin = false;
-            try {
-                if (mediaSrc) {
-                    isSameOrigin = new URL(mediaSrc, window.location.href).origin === window.location.origin;
-                }
-            } catch(_) {}
-            const hasExplicitCors = !!el.crossOrigin && (el.crossOrigin === 'anonymous' || el.crossOrigin === 'use-credentials');
-
-            // CRÍTICO: createMediaElementSource es IRREVERSIBLE para ese elemento HTMLMediaElement.
-            // Si se enlaza a un video cross-origin sin cabeceras CORS, Chromium silencia el audio emitiendo ceros.
-            // Por ende, solo enlazamos si es blob/data, mismo origen o CORS explícito verificado.
-            const canSafelyRouteToWebAudio = isBlobOrData || isSameOrigin || hasExplicitCors;
-            if (!canSafelyRouteToWebAudio) {
-                console.warn('[LexAudio] Video cross-origin sin CORS explícito detectado; se mantiene en audio nativo para evitar silenciamiento por Chromium:', mediaSrc);
-                el.__lexAudioHookFailed = true;
-                return;
-            }
-
-            if (!window.__lexAudioCtx) {
-                window.__lexAudioCtx = new AudioCtx();
-            }
-
-            console.log('[LexAudio] AudioContext inicializado:', {
-                state: window.__lexAudioCtx.state,
-                isBlob: isBlobOrData,
-                src: mediaSrc.substring(0, 90)
-            });
-
+            if (!AudioCtx) return false;
+            if (!window.__lexAudioCtx) window.__lexAudioCtx = new AudioCtx({ latencyHint: 'playback' });
+            const ctx = window.__lexAudioCtx;
             ensureAudioContextRunning();
-
-            const src = window.__lexAudioCtx.createMediaElementSource(el);
-            const gain = window.__lexAudioCtx.createGain();
-            const compressor = window.__lexAudioCtx.createDynamicsCompressor();
-
-            // Calibración acústica de precisión de estudio: evita distorsión armónica y saturación a alto volumen
-            compressor.threshold.value = -6; // dB
-            compressor.knee.value = 12;      // dB suavizado de curva
-            compressor.ratio.value = 4;      // Relación de compresión natural
-            compressor.attack.value = 0.003; // s respuesta ultra rápida
-            compressor.release.value = 0.25; // s recuperación musical limpia
-
+            const src = ctx.createMediaElementSource(el);
+            const gain = ctx.createGain();
+            const comp = ctx.createDynamicsCompressor();
+            comp.threshold.value = -6; comp.knee.value = 12; comp.ratio.value = 4;
+            comp.attack.value = 0.003; comp.release.value = 0.25;
             src.connect(gain);
-            gain.connect(compressor);
-            compressor.connect(window.__lexAudioCtx.destination);
-            el.__lexGainNode = gain;
-        } catch (err) {
-            console.error('[LexAudio] Error en setupAudioGraph:', err);
-            el.__lexAudioHookFailed = true;
-        }
+            gain.connect(ctx.destination);                        // 100%: ruta transparente, sin compresor
+            el.__lexGainNode = gain; el.__lexComp = comp; el.__lexUseComp = false; el.__lexState = 'routed';
+            return true;
+        } catch(_) { el.__lexState = 'unsupported'; return false; }
+    };
+    const setChain = (el, useComp) => {
+        if (el.__lexState !== 'routed' || el.__lexUseComp === useComp) return;
+        const g = el.__lexGainNode, c = el.__lexComp, ctx = window.__lexAudioCtx;
+        try {
+            g.disconnect(); c.disconnect();
+            if (useComp) { g.connect(c); c.connect(ctx.destination); } else { g.connect(ctx.destination); }
+            el.__lexUseComp = useComp;
+        } catch(_) {}
+    };
+    const setGain = (el, v) => {
+        try { const g = el.__lexGainNode, c = window.__lexAudioCtx; if (g && c) g.gain.setTargetAtTime(v, c.currentTime, 0.015); } catch(_) {}
     };
 
-    const applyVolumeBoostToElement = (el, percent) => {
-        if (!el) return;
-        const p = Math.max(0, Math.min(300, Number(percent) || 100));
+    const ensureRouted = async (el) => {
+        if (el.__lexState === 'routed') return true;
+        if (el.__lexBusy || el.__lexState === 'drm' || el.__lexState === 'unsupported') return false;
+        const c = classify(el);
+        if (c === 'drm') { el.__lexState = 'drm'; reportOnce('drm'); return false; }
+        if (c === 'pending') { armPending(el); return false; }
+        if (c === 'safe') return routeElement(el);
+        return await unlockCross(el);
+    };
+
+    const applyToElement = async (el, percent) => {
+        if (!el || (el.tagName !== 'VIDEO' && el.tagName !== 'AUDIO')) return;
+        const p = lexClamp(percent);
+        trackMedia(el);
         try {
-            if (p === 0) {
-                el.muted = true;
-                return;
-            }
-            if (el.muted && window.__lexMutedByZeroVol) {
-                el.muted = false;
-                window.__lexMutedByZeroVol = false;
-            }
+            if (p === 0) { el.muted = true; window.__lexMutedByZeroVol = true; return; }
+            if (el.muted && window.__lexMutedByZeroVol) { el.muted = false; window.__lexMutedByZeroVol = false; }
             if (p <= 100) {
                 el.volume = p / 100.0;
-                if (el.__lexGainNode) {
-                    el.__lexGainNode.gain.value = 1.0;
-                }
+                if (el.__lexState === 'routed') { setChain(el, false); setGain(el, 1.0); }
                 return;
             }
-
-            // p > 100 (101% a 300%): Fijar volumen base al 100% y conectar cadena DSP de alta fidelidad si es seguro
             el.volume = 1.0;
-            if (!el.__lexGainNode && !el.__lexAudioHookFailed) {
-                setupAudioGraph(el);
-            }
-
-            if (el.__lexGainNode) {
-                ensureAudioContextRunning();
-                el.__lexGainNode.gain.value = p / 100.0;
-            }
-        } catch (_) {}
+            const ok = await ensureRouted(el);
+            const cur = window.__lexVolumePercent;                // pudo cambiar durante el await
+            if (ok && cur > 100) { ensureAudioContextRunning(); setChain(el, true); setGain(el, cur / 100.0); }
+        } catch(_) {}
     };
+    const applyVolumeBoostToElement = applyToElement;   // alias: lo usan el listener 'play' y el observer
 
     let _lexMediaObserver = null;
     const updateObserverState = (percent) => {
@@ -756,9 +909,9 @@ public static class YouTubeOptimizer
                                 const node = added[j];
                                 if (node.nodeType === 1) {
                                     if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO') {
-                                        applyVolumeBoostToElement(node, window.__lexVolumePercent);
+                                        applyToElement(node, window.__lexVolumePercent);
                                     } else if (node.querySelectorAll) {
-                                        node.querySelectorAll('video, audio').forEach(m => applyVolumeBoostToElement(m, window.__lexVolumePercent));
+                                        node.querySelectorAll('video, audio').forEach(m => applyToElement(m, window.__lexVolumePercent));
                                     }
                                 }
                             }
@@ -776,22 +929,13 @@ public static class YouTubeOptimizer
     };
 
     const applyVolumeBoostAll = (percent) => {
-        const p = Math.max(0, Math.min(300, Number(percent) || 100));
-        if (p === 0) window.__lexMutedByZeroVol = true;
+        const p = lexClamp(percent);
         window.__lexVolumePercent = p;
-
+        if (p === 0) window.__lexMutedByZeroVol = true;
         updateObserverState(p);
-
-        // 1. Aplicar a todos los elementos multimedia del documento
-        document.querySelectorAll('video, audio').forEach(el => applyVolumeBoostToElement(el, p));
-
-        // 2. Propagar recursivamente a todos los iframes hijos y anidados
+        collectAllMedia().forEach(el => applyToElement(el, p));
         document.querySelectorAll('iframe').forEach(ifr => {
-            try {
-                if (ifr.contentWindow) {
-                    ifr.contentWindow.postMessage({ __lex_cmd: 'set_volume_boost', percent: p }, '*');
-                }
-            } catch (_) {}
+            try { if (ifr.contentWindow) ifr.contentWindow.postMessage({ __lex_cmd: 'set_volume_boost', percent: p }, '*'); } catch(_) {}
         });
     };
 
@@ -909,12 +1053,17 @@ public static class YouTubeOptimizer
                 }
             } else if (e.data.__lex_cmd === 'scan_page_media') {
                 scanPageMediaOnDemand();
+            } else if (e.data.__lex_cmd === 'to_host' && window === window.top) {
+                const d = e.data;
+                if ((d.type === 'audio_status' || d.type === 'cors_unlock_req') && window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage(Object.assign({}, d.payload, { type: d.type }));
+                }
             }
         } catch (_) {}
     });
 
     const getActiveVideo = () => {
-        const videos = Array.from(document.querySelectorAll('video'));
+        const videos = Array.from(collectAllMedia()).filter(m => m.tagName === 'VIDEO');
         const playing = videos.find(v => !v.paused && !v.ended && v.readyState > 1);
         if (playing) return playing;
 
@@ -1112,18 +1261,65 @@ public static class YouTubeOptimizer
         }, true);
     } catch(_) {}
 
-    // Monitores periódicos ligeros (sin saturación de CPU)
+    // ── Arranque basado en eventos ──
+    const onReady = (fn) => {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+        else fn();
+    };
+    const onLoaded = (fn) => {
+        if (document.readyState === 'complete') fn();
+        else window.addEventListener('load', fn, { once: true });
+    };
+
     if (isYouTube) {
-        initYouTubeObserver();
-        setInterval(() => {
-            if (!ytPlayerObserver) initYouTubeObserver();
-            skipYouTubeAds();
-            clearYouTubePopups();
-        }, 350);
+        onReady(armYouTubeObservers);
     } else {
-        setInterval(() => { if (!document.hidden) clearClickjackOverlays(); }, 1500);
+        const runClear = () => { if (!document.hidden) clearClickjackOverlays(); };
+        onLoaded(() => [600, 3000, 8000].forEach(ms => setTimeout(runClear, ms)));
+        document.addEventListener('visibilitychange', runClear);
     }
-    setInterval(syncMediaState, 1000);
+
+    // ── Estado multimedia por eventos (0 timers en reposo) ──
+    let syncTimer = null;
+    const scheduleSync = () => {
+        if (syncTimer) return;
+        syncTimer = setTimeout(() => { syncTimer = null; syncMediaState(); }, 250);
+    };
+    window.__lexScheduleSync = scheduleSync;
+
+    ['play', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied'].forEach(evt =>
+        document.addEventListener(evt, (e) => {
+            const t = e.target;
+            if (t && (t.tagName === 'VIDEO' || t.tagName === 'AUDIO')) scheduleSync();
+        }, true));
+
+    // Título: las SPA lo cambian sin eventos de media
+    const armTitleObserver = () => {
+        const t = document.querySelector('title');
+        if (!t || t.__lexTitleObs) return;
+        t.__lexTitleObs = true;
+        new MutationObserver(scheduleSync).observe(t, { childList: true });
+    };
+    onReady(armTitleObserver);
+    if (isYouTube) document.addEventListener('yt-navigate-finish', () => { armTitleObserver(); scheduleSync(); }, true);
+
+    // Progreso (currentTime): solo si C# lo pide, p. ej. mientras la ventana flotante está visible
+    let progressOn = false, lastProgressSent = 0;
+    const onTimeUpdate = (e) => {
+        const t = e.target;
+        if (!t || (t.tagName !== 'VIDEO' && t.tagName !== 'AUDIO')) return;
+        const now = Date.now();
+        if (now - lastProgressSent < 1000) return;
+        lastProgressSent = now;
+        syncMediaState();
+    };
+    window.__lexSetMediaProgress = (on) => {
+        on = !!on;
+        if (on === progressOn) return;
+        progressOn = on;
+        if (on) { document.addEventListener('timeupdate', onTimeUpdate, true); syncMediaState(); }
+        else document.removeEventListener('timeupdate', onTimeUpdate, true);
+    };
 
     // Inyección de estilos cosméticos y Cortina Visual Fantasma para YouTube
     if (isYouTube) {
