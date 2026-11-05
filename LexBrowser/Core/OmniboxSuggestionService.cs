@@ -217,7 +217,8 @@ public static class OmniboxSuggestionService
                 var (icon, bg, fg) = GetSiteBadgeStyle(entry.Url, isBookmark: false);
                 string title = string.IsNullOrWhiteSpace(entry.Title) ? FormatCleanDisplayUrl(entry.Url) : entry.Title;
                 if (entry.Url.Contains("lexjunior.pages.dev", StringComparison.OrdinalIgnoreCase) ||
-                    title.StartsWith("Lex Junior Browser —", StringComparison.OrdinalIgnoreCase))
+                    title.StartsWith("Lex Junior Browser", StringComparison.OrdinalIgnoreCase) ||
+                    title.Contains("Ultra-Ligero", StringComparison.OrdinalIgnoreCase))
                 {
                     title = "Lex Junior Browser";
                 }
@@ -264,10 +265,18 @@ public static class OmniboxSuggestionService
                     var bfav = bk.FaviconImage ?? Engine.FaviconService.GetCachedFavicon(bdomain);
                     if (bfav == null) _ = Engine.FaviconService.ResolveFaviconAsync(bk.Url);
 
+                    string bTitle = string.IsNullOrWhiteSpace(bk.Title) ? FormatCleanDisplayUrl(bk.Url) : bk.Title;
+                    if (bk.Url.Contains("lexjunior.pages.dev", StringComparison.OrdinalIgnoreCase) ||
+                        bTitle.StartsWith("Lex Junior Browser", StringComparison.OrdinalIgnoreCase) ||
+                        bTitle.Contains("Ultra-Ligero", StringComparison.OrdinalIgnoreCase))
+                    {
+                        bTitle = "Lex Junior Browser";
+                    }
+
                     results.Add(new OmniboxSuggestionItem
                     {
                         Kind = OmniboxSuggestionKind.BookmarkPage,
-                        PrimaryText = string.IsNullOrWhiteSpace(bk.Title) ? FormatCleanDisplayUrl(bk.Url) : bk.Title,
+                        PrimaryText = bTitle,
                         SecondaryText = $" - {FormatCleanDisplayUrl(bk.Url)}",
                         TargetInputOrUrl = bk.Url,
                         IconText = icon,
