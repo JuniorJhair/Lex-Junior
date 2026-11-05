@@ -542,6 +542,9 @@ public partial class MainWindow : Window
 
         // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
         _ = CheckForBrowserUpdateInBackgroundAsync();
+
+        // Comprobar una sola vez y sin consumo en segundo plano si es el navegador predeterminado
+        _ = CheckDefaultBrowserStatusAsync();
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
@@ -663,6 +666,58 @@ public partial class MainWindow : Window
             }
         }
         catch { }
+    }
+
+    private async Task CheckDefaultBrowserStatusAsync()
+    {
+        // 0.0% CPU: solo se verifica una vez tras arrancar la ventana, sin hilos ni procesos en segundo plano
+        if (_isGuestSession || SettingsManager.Current.HasPromptedDefaultBrowser) return;
+
+        await Task.Delay(2000);
+
+        try
+        {
+            bool isDefault = await Task.Run(() => InstallerService.IsDefaultBrowser());
+            if (!isDefault && !SettingsManager.Current.HasPromptedDefaultBrowser)
+            {
+                DefaultBrowserPromptBanner.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                SettingsManager.Current.HasPromptedDefaultBrowser = true;
+                SettingsManager.Save();
+            }
+        }
+        catch { }
+    }
+
+    private void BtnSetAsDefault_Click(object sender, RoutedEventArgs e)
+    {
+        DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
+        SettingsManager.Current.HasPromptedDefaultBrowser = true;
+        SettingsManager.Save();
+
+        try
+        {
+            InstallerService.OpenWindowsDefaultAppsSettings();
+            ShowToast("✨ Abriendo configuración de Windows para elegir a Lex Junior como predeterminado.");
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Error al abrir configuración: {ex.Message}");
+        }
+    }
+
+    private void BtnDismissDefaultBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
+        SettingsManager.Current.HasPromptedDefaultBrowser = true;
+        SettingsManager.Save();
+
+        ShowToast(
+            "Si deseas cambiar de opinión, en Configuración dejamos un botón para elegir tu navegador predeterminado cuando lo desees.",
+            "Ir a Ajustes",
+            () => OpenSettings("General"));
     }
 
     public void AttachExistingTab(BrowserTab tab, int? insertIndex = null)
@@ -813,11 +868,12 @@ public partial class MainWindow : Window
         var core = tab.WebView.CoreWebView2;
         if (core == null) return;
 
-        // Inyectar script universal de optimización, anti-anuncios, iframes, PiP y captura/autocompletado pasivo de contraseñas
+        // Inyectar script universal de optimización, anti-anuncios, iframes, PiP, traducción limpia y captura/autocompletado pasivo de contraseñas
         try
         {
             await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(PasswordManager.InjectedPasswordScript);
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(TranslationService.InjectedShieldScript);
         }
         catch { }
 
@@ -1935,9 +1991,8 @@ public partial class MainWindow : Window
         }
     }
 
-    private void PillTranslate_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void PillTranslate_Click(object sender, RoutedEventArgs e)
     {
-        e.Handled = true;
         if (_activeTab?.WebView?.CoreWebView2 == null || _activeTab.IsDisposed) return;
         PopupTranslate.IsOpen = !PopupTranslate.IsOpen;
     }
@@ -5035,12 +5090,16 @@ public partial class MainWindow : Window
             PasswordManager.MarkSessionUnlocked();
             ApplySettings();
 
-            // Limpiar pestañas temporales del invitado y restaurar la sesión guardada del propietario
-            var guestTabs = Tabs.ToList();
-            foreach (var t in guestTabs)
+            // Limpiar pestañas temporales del invitado sin invocar Close() en la ventana
+            foreach (var t in Tabs.ToList())
             {
-                CloseTab(t);
+                t.IsDisposed = true;
+                try { t.WebView?.CoreWebView2?.Stop(); } catch { }
+                try { t.WebView?.Dispose(); } catch { }
             }
+            Tabs.Clear();
+            BrowserContainer.Children.Clear();
+            _activeTab = null;
 
             await RestoreOrInitializeSessionTabsAsync();
             ShowToast("🔓 Sesión de propietario desbloqueada: tus pestañas, marcadores y contraseñas han sido restaurados.");

@@ -22,6 +22,7 @@ public static class UpdateManager
     public const string GitHubRepo = "Lex-Junior";
 
     public const string LatestReleaseApiUrl = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
+    public const string LatestReleaseWebUrl = $"https://github.com/{GitHubOwner}/{GitHubRepo}/releases/latest";
     public const string DirectLatestInstallerUrl = $"https://github.com/{GitHubOwner}/{GitHubRepo}/releases/latest/download/LexJuniorSetup.exe";
 
     private static readonly HttpClient _httpClient = CreateHttpClient();
@@ -70,41 +71,84 @@ public static class UpdateManager
         try
         {
             using var resp = await _httpClient.GetAsync(LatestReleaseApiUrl, HttpCompletionOption.ResponseContentRead);
-            if (!resp.IsSuccessStatusCode) return null;
+            if (resp.IsSuccessStatusCode)
+            {
+                string json = await resp.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
 
-            string json = await resp.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
+                string tagName = root.TryGetProperty("tag_name", out var tagProp) ? (tagProp.GetString() ?? "") : "";
+                var remoteVersion = ParseVersionTag(tagName);
+                if (remoteVersion != null)
+                {
+                    if (remoteVersion <= CurrentVersion)
+                    {
+                        AvailableUpdate = null;
+                        return null;
+                    }
 
-            string tagName = root.TryGetProperty("tag_name", out var tagProp) ? (tagProp.GetString() ?? "") : "";
+                    string notes = root.TryGetProperty("body", out var bodyProp) ? (bodyProp.GetString() ?? "") : "";
+                    string htmlUrl = root.TryGetProperty("html_url", out var htmlProp) ? (htmlProp.GetString() ?? "") : "";
+                    string downloadUrl = DirectLatestInstallerUrl;
+
+                    if (root.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var asset in assetsProp.EnumerateArray())
+                        {
+                            string assetName = asset.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? "") : "";
+                            string browserUrl = asset.TryGetProperty("browser_download_url", out var bProp) ? (bProp.GetString() ?? "") : "";
+                            if (assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(browserUrl))
+                            {
+                                downloadUrl = browserUrl;
+                                break;
+                            }
+                        }
+                    }
+
+                    var info = new UpdateReleaseInfo(tagName, remoteVersion, notes, downloadUrl, htmlUrl);
+                    AvailableUpdate = info;
+                    UpdateDiscovered?.Invoke(info);
+                    return info;
+                }
+            }
+        }
+        catch { }
+
+        // Fallback resistente a límites de tasa (Rate Limit 403) de la API de GitHub
+        return await CheckForUpdatesViaHtmlRedirectAsync();
+    }
+
+    private static async Task<UpdateReleaseInfo?> CheckForUpdatesViaHtmlRedirectAsync()
+    {
+        try
+        {
+            using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+
+            using var resp = await client.GetAsync(LatestReleaseWebUrl);
+            var loc = resp.Headers.Location;
+            if (loc == null) return null;
+
+            string redirectUrl = loc.ToString();
+            int tagIdx = redirectUrl.LastIndexOf("/tag/", StringComparison.OrdinalIgnoreCase);
+            if (tagIdx < 0) return null;
+
+            string tagName = redirectUrl.Substring(tagIdx + 5).Trim();
             var remoteVersion = ParseVersionTag(tagName);
-            if (remoteVersion == null) return null;
-
-            if (remoteVersion <= CurrentVersion)
+            if (remoteVersion == null || remoteVersion <= CurrentVersion)
             {
                 AvailableUpdate = null;
                 return null;
             }
 
-            string notes = root.TryGetProperty("body", out var bodyProp) ? (bodyProp.GetString() ?? "") : "";
-            string htmlUrl = root.TryGetProperty("html_url", out var htmlProp) ? (htmlProp.GetString() ?? "") : "";
-            string downloadUrl = DirectLatestInstallerUrl;
+            var info = new UpdateReleaseInfo(
+                tagName,
+                remoteVersion,
+                $"Nueva versión {tagName} de Lex Junior disponible.",
+                DirectLatestInstallerUrl,
+                redirectUrl);
 
-            if (root.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var asset in assetsProp.EnumerateArray())
-                {
-                    string assetName = asset.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? "") : "";
-                    string browserUrl = asset.TryGetProperty("browser_download_url", out var bProp) ? (bProp.GetString() ?? "") : "";
-                    if (assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(browserUrl))
-                    {
-                        downloadUrl = browserUrl;
-                        break;
-                    }
-                }
-            }
-
-            var info = new UpdateReleaseInfo(tagName, remoteVersion, notes, downloadUrl, htmlUrl);
             AvailableUpdate = info;
             UpdateDiscovered?.Invoke(info);
             return info;

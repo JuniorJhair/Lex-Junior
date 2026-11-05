@@ -13,6 +13,61 @@ namespace LexBrowser.Core;
 public static class TranslationService
 {
     /// <summary>
+    /// Script inyectado universalmente al crear documentos para neutralizar
+    /// de inmediato cualquier banner invasivo, tooltip o menú de Google Translate.
+    /// Garantiza 0% impacto visual no deseado y 0% consumo en reposo.
+    /// </summary>
+    public static readonly string InjectedShieldScript = @"
+(function() {
+    function injectShield() {
+        if (!document.getElementById('lex_gt_shield')) {
+            var st = document.createElement('style');
+            st.id = 'lex_gt_shield';
+            st.textContent = `
+                .goog-te-banner-frame,
+                .goog-te-menu-frame,
+                .skiptranslate,
+                #goog-gt-tt,
+                #goog-gt-vt,
+                .goog-tooltip,
+                iframe[class*=""goog-te-""],
+                iframe[class*=""VIpgJd""],
+                iframe[id*=""goog""],
+                div[id*=""goog-gt-""],
+                .VIpgJd-ZVi9od-OR95-s8QkWb-wOHMyf,
+                .VIpgJd-ZVi9od-SmfZ-OueRq-Wrql6b,
+                .VIpgJd-ZVi9od-aZ2wEe-wOHMyf,
+                .VIpgJd-ZVi9od-xl07Ob-OEVmcd {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    height: 0 !important;
+                    width: 0 !important;
+                    max-height: 0 !important;
+                    pointer-events: none !important;
+                }
+                body {
+                    top: 0px !important;
+                    position: static !important;
+                    margin-top: 0px !important;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(st);
+        }
+        if (document.body && document.body.style.top && document.body.style.top !== '0px') {
+            document.body.style.top = '0px';
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', injectShield);
+    } else {
+        injectShield();
+    }
+})();
+";
+
+    /// <summary>
     /// Detecta el código de idioma principal de la página HTML actual (ej. "en", "ja", "fr", "es").
     /// </summary>
     public static async Task<string> DetectPageLanguageAsync(CoreWebView2? core)
@@ -47,32 +102,53 @@ public static class TranslationService
             string script = $@"
 (function(tl) {{
     try {{
-        // 1. Configurar cookies de traducción en todos los niveles de dominio
         var host = location.hostname;
         var parts = host.split('.');
         var baseDomain = parts.length > 2 ? parts.slice(-2).join('.') : host;
 
-        var val = '/auto/' + tl;
-        document.cookie = 'googtrans=' + val + '; path=/;';
-        document.cookie = 'googtrans=' + val + '; domain=' + host + '; path=/;';
-        document.cookie = 'googtrans=' + val + '; domain=.' + baseDomain + '; path=/;';
+        var src = (document.documentElement.lang || document.querySelector('meta[http-equiv=""content-language""]')?.content || '').toLowerCase().trim();
+        if (src.length > 2) src = src.substring(0, 2);
+        if (!src) src = 'auto';
+
+        // 1. Configurar cookies de traducción en todos los niveles de dominio
+        var vals = ['/auto/' + tl, '/' + src + '/' + tl];
+        vals.forEach(function(val) {{
+            document.cookie = 'googtrans=' + val + '; path=/;';
+            document.cookie = 'googtrans=' + val + '; domain=' + host + '; path=/;';
+            document.cookie = 'googtrans=' + val + '; domain=.' + baseDomain + '; path=/;';
+        }});
 
         // 2. Inyectar CSS que neutraliza el banner superior y los menús flotantes desproporcionados
         var style = document.getElementById('lex_gt_clean_style');
         if (!style) {{
             style = document.createElement('style');
             style.id = 'lex_gt_clean_style';
-            style.innerHTML = '.goog-te-banner-frame, .goog-te-menu-frame, #goog-gt-tt, .skiptranslate, #goog-gt-vt {{ display: none !important; }} body {{ top: 0px !important; position: static !important; }}';
+            style.innerHTML = '.goog-te-banner-frame, .goog-te-menu-frame, #goog-gt-tt, .skiptranslate, #goog-gt-vt, iframe[class*=""goog-te-""], iframe[class*=""VIpgJd""] {{ display: none !important; visibility: hidden !important; }} body {{ top: 0px !important; position: static !important; margin-top: 0px !important; }}';
             (document.head || document.documentElement).appendChild(style);
         }}
 
+        function triggerCombo() {{
+            var cb = document.querySelector('.goog-te-combo');
+            if (!cb) return false;
+            if (cb.options && cb.options.length > 1) {{
+                for (var i = 0; i < cb.options.length; i++) {{
+                    var optVal = (cb.options[i].value || '').toLowerCase();
+                    if (optVal === tl.toLowerCase() || optVal.startsWith(tl.toLowerCase())) {{
+                        cb.selectedIndex = i;
+                        cb.value = cb.options[i].value;
+                        cb.dispatchEvent(new Event('change', {{ bubbles: true, cancelable: true }}));
+                        if (typeof cb.onchange === 'function') cb.onchange();
+                        window.__lexIsTranslated = true;
+                        window.__lexCurrentLang = tl;
+                        return true;
+                    }}
+                }}
+            }}
+            return false;
+        }}
+
         // 3. Si el combo interno de Google ya está en el DOM, disparar el cambio inmediatamente
-        var combo = document.querySelector('.goog-te-combo');
-        if (combo) {{
-            combo.value = tl;
-            combo.dispatchEvent(new Event('change'));
-            window.__lexIsTranslated = true;
-            window.__lexCurrentLang = tl;
+        if (triggerCombo()) {{
             return true;
         }}
 
@@ -89,19 +165,14 @@ public static class TranslationService
             window.googleTranslateElementInit = function() {{
                 try {{
                     new google.translate.TranslateElement({{
-                        pageLanguage: 'auto',
+                        pageLanguage: src,
                         autoDisplay: false
                     }}, 'google_translate_element');
 
                     var attempts = 0;
                     var checkTimer = setInterval(function() {{
                         attempts++;
-                        var cb = document.querySelector('.goog-te-combo');
-                        if (cb) {{
-                            clearInterval(checkTimer);
-                            cb.value = tl;
-                            cb.dispatchEvent(new Event('change'));
-                        }} else if (attempts > 30) {{
+                        if (triggerCombo() || attempts > 50) {{
                             clearInterval(checkTimer);
                         }}
                     }}, 100);
@@ -113,7 +184,16 @@ public static class TranslationService
             s.src = 'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
             (document.head || document.documentElement).appendChild(s);
         }} else {{
-            location.reload();
+            var attempts = 0;
+            var checkTimer = setInterval(function() {{
+                attempts++;
+                if (triggerCombo()) {{
+                    clearInterval(checkTimer);
+                }} else if (attempts > 15) {{
+                    clearInterval(checkTimer);
+                    location.reload();
+                }}
+            }}, 100);
         }}
 
         window.__lexIsTranslated = true;
@@ -154,6 +234,15 @@ public static class TranslationService
 
         window.__lexIsTranslated = false;
         window.__lexCurrentLang = '';
+
+        var cb = document.querySelector('.goog-te-combo');
+        if (cb && cb.options && cb.options.length > 0) {
+            cb.selectedIndex = 0;
+            cb.value = '';
+            cb.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+            if (typeof cb.onchange === 'function') cb.onchange();
+        }
+
         location.reload();
         return true;
     } catch(_) {
