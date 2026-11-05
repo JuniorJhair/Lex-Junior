@@ -1389,6 +1389,7 @@ public partial class MainWindow : Window
                     win.LoadingProgressBar.Visibility = Visibility.Collapsed;
                     win.UpdateNavigationButtons();
                     win.UpdateCurrentTabBookmarkUI();
+                    if (tab.IsNewTab) win.FocusOmniboxIfNewTab(tab);
                 }
 
                 // Re-aplicar amplificación de volumen si la pestaña tenía un nivel distinto de 100%
@@ -1420,6 +1421,7 @@ public partial class MainWindow : Window
                     win.SetMediaProgressReporting(tab, true);
 
                 _ = win.UpdateTabFaviconAsync(tab);
+                _ = win.UpdateTranslateIndicatorUIAsync(tab);
             });
         };
 
@@ -1653,10 +1655,66 @@ public partial class MainWindow : Window
             UpdateZoomIndicatorUI(showFloating: false);
             UpdateVolumeBoosterUI();
             UpdateMediaSnifferUI();
+            _ = UpdateTranslateIndicatorUIAsync(tab);
+            FocusOmniboxIfNewTab(tab);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[SelectTab] Error: {ex.Message}");
+        }
+    }
+
+    private void FocusOmniboxIfNewTab(BrowserTab? tab)
+    {
+        if (tab == null || tab.IsDisposed || !tab.IsNewTab || _activeTab != tab) return;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
+        {
+            if (tab.IsDisposed || _activeTab != tab || !tab.IsNewTab) return;
+            TxtUrl.Focus();
+            Keyboard.Focus(TxtUrl);
+            TxtUrl.CaretIndex = TxtUrl.Text.Length;
+            TxtUrl.SelectAll();
+        });
+    }
+
+    private async Task UpdateTranslateIndicatorUIAsync(BrowserTab? tab)
+    {
+        if (tab == null || tab.IsDisposed || tab.IsNewTab || tab != _activeTab || tab.WebView?.CoreWebView2 == null)
+        {
+            PillTranslateIndicator.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        try
+        {
+            string lang = await TranslationService.DetectPageLanguageAsync(tab.WebView.CoreWebView2);
+            bool isForeign = !string.IsNullOrEmpty(lang) && !lang.StartsWith("es", StringComparison.OrdinalIgnoreCase);
+            PillTranslateIndicator.Visibility = isForeign ? Visibility.Visible : Visibility.Collapsed;
+            TxtTranslateAction.Text = "Traducir";
+            PillTranslateIndicator.ToolTip = $"Traducir página ({lang.ToUpperInvariant()}) al español";
+        }
+        catch
+        {
+            PillTranslateIndicator.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async void PillTranslate_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (_activeTab?.WebView?.CoreWebView2 == null || _activeTab.IsDisposed) return;
+
+        bool translated = await TranslationService.ToggleInPageTranslateAsync(_activeTab.WebView.CoreWebView2, "es");
+        if (translated)
+        {
+            TxtTranslateAction.Text = "Original";
+            PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E3A8A"));
+            ShowToast("🌐 Página traducida al español. Haz clic de nuevo para restaurar el original.");
+        }
+        else
+        {
+            TxtTranslateAction.Text = "Traducir";
+            PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E293B"));
+            ShowToast("Página restaurada al idioma original.");
         }
     }
 

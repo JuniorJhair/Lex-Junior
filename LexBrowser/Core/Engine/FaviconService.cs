@@ -47,8 +47,9 @@ public static class FaviconService
     }
 
     /// <summary>
-    /// Resuelve el favicon oficial de una página web usando primero el stream de WebView2,
-    /// luego la URI del favicon, y finalmente el favicon directo del servidor.
+    /// Resuelve el favicon oficial de una página web usando primero la FaviconUri informada por la web,
+    /// el stream decodificado de WebView2 (descartando el globo genérico de Chromium),
+    /// el favicon.ico directo y finalmente el servicio universal de iconos de alta resolución.
     /// En modo incógnito no almacena en la caché compartida ni realiza peticiones a servicios de terceros.
     /// </summary>
     public static async Task<ImageSource?> ResolveFaviconAsync(string pageUrl, Stream? webViewStream = null, string? faviconUri = null, bool isIncognito = false)
@@ -64,16 +65,29 @@ public static class FaviconService
             return cached;
         }
 
-        // 2. Intentar decodificar el stream directo devuelto por WebView2
-        if (webViewStream != null)
+        BitmapImage? candidate = null;
+
+        // 2. Si el motor informó una FaviconUri explícita (<link rel="icon"> en el HTML), descargarla primero
+        if (!isIncognito && !string.IsNullOrWhiteSpace(faviconUri) && !faviconUri.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
         {
             try
             {
-                var bmp = await CreateFrozenBitmapFromStreamAsync(webViewStream);
-                if (bmp != null)
+                candidate = await DownloadAndCreateBitmapAsync(faviconUri);
+            }
+            catch { }
+        }
+
+        // 3. Probar el stream directo devuelto por WebView2 (descartando el icono de globo genérico de Chromium < 380 bytes)
+        if (candidate == null && webViewStream != null)
+        {
+            try
+            {
+                using var ms = new MemoryStream();
+                await webViewStream.CopyToAsync(ms);
+                if (ms.Length >= 380)
                 {
-                    if (!isIncognito) _cache[domain] = bmp;
-                    return bmp;
+                    ms.Position = 0;
+                    candidate = CreateFrozenBitmapFromMemory(ms);
                 }
             }
             catch { }
@@ -82,6 +96,7 @@ public static class FaviconService
         // En modo incógnito, nunca hacer peticiones HTTP fuera del WebView2 InPrivate ni filtrar dominios
         if (isIncognito)
         {
+            if (candidate != null) return candidate;
             if (!string.IsNullOrWhiteSpace(faviconUri) && faviconUri.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
             {
                 try { return await DownloadAndCreateBitmapAsync(faviconUri); } catch { }
@@ -89,35 +104,52 @@ public static class FaviconService
             return null;
         }
 
-        // 3. Intentar descargar desde la FaviconUri informada por el motor
-        if (!string.IsNullOrWhiteSpace(faviconUri))
+        // 4. Fallback directo al propio servidor de origen (https://domain/favicon.ico)
+        if (candidate == null)
         {
             try
             {
-                var bmp = await DownloadAndCreateBitmapAsync(faviconUri);
-                if (bmp != null)
-                {
-                    _cache[domain] = bmp;
-                    return bmp;
-                }
+                string directIconUrl = $"https://{domain}/favicon.ico";
+                candidate = await DownloadAndCreateBitmapAsync(directIconUrl);
             }
             catch { }
         }
 
-        // 4. Fallback directo al propio servidor de origen (sin terceros)
+        // 5. Fallback universal de alta resolución (utilizado por navegadores para resolver SPAs como Instagram, ChatGPT, etc.)
+        if (candidate == null)
+        {
+            try
+            {
+                string googleFaviconUrl = $"https://www.google.com/s2/favicons?domain={domain}&sz=32";
+                candidate = await DownloadAndCreateBitmapAsync(googleFaviconUrl);
+            }
+            catch { }
+        }
+
+        if (candidate != null)
+        {
+            _cache[domain] = candidate;
+        }
+
+        return candidate;
+    }
+
+    private static BitmapImage? CreateFrozenBitmapFromMemory(MemoryStream ms)
+    {
         try
         {
-            string directIconUrl = $"https://{domain}/favicon.ico";
-            var bmp = await DownloadAndCreateBitmapAsync(directIconUrl);
-            if (bmp != null)
-            {
-                _cache[domain] = bmp;
-                return bmp;
-            }
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = ms;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            return bitmap;
         }
-        catch { }
-
-        return null;
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>

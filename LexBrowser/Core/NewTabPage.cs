@@ -352,9 +352,6 @@ public static class NewTabPage
     document.getElementById('si').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') go();
     });
-    setTimeout(function() {
-      document.getElementById('si').focus();
-    }, 150);
   </script>
 </body>
 </html>";

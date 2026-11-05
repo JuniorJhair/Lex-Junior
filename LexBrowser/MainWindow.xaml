@@ -400,6 +400,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Logo G multicolor de Google (visible al buscar o en Nueva Pestaña) + Icono de Seguridad HTTPS -->
@@ -445,6 +446,17 @@
                             <TextBlock Text="🔍 " FontSize="9" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtZoomValue" Text="100%" FontSize="11" FontWeight="Bold" Foreground="#818CF8" VerticalAlignment="Center"/>
                             <TextBlock Text=" ↺" FontSize="11" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="3,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Pill de Traducción en Omnibox (Visible en páginas con idioma extranjero o al solicitar traducción) -->
+                    <Border x:Name="PillTranslateIndicator" Grid.Column="4" Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
+                            CornerRadius="6" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
+                            Cursor="Hand" ToolTip="Traducir esta página al español (clic para alternar)"
+                            MouseLeftButtonDown="PillTranslate_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🌐 " FontSize="10" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtTranslateAction" Text="Traducir" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Grid>

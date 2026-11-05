@@ -164,59 +164,69 @@ public static class OmniboxSuggestionService
         var seenSearchTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { query };
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 2. Búsquedas recientes del usuario en el historial (con icono de reloj 🕒, igual a Chrome/Brave)
+        // 2. Páginas y videos ya navegados con anterioridad en el historial (ej. YouTube, Instagram, etc.)
+        // Se muestran PRIMERO con prioridad para autocompletar sitios frecuentes al escribir (igual a Chrome/Brave)
         if (historyEntries != null)
         {
-            int recentSearchCount = 0;
+            string[] words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var matchingHistory = new List<(HistoryEntry entry, int score)>();
+
             foreach (var entry in historyEntries)
             {
-                if (recentSearchCount >= 3) break;
-                string? pastQuery = TryExtractSearchQueryFromUrl(entry.Url);
-                if (string.IsNullOrWhiteSpace(pastQuery)) continue;
+                if (string.IsNullOrWhiteSpace(entry.Url)) continue;
+                if (TryExtractSearchQueryFromUrl(entry.Url) != null) continue;
 
-                if (pastQuery.Contains(query, StringComparison.OrdinalIgnoreCase) && seenSearchTerms.Add(pastQuery))
+                string urlClean = FormatCleanDisplayUrl(entry.Url).ToLowerInvariant();
+                string titleLower = (entry.Title ?? "").ToLowerInvariant();
+                string qLower = query.ToLowerInvariant();
+
+                bool matchesAllWords = true;
+                foreach (string w in words)
                 {
-                    results.Add(new OmniboxSuggestionItem
+                    if (!titleLower.Contains(w, StringComparison.OrdinalIgnoreCase) &&
+                        !entry.Url.Contains(w, StringComparison.OrdinalIgnoreCase))
                     {
-                        Kind = OmniboxSuggestionKind.RecentSearch,
-                        PrimaryText = pastQuery,
-                        SecondaryText = string.Empty,
-                        TargetInputOrUrl = pastQuery,
-                        IconText = "🕒",
-                        IconBgHex = "#232332",
-                        IconFgHex = "#A1A1AA",
-                        HistoryEntryId = entry.Id
-                    });
-                    recentSearchCount++;
+                        matchesAllWords = false;
+                        break;
+                    }
                 }
-            }
-        }
+                if (!matchesAllWords) continue;
 
-        // 3. Sugerencias predictivas de Google en vivo (🔍)
-        if (liveGoogleSuggestions != null && !looksLikeUrl)
-        {
-            int liveCount = 0;
-            foreach (string suggestion in liveGoogleSuggestions)
+                int score = 0;
+                if (urlClean.StartsWith(qLower, StringComparison.OrdinalIgnoreCase)) score += 100;
+                else if (urlClean.Contains(qLower, StringComparison.OrdinalIgnoreCase)) score += 50;
+                if (titleLower.StartsWith(qLower, StringComparison.OrdinalIgnoreCase)) score += 40;
+                else if (titleLower.Contains(qLower, StringComparison.OrdinalIgnoreCase)) score += 20;
+
+                matchingHistory.Add((entry, score));
+            }
+
+            int visitedCount = 0;
+            foreach (var (entry, _) in matchingHistory.OrderByDescending(x => x.score))
             {
-                if (liveCount >= 3 || results.Count >= maxTotalItems - 2) break;
-                string cleanSug = suggestion.Trim();
-                if (string.IsNullOrEmpty(cleanSug) || !seenSearchTerms.Add(cleanSug)) continue;
+                if (visitedCount >= 4 || results.Count >= maxTotalItems - 2) break;
+                if (!seenUrls.Add(entry.Url)) continue;
+
+                var (icon, bg, fg) = GetSiteBadgeStyle(entry.Url, isBookmark: false);
+                string title = string.IsNullOrWhiteSpace(entry.Title) ? FormatCleanDisplayUrl(entry.Url) : entry.Title;
+                if (title.Length > 68) title = title.Substring(0, 65) + "...";
 
                 results.Add(new OmniboxSuggestionItem
                 {
-                    Kind = OmniboxSuggestionKind.LiveSearchSuggestion,
-                    PrimaryText = cleanSug,
-                    SecondaryText = string.Empty,
-                    TargetInputOrUrl = cleanSug,
-                    IconText = "🔍",
-                    IconBgHex = "#232332",
-                    IconFgHex = "#A1A1AA"
+                    Kind = OmniboxSuggestionKind.VisitedPage,
+                    PrimaryText = title,
+                    SecondaryText = $" - {FormatCleanDisplayUrl(entry.Url)}",
+                    TargetInputOrUrl = entry.Url,
+                    IconText = icon,
+                    IconBgHex = bg,
+                    IconFgHex = fg,
+                    HistoryEntryId = entry.Id
                 });
-                liveCount++;
+                visitedCount++;
             }
         }
 
-        // 4. Marcadores anclados que coincidan
+        // 3. Marcadores anclados que coincidan
         if (bookmarks != null)
         {
             foreach (var bk in bookmarks)
@@ -243,46 +253,55 @@ public static class OmniboxSuggestionService
             }
         }
 
-        // 5. Páginas y videos ya navegados con anterioridad en el historial (ej. YouTube ▶ con título y URL en azul)
+        // 4. Búsquedas recientes del usuario en el historial (con icono de reloj 🕒)
         if (historyEntries != null)
         {
-            string[] words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            int recentSearchCount = 0;
             foreach (var entry in historyEntries)
             {
-                if (results.Count >= maxTotalItems) break;
-                if (string.IsNullOrWhiteSpace(entry.Url)) continue;
+                if (recentSearchCount >= 2 || results.Count >= maxTotalItems - 2) break;
+                string? pastQuery = TryExtractSearchQueryFromUrl(entry.Url);
+                if (string.IsNullOrWhiteSpace(pastQuery)) continue;
 
-                // Evitar duplicar una página que ya se mostró arriba como búsqueda simple de Google
-                if (TryExtractSearchQueryFromUrl(entry.Url) != null) continue;
-
-                bool matchesAllWords = true;
-                foreach (string w in words)
+                if (pastQuery.Contains(query, StringComparison.OrdinalIgnoreCase) && seenSearchTerms.Add(pastQuery))
                 {
-                    if (!entry.Title.Contains(w, StringComparison.OrdinalIgnoreCase) &&
-                        !entry.Url.Contains(w, StringComparison.OrdinalIgnoreCase))
+                    results.Add(new OmniboxSuggestionItem
                     {
-                        matchesAllWords = false;
-                        break;
-                    }
+                        Kind = OmniboxSuggestionKind.RecentSearch,
+                        PrimaryText = pastQuery,
+                        SecondaryText = string.Empty,
+                        TargetInputOrUrl = pastQuery,
+                        IconText = "🕒",
+                        IconBgHex = "#232332",
+                        IconFgHex = "#A1A1AA",
+                        HistoryEntryId = entry.Id
+                    });
+                    recentSearchCount++;
                 }
+            }
+        }
 
-                if (!matchesAllWords || !seenUrls.Add(entry.Url)) continue;
-
-                var (icon, bg, fg) = GetSiteBadgeStyle(entry.Url, isBookmark: false);
-                string title = string.IsNullOrWhiteSpace(entry.Title) ? FormatCleanDisplayUrl(entry.Url) : entry.Title;
-                if (title.Length > 68) title = title.Substring(0, 65) + "...";
+        // 5. Sugerencias predictivas de Google en vivo (🔍)
+        if (liveGoogleSuggestions != null && !looksLikeUrl)
+        {
+            int liveCount = 0;
+            foreach (string suggestion in liveGoogleSuggestions)
+            {
+                if (liveCount >= 3 || results.Count >= maxTotalItems) break;
+                string cleanSug = suggestion.Trim();
+                if (string.IsNullOrEmpty(cleanSug) || !seenSearchTerms.Add(cleanSug)) continue;
 
                 results.Add(new OmniboxSuggestionItem
                 {
-                    Kind = OmniboxSuggestionKind.VisitedPage,
-                    PrimaryText = title,
-                    SecondaryText = $" - {FormatCleanDisplayUrl(entry.Url)}",
-                    TargetInputOrUrl = entry.Url,
-                    IconText = icon,
-                    IconBgHex = bg,
-                    IconFgHex = fg,
-                    HistoryEntryId = entry.Id
+                    Kind = OmniboxSuggestionKind.LiveSearchSuggestion,
+                    PrimaryText = cleanSug,
+                    SecondaryText = string.Empty,
+                    TargetInputOrUrl = cleanSug,
+                    IconText = "🔍",
+                    IconBgHex = "#232332",
+                    IconFgHex = "#A1A1AA"
                 });
+                liveCount++;
             }
         }
 
