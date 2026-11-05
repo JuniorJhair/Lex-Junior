@@ -452,7 +452,7 @@
                     <!-- Pill de Traducción en Omnibox (Visible en páginas con idioma extranjero o al solicitar traducción) -->
                     <Border x:Name="PillTranslateIndicator" Grid.Column="4" Background="#1E293B" BorderBrush="#38BDF8" BorderThickness="1"
                             CornerRadius="6" Padding="6,2" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
-                            Cursor="Hand" ToolTip="Traducir esta página al español (clic para alternar)"
+                            Cursor="Hand" ToolTip="Traducir esta página (clic para opciones de traducción)"
                             MouseLeftButtonDown="PillTranslate_Click">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="🌐 " FontSize="10" VerticalAlignment="Center"/>
@@ -461,6 +461,62 @@
                     </Border>
                 </Grid>
             </Border>
+
+            <!-- Popup Nativo de Traducción de Páginas Web (Nivel Senior, sin banners invasivos) -->
+            <Popup x:Name="PopupTranslate" PlacementTarget="{Binding ElementName=PillTranslateIndicator}"
+                   Placement="Bottom" VerticalOffset="6" HorizontalOffset="-140"
+                   StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Background="#161622" BorderBrush="#2D2D42" BorderThickness="1.5" CornerRadius="12" Padding="14,12" Width="280">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="22" ShadowDepth="4" Opacity="0.8" Color="#000000"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <!-- Encabezado con Icono y Botón Cerrar -->
+                        <Grid Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="🌐" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Traducir página" FontWeight="Bold" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button Content="✕" Width="18" Height="18" Background="Transparent" BorderThickness="0"
+                                    Foreground="#71717A" HorizontalAlignment="Right" Cursor="Hand" Click="BtnCloseTranslatePopup_Click"/>
+                        </Grid>
+
+                        <!-- Selector de idioma -->
+                        <TextBlock Text="Traducir al idioma:" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,6"/>
+                        <ComboBox x:Name="CmbTargetLanguage" Height="30" Background="#202030" Foreground="#FFFFFF"
+                                  BorderBrush="#38384E" BorderThickness="1" Padding="6,2" Margin="0,0,0,12"
+                                  DisplayMemberPath="Name" SelectedValuePath="Code"/>
+
+                        <!-- Botones de Acción -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button x:Name="BtnDoTranslate" Grid.Column="0" Content="Traducir" Height="30" Margin="0,0,6,0"
+                                    Background="#2563EB" Foreground="#FFFFFF" FontWeight="SemiBold" BorderThickness="0"
+                                    Cursor="Hand" Click="BtnDoTranslate_Click">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+
+                            <Button x:Name="BtnRestoreTranslate" Grid.Column="1" Content="Ver original" Height="30" Padding="10,0"
+                                    Background="#262638" Foreground="#E4E4E7" FontWeight="SemiBold" BorderThickness="0"
+                                    Cursor="Hand" Click="BtnRestoreTranslate_Click">
+                                <Button.Resources>
+                                    <Style TargetType="Border">
+                                        <Setter Property="CornerRadius" Value="6"/>
+                                    </Style>
+                                </Button.Resources>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Popup>
 
             <!-- Desplegable Inteligente de Sugerencias del Omnibox (Búsquedas recientes, Autocompletado de Google y Páginas visitadas) -->
             <Popup x:Name="PopupOmniboxSuggestions" PlacementTarget="{Binding ElementName=BorderOmnibox}" Placement="Bottom"

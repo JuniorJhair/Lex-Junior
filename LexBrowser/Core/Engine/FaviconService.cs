@@ -67,41 +67,64 @@ public static class FaviconService
 
         BitmapImage? candidate = null;
 
-        // 2. Si el motor informó una FaviconUri explícita (<link rel="icon"> en el HTML), descargarla primero
-        if (!isIncognito && !string.IsNullOrWhiteSpace(faviconUri) && !faviconUri.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+        // Resolver faviconUri relativo contra la URL base de la página si es necesario
+        string? resolvedFaviconUri = faviconUri;
+        if (!string.IsNullOrWhiteSpace(resolvedFaviconUri))
         {
-            try
+            if (!Uri.TryCreate(resolvedFaviconUri, UriKind.Absolute, out _) && Uri.TryCreate(pageUrl, UriKind.Absolute, out var baseUri))
             {
-                candidate = await DownloadAndCreateBitmapAsync(faviconUri);
-            }
-            catch { }
-        }
-
-        // 3. Probar el stream directo devuelto por WebView2 (descartando el icono de globo genérico de Chromium < 380 bytes)
-        if (candidate == null && webViewStream != null)
-        {
-            try
-            {
-                using var ms = new MemoryStream();
-                await webViewStream.CopyToAsync(ms);
-                if (ms.Length >= 380)
+                if (Uri.TryCreate(baseUri, resolvedFaviconUri, out var combinedUri))
                 {
-                    ms.Position = 0;
-                    candidate = CreateFrozenBitmapFromMemory(ms);
+                    resolvedFaviconUri = combinedUri.AbsoluteUri;
                 }
             }
+        }
+
+        // 2. Si el motor informó una FaviconUri explícita (<link rel="icon"> en el HTML), descargarla primero
+        if (!isIncognito && !string.IsNullOrWhiteSpace(resolvedFaviconUri) && !resolvedFaviconUri.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                candidate = await DownloadAndCreateBitmapAsync(resolvedFaviconUri);
+            }
             catch { }
         }
 
-        // En modo incógnito, nunca hacer peticiones HTTP fuera del WebView2 InPrivate ni filtrar dominios
+        // En modo incógnito, nunca consultar servicios externos ni filtrar el dominio a terceros
         if (isIncognito)
         {
             if (candidate != null) return candidate;
-            if (!string.IsNullOrWhiteSpace(faviconUri) && faviconUri.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(resolvedFaviconUri) && resolvedFaviconUri.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
             {
-                try { return await DownloadAndCreateBitmapAsync(faviconUri); } catch { }
+                try { return await DownloadAndCreateBitmapAsync(resolvedFaviconUri); } catch { }
+            }
+            if (webViewStream != null)
+            {
+                try
+                {
+                    using var ms = new MemoryStream();
+                    await webViewStream.CopyToAsync(ms);
+                    if (ms.Length > 200)
+                    {
+                        ms.Position = 0;
+                        return CreateFrozenBitmapFromMemory(ms);
+                    }
+                }
+                catch { }
             }
             return null;
+        }
+
+        // 3. Servicio oficial de iconos de alta resolución de Google S2 (resuelve de forma inmediata el logo oficial
+        // de ChatGPT, Instagram, YouTube, BBC, Twitch, Netflix, etc. con fondo transparente a 32x32)
+        if (candidate == null)
+        {
+            try
+            {
+                string googleFaviconUrl = $"https://www.google.com/s2/favicons?domain={domain}&sz=32";
+                candidate = await DownloadAndCreateBitmapAsync(googleFaviconUrl);
+            }
+            catch { }
         }
 
         // 4. Fallback directo al propio servidor de origen (https://domain/favicon.ico)
@@ -115,13 +138,18 @@ public static class FaviconService
             catch { }
         }
 
-        // 5. Fallback universal de alta resolución (utilizado por navegadores para resolver SPAs como Instagram, ChatGPT, etc.)
-        if (candidate == null)
+        // 5. Probar el stream directo devuelto por WebView2 (para intranets, localhost o sitios cerrados)
+        if (candidate == null && webViewStream != null)
         {
             try
             {
-                string googleFaviconUrl = $"https://www.google.com/s2/favicons?domain={domain}&sz=32";
-                candidate = await DownloadAndCreateBitmapAsync(googleFaviconUrl);
+                using var ms = new MemoryStream();
+                await webViewStream.CopyToAsync(ms);
+                if (ms.Length >= 380)
+                {
+                    ms.Position = 0;
+                    candidate = CreateFrozenBitmapFromMemory(ms);
+                }
             }
             catch { }
         }

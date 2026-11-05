@@ -72,6 +72,7 @@ public partial class MainWindow : Window
         _initialUrl = NormalizeExternalUrl(initialUrl);
         _initialAttachedTab = initialTab;
         InitializeComponent();
+        InitializeTranslateLanguageList();
         TabsItemsControl.ItemsSource = Tabs;
         BookmarksItemsControl.ItemsSource = BookmarkManager.Bookmarks;
 
@@ -536,13 +537,75 @@ public partial class MainWindow : Window
         }
         else if (Tabs.Count == 0)
         {
-            string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
-            _initialUrl = null;
-            await AddNewTabAsync(launchUrl, isIncognito: _isGuestSession);
+            await RestoreOrInitializeSessionTabsAsync();
         }
 
         // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
         _ = CheckForBrowserUpdateInBackgroundAsync();
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_isGuestSession && SettingsManager.Current.RestorePreviousSession)
+        {
+            SessionManager.SaveSession(Tabs, _activeTab);
+        }
+        base.OnClosing(e);
+    }
+
+    private async Task RestoreOrInitializeSessionTabsAsync()
+    {
+        string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
+        _initialUrl = null;
+
+        if (!string.IsNullOrWhiteSpace(launchUrl))
+        {
+            await AddNewTabAsync(launchUrl, isIncognito: _isGuestSession);
+            return;
+        }
+
+        if (!_isGuestSession && SettingsManager.Current.RestorePreviousSession)
+        {
+            var savedSession = SessionManager.LoadSession();
+            if (savedSession != null && savedSession.Tabs.Count > 0)
+            {
+                int activeIndex = Math.Clamp(savedSession.ActiveIndex, 0, savedSession.Tabs.Count - 1);
+                BrowserTab? targetActiveTab = null;
+
+                for (int i = 0; i < savedSession.Tabs.Count; i++)
+                {
+                    var item = savedSession.Tabs[i];
+                    bool isActive = (i == activeIndex);
+
+                    var tab = await AddNewTabAsync(item.Url, isIncognito: false, skipInitialNavigate: !isActive);
+                    if (!string.IsNullOrWhiteSpace(item.Title))
+                    {
+                        tab.Title = item.Title;
+                    }
+                    if (item.IsPinned)
+                    {
+                        tab.PinMode = TabPinMode.LogoAndName;
+                    }
+
+                    if (!isActive)
+                    {
+                        tab.IsLazyLoaded = true;
+                    }
+                    else
+                    {
+                        targetActiveTab = tab;
+                    }
+                }
+
+                if (targetActiveTab != null)
+                {
+                    SelectTab(targetActiveTab, force: true);
+                }
+                return;
+            }
+        }
+
+        await AddNewTabAsync(null, isIncognito: _isGuestSession);
     }
 
     private static string? NormalizeExternalUrl(string? raw)
@@ -1640,6 +1703,15 @@ public partial class MainWindow : Window
                 tab.WebView.Visibility = Visibility.Visible;
             }
 
+            if (tab != null && tab.IsLazyLoaded && !string.IsNullOrWhiteSpace(tab.Url))
+            {
+                tab.IsLazyLoaded = false;
+                if (tab.WebView?.CoreWebView2 != null)
+                {
+                    tab.WebView.CoreWebView2.Navigate(tab.Url);
+                }
+            }
+
             if (tab != null)
             {
                 _isUpdatingOmniboxTextProgrammatically = true;
@@ -1677,6 +1749,30 @@ public partial class MainWindow : Window
         });
     }
 
+    private void InitializeTranslateLanguageList()
+    {
+        var languages = new List<TranslateLanguageItem>
+        {
+            new("es", "Español"),
+            new("en", "Inglés (English)"),
+            new("fr", "Francés (Français)"),
+            new("pt", "Portugués (Português)"),
+            new("de", "Alemán (Deutsch)"),
+            new("it", "Italiano"),
+            new("ja", "Japonés (日本語)"),
+            new("zh-CN", "Chino (简体中文)"),
+            new("ru", "Ruso (Русский)"),
+            new("ko", "Coreano (한국어)"),
+            new("ar", "Árabe (العربية)"),
+            new("hi", "Hindi (हिन्दी)"),
+            new("nl", "Holandés (Nederlands)"),
+            new("pl", "Polaco (Polski)"),
+            new("tr", "Turco (Türkçe)")
+        };
+        CmbTargetLanguage.ItemsSource = languages;
+        CmbTargetLanguage.SelectedValue = "es";
+    }
+
     private async Task UpdateTranslateIndicatorUIAsync(BrowserTab? tab)
     {
         if (tab == null || tab.IsDisposed || tab.IsNewTab || tab != _activeTab || tab.WebView?.CoreWebView2 == null)
@@ -1687,11 +1783,22 @@ public partial class MainWindow : Window
 
         try
         {
+            bool isTranslated = await TranslationService.IsPageTranslatedAsync(tab.WebView.CoreWebView2);
+            if (isTranslated)
+            {
+                PillTranslateIndicator.Visibility = Visibility.Visible;
+                TxtTranslateAction.Text = "Original";
+                PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E3A8A"));
+                PillTranslateIndicator.ToolTip = "Página traducida (clic para ver opciones o restaurar el original)";
+                return;
+            }
+
             string lang = await TranslationService.DetectPageLanguageAsync(tab.WebView.CoreWebView2);
             bool isForeign = !string.IsNullOrEmpty(lang) && !lang.StartsWith("es", StringComparison.OrdinalIgnoreCase);
             PillTranslateIndicator.Visibility = isForeign ? Visibility.Visible : Visibility.Collapsed;
             TxtTranslateAction.Text = "Traducir";
-            PillTranslateIndicator.ToolTip = $"Traducir página ({lang.ToUpperInvariant()}) al español";
+            PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E293B"));
+            PillTranslateIndicator.ToolTip = string.IsNullOrEmpty(lang) ? "Traducir esta página" : $"Traducir página ({lang.ToUpperInvariant()})";
         }
         catch
         {
@@ -1699,23 +1806,41 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void PillTranslate_Click(object sender, MouseButtonEventArgs e)
+    private void PillTranslate_Click(object sender, MouseButtonEventArgs e)
     {
         if (_activeTab?.WebView?.CoreWebView2 == null || _activeTab.IsDisposed) return;
+        PopupTranslate.IsOpen = true;
+    }
 
-        bool translated = await TranslationService.ToggleInPageTranslateAsync(_activeTab.WebView.CoreWebView2, "es");
+    private void BtnCloseTranslatePopup_Click(object sender, RoutedEventArgs e)
+    {
+        PopupTranslate.IsOpen = false;
+    }
+
+    private async void BtnDoTranslate_Click(object sender, RoutedEventArgs e)
+    {
+        PopupTranslate.IsOpen = false;
+        if (_activeTab?.WebView?.CoreWebView2 == null || _activeTab.IsDisposed) return;
+
+        string targetLang = CmbTargetLanguage.SelectedValue as string ?? "es";
+        bool translated = await TranslationService.TranslatePageAsync(_activeTab.WebView.CoreWebView2, targetLang);
         if (translated)
         {
             TxtTranslateAction.Text = "Original";
             PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E3A8A"));
-            ShowToast("🌐 Página traducida al español. Haz clic de nuevo para restaurar el original.");
+            ShowToast("🌐 Página traducida. Haz clic en el indicador para ver opciones o restaurar.");
         }
-        else
-        {
-            TxtTranslateAction.Text = "Traducir";
-            PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E293B"));
-            ShowToast("Página restaurada al idioma original.");
-        }
+    }
+
+    private async void BtnRestoreTranslate_Click(object sender, RoutedEventArgs e)
+    {
+        PopupTranslate.IsOpen = false;
+        if (_activeTab?.WebView?.CoreWebView2 == null || _activeTab.IsDisposed) return;
+
+        await TranslationService.RestoreOriginalAsync(_activeTab.WebView.CoreWebView2);
+        TxtTranslateAction.Text = "Traducir";
+        PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E293B"));
+        ShowToast("Página restaurada al idioma original.");
     }
 
     private void UpdateNavigationButtons()
@@ -4698,9 +4823,7 @@ public partial class MainWindow : Window
 
         if (Tabs.Count == 0)
         {
-            string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
-            _initialUrl = null;
-            await AddNewTabAsync(launchUrl, isIncognito: false);
+            await RestoreOrInitializeSessionTabsAsync();
         }
     }
 
@@ -4839,3 +4962,5 @@ public partial class MainWindow : Window
         }
     }
 }
+
+public record TranslateLanguageItem(string Code, string Name);

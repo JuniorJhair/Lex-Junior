@@ -1,12 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
+using System.Windows.Media;
 
 namespace LexBrowser.Core;
 
-public class HistoryEntry
+public class HistoryEntry : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+    protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string Url { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
@@ -26,6 +34,55 @@ public class HistoryEntry
             if (date == DateTime.Today.AddDays(-1)) return "Ayer";
             return VisitedAt.ToString("dddd, d 'de' MMMM 'de' yyyy");
         }
+    }
+
+    private ImageSource? _faviconImage;
+    private bool _isResolvingFavicon;
+
+    [JsonIgnore]
+    public ImageSource? FaviconImage
+    {
+        get
+        {
+            if (_faviconImage != null) return _faviconImage;
+
+            // Consultar caché síncrona en memoria primero
+            var cached = Engine.FaviconService.GetCachedFavicon(Domain);
+            if (cached != null)
+            {
+                _faviconImage = cached;
+                return cached;
+            }
+
+            if (!_isResolvingFavicon && !string.IsNullOrWhiteSpace(Url))
+            {
+                _isResolvingFavicon = true;
+                _ = ResolveFaviconAsync();
+            }
+            return null;
+        }
+    }
+
+    [JsonIgnore] public bool HasFaviconImage => FaviconImage != null;
+    [JsonIgnore] public bool HasNoFaviconImage => FaviconImage == null;
+
+    private async Task ResolveFaviconAsync()
+    {
+        try
+        {
+            var img = await Engine.FaviconService.ResolveFaviconAsync(Url);
+            if (img != null)
+            {
+                _faviconImage = img;
+                System.Windows.Application.Current?.Dispatcher?.BeginInvoke(() =>
+                {
+                    OnPropertyChanged(nameof(FaviconImage));
+                    OnPropertyChanged(nameof(HasFaviconImage));
+                    OnPropertyChanged(nameof(HasNoFaviconImage));
+                });
+            }
+        }
+        catch { }
     }
 
     [JsonIgnore] public string FaviconUrl => "pack://application:,,,/Assets/logo.png";

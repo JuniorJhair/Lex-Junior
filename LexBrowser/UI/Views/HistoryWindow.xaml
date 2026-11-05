@@ -16,6 +16,7 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <!-- Estilo Pestañas Superiores -->
         <Style x:Key="HeaderTabBtn" TargetType="RadioButton">
             <Setter Property="Background" Value="Transparent"/>
@@ -591,17 +592,26 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Hora -->
-                            <TextBlock Grid.Column="0" Text="{Binding DisplayTime}" Foreground="#71717A" FontSize="11" VerticalAlignment="Center" FontFamily="Consolas, Segoe UI"/>
+                            <!-- Zona clickeable completa que cubre toda la fila excepto los botones de acción -->
+                            <Border Grid.Column="0" Grid.ColumnSpan="3" Background="Transparent" Cursor="Hand" MouseLeftButtonDown="HistoryRow_Click"/>
 
-                            <!-- Favicon / Ícono -->
-                            <Border Grid.Column="1" Width="20" Height="20" CornerRadius="4" Background="#1C1C26" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                <TextBlock Text="🌐" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Hora -->
+                            <TextBlock Grid.Column="0" Text="{Binding DisplayTime}" Foreground="#71717A" FontSize="11" VerticalAlignment="Center" FontFamily="Consolas, Segoe UI" IsHitTestVisible="False"/>
+
+                            <!-- Favicon / Ícono Oficial -->
+                            <Border Grid.Column="1" Width="20" Height="20" CornerRadius="4" Background="#1C1C26" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
+                                <Grid>
+                                    <Image Source="{Binding FaviconImage}" Width="16" Height="16"
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           Visibility="{Binding HasFaviconImage, Converter={StaticResource BoolToVis}}"/>
+                                    <TextBlock Text="🌐" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
+                                </Grid>
                             </Border>
 
                             <!-- Contenido Principal -->
-                            <StackPanel Grid.Column="2" Margin="6,0,16,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5" TextTrimming="CharacterEllipsis" Cursor="Hand" MouseLeftButtonDown="HistoryTitle_Click"/>
+                            <StackPanel Grid.Column="2" Margin="6,0,16,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5" TextTrimming="CharacterEllipsis"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                                     <Border Background="#20202F" CornerRadius="3" Padding="5,1" Margin="0,0,8,0">
                                         <TextBlock Text="{Binding Domain}" FontSize="10" Foreground="#818CF8" FontWeight="SemiBold"/>

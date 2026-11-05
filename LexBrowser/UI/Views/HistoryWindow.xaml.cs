@@ -290,6 +290,15 @@ public partial class HistoryWindow : Window
     // ─────────────────────────────────────────────────────────────────
     // ACCIONES POR ELEMENTO / DÍA
     // ─────────────────────────────────────────────────────────────────
+    private void HistoryRow_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is HistoryEntry entry && !string.IsNullOrWhiteSpace(entry.Url))
+        {
+            UrlSelected?.Invoke(entry.Url);
+            Close();
+        }
+    }
+
     private void HistoryTitle_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is TextBlock tb && tb.DataContext is HistoryEntry entry)
@@ -301,6 +310,7 @@ public partial class HistoryWindow : Window
 
     private void BtnDeleteSingle_Click(object sender, RoutedEventArgs e)
     {
+        e.Handled = true;
         if (sender is Button btn && btn.DataContext is HistoryEntry entry)
         {
             HistoryManager.DeleteEntry(entry.Id);
@@ -310,6 +320,7 @@ public partial class HistoryWindow : Window
 
     private async void BtnCleanSite_Click(object sender, RoutedEventArgs e)
     {
+        e.Handled = true;
         if (sender is Button btn && btn.DataContext is HistoryEntry entry)
         {
             string domain = entry.Domain;

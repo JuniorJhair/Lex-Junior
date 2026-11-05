@@ -66,6 +66,7 @@ public class BrowserTab : INotifyPropertyChanged
     public WebView2 WebView { get; }
     public MainWindow? OwnerWindow { get; set; }
     public bool IsDisposed { get; set; } = false;
+    public bool IsLazyLoaded { get; set; } = false;
 
     /// <summary>Registro en memoria de subframes (iframes) activos para sincronización instantánea de volumen y multimedia.</summary>
     public ConcurrentDictionary<CoreWebView2Frame, byte> ActiveFrames { get; } = new();

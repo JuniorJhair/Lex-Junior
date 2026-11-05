@@ -24,6 +24,7 @@ public class BrowserSettings
     public double MainWindowTop { get; set; } = double.NaN;
     public string DefaultSearchEngine { get; set; } = "Google";
     public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
+    public bool RestorePreviousSession { get; set; } = true;
 
     // Guardador de Contraseñas y Bloqueo Inteligente del Navegador (0% CPU en reposo)
     public bool EnablePasswordManager { get; set; } = true;

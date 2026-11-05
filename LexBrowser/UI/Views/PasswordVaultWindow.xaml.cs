@@ -419,6 +419,7 @@ public partial class PasswordVaultWindow : Window
             {
                 PasswordManager.DisableMasterPassword();
                 BorderRecoveryCodeDisplay.Visibility = Visibility.Collapsed;
+                UpdatePinConfigPanelVisibility();
                 MessageBox.Show(
                     "Has elegido 'No me gustaría usar contraseña'.\n\n" +
                     "El navegador y la bóveda abrirán directamente sin pedir PIN.",
@@ -438,7 +439,54 @@ public partial class PasswordVaultWindow : Window
     private void UpdatePinConfigPanelVisibility()
     {
         if (BorderPinConfiguration == null) return;
-        BorderPinConfiguration.Visibility = RbLockNone.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        bool isNone = RbLockNone.IsChecked == true;
+        BorderPinConfiguration.Visibility = isNone ? Visibility.Collapsed : Visibility.Visible;
+
+        bool hasPin = PasswordManager.HasMasterPasswordConfigured();
+        if (BorderPinActiveStatus != null)
+        {
+            BorderPinActiveStatus.Visibility = (hasPin && !isNone) ? Visibility.Visible : Visibility.Collapsed;
+        }
+        if (TxtPinLengthBadge != null && hasPin)
+        {
+            int len = SettingsManager.Current.MasterPasswordLength;
+            TxtPinLengthBadge.Text = len > 0 ? $"{len} dígitos" : "Activo";
+        }
+        if (BorderPinForm != null)
+        {
+            BorderPinForm.Visibility = (hasPin && !isNone) ? Visibility.Collapsed : Visibility.Visible;
+            if (TxtPinFormTitle != null)
+            {
+                TxtPinFormTitle.Text = hasPin
+                    ? "2. Modificar PIN o Contraseña y Preguntas"
+                    : "2. Configura tu PIN o Contraseña y tu Método de Recuperación";
+            }
+        }
+    }
+
+    private void BtnChangePin_Click(object sender, RoutedEventArgs e)
+    {
+        var pinDialog = new PinPromptDialog("Ingresa tu PIN actual para modificar tu contraseña o preguntas") { Owner = this };
+        if (pinDialog.ShowDialog() == true)
+        {
+            if (BorderPinForm != null)
+            {
+                BorderPinForm.Visibility = Visibility.Visible;
+                PwdMasterPin.Focus();
+            }
+        }
+    }
+
+    private void BtnDisablePinDirect_Click(object sender, RoutedEventArgs e)
+    {
+        var pinDialog = new PinPromptDialog("Ingresa tu PIN actual para desactivar la protección por contraseña") { Owner = this };
+        if (pinDialog.ShowDialog() == true)
+        {
+            PasswordManager.DisableMasterPassword();
+            RbLockNone.IsChecked = true;
+            UpdatePinConfigPanelVisibility();
+            ShowInternalBanner("🔓 Contraseña del navegador desactivada.");
+        }
     }
 
     private void BtnSaveLockSettings_Click(object sender, RoutedEventArgs e)
@@ -450,7 +498,16 @@ public partial class PasswordVaultWindow : Window
 
         if (selectedMode == "None")
         {
+            if (PasswordManager.HasMasterPasswordConfigured())
+            {
+                if (!EnsureAuthorizedForSensitiveAction("Confirma tu PIN actual para desactivar la protección"))
+                {
+                    return;
+                }
+            }
             PasswordManager.DisableMasterPassword();
+            UpdatePinConfigPanelVisibility();
+            ShowInternalBanner("🔓 Configuración guardada sin contraseña.");
             return;
         }
 
