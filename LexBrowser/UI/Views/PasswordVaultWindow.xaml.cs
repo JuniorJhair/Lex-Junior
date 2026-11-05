@@ -604,5 +604,17 @@ public partial class PasswordVaultWindow : Window
         _bannerTimer.Stop();
         Close();
     }
+
+    private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is ScrollViewer scrollViewer)
+        {
+            double deltaUnits = e.Delta / 120.0;
+            double scrollPixels = deltaUnits * 28.0;
+            double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
+            scrollViewer.ScrollToVerticalOffset(newOffset);
+        }
+    }
 }
 

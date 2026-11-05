@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
 using LexBrowser.Core;
@@ -206,7 +207,7 @@ public partial class SettingsWindow : Window
             bool isDefault = InstallerService.IsDefaultBrowser();
             if (isDefault)
             {
-                TxtDefaultBrowserStatus.Text = "✓ Lex Junior ya es tu navegador predeterminado en Windows.";
+                TxtDefaultBrowserStatus.Text = "🎉 ¡Gracias por preferirnos como tu navegador predeterminado en Windows!";
                 TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#34D399"));
                 BtnSetDefaultBrowser.Content = "✓ Ya es predeterminado";
                 BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#065F46"));
@@ -235,6 +236,18 @@ public partial class SettingsWindow : Window
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is ScrollViewer scrollViewer)
+        {
+            double deltaUnits = e.Delta / 120.0;
+            double scrollPixels = deltaUnits * 28.0;
+            double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
+            scrollViewer.ScrollToVerticalOffset(newOffset);
+        }
     }
 }
 

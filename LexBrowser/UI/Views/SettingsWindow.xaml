@@ -160,7 +160,8 @@
             </Border>
 
             <!-- Área de contenido con scroll -->
-            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="28,20">
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          ScrollViewer.CanContentScroll="False" PreviewMouseWheel="ScrollViewer_PreviewMouseWheel" Padding="28,20">
                 <StackPanel>
 
                     <!-- SECCIÓN: GENERAL -->

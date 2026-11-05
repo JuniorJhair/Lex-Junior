@@ -680,36 +680,28 @@ public partial class MainWindow : Window
         {
             bool isDefault = await Task.Run(() => InstallerService.IsDefaultBrowser());
 
-            // 1. Si ya es predeterminado: NUNCA mostrar el aviso
+            // 1. Si ya es predeterminado en Windows: marcar y NUNCA mostrar el aviso
             if (isDefault)
             {
                 SettingsManager.Current.WasPreviouslyDefaultBrowser = true;
+                SettingsManager.Current.UserDecidedDefaultBrowser = true;
                 SettingsManager.Save();
                 DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            // 2. Si antes era predeterminado y ahora dejó de serlo (otra app lo cambió):
-            // reactivar para darle otra oportunidad de decidir
-            if (SettingsManager.Current.WasPreviouslyDefaultBrowser)
-            {
-                SettingsManager.Current.WasPreviouslyDefaultBrowser = false;
-                SettingsManager.Current.UserDecidedDefaultBrowser = false;
-                SettingsManager.Save();
-            }
-
-            // 3. Si el usuario ya tomó una decisión explícita (hizo clic en "Sí" o en "Ahora no"):
-            // respetamos su decisión y no volvemos a mostrarlo
+            // 2. Si el usuario ya tomó una decisión explícita previa (hizo clic en "Sí" o en "Ahora no"):
+            // respetamos absolutamente su decisión y no volvemos a interrumpirlo
             if (SettingsManager.Current.UserDecidedDefaultBrowser)
             {
                 DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            // 4. Si aún no ha decidido (o lo ignoró en aperturas previas), mostrarlo en la infobar superior
+            // 3. Si aún no ha decidido (o lo ignoró en aperturas previas), mostrarlo en la infobar superior
             DefaultBrowserPromptBanner.Visibility = Visibility.Visible;
 
-            // 5. Permanecer visible por al menos 3 minutos. Si el usuario lo ignora por más de 3 minutos, desaparece esta sesión
+            // 4. Permanecer visible por al menos 3 minutos. Si el usuario lo ignora por más de 3 minutos, desaparece esta sesión
             // Task.Delay usa 0.0% CPU y no deja procesos en segundo plano
             await Task.Delay(TimeSpan.FromMinutes(3));
             if (!SettingsManager.Current.UserDecidedDefaultBrowser && DefaultBrowserPromptBanner.Visibility == Visibility.Visible)
@@ -724,7 +716,6 @@ public partial class MainWindow : Window
     {
         DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
         SettingsManager.Current.UserDecidedDefaultBrowser = true;
-        SettingsManager.Current.WasPreviouslyDefaultBrowser = true;
         SettingsManager.Save();
 
         try
@@ -1086,8 +1077,19 @@ public partial class MainWindow : Window
         {
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && AdBlockFilter.ShouldBlock(uri))
             {
+                // En YouTube, responder con 204 No Content en endpoints de anuncios para que los scripts
+                // anti-bloqueador de YouTube no fuercen la pausa artificial al primer segundo de video
+                int statusCode = 403;
+                string statusReason = "Blocked by LexShield";
+                if (uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                    uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
+                {
+                    statusCode = 204;
+                    statusReason = "No Content";
+                }
+
                 e.Response = core.Environment.CreateWebResourceResponse(
-                    new MemoryStream(EmptyResponseBytes, writable: false), 403, "Blocked by LexShield", "Content-Type: text/plain");
+                    new MemoryStream(EmptyResponseBytes, writable: false), statusCode, statusReason, "Content-Type: text/plain");
 
                 var win = tab.OwnerWindow ?? this;
                 win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
@@ -5231,6 +5233,18 @@ public partial class MainWindow : Window
             PasswordManager.EmergencyResetLockAndClearVault();
             CompleteOverlayUnlock();
             ShowToast("🔓 Acceso restablecido (se vació solo la bóveda de contraseñas; tus marcadores y ajustes siguen intactos).");
+        }
+    }
+
+    private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is ScrollViewer scrollViewer)
+        {
+            double deltaUnits = e.Delta / 120.0;
+            double scrollPixels = deltaUnits * 28.0;
+            double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
+            scrollViewer.ScrollToVerticalOffset(newOffset);
         }
     }
 }

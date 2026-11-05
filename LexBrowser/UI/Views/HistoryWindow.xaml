@@ -679,7 +679,8 @@
         </Grid>
 
         <!-- SECCIÓN 2: LIMPIEZA AVANZADA DE DATOS (NIVEL SENIOR) -->
-        <ScrollViewer x:Name="ViewClearAdvanced" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="32,24">
+        <ScrollViewer x:Name="ViewClearAdvanced" Grid.Row="2" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.CanContentScroll="False" PreviewMouseWheel="ScrollViewer_PreviewMouseWheel" Padding="32,24">
             <StackPanel MaxWidth="820" HorizontalAlignment="Left">
                 <TextBlock Text="Limpieza Avanzada de Datos y Sitios Web" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
                 <TextBlock Text="Elimina selectivamente cookies, contraseñas, inicios de sesión y caché de manera global o de un solo sitio web." FontSize="12" Foreground="#71717A" Margin="0,0,0,24"/>

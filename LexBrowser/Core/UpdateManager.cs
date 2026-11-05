@@ -163,6 +163,7 @@ public static class UpdateManager
     {
         try
         {
+            InstallerService.CleanOldTempInstallers();
             string tempSetupPath = Path.Combine(Path.GetTempPath(), $"LexJuniorSetup_{update.ParsedVersion}.exe");
 
             using var resp = await _httpClient.GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead);

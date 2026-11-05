@@ -826,7 +826,8 @@
                                                Foreground="#71717A" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
                                                VerticalAlignment="Center" HorizontalAlignment="Center" Margin="18"/>
 
-                                    <ScrollViewer x:Name="ScrollDetectedMedia" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                                    <ScrollViewer x:Name="ScrollDetectedMedia" VerticalScrollBarVisibility="Auto"
+                                                  ScrollViewer.CanContentScroll="False" PreviewMouseWheel="ScrollViewer_PreviewMouseWheel" Visibility="Collapsed">
                                         <ItemsControl x:Name="ItemsDetectedMedia">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
@@ -938,7 +939,8 @@
                                                Foreground="#71717A" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
                                                VerticalAlignment="Center" HorizontalAlignment="Center" Margin="18"/>
 
-                                    <ScrollViewer x:Name="ScrollDownloadsHistory" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                                    <ScrollViewer x:Name="ScrollDownloadsHistory" VerticalScrollBarVisibility="Auto"
+                                                  ScrollViewer.CanContentScroll="False" PreviewMouseWheel="ScrollViewer_PreviewMouseWheel" Visibility="Collapsed">
                                         <ItemsControl x:Name="ItemsDownloadsHistory">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>

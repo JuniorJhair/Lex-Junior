@@ -216,7 +216,15 @@ public static class OmniboxSuggestionService
 
                 var (icon, bg, fg) = GetSiteBadgeStyle(entry.Url, isBookmark: false);
                 string title = string.IsNullOrWhiteSpace(entry.Title) ? FormatCleanDisplayUrl(entry.Url) : entry.Title;
-                if (title.Length > 68) title = title.Substring(0, 65) + "...";
+                if (entry.Url.Contains("lexjunior.pages.dev", StringComparison.OrdinalIgnoreCase) ||
+                    title.StartsWith("Lex Junior Browser —", StringComparison.OrdinalIgnoreCase))
+                {
+                    title = "Lex Junior Browser";
+                }
+                else if (title.Length > 68)
+                {
+                    title = title.Substring(0, 65) + "...";
+                }
 
                 string domain = Engine.FaviconService.ExtractDomain(entry.Url);
                 var fav = Engine.FaviconService.GetCachedFavicon(domain) ?? entry.FaviconImage;

@@ -198,24 +198,73 @@ public static class InstallerService
     }
 
     /// <summary>
-    /// Comprueba si Lex Junior está actualmente configurado como navegador predeterminado para HTTP/HTTPS.
+    /// Comprueba si Lex Junior está actualmente configurado como navegador predeterminado para HTTP/HTTPS o HTML.
     /// </summary>
     public static bool IsDefaultBrowser()
     {
         try
         {
-            using var httpsKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
-            var progId = httpsKey?.GetValue("ProgId") as string;
-            if (string.Equals(progId, BrowserProgId, StringComparison.OrdinalIgnoreCase)) return true;
+            // 1. Comprobar https
+            using (var httpsKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice"))
+            {
+                var progId = httpsKey?.GetValue("ProgId") as string;
+                if (!string.IsNullOrEmpty(progId) &&
+                    (string.Equals(progId, BrowserProgId, StringComparison.OrdinalIgnoreCase) ||
+                     progId.Contains("LexJunior", StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
 
-            using var httpKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice");
-            var httpProgId = httpKey?.GetValue("ProgId") as string;
-            return string.Equals(httpProgId, BrowserProgId, StringComparison.OrdinalIgnoreCase);
+            // 2. Comprobar http
+            using (var httpKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice"))
+            {
+                var httpProgId = httpKey?.GetValue("ProgId") as string;
+                if (!string.IsNullOrEmpty(httpProgId) &&
+                    (string.Equals(httpProgId, BrowserProgId, StringComparison.OrdinalIgnoreCase) ||
+                     httpProgId.Contains("LexJunior", StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
+
+            // 3. Comprobar asociación de archivo .html
+            using (var htmlKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice"))
+            {
+                var progId = htmlKey?.GetValue("ProgId") as string;
+                if (!string.IsNullOrEmpty(progId) &&
+                    (string.Equals(progId, BrowserProgId, StringComparison.OrdinalIgnoreCase) ||
+                     progId.Contains("LexJunior", StringComparison.OrdinalIgnoreCase)))
+                    return true;
+            }
         }
         catch
         {
             return false;
         }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Limpia cualquier instalador previo de Lex Junior acumulado en la carpeta %TEMP% (0% basura residual).
+    /// </summary>
+    public static void CleanOldTempInstallers()
+    {
+        try
+        {
+            string tempDir = Path.GetTempPath();
+            string currentExe = Environment.ProcessPath ?? "";
+            var oldInstallers = Directory.GetFiles(tempDir, "LexJuniorSetup*.exe");
+            foreach (var file in oldInstallers)
+            {
+                try
+                {
+                    if (!string.Equals(Path.GetFullPath(file), Path.GetFullPath(currentExe), StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Delete(file);
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
     }
 
     /// <summary>

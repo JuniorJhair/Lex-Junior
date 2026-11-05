@@ -84,11 +84,11 @@ public partial class App : Application
             return;
         }
 
-        // Auto-registro en segundo plano en Windows (StartMenuInternet) para que siempre
-        // figure de inmediato en la lista oficial de "Navegadores web" de Windows.
+        // Auto-registro en segundo plano en Windows (StartMenuInternet) y limpieza de instaladores residuales
         _ = Task.Run(() =>
         {
             try { InstallerService.RegisterAsDefaultBrowser(); } catch { }
+            try { InstallerService.CleanOldTempInstallers(); } catch { }
         });
 
         var browserWindow = new MainWindow(initialUrl);

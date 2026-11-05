@@ -458,9 +458,10 @@ public static class YouTubeOptimizer
             return;
         }
 
-        // Detección oficial estricta: YouTube únicamente asigna 'ad-showing' o 'ad-interrupting' cuando un anuncio está activo
-        const isAdShowing = moviePlayer.classList.contains('ad-showing') ||
-                            moviePlayer.classList.contains('ad-interrupting');
+        // Detección oficial estricta: verificar presencia de anuncio real sin confundir el video del usuario
+        const hasAdOverlay = !!moviePlayer.querySelector('.ytp-ad-player-overlay, .ytp-ad-text, .video-ads, .ytp-ad-module, .ytp-ad-overlay-container, .ytp-ad-skip-button, .ytp-ad-skip-button-modern');
+        const isAdShowing = (moviePlayer.classList.contains('ad-showing') || moviePlayer.classList.contains('ad-interrupting')) &&
+                            (hasAdOverlay || isNaN(video.duration) || video.duration <= 90);
 
         // Vigilante de vida corta: existe SOLO mientras hay un anuncio en pantalla
         if (isAdShowing && !adWatchdog) adWatchdog = setInterval(skipYouTubeAds, 250);
@@ -487,16 +488,16 @@ public static class YouTubeOptimizer
                     previousUserPlaybackRate = video.playbackRate;
                 }
 
-                // 2. Aceleración máxima (16x)
+                // 2. Aceleración máxima (16x) únicamente en anuncios
                 video.playbackRate = 16.0;
 
-                // 3. Forzar reproducción si YouTube intentó pausar
+                // 3. Forzar reproducción si el anuncio intentó congelarse
                 if (video.paused) {
                     try { video.play().catch(() => {}); } catch(_) {}
                 }
 
-                // 4. Salto hacia el final del segmento de anuncio para disparar el evento ended
-                if (!isNaN(video.duration) && video.duration > 0 && isFinite(video.duration)) {
+                // 4. Salto hacia el final del segmento SOLO si la duración corresponde a un clip publicitario (<= 90s)
+                if (!isNaN(video.duration) && video.duration > 0 && video.duration <= 90) {
                     const targetTime = Math.max(0, video.duration - 0.1);
                     if (video.currentTime < targetTime) {
                         try { video.currentTime = targetTime; } catch(_) {}
@@ -546,11 +547,39 @@ public static class YouTubeOptimizer
         }
     };
 
+    let lastUserInteractionTime = 0;
+    let lastYtNavigationTime = Date.now();
+
     if (isYouTube) {
+        ['click', 'keydown', 'pointerdown'].forEach(evt =>
+            document.addEventListener(evt, () => { lastUserInteractionTime = Date.now(); }, true));
+
+        // Guardián contra la pausa artificial de YouTube al 1er segundo:
+        // Si el video se pausa solo dentro de los primeros 4 segundos de navegación sin interacción del usuario, auto-reanudar
+        document.addEventListener('pause', () => {
+            const now = Date.now();
+            if ((now - lastYtNavigationTime < 4500) && (now - lastUserInteractionTime > 800)) {
+                const moviePlayer = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
+                const video = document.querySelector('video');
+                if (video && !moviePlayer?.classList?.contains('ad-showing')) {
+                    setTimeout(() => {
+                        if (video.paused && (Date.now() - lastUserInteractionTime > 800)) {
+                            try {
+                                if (moviePlayer && typeof moviePlayer.playVideo === 'function') moviePlayer.playVideo();
+                                else video.play().catch(() => {});
+                            } catch(_) {}
+                        }
+                    }, 120);
+                }
+            }
+        }, true);
+
         ['play', 'loadedmetadata', 'durationchange'].forEach(evt =>
             document.addEventListener(evt, () => skipYouTubeAds(), true));
         ['yt-navigate-finish', 'yt-page-data-updated'].forEach(evt =>
             document.addEventListener(evt, () => {
+                lastYtNavigationTime = Date.now();
+                lastUserInteractionTime = 0;
                 skipYouTubeAds();
                 clearYouTubePopups();
                 armYouTubeObservers();
