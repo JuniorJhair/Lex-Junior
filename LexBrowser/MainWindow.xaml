@@ -1087,7 +1087,7 @@
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                     <TextBlock Text="¿Te gustaría tener a Lex Junior como tu navegador predeterminado?"
                                FontWeight="Bold" FontSize="12.5" Foreground="#FFFFFF"/>
-                    <TextBlock Text="Hemos detectado que aún no somos tu navegador predeterminado. Disfruta de navegación ultrarrápida, sin publicidad y con 0% de consumo en reposo."
+                    <TextBlock Text="Hemos detectado que aún no somos tu navegador predeterminado."
                                FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,2,0,0"/>
                 </StackPanel>
 

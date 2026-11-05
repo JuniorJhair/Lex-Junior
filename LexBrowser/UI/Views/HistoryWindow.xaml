@@ -163,10 +163,10 @@
             </Setter>
         </Style>
 
-        <!-- ScrollBar Oscura Moderna -->
+        <!-- ScrollBar Oscura Moderna y Suave -->
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="8"/>
+            <Setter Property="Width" Value="10"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
@@ -176,7 +176,15 @@
                                     <Thumb>
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Border Background="#2E2E40" CornerRadius="4" Margin="1,0"/>
+                                                <Border x:Name="ThumbBorder" Background="#333348" CornerRadius="5" Margin="1,0"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#4F4F72"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsDragging" Value="True">
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#6366F1"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -547,9 +555,11 @@
                 </Grid>
             </Border>
 
-            <!-- Lista / Tabla de Historial -->
+            <!-- Lista / Tabla de Historial con Desplazamiento Suave en Píxeles (Sin saltos bruscos) -->
             <ListView x:Name="LstHistory" Grid.Row="1" Background="#0C0C10" BorderThickness="0" Foreground="#E4E4E7"
-                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                      ScrollViewer.CanContentScroll="False">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Background" Value="Transparent"/>

@@ -30,6 +30,7 @@ public partial class App : Application
         {
             // Registrar AppID de Windows para que el icono anclado en la barra de tareas sea siempre el oficial
             SetCurrentProcessExplicitAppUserModelID("LexJunior.Browser");
+            InstallerService.RefreshWindowsIconCache();
         }
         catch { }
 

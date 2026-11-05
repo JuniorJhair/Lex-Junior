@@ -133,6 +133,7 @@ public static class InstallerService
 
             RegisterInWindowsAddRemovePrograms(iconPath);
             RegisterAsDefaultBrowser(InstalledExePath, iconPath);
+            RefreshWindowsIconCache(iconPath);
         });
 
         progress?.Report((100, "¡Instalación completada con éxito!"));
@@ -498,10 +499,69 @@ public static class InstallerService
         catch { }
     }
 
+    [System.Runtime.InteropServices.DllImport("shell32.dll", SetLastError = true)]
+    public static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+    public const uint SHCNE_ASSOCCHANGED = 0x08000000;
+    public const uint SHCNF_IDLIST = 0x0000;
+    public const uint SHCNF_FLUSH = 0x1000;
+
+    public static void RefreshWindowsIconCache(string? customIconPath = null)
+    {
+        try
+        {
+            string iconPath = customIconPath ?? Path.Combine(InstallDir, "app.ico");
+            if (!File.Exists(iconPath))
+            {
+                ExtractEmbeddedIconToDisk(iconPath);
+            }
+
+            if (File.Exists(InstalledExePath))
+            {
+                // 1. Recrear acceso directo en el Escritorio
+                if (File.Exists(DesktopShortcutPath))
+                {
+                    CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador ultraligero con bloqueo nativo y 0 telemetría");
+                }
+
+                // 2. Recrear acceso directo en el Menú Inicio
+                if (File.Exists(StartMenuShortcutPath))
+                {
+                    CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador ultraligero con bloqueo nativo y 0 telemetría");
+                }
+
+                // 3. Actualizar accesos directos anclados en la barra de tareas de Windows
+                string taskbarDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    @"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar");
+
+                if (Directory.Exists(taskbarDir))
+                {
+                    foreach (var file in Directory.GetFiles(taskbarDir, "*.lnk"))
+                    {
+                        if (Path.GetFileName(file).Contains("Lex", StringComparison.OrdinalIgnoreCase))
+                        {
+                            CreateWindowsShortcut(file, InstalledExePath, InstallDir, iconPath, "Lex Junior Browser");
+                        }
+                    }
+                }
+            }
+
+            // 4. Notificar a Windows Shell de cambios inmediatos en caché de iconos
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH, IntPtr.Zero, IntPtr.Zero);
+        }
+        catch { }
+    }
+
     private static void CreateWindowsShortcut(string lnkPath, string targetExe, string workingDir, string iconPath, string description)
     {
         try
         {
+            if (File.Exists(lnkPath))
+            {
+                try { File.Delete(lnkPath); } catch { }
+            }
+
             Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
             if (shellType == null) return;
             dynamic? shell = Activator.CreateInstance(shellType);
@@ -520,6 +580,11 @@ public static class InstallerService
                 shortcut.IconLocation = $"{targetExe},0";
             }
             shortcut.Save();
+
+            if (File.Exists(lnkPath))
+            {
+                try { File.SetLastWriteTime(lnkPath, DateTime.Now); } catch { }
+            }
         }
         catch { }
     }

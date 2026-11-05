@@ -44,6 +44,50 @@ Remove-Item $publishTempDir -Recurse -Force
 $sizeMb = [Math]::Round((Get-Item $setupExePath).Length / 1MB, 2)
 Write-Host "[OK] Instalador generado exitosamente: $setupExePath ($sizeMb MB)" -ForegroundColor Green
 
+# 2.1 Actualizar accesos directos locales y notificar a Windows Shell
+try {
+    Write-Host "Actualizando accesos directos locales con nuevo logo oficial..." -ForegroundColor Cyan
+    $wsh = New-Object -ComObject WScript.Shell
+    $localApp = [Environment]::GetFolderPath('LocalApplicationData')
+    $iconFile = Join-Path $localApp 'Programs\LexJuniorBrowser\app.ico'
+    $exeFile = Join-Path $localApp 'Programs\LexJuniorBrowser\LexBrowser.exe'
+    $installFolder = Join-Path $localApp 'Programs\LexJuniorBrowser'
+
+    $srcIcon = Join-Path $PSScriptRoot 'LexBrowser\Assets\app.ico'
+    if (Test-Path $srcIcon) {
+        if (!(Test-Path $installFolder)) { New-Item -ItemType Directory -Path $installFolder -Force | Out-Null }
+        Copy-Item $srcIcon $iconFile -Force
+    }
+
+    $deskPath = [Environment]::GetFolderPath('Desktop')
+    $deskFile = Join-Path $deskPath 'Lex Junior Browser.lnk'
+    if (Test-Path $deskFile) {
+        Remove-Item $deskFile -Force -ErrorAction SilentlyContinue
+        $link = $wsh.CreateShortcut($deskFile)
+        $link.TargetPath = $exeFile
+        $link.WorkingDirectory = $installFolder
+        $link.IconLocation = "$iconFile,0"
+        $link.Save()
+        (Get-Item $deskFile).LastWriteTime = (Get-Date)
+    }
+
+    $taskbarPath = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
+    if (Test-Path $taskbarPath) {
+        Get-ChildItem -Path $taskbarPath -Filter '*Lex*.lnk' | ForEach-Object {
+            $p = $_.FullName
+            Remove-Item $p -Force -ErrorAction SilentlyContinue
+            $link = $wsh.CreateShortcut($p)
+            $link.TargetPath = $exeFile
+            $link.WorkingDirectory = $installFolder
+            $link.IconLocation = "$iconFile,0"
+            $link.Save()
+            (Get-Item $p).LastWriteTime = (Get-Date)
+        }
+    }
+} catch {
+    Write-Host "Nota: No se pudieron actualizar accesos locales: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
 if ($PublishToGitHub) {
     $ghExe = "C:\Program Files\GitHub CLI\gh.exe"
     if (!(Test-Path $ghExe)) { $ghExe = "gh" }
