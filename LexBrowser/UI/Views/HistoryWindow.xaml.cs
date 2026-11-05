@@ -18,6 +18,10 @@ public partial class HistoryWindow : Window
     private string? _currentDomainFilter = null;
     private DateTime? _fromDateFilter = null;
     private DateTime? _toDateFilter = null;
+    private int _currentPage = 1;
+    private int _pageSize = 50;
+    private int _totalPages = 1;
+    private List<HistoryEntry> _allFilteredEntries = new();
 
     public event Action<string>? UrlSelected;
 
@@ -219,6 +223,7 @@ public partial class HistoryWindow : Window
     private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (!_isInitialized) return;
+        _currentPage = 1;
         RefreshHistoryList();
     }
 
@@ -236,6 +241,7 @@ public partial class HistoryWindow : Window
             int idx = sel.IndexOf('(');
             _currentDomainFilter = (idx > 0 ? sel.Substring(0, idx) : sel).Trim();
         }
+        _currentPage = 1;
         RefreshHistoryList();
     }
 
@@ -271,6 +277,7 @@ public partial class HistoryWindow : Window
                     _toDateFilter = null;
                     break;
             }
+            _currentPage = 1;
             RefreshHistoryList();
         }
     }
@@ -280,11 +287,55 @@ public partial class HistoryWindow : Window
         if (!_isInitialized || LstHistory == null || TxtHistoryCount == null) return;
 
         string? searchText = string.IsNullOrWhiteSpace(TxtSearch?.Text) ? null : TxtSearch.Text;
-        var entries = HistoryManager.GetEntries(searchText, _currentDomainFilter, _fromDateFilter, _toDateFilter);
+        _allFilteredEntries = HistoryManager.GetEntries(searchText, _currentDomainFilter, _fromDateFilter, _toDateFilter);
 
-        LstHistory.ItemsSource = entries;
-        TxtHistoryCount.Text = $"Mostrando {entries.Count} de {HistoryManager.GetTotalCount()} páginas registradas.";
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_allFilteredEntries.Count / (double)_pageSize));
+        if (_currentPage > _totalPages) _currentPage = _totalPages;
+        if (_currentPage < 1) _currentPage = 1;
+
+        var pageEntries = _allFilteredEntries.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
+        LstHistory.ItemsSource = pageEntries;
+
+        int totalCount = HistoryManager.GetTotalCount();
+        TxtHistoryCount.Text = $"{_allFilteredEntries.Count} encontradas (Total: {totalCount})";
+
+        if (TxtPageInfo != null)
+        {
+            TxtPageInfo.Text = $"Pág. {_currentPage} de {_totalPages}";
+        }
+        if (BtnPrevPage != null) BtnPrevPage.IsEnabled = _currentPage > 1;
+        if (BtnNextPage != null) BtnNextPage.IsEnabled = _currentPage < _totalPages;
+
         UpdateHistoryMasterStatusUI();
+    }
+
+    private void BtnPrevPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPage > 1)
+        {
+            _currentPage--;
+            RefreshHistoryList();
+        }
+    }
+
+    private void BtnNextPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentPage < _totalPages)
+        {
+            _currentPage++;
+            RefreshHistoryList();
+        }
+    }
+
+    private void CmbPageSize_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isInitialized || CmbPageSize == null) return;
+        if (CmbPageSize.SelectedItem is ComboBoxItem item && int.TryParse(item.Content?.ToString(), out int size))
+        {
+            _pageSize = size;
+            _currentPage = 1;
+            RefreshHistoryList();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────

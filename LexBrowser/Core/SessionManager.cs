@@ -29,7 +29,7 @@ public class SessionTabItem
 public static class SessionManager
 {
     private static string SessionFilePath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexJuniorBrowser", "session_tabs.json");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexBrowser", "session_tabs.json");
 
     public static void SaveSession(IEnumerable<BrowserTab> tabs, BrowserTab? activeTab)
     {
@@ -99,3 +99,4 @@ public static class SessionManager
         catch { }
     }
 }
+

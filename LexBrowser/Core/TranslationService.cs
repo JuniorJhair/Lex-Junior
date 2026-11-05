@@ -36,8 +36,8 @@ public static class TranslationService
     }
 
     /// <summary>
-    /// Traduce la página web al idioma de destino especificado sin banners antiestéticos.
-    /// Inyecta reglas de CSS estrictas para ocultar .goog-te-banner-frame y .goog-te-menu-frame.
+    /// Traduce la página web al idioma de destino especificado (ej. "es", "en", "fr") sin banners invasivos.
+    /// Neutraliza .goog-te-banner-frame y .goog-te-menu-frame y activa la traducción por selector de Google.
     /// </summary>
     public static async Task<bool> TranslatePageAsync(CoreWebView2? core, string targetLang = "es")
     {
@@ -47,9 +47,15 @@ public static class TranslationService
             string script = $@"
 (function(tl) {{
     try {{
-        // 1. Configurar cookie de traducción de Google
-        document.cookie = 'googtrans=/auto/' + tl + '; path=/;';
-        document.cookie = 'googtrans=/auto/' + tl + '; domain=' + location.hostname + '; path=/;';
+        // 1. Configurar cookies de traducción en todos los niveles de dominio
+        var host = location.hostname;
+        var parts = host.split('.');
+        var baseDomain = parts.length > 2 ? parts.slice(-2).join('.') : host;
+
+        var val = '/auto/' + tl;
+        document.cookie = 'googtrans=' + val + '; path=/;';
+        document.cookie = 'googtrans=' + val + '; domain=' + host + '; path=/;';
+        document.cookie = 'googtrans=' + val + '; domain=.' + baseDomain + '; path=/;';
 
         // 2. Inyectar CSS que neutraliza el banner superior y los menús flotantes desproporcionados
         var style = document.getElementById('lex_gt_clean_style');
@@ -60,14 +66,24 @@ public static class TranslationService
             (document.head || document.documentElement).appendChild(style);
         }}
 
-        // 3. Inicializar TranslateElement
+        // 3. Si el combo interno de Google ya está en el DOM, disparar el cambio inmediatamente
+        var combo = document.querySelector('.goog-te-combo');
+        if (combo) {{
+            combo.value = tl;
+            combo.dispatchEvent(new Event('change'));
+            window.__lexIsTranslated = true;
+            window.__lexCurrentLang = tl;
+            return true;
+        }}
+
+        // 4. Si el script no ha sido inyectado aún, inyectarlo
         if (!document.getElementById('lex_gt_script')) {{
             var el = document.getElementById('google_translate_element');
             if (!el) {{
                 el = document.createElement('div');
                 el.id = 'google_translate_element';
                 el.style.display = 'none';
-                document.body.appendChild(el);
+                (document.body || document.documentElement).appendChild(el);
             }}
 
             window.googleTranslateElementInit = function() {{
@@ -76,6 +92,19 @@ public static class TranslationService
                         pageLanguage: 'auto',
                         autoDisplay: false
                     }}, 'google_translate_element');
+
+                    var attempts = 0;
+                    var checkTimer = setInterval(function() {{
+                        attempts++;
+                        var cb = document.querySelector('.goog-te-combo');
+                        if (cb) {{
+                            clearInterval(checkTimer);
+                            cb.value = tl;
+                            cb.dispatchEvent(new Event('change'));
+                        }} else if (attempts > 30) {{
+                            clearInterval(checkTimer);
+                        }}
+                    }}, 100);
                 }} catch(_) {{}}
             }};
 
@@ -86,6 +115,7 @@ public static class TranslationService
         }} else {{
             location.reload();
         }}
+
         window.__lexIsTranslated = true;
         window.__lexCurrentLang = tl;
         return true;
@@ -113,8 +143,15 @@ public static class TranslationService
             string script = @"
 (function() {
     try {
-        document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-        document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=' + location.hostname + '; path=/;';
+        var host = location.hostname;
+        var parts = host.split('.');
+        var baseDomain = parts.length > 2 ? parts.slice(-2).join('.') : host;
+
+        var exp = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        document.cookie = exp;
+        document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=' + host + '; path=/;';
+        document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=.' + baseDomain + '; path=/;';
+
         window.__lexIsTranslated = false;
         window.__lexCurrentLang = '';
         location.reload();

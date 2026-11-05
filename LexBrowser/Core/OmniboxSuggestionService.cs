@@ -31,6 +31,10 @@ public sealed class OmniboxSuggestionItem
     public bool CanDelete => !string.IsNullOrEmpty(HistoryEntryId);
     public bool HasSecondaryText => !string.IsNullOrWhiteSpace(SecondaryText);
     public bool IsSelected { get; set; }
+
+    public System.Windows.Media.ImageSource? FaviconImage { get; init; }
+    public bool HasFaviconImage => FaviconImage != null;
+    public bool HasNoFaviconImage => FaviconImage == null;
 }
 
 /// <summary>
@@ -149,6 +153,8 @@ public static class OmniboxSuggestionService
                             (query.Contains('.') && !query.Contains(' '));
 
         // 1. Primera fila: Búsqueda directa en Google (o ir a la URL si escribió un dominio)
+        string? primaryFavDomain = looksLikeUrl ? Engine.FaviconService.ExtractDomain(query) : null;
+        var primaryFav = !string.IsNullOrEmpty(primaryFavDomain) ? Engine.FaviconService.GetCachedFavicon(primaryFavDomain) : null;
         results.Add(new OmniboxSuggestionItem
         {
             Kind = OmniboxSuggestionKind.PrimarySearchOrUrl,
@@ -158,6 +164,7 @@ public static class OmniboxSuggestionService
             IconText = looksLikeUrl ? "🌐" : "🔍",
             IconBgHex = "#252538",
             IconFgHex = "#818CF8",
+            FaviconImage = primaryFav,
             IsSelected = true
         });
 
@@ -211,6 +218,10 @@ public static class OmniboxSuggestionService
                 string title = string.IsNullOrWhiteSpace(entry.Title) ? FormatCleanDisplayUrl(entry.Url) : entry.Title;
                 if (title.Length > 68) title = title.Substring(0, 65) + "...";
 
+                string domain = Engine.FaviconService.ExtractDomain(entry.Url);
+                var fav = Engine.FaviconService.GetCachedFavicon(domain) ?? entry.FaviconImage;
+                if (fav == null) _ = Engine.FaviconService.ResolveFaviconAsync(entry.Url);
+
                 results.Add(new OmniboxSuggestionItem
                 {
                     Kind = OmniboxSuggestionKind.VisitedPage,
@@ -220,6 +231,7 @@ public static class OmniboxSuggestionService
                     IconText = icon,
                     IconBgHex = bg,
                     IconFgHex = fg,
+                    FaviconImage = fav,
                     HistoryEntryId = entry.Id
                 });
                 visitedCount++;
@@ -239,6 +251,11 @@ public static class OmniboxSuggestionService
                 {
                     if (!seenUrls.Add(bk.Url)) continue;
                     var (icon, bg, fg) = GetSiteBadgeStyle(bk.Url, isBookmark: true);
+
+                    string bdomain = Engine.FaviconService.ExtractDomain(bk.Url);
+                    var bfav = bk.FaviconImage ?? Engine.FaviconService.GetCachedFavicon(bdomain);
+                    if (bfav == null) _ = Engine.FaviconService.ResolveFaviconAsync(bk.Url);
+
                     results.Add(new OmniboxSuggestionItem
                     {
                         Kind = OmniboxSuggestionKind.BookmarkPage,
@@ -247,7 +264,8 @@ public static class OmniboxSuggestionService
                         TargetInputOrUrl = bk.Url,
                         IconText = icon,
                         IconBgHex = bg,
-                        IconFgHex = fg
+                        IconFgHex = fg,
+                        FaviconImage = bfav
                     });
                 }
             }

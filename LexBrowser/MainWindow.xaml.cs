@@ -558,13 +558,14 @@ public partial class MainWindow : Window
         string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
         _initialUrl = null;
 
-        if (!string.IsNullOrWhiteSpace(launchUrl))
+        if (_isGuestSession)
         {
-            await AddNewTabAsync(launchUrl, isIncognito: _isGuestSession);
+            await AddNewTabAsync(launchUrl, isIncognito: true);
             return;
         }
 
-        if (!_isGuestSession && SettingsManager.Current.RestorePreviousSession)
+        bool sessionRestored = false;
+        if (SettingsManager.Current.RestorePreviousSession)
         {
             var savedSession = SessionManager.LoadSession();
             if (savedSession != null && savedSession.Tabs.Count > 0)
@@ -575,7 +576,7 @@ public partial class MainWindow : Window
                 for (int i = 0; i < savedSession.Tabs.Count; i++)
                 {
                     var item = savedSession.Tabs[i];
-                    bool isActive = (i == activeIndex);
+                    bool isActive = (i == activeIndex && string.IsNullOrWhiteSpace(launchUrl));
 
                     var tab = await AddNewTabAsync(item.Url, isIncognito: false, skipInitialNavigate: !isActive);
                     if (!string.IsNullOrWhiteSpace(item.Title))
@@ -601,11 +602,20 @@ public partial class MainWindow : Window
                 {
                     SelectTab(targetActiveTab, force: true);
                 }
-                return;
+                sessionRestored = true;
             }
         }
 
-        await AddNewTabAsync(null, isIncognito: _isGuestSession);
+        // Si se abrió con un archivo o enlace externo (ej. PDF), abrirlo en una pestaña activa
+        if (!string.IsNullOrWhiteSpace(launchUrl))
+        {
+            var extTab = await AddNewTabAsync(launchUrl, isIncognito: false);
+            SelectTab(extTab, force: true);
+        }
+        else if (!sessionRestored && Tabs.Count == 0)
+        {
+            await AddNewTabAsync(null, isIncognito: false);
+        }
     }
 
     private static string? NormalizeExternalUrl(string? raw)
@@ -1753,21 +1763,140 @@ public partial class MainWindow : Window
     {
         var languages = new List<TranslateLanguageItem>
         {
-            new("es", "Español"),
-            new("en", "Inglés (English)"),
-            new("fr", "Francés (Français)"),
-            new("pt", "Portugués (Português)"),
-            new("de", "Alemán (Deutsch)"),
-            new("it", "Italiano"),
-            new("ja", "Japonés (日本語)"),
-            new("zh-CN", "Chino (简体中文)"),
-            new("ru", "Ruso (Русский)"),
-            new("ko", "Coreano (한국어)"),
-            new("ar", "Árabe (العربية)"),
-            new("hi", "Hindi (हिन्दी)"),
-            new("nl", "Holandés (Nederlands)"),
-            new("pl", "Polaco (Polski)"),
-            new("tr", "Turco (Türkçe)")
+            // Idiomas principales de acceso rápido
+            new("es", "⭐ Español"),
+            new("en", "⭐ Inglés (English)"),
+            new("fr", "⭐ Francés (Français)"),
+            new("pt", "⭐ Portugués (Português)"),
+            new("de", "⭐ Alemán (Deutsch)"),
+            new("it", "⭐ Italiano"),
+            new("ja", "⭐ Japonés (日本語)"),
+            new("zh-CN", "⭐ Chino Simplificado (简体中文)"),
+            new("zh-TW", "⭐ Chino Tradicional (繁體中文)"),
+            new("ru", "⭐ Ruso (Русский)"),
+            new("ko", "⭐ Coreano (한국어)"),
+            new("ar", "⭐ Árabe (العربية)"),
+            new("hi", "⭐ Hindi (हिन्दी)"),
+            new("nl", "⭐ Holandés (Nederlands)"),
+
+            // Lista completa de idiomas mundiales (orden alfabético en español)
+            new("af", "Afrikáans"),
+            new("sq", "Albanés"),
+            new("am", "Amárico"),
+            new("hy", "Armenio"),
+            new("as", "Asamés"),
+            new("ay", "Aymara"),
+            new("az", "Azerbaiyano"),
+            new("bm", "Bambara"),
+            new("bn", "Bengalí"),
+            new("bho", "Bhojpuri"),
+            new("be", "Bielorruso"),
+            new("my", "Birmano"),
+            new("bs", "Bosnio"),
+            new("bg", "Búlgaro"),
+            new("ca", "Catalán"),
+            new("ceb", "Cebuano"),
+            new("cs", "Checo"),
+            new("ny", "Chichewa"),
+            new("si", "Cingalés"),
+            new("co", "Corso"),
+            new("hr", "Croata"),
+            new("da", "Danés"),
+            new("dv", "Divehi"),
+            new("doi", "Dogri"),
+            new("sk", "Eslovaco"),
+            new("sl", "Esloveno"),
+            new("eo", "Esperanto"),
+            new("et", "Estonio"),
+            new("eu", "Euskera (Vasco)"),
+            new("ee", "Ewe"),
+            new("tl", "Filipino (Tagalo)"),
+            new("fi", "Finés"),
+            new("fy", "Frisón"),
+            new("gd", "Gaélico escocés"),
+            new("cy", "Galés"),
+            new("gl", "Gallego"),
+            new("ka", "Georgiano"),
+            new("el", "Griego"),
+            new("gn", "Guaraní"),
+            new("gu", "Guyaratí"),
+            new("ha", "Hausa"),
+            new("haw", "Hawaiano"),
+            new("he", "Hebreo"),
+            new("hmn", "Hmong"),
+            new("hu", "Húngaro"),
+            new("ig", "Igbo"),
+            new("ilo", "Ilocano"),
+            new("id", "Indonesio"),
+            new("ga", "Irlandés"),
+            new("is", "Islandés"),
+            new("jv", "Javanés"),
+            new("km", "Jemer (Camboyano)"),
+            new("kn", "Kannada"),
+            new("kk", "Kazajo"),
+            new("rw", "Kinyarwanda"),
+            new("ky", "Kirguís"),
+            new("gom", "Konkani"),
+            new("kri", "Krio"),
+            new("ku", "Kurdo (Kurmanji)"),
+            new("ckb", "Kurdo (Sorani)"),
+            new("lo", "Lao"),
+            new("la", "Latín"),
+            new("lv", "Letón"),
+            new("ln", "Lingala"),
+            new("lt", "Lituano"),
+            new("lg", "Luganda"),
+            new("lb", "Luxemburgués"),
+            new("mk", "Macedonio"),
+            new("mai", "Maithili"),
+            new("mg", "Malgache"),
+            new("ms", "Malayo"),
+            new("ml", "Malayalam"),
+            new("mt", "Maltés"),
+            new("mi", "Maorí"),
+            new("mr", "Maratí"),
+            new("mni-Mtei", "Meiteilon (Manipuri)"),
+            new("mzo", "Mizo"),
+            new("mn", "Mongol"),
+            new("ne", "Nepalí"),
+            new("no", "Noruego"),
+            new("om", "Oromo"),
+            new("pa", "Panyabí"),
+            new("ps", "Pashto"),
+            new("fa", "Persa"),
+            new("pl", "Polaco"),
+            new("qu", "Quechua"),
+            new("ro", "Rumano"),
+            new("sm", "Samoano"),
+            new("sa", "Sánscrito"),
+            new("nso", "Sepedi"),
+            new("sr", "Serbio"),
+            new("st", "Sesotho"),
+            new("sn", "Shona"),
+            new("sd", "Sindhi"),
+            new("so", "Somalí"),
+            new("sw", "Suajili"),
+            new("sv", "Sueco"),
+            new("su", "Sundanés"),
+            new("tg", "Tayiko"),
+            new("ta", "Tamil"),
+            new("tt", "Tártaro"),
+            new("te", "Telugu"),
+            new("th", "Tailandés"),
+            new("ti", "Tigriña"),
+            new("ts", "Tsonga"),
+            new("tr", "Turco"),
+            new("tk", "Turcomano"),
+            new("ak", "Twi"),
+            new("uk", "Ucraniano"),
+            new("ug", "Uigur"),
+            new("ur", "Urdu"),
+            new("uz", "Uzbeko"),
+            new("vi", "Vietnamita"),
+            new("xh", "Xhosa"),
+            new("yi", "Yidis"),
+            new("yo", "Yoruba"),
+            new("zu", "Zulú")
         };
         CmbTargetLanguage.ItemsSource = languages;
         CmbTargetLanguage.SelectedValue = "es";
@@ -1789,7 +1918,7 @@ public partial class MainWindow : Window
                 PillTranslateIndicator.Visibility = Visibility.Visible;
                 TxtTranslateAction.Text = "Original";
                 PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E3A8A"));
-                PillTranslateIndicator.ToolTip = "Página traducida (clic para ver opciones o restaurar el original)";
+                PillTranslateIndicator.ToolTip = "Página traducida (clic para cambiar idioma o restaurar)";
                 return;
             }
 
@@ -1806,10 +1935,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void PillTranslate_Click(object sender, MouseButtonEventArgs e)
+    private void PillTranslate_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        e.Handled = true;
         if (_activeTab?.WebView?.CoreWebView2 == null || _activeTab.IsDisposed) return;
-        PopupTranslate.IsOpen = true;
+        PopupTranslate.IsOpen = !PopupTranslate.IsOpen;
     }
 
     private void BtnCloseTranslatePopup_Click(object sender, RoutedEventArgs e)
@@ -1828,7 +1958,7 @@ public partial class MainWindow : Window
         {
             TxtTranslateAction.Text = "Original";
             PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E3A8A"));
-            ShowToast("🌐 Página traducida. Haz clic en el indicador para ver opciones o restaurar.");
+            ShowToast($"🌐 Traduciendo página a {targetLang.ToUpperInvariant()}... Clic para opciones.");
         }
     }
 
@@ -3448,6 +3578,19 @@ public partial class MainWindow : Window
                 }
             }
             Tabs.Clear();
+
+            int remainingWindows = 0;
+            try
+            {
+                remainingWindows = Application.Current.Windows.OfType<MainWindow>().Count(w => w != this && w.IsLoaded);
+            }
+            catch { }
+
+            if (remainingWindows == 0)
+            {
+                try { SingleInstanceIpc.Release(); } catch { }
+                try { Application.Current.Shutdown(); } catch { }
+            }
         }
         catch { }
 
@@ -4870,15 +5013,40 @@ public partial class MainWindow : Window
 
         if (Tabs.Count == 0)
         {
-            await AddNewTabAsync(null, isIncognito: true);
+            string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
+            _initialUrl = null;
+            await AddNewTabAsync(launchUrl, isIncognito: true);
         }
 
         ShowToast("👤 Modo Invitado activo: navegas en una sesión aislada sin acceso a las contraseñas ni marcadores del propietario.");
     }
 
-    private void BtnUnlockFromGuest_Click(object sender, RoutedEventArgs e)
+    private async void BtnUnlockFromGuest_Click(object sender, RoutedEventArgs e)
     {
-        TryUnlockFromGuestMode("Ingresa tu PIN de propietario para salir del Modo Invitado y restaurar tus marcadores y contraseñas");
+        await UnlockFromGuestToOwnerAsync();
+    }
+
+    private async Task<bool> UnlockFromGuestToOwnerAsync()
+    {
+        var pinDialog = new PinPromptDialog("Ingresa tu PIN de propietario para salir del Modo Invitado y restaurar tus páginas y contraseñas") { Owner = this };
+        if (pinDialog.ShowDialog() == true)
+        {
+            _isGuestSession = false;
+            PasswordManager.MarkSessionUnlocked();
+            ApplySettings();
+
+            // Limpiar pestañas temporales del invitado y restaurar la sesión guardada del propietario
+            var guestTabs = Tabs.ToList();
+            foreach (var t in guestTabs)
+            {
+                CloseTab(t);
+            }
+
+            await RestoreOrInitializeSessionTabsAsync();
+            ShowToast("🔓 Sesión de propietario desbloqueada: tus pestañas, marcadores y contraseñas han sido restaurados.");
+            return true;
+        }
+        return false;
     }
 
     private bool TryUnlockFromGuestMode(string reason)
@@ -4962,5 +5130,3 @@ public partial class MainWindow : Window
         }
     }
 }
-
-public record TranslateLanguageItem(string Code, string Name);

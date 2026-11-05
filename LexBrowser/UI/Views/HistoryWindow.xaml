@@ -630,11 +630,36 @@
                 </ListView.ItemTemplate>
             </ListView>
 
-            <!-- Barra inferior con contadores -->
+            <!-- Barra inferior con paginación inteligente y contadores -->
             <Border Grid.Row="2" Background="#111116" BorderBrush="#20202B" BorderThickness="0,1,0,0" Padding="16,8">
                 <Grid>
-                    <TextBlock x:Name="TxtHistoryCount" Text="Cargando historial..." FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Lado Izquierdo: Contador y Selector por página -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtHistoryCount" Text="Cargando historial..." FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <TextBlock Text="Mostrar:" FontSize="11" Foreground="#71717A" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox x:Name="CmbPageSize" Width="60" Height="24" Background="#1B1B26" Foreground="#FFFFFF" BorderBrush="#2B2B3C" BorderThickness="1"
+                                  FontSize="11" VerticalContentAlignment="Center" SelectionChanged="CmbPageSize_SelectionChanged">
+                            <ComboBoxItem Content="50" IsSelected="True"/>
+                            <ComboBoxItem Content="100"/>
+                            <ComboBoxItem Content="200"/>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <!-- Centro: Navegación de Páginas -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Button x:Name="BtnPrevPage" Content="◀ Anterior" Style="{StaticResource ActionBtn}" Padding="8,3" FontSize="11" Margin="0,0,8,0" Click="BtnPrevPage_Click"/>
+                        <TextBlock x:Name="TxtPageInfo" Text="Pág. 1 de 1" FontSize="11" FontWeight="SemiBold" Foreground="#818CF8" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <Button x:Name="BtnNextPage" Content="Siguiente ▶" Style="{StaticResource ActionBtn}" Padding="8,3" FontSize="11" Click="BtnNextPage_Click"/>
+                    </StackPanel>
+
+                    <!-- Lado Derecho: Acciones de borrado -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <Button Content="🗑️ Eliminar día seleccionado" Style="{StaticResource ActionBtn}" Padding="10,4" Margin="0,0,8,0" Click="BtnDeleteDay_Click"/>
                         <Button Content="Vaciar todo el historial" Style="{StaticResource ActionBtn}" Foreground="#F43F5E" Padding="10,4" Click="BtnClearAll_Click"/>
                     </StackPanel>

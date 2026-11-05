@@ -19,6 +19,25 @@ public sealed class SavedCredential
 
     public string DomainInitial => string.IsNullOrWhiteSpace(Domain) ? "🌐" : Domain.Substring(0, 1).ToUpperInvariant();
     public string UpdatedDisplay => $"Guardado el {UpdatedAtUtc.ToLocalTime():dd/MM/yyyy HH:mm}";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public System.Windows.Media.ImageSource? FaviconImage
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(Domain)) return null;
+            var cached = Engine.FaviconService.GetCachedFavicon(Domain);
+            if (cached != null) return cached;
+            _ = Engine.FaviconService.ResolveFaviconAsync("https://" + Domain);
+            return null;
+        }
+    }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasFaviconImage => FaviconImage != null;
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasNoFaviconImage => FaviconImage == null;
 }
 
 public sealed class VaultFileModel
