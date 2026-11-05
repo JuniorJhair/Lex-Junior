@@ -16,7 +16,7 @@
   --accent-emerald: #10B981;
   --text-primary: #F4F4F6;
   --text-secondary: #A1A1B5;
-  --text-muted: #6E6E85;
+  --text-muted: #8B8B9E;
   --radius-xl: 20px;
   --radius-lg: 14px;
   --radius-md: 10px;
@@ -27,6 +27,11 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 3px;
 }
 
 html {
@@ -1499,6 +1504,15 @@ section {
 
   .mobile-menu-btn {
     display: inline-block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
