@@ -364,7 +364,8 @@ public static class GlobalScrollBehavior
 
     private static void OnScrollViewerScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        if (e.VerticalChange == 0 && e.HorizontalChange == 0) return;
+        // Filtrar estrictamente por VerticalChange != 0 para no cerrar desplegables por simples cambios de layout o scroll horizontal
+        if (e.VerticalChange == 0) return;
         if (_suppressScrollClose) return;
         if (sender is not DependencyObject d) return;
         if (IsInsideComboBoxOrPopup(d)) return;
