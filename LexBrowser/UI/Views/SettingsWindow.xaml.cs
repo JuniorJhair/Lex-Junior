@@ -17,6 +17,7 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         LoadCurrentSettings();
         _isInitializing = false;
+        Activated += (s, e) => UpdateDefaultBrowserUI();
     }
 
     private void LoadCurrentSettings()
@@ -45,6 +46,8 @@ public partial class SettingsWindow : Window
             case "Custom": RbCustom.IsChecked = true; break;
             default: RbGoogle.IsChecked = true; break;
         }
+
+        UpdateDefaultBrowserUI();
     }
 
     public void OpenToSection(string section)
@@ -192,6 +195,35 @@ public partial class SettingsWindow : Window
         {
             try { DragMove(); } catch { }
         }
+    }
+
+    private void UpdateDefaultBrowserUI()
+    {
+        try
+        {
+            bool isDefault = InstallerService.IsDefaultBrowser();
+            if (isDefault)
+            {
+                TxtDefaultBrowserStatus.Text = "✓ Lex Junior es tu navegador predeterminado en Windows.";
+                TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#34D399"));
+                BtnSetDefaultBrowser.Content = "⚙ Cambiar opciones en Windows";
+                BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2E2E3A"));
+            }
+            else
+            {
+                TxtDefaultBrowserStatus.Text = "Haz de Lex Junior tu navegador principal para abrir enlaces externos.";
+                TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#71717A"));
+                BtnSetDefaultBrowser.Content = "🌐 Establecer como predeterminado";
+                BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#6366F1"));
+            }
+        }
+        catch { }
+    }
+
+    private void BtnSetDefaultBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        InstallerService.OpenWindowsDefaultAppsSettings();
+        UpdateDefaultBrowserUI();
     }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)

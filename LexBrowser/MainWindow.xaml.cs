@@ -53,13 +53,23 @@ public partial class MainWindow : Window
     private Border? _draggedBorder;
     private bool _isDraggingTab = false;
     private BrowserTab? _initialAttachedTab;
+    private string? _initialUrl;
 
-    public MainWindow() : this(null)
+    public MainWindow() : this((string?)null, null)
     {
     }
 
-    public MainWindow(BrowserTab? initialTab)
+    public MainWindow(string? initialUrl) : this(initialUrl, null)
     {
+    }
+
+    public MainWindow(BrowserTab? initialTab) : this(null, initialTab)
+    {
+    }
+
+    public MainWindow(string? initialUrl, BrowserTab? initialTab)
+    {
+        _initialUrl = NormalizeExternalUrl(initialUrl);
         _initialAttachedTab = initialTab;
         InitializeComponent();
         TabsItemsControl.ItemsSource = Tabs;
@@ -526,11 +536,41 @@ public partial class MainWindow : Window
         }
         else if (Tabs.Count == 0)
         {
-            await AddNewTabAsync(null, isIncognito: _isGuestSession);
+            string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
+            _initialUrl = null;
+            await AddNewTabAsync(launchUrl, isIncognito: _isGuestSession);
         }
 
         // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
         _ = CheckForBrowserUpdateInBackgroundAsync();
+    }
+
+    private static string? NormalizeExternalUrl(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        raw = raw.Trim('"', ' ', '\'');
+        if (raw.StartsWith("-") || raw.StartsWith("/")) return null;
+
+        if (File.Exists(raw))
+        {
+            try { return new Uri(raw).AbsoluteUri; } catch { }
+        }
+        return raw;
+    }
+
+    public async Task AddNewTabFromExternalAsync(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        string? normalized = NormalizeExternalUrl(url);
+        if (string.IsNullOrWhiteSpace(normalized)) return;
+
+        if (BrowserLockOverlay.Visibility == Visibility.Visible)
+        {
+            _initialUrl = normalized;
+            return;
+        }
+
+        await AddNewTabAsync(normalized, isIncognito: _isGuestSession);
     }
 
     private async Task CheckForBrowserUpdateInBackgroundAsync()
@@ -4600,7 +4640,9 @@ public partial class MainWindow : Window
 
         if (Tabs.Count == 0)
         {
-            await AddNewTabAsync(null, isIncognito: false);
+            string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
+            _initialUrl = null;
+            await AddNewTabAsync(launchUrl, isIncognito: false);
         }
     }
 

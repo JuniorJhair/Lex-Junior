@@ -1,6 +1,9 @@
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
+using LexBrowser.Core;
 
 namespace LexBrowser;
 
@@ -32,18 +35,18 @@ public partial class App : Application
 
         base.OnStartup(e);
 
-        if (LexBrowser.Core.InstallerService.ShouldRunAsSilentUpdate(e.Args))
+        if (InstallerService.ShouldRunAsSilentUpdate(e.Args))
         {
             try
             {
-                await LexBrowser.Core.InstallerService.PerformSilentUpdateAndRestartAsync();
+                await InstallerService.PerformSilentUpdateAndRestartAsync();
             }
             catch { }
             Shutdown();
             return;
         }
 
-        if (LexBrowser.Core.InstallerService.ShouldRunAsUninstaller(e.Args))
+        if (InstallerService.ShouldRunAsUninstaller(e.Args))
         {
             var uninstaller = new LexBrowser.UI.Views.InstallerWindow(isUninstallMode: true);
             MainWindow = uninstaller;
@@ -51,7 +54,7 @@ public partial class App : Application
             return;
         }
 
-        if (LexBrowser.Core.InstallerService.ShouldRunAsInstaller(e.Args))
+        if (InstallerService.ShouldRunAsInstaller(e.Args))
         {
             var installer = new LexBrowser.UI.Views.InstallerWindow(isUninstallMode: false);
             MainWindow = installer;
@@ -59,15 +62,69 @@ public partial class App : Application
             return;
         }
 
-        var browserWindow = new MainWindow();
+        // Extraer URL o ruta de archivo si el navegador fue ejecutado con argumentos externos
+        string? initialUrl = null;
+        if (e.Args != null && e.Args.Length > 0)
+        {
+            foreach (var arg in e.Args)
+            {
+                if (string.IsNullOrWhiteSpace(arg) || arg.StartsWith("-") || arg.StartsWith("/")) continue;
+                initialUrl = arg;
+                break;
+            }
+        }
+
+        // Si ya hay una ventana de Lex Junior abierta en el sistema, reenviarle la URL por NamedPipe
+        // y terminar este proceso en ~5ms (evita procesos duplicados y ahorra 100% de memoria RAM).
+        if (!SingleInstanceIpc.TryAcquireSingleInstance())
+        {
+            await SingleInstanceIpc.SendUrlToExistingInstanceAsync(initialUrl);
+            Shutdown();
+            return;
+        }
+
+        // Auto-registro en segundo plano en Windows (StartMenuInternet) para que siempre
+        // figure de inmediato en la lista oficial de "Navegadores web" de Windows.
+        _ = Task.Run(() =>
+        {
+            try { InstallerService.RegisterAsDefaultBrowser(); } catch { }
+        });
+
+        var browserWindow = new MainWindow(initialUrl);
         MainWindow = browserWindow;
+
+        // Iniciar el servidor de escucha IPC para enlaces externos entrantes mientras el navegador esté abierto
+        SingleInstanceIpc.StartIpcServer(url =>
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (MainWindow is MainWindow win)
+                {
+                    if (win.WindowState == WindowState.Minimized)
+                        win.WindowState = WindowState.Normal;
+                    win.Activate();
+                    win.Topmost = true;
+                    win.Topmost = false;
+                    win.Focus();
+
+                    if (!string.IsNullOrWhiteSpace(url))
+                    {
+                        _ = win.AddNewTabFromExternalAsync(url);
+                    }
+                }
+            });
+        });
+
         browserWindow.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Liberar mutex y servidor IPC
+        try { SingleInstanceIpc.Release(); } catch { }
+
         // Garantiza que el historial pendiente (guardado diferido) llegue a disco al cerrar
-        try { LexBrowser.Core.HistoryManager.Flush(); } catch { }
+        try { HistoryManager.Flush(); } catch { }
         base.OnExit(e);
     }
 }

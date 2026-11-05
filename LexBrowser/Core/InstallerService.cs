@@ -11,6 +11,9 @@ namespace LexBrowser.Core;
 public static class InstallerService
 {
     private const string UninstallRegistrySubKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\LexJuniorBrowser";
+    private const string BrowserClientSubKey = @"Software\Clients\StartMenuInternet\LexJuniorBrowser";
+    private const string BrowserProgId = "LexJuniorHTML";
+    private const string BrowserAppKey = @"Software\Classes\Applications\LexBrowser.exe";
 
     public static string InstallDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "LexJuniorBrowser");
@@ -116,7 +119,7 @@ public static class InstallerService
         string iconPath = Path.Combine(InstallDir, "app.ico");
         ExtractEmbeddedIconToDisk(iconPath);
 
-        progress?.Report((80, "Creando accesos directos y registrando en Windows..."));
+        progress?.Report((80, "Creando accesos directos y registrando navegador en Windows..."));
         await Task.Run(() =>
         {
             if (createDesktopShortcut)
@@ -129,6 +132,7 @@ public static class InstallerService
             }
 
             RegisterInWindowsAddRemovePrograms(iconPath);
+            RegisterAsDefaultBrowser(InstalledExePath, iconPath);
         });
 
         progress?.Report((100, "¡Instalación completada con éxito!"));
@@ -168,6 +172,7 @@ public static class InstallerService
             try { if (File.Exists(DesktopShortcutPath)) File.Delete(DesktopShortcutPath); } catch { }
             try { if (File.Exists(StartMenuShortcutPath)) File.Delete(StartMenuShortcutPath); } catch { }
             try { Registry.CurrentUser.DeleteSubKeyTree(UninstallRegistrySubKey, throwOnMissingSubKey: false); } catch { }
+            UnregisterAsDefaultBrowser();
         });
 
         if (deleteUserData)
@@ -189,6 +194,252 @@ public static class InstallerService
         progress?.Report((95, "Programando limpieza final de carpeta de programa..."));
         ScheduleSelfDeletionOfInstallDir();
         progress?.Report((100, "Desinstalación completada."));
+    }
+
+    /// <summary>
+    /// Comprueba si Lex Junior está actualmente configurado como navegador predeterminado para HTTP/HTTPS.
+    /// </summary>
+    public static bool IsDefaultBrowser()
+    {
+        try
+        {
+            using var httpsKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice");
+            var progId = httpsKey?.GetValue("ProgId") as string;
+            if (string.Equals(progId, BrowserProgId, StringComparison.OrdinalIgnoreCase)) return true;
+
+            using var httpKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice");
+            var httpProgId = httpKey?.GetValue("ProgId") as string;
+            return string.Equals(httpProgId, BrowserProgId, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Abre la pantalla oficial de Windows 10/11 para seleccionar el navegador web predeterminado.
+    /// </summary>
+    public static void OpenWindowsDefaultAppsSettings()
+    {
+        RegisterAsDefaultBrowser();
+
+        try
+        {
+            // Windows 11: abre directamente la sección de Lex Junior
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "ms-settings:defaultapps?registeredAppUser=LexJuniorBrowser",
+                UseShellExecute = true
+            });
+            return;
+        }
+        catch { }
+
+        try
+        {
+            // Windows 10: abre la pantalla de Aplicaciones Predeterminadas estándar
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "ms-settings:defaultapps",
+                UseShellExecute = true
+            });
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Registra formalmente a Lex Junior como navegador web en Windows (StartMenuInternet, Capabilities, ProgID).
+    /// Se escribe en HKEY_CURRENT_USER por lo que NUNCA requiere permisos de Administrador ni eleva UAC.
+    /// </summary>
+    public static void RegisterAsDefaultBrowser(string? targetExe = null, string? targetIcon = null)
+    {
+        try
+        {
+            targetExe ??= File.Exists(InstalledExePath) ? InstalledExePath : (Environment.ProcessPath ?? "");
+            if (string.IsNullOrEmpty(targetExe) || !File.Exists(targetExe)) return;
+
+            targetIcon ??= Path.Combine(InstallDir, "app.ico");
+            if (!File.Exists(targetIcon))
+            {
+                string localIcon = Path.Combine(Path.GetDirectoryName(targetExe) ?? "", "app.ico");
+                targetIcon = File.Exists(localIcon) ? localIcon : targetExe;
+            }
+
+            // 1. HKCU\Software\Clients\StartMenuInternet\LexJuniorBrowser
+            using (var clientKey = Registry.CurrentUser.CreateSubKey(BrowserClientSubKey))
+            {
+                if (clientKey != null)
+                {
+                    clientKey.SetValue("", "Lex Junior Browser", RegistryValueKind.String);
+
+                    using (var iconKey = clientKey.CreateSubKey("DefaultIcon"))
+                    {
+                        iconKey.SetValue("", $"{targetIcon},0", RegistryValueKind.String);
+                    }
+
+                    using (var shellOpen = clientKey.CreateSubKey(@"shell\open\command"))
+                    {
+                        shellOpen.SetValue("", $"\"{targetExe}\"", RegistryValueKind.String);
+                    }
+
+                    using (var installInfo = clientKey.CreateSubKey("InstallInfo"))
+                    {
+                        installInfo.SetValue("ReinstallCommand", $"\"{targetExe}\" --install", RegistryValueKind.String);
+                        installInfo.SetValue("HideIconsCommand", "", RegistryValueKind.String);
+                        installInfo.SetValue("ShowIconsCommand", "", RegistryValueKind.String);
+                        installInfo.SetValue("IconsVisible", 1, RegistryValueKind.DWord);
+                    }
+
+                    using (var cap = clientKey.CreateSubKey("Capabilities"))
+                    {
+                        cap.SetValue("ApplicationDescription", "Lex Junior - Navegador ultraligero con bloqueo nativo de anuncios y 0 telemetría.", RegistryValueKind.String);
+                        cap.SetValue("ApplicationIcon", $"{targetIcon},0", RegistryValueKind.String);
+                        cap.SetValue("ApplicationName", "Lex Junior Browser", RegistryValueKind.String);
+
+                        using (var fa = cap.CreateSubKey("FileAssociations"))
+                        {
+                            fa.SetValue(".htm", BrowserProgId, RegistryValueKind.String);
+                            fa.SetValue(".html", BrowserProgId, RegistryValueKind.String);
+                            fa.SetValue(".pdf", BrowserProgId, RegistryValueKind.String);
+                            fa.SetValue(".shtml", BrowserProgId, RegistryValueKind.String);
+                            fa.SetValue(".xht", BrowserProgId, RegistryValueKind.String);
+                            fa.SetValue(".xhtml", BrowserProgId, RegistryValueKind.String);
+                            fa.SetValue(".svg", BrowserProgId, RegistryValueKind.String);
+                            fa.SetValue(".webp", BrowserProgId, RegistryValueKind.String);
+                        }
+
+                        using (var ua = cap.CreateSubKey("URLAssociations"))
+                        {
+                            ua.SetValue("http", BrowserProgId, RegistryValueKind.String);
+                            ua.SetValue("https", BrowserProgId, RegistryValueKind.String);
+                            ua.SetValue("ftp", BrowserProgId, RegistryValueKind.String);
+                        }
+
+                        using (var sm = cap.CreateSubKey("StartMenu"))
+                        {
+                            sm.SetValue("StartMenuInternet", "LexJuniorBrowser", RegistryValueKind.String);
+                        }
+                    }
+                }
+            }
+
+            // 2. HKCU\Software\RegisteredApplications
+            using (var regApps = Registry.CurrentUser.CreateSubKey(@"Software\RegisteredApplications"))
+            {
+                regApps?.SetValue("LexJuniorBrowser", @"Software\Clients\StartMenuInternet\LexJuniorBrowser\Capabilities", RegistryValueKind.String);
+            }
+
+            // 3. HKCU\Software\Classes\LexJuniorHTML
+            using (var progIdKey = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{BrowserProgId}"))
+            {
+                if (progIdKey != null)
+                {
+                    progIdKey.SetValue("", "Documento HTML de Lex Junior", RegistryValueKind.String);
+                    progIdKey.SetValue("AppUserModelId", "LexJunior.Browser", RegistryValueKind.String);
+                    progIdKey.SetValue("FriendlyTypeName", "Documento HTML de Lex Junior", RegistryValueKind.String);
+
+                    using (var iconKey = progIdKey.CreateSubKey("DefaultIcon"))
+                    {
+                        iconKey.SetValue("", $"{targetIcon},0", RegistryValueKind.String);
+                    }
+
+                    using (var shellOpen = progIdKey.CreateSubKey(@"shell\open\command"))
+                    {
+                        shellOpen.SetValue("", $"\"{targetExe}\" \"%1\"", RegistryValueKind.String);
+                    }
+
+                    using (var appInfo = progIdKey.CreateSubKey("Application"))
+                    {
+                        appInfo.SetValue("ApplicationName", "Lex Junior Browser", RegistryValueKind.String);
+                        appInfo.SetValue("ApplicationIcon", $"{targetIcon},0", RegistryValueKind.String);
+                        appInfo.SetValue("ApplicationDescription", "Documento web de Lex Junior", RegistryValueKind.String);
+                        appInfo.SetValue("AppUserModelId", "LexJunior.Browser", RegistryValueKind.String);
+                    }
+                }
+            }
+
+            // 4. HKCU\Software\Classes\Applications\LexBrowser.exe
+            using (var appKey = Registry.CurrentUser.CreateSubKey(BrowserAppKey))
+            {
+                if (appKey != null)
+                {
+                    appKey.SetValue("", "Lex Junior Browser", RegistryValueKind.String);
+                    appKey.SetValue("FriendlyAppName", "Lex Junior Browser", RegistryValueKind.String);
+
+                    using (var sup = appKey.CreateSubKey("SupportedProtocols"))
+                    {
+                        sup.SetValue("http", "", RegistryValueKind.String);
+                        sup.SetValue("https", "", RegistryValueKind.String);
+                    }
+
+                    using (var iconKey = appKey.CreateSubKey("DefaultIcon"))
+                    {
+                        iconKey.SetValue("", $"{targetIcon},0", RegistryValueKind.String);
+                    }
+
+                    using (var shellOpen = appKey.CreateSubKey(@"shell\open\command"))
+                    {
+                        shellOpen.SetValue("", $"\"{targetExe}\" \"%1\"", RegistryValueKind.String);
+                    }
+                }
+            }
+
+            // 5. OpenWithProgids para que aparezca en el menú clic derecho "Abrir con..."
+            string[] extensions = { ".htm", ".html", ".pdf", ".shtml", ".svg", ".webp" };
+            foreach (var ext in extensions)
+            {
+                try
+                {
+                    using var extKey = Registry.CurrentUser.CreateSubKey($@"Software\Classes\{ext}\OpenWithProgids");
+                    extKey?.SetValue(BrowserProgId, string.Empty, RegistryValueKind.String);
+                }
+                catch { }
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Limpia todas las claves de registro del navegador al desinstalar.
+    /// </summary>
+    public static void UnregisterAsDefaultBrowser()
+    {
+        try
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(BrowserClientSubKey, throwOnMissingSubKey: false);
+        }
+        catch { }
+
+        try
+        {
+            using var regApps = Registry.CurrentUser.OpenSubKey(@"Software\RegisteredApplications", writable: true);
+            regApps?.DeleteValue("LexJuniorBrowser", throwOnMissingValue: false);
+        }
+        catch { }
+
+        try
+        {
+            Registry.CurrentUser.DeleteSubKeyTree($@"Software\Classes\{BrowserProgId}", throwOnMissingSubKey: false);
+        }
+        catch { }
+
+        try
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(BrowserAppKey, throwOnMissingSubKey: false);
+        }
+        catch { }
+
+        string[] extensions = { ".htm", ".html", ".pdf", ".shtml", ".svg", ".webp" };
+        foreach (var ext in extensions)
+        {
+            try
+            {
+                using var extKey = Registry.CurrentUser.OpenSubKey($@"Software\Classes\{ext}\OpenWithProgids", writable: true);
+                extKey?.DeleteValue(BrowserProgId, throwOnMissingValue: false);
+            }
+            catch { }
+        }
     }
 
     private static void StopOtherLexProcesses()
