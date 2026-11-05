@@ -203,7 +203,7 @@
                 <StackPanel x:Name="VideoPlaceholder" VerticalAlignment="Center" HorizontalAlignment="Center">
                     <TextBlock Text="🗖" FontSize="36" HorizontalAlignment="Center" Opacity="0.3"/>
                     <TextBlock Text="Página flotante lista" 
-                               Foreground="#555566" FontSize="11" HorizontalAlignment="Center" 
+                               Foreground="#8B8B96" FontSize="11" HorizontalAlignment="Center" 
                                TextWrapping="Wrap" TextAlignment="Center" Margin="20,8"/>
                 </StackPanel>
             </Grid>
