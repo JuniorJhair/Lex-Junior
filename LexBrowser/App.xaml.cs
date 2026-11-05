@@ -17,6 +17,9 @@ public partial class App : Application
 
     public App()
     {
+        // Registrar comportamiento global de ComboBox y ScrollViewer (aislamiento de rueda y auto-cierre sin timers)
+        LexBrowser.UI.GlobalScrollBehavior.Initialize();
+
         DispatcherUnhandledException += (s, e) =>
         {
             System.Diagnostics.Debug.WriteLine($"[CRASH PREVENTED] Unhandled exception: {e.Exception}");
