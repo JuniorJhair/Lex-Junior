@@ -9,6 +9,11 @@ public partial class PinPromptDialog : Window
     public PinPromptDialog(string? actionDescription = null)
     {
         InitializeComponent();
+
+        // Límite responsivo: máximo 85% del área de trabajo de la pantalla actual
+        MaxHeight = SystemParameters.WorkArea.Height * 0.85;
+        MinHeight = 360;
+
         if (!string.IsNullOrWhiteSpace(actionDescription))
         {
             TxtPromptSubtitle.Text = actionDescription;

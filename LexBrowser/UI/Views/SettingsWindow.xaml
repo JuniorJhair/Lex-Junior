@@ -8,6 +8,8 @@
         AllowsTransparency="False"
         Background="#0F0F14"
         Foreground="#E4E4E7"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         WindowStartupLocation="CenterOwner"
         Icon="pack://application:,,,/Assets/logo.png">
 
@@ -57,8 +59,8 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <ContentPresenter Grid.Column="0" VerticalAlignment="Center"/>
-                            <Border x:Name="track" Grid.Column="1" Width="44" Height="24" CornerRadius="12" Background="#2E2E3A" Margin="10,0,0,0">
+                            <ContentPresenter Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <Border x:Name="track" Grid.Column="1" Width="44" Height="24" CornerRadius="12" Background="#2E2E3A" Margin="0,0,0,0">
                                 <Ellipse x:Name="thumb" Width="18" Height="18" Fill="#FFFFFF" HorizontalAlignment="Left" Margin="3,0,0,0">
                                     <Ellipse.Effect>
                                         <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.3"/>
@@ -141,7 +143,7 @@
             <!-- Menú lateral de navegación -->
             <Border Grid.Column="0" Background="#121217" BorderBrush="#242430" BorderThickness="0,0,1,0" Padding="12,16">
                 <StackPanel>
-                    <TextBlock Text="OPCIONES" FontSize="10" FontWeight="Bold" Foreground="#52525B" Margin="8,0,0,10"/>
+                    <TextBlock Text="OPCIONES" FontSize="10.5" FontWeight="Bold" Foreground="#8B8B96" Margin="8,0,0,10"/>
                     
                     <RadioButton x:Name="TabGeneral" Content="🛠️ General" Style="{StaticResource SettingsTabBtn}" IsChecked="True" Checked="Tab_Checked"/>
                     <RadioButton x:Name="TabSearch" Content="🔍 Buscador" Style="{StaticResource SettingsTabBtn}" Checked="Tab_Checked"/>
@@ -152,8 +154,8 @@
 
                     <Border Background="#1A1A24" CornerRadius="8" Padding="10,12" Margin="0,8">
                         <StackPanel>
-                            <TextBlock Text="⚡ Lex Junior v2.0" FontWeight="Bold" FontSize="11" Foreground="#818CF8"/>
-                            <TextBlock Text="Navegador ultra-ligero y privado" FontSize="10" Foreground="#71717A" Margin="0,4,0,0"/>
+                            <TextBlock x:Name="TxtSettingsVersionBadge" Text="⚡ Lex Junior" FontWeight="Bold" FontSize="11" Foreground="#818CF8"/>
+                            <TextBlock Text="Navegador ultra-ligero y privado" FontSize="10.5" Foreground="#8B8B96" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -167,7 +169,7 @@
                     <!-- SECCIÓN: GENERAL -->
                     <StackPanel x:Name="PanelGeneral" Visibility="Visible">
                         <TextBlock Text="Funciones de Navegación" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                        <TextBlock Text="Personaliza los controles y botones activos en tu ventana" FontSize="12" Foreground="#71717A" Margin="0,0,0,18"/>
+                        <TextBlock Text="Personaliza los controles y botones activos en tu ventana" FontSize="12" Foreground="#8B8B96" Margin="0,0,0,18"/>
 
                         <!-- Tarjeta: Navegador Predeterminado -->
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
@@ -176,9 +178,9 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock Text="Navegador Web Predeterminado" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                    <TextBlock x:Name="TxtDefaultBrowserStatus" Text="Comprobando estado en Windows..." FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="TxtDefaultBrowserStatus" Text="Comprobando estado en Windows..." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <Button x:Name="BtnSetDefaultBrowser" Grid.Column="1" Content="🌐 Establecer como predeterminado" Background="#6366F1" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="12" Padding="14,7" Cursor="Hand" Click="BtnSetDefaultBrowser_Click" VerticalAlignment="Center">
                                     <Button.Resources>
@@ -186,6 +188,16 @@
                                             <Setter Property="CornerRadius" Value="7"/>
                                         </Style>
                                     </Button.Resources>
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Style.Triggers>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter Property="Opacity" Value="0.6"/>
+                                                    <Setter Property="Cursor" Value="Arrow"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
                                 </Button>
                             </Grid>
                         </Border>
@@ -195,7 +207,7 @@
                                 <CheckBox x:Name="ChkRestoreSession" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Restaurar Pestañas de la Sesión Anterior" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Al abrir el navegador, recupera las pestañas abiertas la última vez con hibernación inteligente (0 MB de RAM hasta hacer clic)" FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Al abrir el navegador, recupera las pestañas abiertas la última vez con hibernación inteligente (0 MB de RAM hasta hacer clic)" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
@@ -206,7 +218,7 @@
                                 <CheckBox x:Name="ChkFloatingPage" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Botón de Página Flotante" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Muestra el botón '🗖 Página Flotante' en la barra de navegación para desanclar la web completa" FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Muestra el botón '🗖 Página Flotante' en la barra de navegación para desanclar la web completa" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
@@ -217,7 +229,7 @@
                                 <CheckBox x:Name="ChkAutoVideoPip" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Mini-Reproductor de Video Automático (PiP)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Al cambiar de pestaña mientras un video se reproduce (YouTube, partidos en vivo, etc.), flota solo el video" FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Al cambiar de pestaña mientras un video se reproduce (YouTube, partidos en vivo, etc.), flota solo el video" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
@@ -228,7 +240,7 @@
                                 <CheckBox x:Name="ChkAdBlocker" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Escudo Bloqueador de Anuncios y Popunders" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Neutraliza publicidad en video de YouTube, banners molestos y capas invisibles de click-jacking" FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Neutraliza publicidad en video de YouTube, banners molestos y capas invisibles de click-jacking" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
@@ -239,7 +251,7 @@
                                 <CheckBox x:Name="ChkEnableHistory" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Guardar Historial de Navegación" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Si lo desactivas, el navegador no guardará páginas visitadas y no ocupará espacio en disco." FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Si lo desactivas, el navegador no guardará páginas visitadas y no ocupará espacio en disco." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                                 <Border Height="1" Background="#242430" Margin="0,10,0,10"/>
@@ -273,7 +285,7 @@
                             <StackPanel>
                                 <TextBlock Text="🔑 Bóveda de Contraseñas, Bloqueo por PIN y Modo Invitado" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
                                 <TextBlock Text="Guarda tus contraseñas por dominio (.com, .pe, etc.) con 0% consumo de CPU, protege el navegador con PIN y activa el Modo Invitado."
-                                           FontSize="11" Foreground="#71717A" TextWrapping="Wrap" Margin="0,2,0,10"/>
+                                           FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,10"/>
                                 <Grid>
                                     <TextBlock x:Name="TxtSettingsVaultSummary" Text="Contraseñas guardadas: 0" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
                                     <Button Content="🔑 Abrir Bóveda y Configurar PIN..." HorizontalAlignment="Right" Background="#312E81" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" Padding="12,6" BorderThickness="0" Cursor="Hand" Click="BtnOpenVaultFromSettings_Click"/>
@@ -285,7 +297,7 @@
                     <!-- SECCIÓN: BUSCADOR -->
                     <StackPanel x:Name="PanelSearch" Visibility="Collapsed">
                         <TextBlock Text="Motor de Búsqueda" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                        <TextBlock Text="Elige qué buscador usar al escribir consultas en la barra de direcciones" FontSize="12" Foreground="#71717A" Margin="0,0,0,24"/>
+                        <TextBlock Text="Elige qué buscador usar al escribir consultas en la barra de direcciones" FontSize="12" Foreground="#8B8B96" Margin="0,0,0,24"/>
 
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,16">
                             <StackPanel>
@@ -304,14 +316,14 @@
                     <!-- SECCIÓN: ACCESOS DIRECTOS -->
                     <StackPanel x:Name="PanelBookmarks" Visibility="Collapsed">
                         <TextBlock Text="Barra de Accesos Directos" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                        <TextBlock Text="Gestiona la barra rápida ubicada debajo de la URL" FontSize="12" Foreground="#71717A" Margin="0,0,0,24"/>
+                        <TextBlock Text="Gestiona la barra rápida ubicada debajo de la URL" FontSize="12" Foreground="#8B8B96" Margin="0,0,0,24"/>
 
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <StackPanel>
                                 <CheckBox x:Name="ChkBookmarksBar" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Mostrar Barra de Accesos Directos" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Atajo rápido de teclado: presiona Ctrl + Shift + B en cualquier momento para mostrarla u ocultarla" FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Atajo rápido de teclado: presiona Ctrl + Shift + B en cualquier momento para mostrarla u ocultarla" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
@@ -334,7 +346,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <Border Background="#206366F1" CornerRadius="6" Padding="8,3" HorizontalAlignment="Left" Margin="0,0,0,8">
-                                        <TextBlock Text="🛡️ MODO BLINDADO ACTIVO" Foreground="#A5B4FC" FontSize="10" FontWeight="Bold"/>
+                                        <TextBlock Text="🛡️ MODO BLINDADO ACTIVO" Foreground="#A5B4FC" FontSize="10.5" FontWeight="Bold"/>
                                     </Border>
                                     <TextBlock Text="¿Qué significa '0 Telemetría' en Lex Junior?" FontSize="18" FontWeight="Bold" Foreground="#FFFFFF"/>
                                     <TextBlock Text="Tu navegador corre sin procesos espía corporativos ni fugas de información." FontSize="12" Foreground="#A1A1AA" Margin="0,4,0,0"/>

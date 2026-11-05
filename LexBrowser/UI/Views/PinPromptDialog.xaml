@@ -2,7 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Verificación de Seguridad - Lex Junior"
-        Height="430" Width="460"
+        Width="460" MinWidth="420"
+        SizeToContent="Height"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -14,7 +17,8 @@
         <Border.Effect>
             <DropShadowEffect BlurRadius="22" ShadowDepth="6" Direction="270" Opacity="0.7" Color="Black"/>
         </Border.Effect>
-        <Grid Margin="24,20,24,18">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="24,20,24,18">
             <!-- VISTA 1: INGRESO DE PIN / CONTRASEÑA -->
             <StackPanel x:Name="PanelPinEntry" Visibility="Visible">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
@@ -93,6 +97,7 @@
                         Background="Transparent" Foreground="#A1A1AA" FontSize="11" BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center"/>
             </StackPanel>
         </Grid>
+        </ScrollViewer>
     </Border>
 </Window>
 

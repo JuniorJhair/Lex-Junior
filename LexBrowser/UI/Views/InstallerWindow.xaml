@@ -9,6 +9,8 @@
         AllowsTransparency="True"
         Background="Transparent"
         ResizeMode="NoResize"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
     <Border Background="#0F0F15" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Margin="10">
@@ -26,7 +28,7 @@
 
             <!-- Botón Cerrar superior derecho -->
             <Button Grid.Row="0" Content="✕" HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Width="28" Height="28" Background="Transparent" Foreground="#71717A"
+                    Width="28" Height="28" Background="Transparent" Foreground="#8B8B96"
                     BorderThickness="0" FontSize="13" Cursor="Hand" Click="BtnClose_Click"/>
 
             <!-- Cabecera con Logo y Título -->
@@ -63,7 +65,7 @@
                     <CheckBox x:Name="ChkLaunchAfterInstall" IsChecked="True" Foreground="#E4E4E7" FontSize="12.5" Margin="0,0,0,12"
                               Content="Iniciar Lex Junior Browser al terminar la instalación"/>
 
-                    <TextBlock x:Name="TxtInstallLocation" Text="" Foreground="#71717A" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="TxtInstallLocation" Text="" Foreground="#8B8B96" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
 
                 <!-- Panel de Desinstalación -->

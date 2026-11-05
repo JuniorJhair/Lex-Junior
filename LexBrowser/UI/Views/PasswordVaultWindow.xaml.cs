@@ -607,6 +607,13 @@ public partial class PasswordVaultWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (GlobalScrollBehavior.HasAnyOpenComboBox())
+        {
+            e.Handled = true;
+            GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
+            return;
+        }
+
         e.Handled = true;
         if (sender is ScrollViewer scrollViewer)
         {

@@ -10,6 +10,8 @@
         AllowsTransparency="False"
         Background="#0F0F12"
         Foreground="#E4E4E7"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp">
 
     <WindowChrome.WindowChrome>
@@ -164,7 +166,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <ContentPresenter Grid.Column="0" ContentSource="Header" VerticalAlignment="Center" Margin="0,0,20,0"/>
-                                <TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}" Foreground="#71717A" FontSize="11" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{TemplateBinding InputGestureText}" Foreground="#8B8B96" FontSize="11" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -297,7 +299,7 @@
                                                        Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
 
                                             <!-- Indicador pin -->
-                                            <TextBlock Grid.Column="1" Text="📌 " FontSize="9" 
+                                            <TextBlock Grid.Column="1" Text="📌 " FontSize="10.5" 
                                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}}" 
                                                        VerticalAlignment="Center"/>
 
@@ -307,22 +309,25 @@
                                                        Visibility="{Binding ShowTitleInTab, Converter={StaticResource BoolToVis}}"/>
 
                                             <!-- Indicador de audio dinámico (🔊 o 🔇) -->
-                                            <TextBlock Grid.Column="3" Text="{Binding AudioIndicatorText}" Foreground="#67E8F9" FontSize="10" Margin="4,0" 
+                                            <TextBlock Grid.Column="3" Text="{Binding AudioIndicatorText}" Foreground="#67E8F9" FontSize="10.5" Margin="4,0" 
                                                        VerticalAlignment="Center"/>
 
-                                            <!-- Botón Cerrar Pestaña (Oculto en pestañas fijadas) -->
-                                            <Button Grid.Column="4" Content="✕" Width="18" Height="18" Margin="4,0,0,0"
+                                            <!-- Botón Cerrar Pestaña (Layout estricto de 18x18 DIP; área de clic expandida con Margin negativo en template) -->
+                                            <Button Grid.Column="4" Width="18" Height="18" Margin="4,0,0,0" Padding="0"
                                                     Background="Transparent" BorderThickness="0" Foreground="#888899"
                                                     Cursor="Hand" Click="CloseTab_Click" Tag="{Binding}"
+                                                    ToolTip="Cerrar pestaña (Ctrl+W)"
                                                     Visibility="{Binding ShowCloseButton, Converter={StaticResource BoolToVis}}">
                                                 <Button.Style>
                                                     <Style TargetType="Button">
                                                         <Setter Property="Template">
                                                             <Setter.Value>
                                                                 <ControlTemplate TargetType="Button">
-                                                                    <Border x:Name="b" CornerRadius="9" Background="{TemplateBinding Background}">
-                                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                                    </Border>
+                                                                    <Grid Margin="-3" Background="Transparent">
+                                                                        <Border x:Name="b" Width="18" Height="18" CornerRadius="9" Background="{TemplateBinding Background}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                            <TextBlock Text="✕" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                                                                        </Border>
+                                                                    </Grid>
                                                                     <ControlTemplate.Triggers>
                                                                         <Trigger Property="IsMouseOver" Value="True">
                                                                             <Setter TargetName="b" Property="Background" Value="#33FF3344"/>
@@ -432,10 +437,10 @@
                              PreviewMouseDown="TxtUrl_PreviewMouseDown"/>
 
                     <!-- Escudo de Anuncios en la barra -->
-                    <Border Grid.Column="2" Background="#1E293B" CornerRadius="6" Padding="6,2" Margin="4,0,0,0" ToolTip="Anuncios neutralizados en esta pestaña">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🛡️" FontSize="11" Margin="0,0,4,0"/>
-                            <TextBlock x:Name="TxtShieldBadge" Text="0 bloqueados" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold"/>
+                    <Border Grid.Column="2" Background="#1E293B" CornerRadius="6" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center" ToolTip="Anuncios neutralizados en esta pestaña">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🛡️" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtShieldBadge" Text="0 bloqueados" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
 
@@ -445,7 +450,7 @@
                             Cursor="Hand" ToolTip="Zoom modificado. Clic para restablecer al 100% (o pulsa Ctrl+0)"
                             MouseLeftButtonDown="PillZoom_Click">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="🔍 " FontSize="9" VerticalAlignment="Center"/>
+                            <TextBlock Text="🔍 " FontSize="10.5" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtZoomValue" Text="100%" FontSize="11" FontWeight="Bold" Foreground="#818CF8" VerticalAlignment="Center"/>
                             <TextBlock Text=" ↺" FontSize="11" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="3,0,0,0"/>
                         </StackPanel>
@@ -465,7 +470,7 @@
                             </ControlTemplate>
                         </Button.Template>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="🌐 " FontSize="10" VerticalAlignment="Center"/>
+                            <TextBlock Text="🌐 " FontSize="10.5" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtTranslateAction" Text="Traducir" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
@@ -476,7 +481,7 @@
             <Popup x:Name="PopupTranslate" PlacementTarget="{Binding ElementName=PillTranslateIndicator}"
                    Placement="Bottom" VerticalOffset="6" HorizontalOffset="-140"
                    StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
-                <Border Background="#161622" BorderBrush="#2D2D42" BorderThickness="1.5" CornerRadius="12" Padding="14,12" Width="280">
+                <Border Background="#161622" BorderBrush="#2D2D42" BorderThickness="1.5" CornerRadius="12" Padding="14,12" MinWidth="290" MaxWidth="340">
                     <Border.Effect>
                         <DropShadowEffect BlurRadius="22" ShadowDepth="4" Opacity="0.8" Color="#000000"/>
                     </Border.Effect>
@@ -487,8 +492,8 @@
                                 <TextBlock Text="🌐" FontSize="13" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Traducir página" FontWeight="Bold" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
                             </StackPanel>
-                            <Button Content="✕" Width="18" Height="18" Background="Transparent" BorderThickness="0"
-                                    Foreground="#71717A" HorizontalAlignment="Right" Cursor="Hand" Click="BtnCloseTranslatePopup_Click"/>
+                            <Button Content="✕" Width="28" Height="28" Background="Transparent" BorderThickness="0"
+                                    Foreground="#8B8B96" HorizontalAlignment="Right" Cursor="Hand" Click="BtnCloseTranslatePopup_Click"/>
                         </Grid>
 
                         <!-- Selector de idioma con tema oscuro completo -->
@@ -573,7 +578,7 @@
                                                     <Border.Effect>
                                                         <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.6" Color="Black"/>
                                                     </Border.Effect>
-                                                    <ScrollViewer SnapsToDevicePixels="True">
+                                                    <ScrollViewer x:Name="DropDownScrollViewer" CanContentScroll="False" SnapsToDevicePixels="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                                                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
                                                     </ScrollViewer>
                                                 </Border>
@@ -659,7 +664,7 @@
                                         <!-- Botón ✕ para borrar búsqueda reciente o entrada del historial -->
                                         <Button Grid.Column="2" Content="✕" Tag="{Binding}"
                                                 PreviewMouseLeftButtonDown="BtnDeleteOmniboxSuggestion_MouseDown"
-                                                Background="Transparent" BorderThickness="0" Foreground="#71717A" FontSize="10.5"
+                                                Background="Transparent" BorderThickness="0" Foreground="#8B8B96" FontSize="10.5"
                                                 Padding="6,2" Cursor="Hand" VerticalAlignment="Center"
                                                 ToolTip="Eliminar esta sugerencia del historial"
                                                 Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"/>
@@ -727,10 +732,10 @@
                                     ValueChanged="SliderVolumeBoost_ValueChanged" Margin="0,4,0,4"/>
 
                             <Grid Margin="0,0,0,12">
-                                <TextBlock Text="0%" Foreground="#71717A" FontSize="10" HorizontalAlignment="Left"/>
-                                <TextBlock Text="100%" Foreground="#A1A1AA" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Left" Margin="85,0,0,0"/>
-                                <TextBlock Text="200%" Foreground="#71717A" FontSize="10" HorizontalAlignment="Right" Margin="0,0,82,0"/>
-                                <TextBlock Text="300% Máx" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                <TextBlock Text="0%" Foreground="#8B8B96" FontSize="10.5" HorizontalAlignment="Left"/>
+                                <TextBlock Text="100%" Foreground="#A1A1AA" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Left" Margin="85,0,0,0"/>
+                                <TextBlock Text="200%" Foreground="#8B8B96" FontSize="10.5" HorizontalAlignment="Right" Margin="0,0,82,0"/>
+                                <TextBlock Text="300% Máx" Foreground="#38BDF8" FontSize="10.5" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                             </Grid>
 
                             <!-- Botones de preajuste y Restablecer -->
@@ -755,7 +760,7 @@
                         Click="BtnMediaSniffer_Click">
                     <Border x:Name="BorderMediaSniffer" Background="#252536" CornerRadius="8" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Ellipse x:Name="DotMediaSnifferStatus" Width="6" Height="6" Fill="#71717A" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <Ellipse x:Name="DotMediaSnifferStatus" Width="6" Height="6" Fill="#8B8B96" Margin="0,0,5,0" VerticalAlignment="Center"/>
                             <TextBlock Text="📥" FontSize="11" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtMediaSnifferLabel" Text="Multimedia" Margin="4,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -823,7 +828,7 @@
                                 <Grid>
                                     <TextBlock x:Name="TxtMediaEmptyState"
                                                Text="Presiona '⚡ Activar aquí' para detectar videos, audios, imágenes de alta resolución y documentos (PDF, ZIP, Office) en esta página."
-                                               Foreground="#71717A" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+                                               Foreground="#8B8B96" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
                                                VerticalAlignment="Center" HorizontalAlignment="Center" Margin="18"/>
 
                                     <ScrollViewer x:Name="ScrollDetectedMedia" VerticalScrollBarVisibility="Auto"
@@ -844,7 +849,7 @@
                                                             <Border Grid.Column="0" Background="#28283C" CornerRadius="5" Padding="6,3" Margin="0,0,8,0" VerticalAlignment="Center">
                                                                 <StackPanel Orientation="Horizontal">
                                                                     <TextBlock Text="{Binding CategoryIcon}" FontSize="11" Margin="0,0,4,0"/>
-                                                                    <TextBlock Text="{Binding FormatBadge}" Foreground="#818CF8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding FormatBadge}" Foreground="#818CF8" FontSize="10.5" FontWeight="Bold" VerticalAlignment="Center"/>
                                                                 </StackPanel>
                                                             </Border>
 
@@ -852,7 +857,7 @@
                                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
                                                                 <TextBlock Text="{Binding FileName}" Foreground="#F4F4F5" FontSize="11" FontWeight="SemiBold"
                                                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding Url}"/>
-                                                                <TextBlock Text="{Binding SizeDisplay}" Foreground="#9CA3AF" FontSize="9.5"/>
+                                                                <TextBlock Text="{Binding SizeDisplay}" Foreground="#9CA3AF" FontSize="10.5"/>
                                                             </StackPanel>
 
                                                             <!-- Copiar enlace -->
@@ -881,7 +886,7 @@
                         Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="0 Telemetría: haz clic para ver cómo te protege y sus ventajas">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtTelemetryLabel" Text="0 Telemetría" Margin="6,0,0,0" FontSize="10" Foreground="#A1A1AA" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtTelemetryLabel" Text="0 Telemetría" Margin="6,0,0,0" FontSize="11" Foreground="#A1A1AA" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -918,7 +923,7 @@
                             <Grid Margin="0,0,0,10">
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="⬇ Historial de Descargas" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
-                                    <TextBlock x:Name="TxtDownloadsCountSubtitle" Text="Ligero · 0% consumo en segundo plano" Foreground="#9CA3AF" FontSize="10" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="TxtDownloadsCountSubtitle" Text="Ligero · 0% consumo en segundo plano" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <Button Content="📂 Carpeta" Click="BtnOpenDownloadsFolder_Click"
@@ -936,7 +941,7 @@
                                 <Grid>
                                     <TextBlock x:Name="TxtDownloadsEmptyState"
                                                Text="Aún no hay descargas recientes."
-                                               Foreground="#71717A" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+                                               Foreground="#8B8B96" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
                                                VerticalAlignment="Center" HorizontalAlignment="Center" Margin="18"/>
 
                                     <ScrollViewer x:Name="ScrollDownloadsHistory" VerticalScrollBarVisibility="Auto"
@@ -961,7 +966,7 @@
                                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
                                                                 <TextBlock Text="{Binding FileName}" Foreground="#F4F4F5" FontSize="11" FontWeight="SemiBold"
                                                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding FilePath}"/>
-                                                                <TextBlock Text="{Binding StatusDisplay}" Foreground="#9CA3AF" FontSize="9.5" Margin="0,1,0,0"/>
+                                                                <TextBlock Text="{Binding StatusDisplay}" Foreground="#9CA3AF" FontSize="10.5" Margin="0,1,0,0"/>
                                                                 <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100" Height="3.5" Foreground="#10B981" Background="#27273A" BorderThickness="0" Margin="0,3,0,0"
                                                                              Visibility="{Binding IsInProgress, Converter={StaticResource BoolToVis}}"/>
                                                             </StackPanel>
@@ -975,7 +980,7 @@
                                                                     BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Mostrar en carpeta"/>
 
                                                             <Button Grid.Column="4" Content="✕" Tag="{Binding}" Click="BtnRemoveDownloadEntry_Click"
-                                                                    Background="Transparent" Foreground="#71717A" FontSize="10" Padding="5,4"
+                                                                    Background="Transparent" Foreground="#8B8B96" FontSize="11" Padding="5,4"
                                                                     BorderThickness="0" Cursor="Hand" VerticalAlignment="Center" ToolTip="Quitar de la lista"/>
                                                         </Grid>
                                                     </Border>
@@ -1052,9 +1057,9 @@
                                                VerticalAlignment="Center"
                                                Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
                                     <TextBlock Text="{Binding Title}" Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center" MaxWidth="110" TextTrimming="CharacterEllipsis"/>
-                                    <!-- Botón '✕' protegido -->
-                                    <Button Content="✕" Width="16" Height="16" Margin="6,0,0,0"
-                                            Background="Transparent" BorderThickness="0" Foreground="#71717A" FontSize="9"
+                                    <!-- Botón '✕' protegido (Área de clic ampliada a 22x22 de forma invisible, icono visual de 16x16) -->
+                                    <Button Width="22" Height="22" Margin="3,0,0,0" Padding="0"
+                                            Background="Transparent" BorderThickness="0" Foreground="#8B8B96" FontSize="10.5"
                                             Cursor="Hand" ToolTip="Quitar de la barra de accesos directos"
                                             Click="BtnRemoveBookmark_Click" Tag="{Binding}">
                                         <Button.Style>
@@ -1062,9 +1067,11 @@
                                                 <Setter Property="Template">
                                                     <Setter.Value>
                                                         <ControlTemplate TargetType="Button">
-                                                            <Border x:Name="xb" CornerRadius="8" Background="{TemplateBinding Background}">
-                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                            </Border>
+                                                            <Grid Background="Transparent">
+                                                                <Border x:Name="xb" Width="16" Height="16" CornerRadius="8" Background="{TemplateBinding Background}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                    <TextBlock Text="✕" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                                                                </Border>
+                                                            </Grid>
                                                             <ControlTemplate.Triggers>
                                                                 <Trigger Property="IsMouseOver" Value="True">
                                                                     <Setter TargetName="xb" Property="Background" Value="#33FF3344"/>
@@ -1093,28 +1100,32 @@
                         <TextBlock Text="Marcador quitado" Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center"/>
                         <Button x:Name="BtnUndoBookmark" Content="Deshacer" Foreground="#38BDF8" FontWeight="Bold" FontSize="11"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnUndoBookmark_Click" Margin="6,0,0,0"/>
-                        <Button Content="✕" Foreground="#71717A" FontSize="9" Background="Transparent" BorderThickness="0"
+                        <Button Content="✕" Foreground="#8B8B96" FontSize="10.5" Background="Transparent" BorderThickness="0"
                                 Cursor="Hand" Click="BtnCloseUndoBanner_Click" Margin="6,0,0,0"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Botón para ocultar barra de accesos directos -->
                 <Button Style="{StaticResource NavBtn}" Width="26" Height="26" ToolTip="Ocultar barra de accesos directos (Ctrl+Shift+B)" Click="BtnHideBookmarksBar_Click">
-                    <TextBlock Text="···" FontSize="13" Foreground="#71717A"/>
+                    <TextBlock Text="···" FontSize="13" Foreground="#8B8B96"/>
                 </Button>
             </StackPanel>
 
             <!-- Banner de Modo Invitado (Cubre la barra de marcadores personales cuando alguien entra como Invitado) -->
             <Border x:Name="BorderGuestSessionBanner" Grid.Column="0" Grid.ColumnSpan="4" Background="#171726" BorderBrush="#6366F1" BorderThickness="0,0,0,1" Visibility="Collapsed" Panel.ZIndex="10">
-                <Grid Margin="14,0">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="👤 Modo Invitado Activo:" FontWeight="Bold" FontSize="11.5" Foreground="#A5B4FC" Margin="0,0,6,0"/>
+                <Grid Margin="14,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="👤 Modo Invitado Activo:" FontWeight="Bold" FontSize="11.5" Foreground="#A5B4FC" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Tus marcadores personales, historial y contraseñas guardadas están ocultos. Al cerrar la ventana se borrará la sesión de invitado."
-                                   FontSize="11" Foreground="#D4D4D8" VerticalAlignment="Center"/>
+                                   FontSize="11" Foreground="#D4D4D8" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
-                    <Button Content="🔑 Desbloquear mi cuenta con PIN" Click="BtnUnlockFromGuest_Click"
-                            HorizontalAlignment="Right" VerticalAlignment="Center" Background="#6366F1" Foreground="#FFFFFF"
-                            FontSize="10.5" FontWeight="Bold" Padding="10,3" BorderThickness="0" Cursor="Hand"/>
+                    <Button Grid.Column="1" Content="🔑 Desbloquear mi cuenta con PIN" Click="BtnUnlockFromGuest_Click"
+                            VerticalAlignment="Center" Background="#6366F1" Foreground="#FFFFFF"
+                            FontSize="11" FontWeight="Bold" Padding="12,4" BorderThickness="0" Cursor="Hand"/>
                 </Grid>
             </Border>
         </Grid>
@@ -1231,7 +1242,7 @@
             <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="500">
                 <Border Background="#14141E" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Padding="28,22">
                     <Border.Effect>
-                        <DropShadowEffect BlurRadius="30" ShadowDepth="8" Opacity="0.8" Color="#000000"/>
+                        <DropShadowEffect BlurRadius="16" ShadowDepth="6" Opacity="0.8" Color="#000000"/>
                     </Border.Effect>
                     <Grid>
                         <!-- VISTA DE BIENVENIDA / CONFIGURACIÓN INICIAL AL INSTALAR O ABRIR POR PRIMERA VEZ -->
@@ -1253,7 +1264,7 @@
                                                FontSize="10.5" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
                                     <TextBlock Text="¿Cuándo deseas que te pida la contraseña?" FontSize="11" FontWeight="SemiBold" Foreground="#D4D4D8" Margin="0,0,0,4"/>
-                                    <ComboBox x:Name="CmbFirstSetupLockMode" SelectedIndex="0" Margin="0,0,0,8" Padding="8,5" FontSize="11.5">
+                                    <ComboBox x:Name="CmbFirstSetupLockMode" Style="{StaticResource LexComboBox}" SelectedIndex="0" Margin="0,0,0,8" Padding="8,5" FontSize="11.5">
                                         <ComboBoxItem Tag="SmartSession" Content="⚡ Inteligente: Solo al encender la PC o tras bloquear Windows (Recomendado)"/>
                                         <ComboBoxItem Tag="AlwaysOnStartup" Content="🔒 Siempre: Pedir contraseña cada vez que cierre y abra el navegador"/>
                                         <ComboBoxItem Tag="VaultOnly" Content="🔑 Solo en Bóveda: Abrir navegador directo y pedir PIN solo al ver contraseñas"/>
@@ -1297,7 +1308,7 @@
                                             Background="#27273A" Foreground="#E4E4E7" FontWeight="Bold" FontSize="12" Padding="12,8"
                                             BorderThickness="0" Cursor="Hand" Margin="0,0,0,5"/>
                                     <TextBlock Text="¿Qué ocurrirá? Entrarás directo sin pedir PIN al abrir el navegador y este aviso no volverá a aparecer. Si más adelante deseas poner contraseña, podrás activarla en cualquier momento desde el botón 🔑 de la barra superior."
-                                               FontSize="10" Foreground="#9CA3AF" TextWrapping="Wrap" TextAlignment="Center"/>
+                                               FontSize="10.5" Foreground="#9CA3AF" TextWrapping="Wrap" TextAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -1398,11 +1409,11 @@
                 <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.6" Color="Black"/>
             </Border.Effect>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="−" Width="24" Height="24" Background="#262638" Foreground="#FFFFFF" FontWeight="Bold"
+                <Button Content="−" Width="28" Height="28" Background="#262638" Foreground="#FFFFFF" FontWeight="Bold"
                         BorderThickness="0" Cursor="Hand" Click="BtnZoomOut_Click" ToolTip="Reducir zoom (Ctrl -)"/>
                 <TextBlock x:Name="TxtFloatingZoomValue" Text="100%" Foreground="#818CF8" FontWeight="Bold" FontSize="12"
                            VerticalAlignment="Center" Margin="8,0"/>
-                <Button Content="+" Width="24" Height="24" Background="#262638" Foreground="#FFFFFF" FontWeight="Bold"
+                <Button Content="+" Width="28" Height="28" Background="#262638" Foreground="#FFFFFF" FontWeight="Bold"
                         BorderThickness="0" Cursor="Hand" Click="BtnZoomIn_Click" ToolTip="Aumentar zoom (Ctrl +)"/>
                 <Button Content="↺ 100%" Background="#6366F1" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11"
                         Padding="8,2" BorderThickness="0" Cursor="Hand" Margin="8,0,0,0" Click="BtnZoomReset_Click"
@@ -1443,7 +1454,7 @@
                                Foreground="#FFFFFF" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     <Button x:Name="BtnToastAction" Content="Detalles ⬇" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" 
                             Background="#262B40" Padding="8,4" BorderThickness="0" Cursor="Hand" Click="ToastAction_Click" Margin="12,0,0,0"/>
-                    <Button Content="✕" Foreground="#71717A" FontSize="10" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToastClose_Click" Margin="10,0,0,0"/>
+                    <Button Content="✕" Foreground="#8B8B96" FontSize="10.5" Background="Transparent" BorderThickness="0" Cursor="Hand" Click="ToastClose_Click" Margin="10,0,0,0"/>
                 </StackPanel>
             </Border>
         </Popup>

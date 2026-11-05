@@ -8,6 +8,8 @@
         AllowsTransparency="False"
         Background="#0F0F14"
         Foreground="#E4E4E7"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         WindowStartupLocation="CenterOwner"
         Icon="pack://application:,,,/Assets/logo.png">
 
@@ -330,7 +332,7 @@
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
+            <Setter Property="ScrollViewer.CanContentScroll" Value="False"/>
             <Setter Property="Foreground" Value="#F4F4F5"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboItem}"/>
@@ -375,7 +377,12 @@
                                         <Border.Effect>
                                             <DropShadowEffect BlurRadius="12" ShadowDepth="4" Direction="270" Opacity="0.5" Color="Black"/>
                                         </Border.Effect>
-                                        <ScrollViewer SnapsToDevicePixels="True">
+                                        <ScrollViewer x:Name="DropDownScrollViewer"
+                                                      CanContentScroll="False"
+                                                      HorizontalScrollBarVisibility="Disabled"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      Focusable="False"
+                                                      SnapsToDevicePixels="True">
                                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
                                         </ScrollViewer>
                                     </Border>
@@ -468,10 +475,10 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Guardar historial de navegación" FontWeight="Bold" FontSize="13" Foreground="#FFFFFF" Margin="0,0,8,0"/>
                         <Border x:Name="BadgeHistoryStatus" Background="#1E3A8A" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtHistoryStatus" Text="ACTIVO" FontSize="9" FontWeight="Bold" Foreground="#93C5FD"/>
+                            <TextBlock x:Name="TxtHistoryStatus" Text="ACTIVO" FontSize="10.5" FontWeight="Bold" Foreground="#93C5FD"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock Text="Si está desactivado, el navegador no guarda páginas ni rutas visitadas, ahorrando memoria y espacio en disco por completo." FontSize="11" Foreground="#71717A" Margin="0,2,0,0"/>
+                    <TextBlock Text="Si está desactivado, el navegador no guarda páginas ni rutas visitadas, ahorrando memoria y espacio en disco por completo." FontSize="11" Foreground="#8B8B96" Margin="0,2,0,0"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0">
@@ -517,7 +524,7 @@
                         <!-- Buscador instantáneo -->
                         <Grid Grid.Column="0" Margin="0,0,10,0">
                             <TextBox x:Name="TxtSearch" Style="{StaticResource DarkInput}" TextChanged="TxtSearch_TextChanged"/>
-                            <TextBlock Text="🔍 Buscar por título, URL o palabra clave..." IsHitTestVisible="False" Foreground="#52525B" FontSize="12" Margin="12,7,0,0">
+                            <TextBlock Text="🔍 Buscar por título, URL o palabra clave..." IsHitTestVisible="False" Foreground="#8B8B96" FontSize="12" Margin="12,7,0,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -549,7 +556,7 @@
 
                     <!-- Fila 2: Chips informativos / Acciones rápidas -->
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
-                        <TextBlock Text="Sitios frecuentes:" FontSize="11" Foreground="#71717A" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="Sitios frecuentes:" FontSize="11" Foreground="#8B8B96" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <WrapPanel x:Name="DomainChipsPanel" Orientation="Horizontal"/>
                     </StackPanel>
                 </Grid>
@@ -607,7 +614,7 @@
                             <Border Grid.Column="0" Grid.ColumnSpan="3" Background="Transparent" Cursor="Hand" MouseLeftButtonDown="HistoryRow_Click"/>
 
                             <!-- Hora -->
-                            <TextBlock Grid.Column="0" Text="{Binding DisplayTime}" Foreground="#71717A" FontSize="11" VerticalAlignment="Center" FontFamily="Consolas, Segoe UI" IsHitTestVisible="False"/>
+                            <TextBlock Grid.Column="0" Text="{Binding DisplayTime}" Foreground="#8B8B96" FontSize="11" VerticalAlignment="Center" FontFamily="Consolas, Segoe UI" IsHitTestVisible="False"/>
 
                             <!-- Favicon / Ícono Oficial -->
                             <Border Grid.Column="1" Width="20" Height="20" CornerRadius="4" Background="#1C1C26" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
@@ -625,9 +632,9 @@
                                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5" TextTrimming="CharacterEllipsis"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                                     <Border Background="#20202F" CornerRadius="3" Padding="5,1" Margin="0,0,8,0">
-                                        <TextBlock Text="{Binding Domain}" FontSize="10" Foreground="#818CF8" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Domain}" FontSize="10.5" Foreground="#818CF8" FontWeight="SemiBold"/>
                                     </Border>
-                                    <TextBlock Text="{Binding Url}" Foreground="#52525B" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Url}" Foreground="#8B8B96" FontSize="11" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -653,7 +660,7 @@
                     <!-- Lado Izquierdo: Contador y Selector por página -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtHistoryCount" Text="Cargando historial..." FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <TextBlock Text="Mostrar:" FontSize="11" Foreground="#71717A" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBlock Text="Mostrar:" FontSize="11" Foreground="#8B8B96" VerticalAlignment="Center" Margin="0,0,4,0"/>
                         <ComboBox x:Name="CmbPageSize" Width="60" Height="24" Background="#1B1B26" Foreground="#FFFFFF" BorderBrush="#2B2B3C" BorderThickness="1"
                                   FontSize="11" VerticalContentAlignment="Center" SelectionChanged="CmbPageSize_SelectionChanged">
                             <ComboBoxItem Content="50" IsSelected="True"/>
@@ -683,7 +690,7 @@
                       ScrollViewer.CanContentScroll="False" PreviewMouseWheel="ScrollViewer_PreviewMouseWheel" Padding="32,24">
             <StackPanel MaxWidth="820" HorizontalAlignment="Left">
                 <TextBlock Text="Limpieza Avanzada de Datos y Sitios Web" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                <TextBlock Text="Elimina selectivamente cookies, contraseñas, inicios de sesión y caché de manera global o de un solo sitio web." FontSize="12" Foreground="#71717A" Margin="0,0,0,24"/>
+                <TextBlock Text="Elimina selectivamente cookies, contraseñas, inicios de sesión y caché de manera global o de un solo sitio web." FontSize="12" Foreground="#8B8B96" Margin="0,0,0,24"/>
 
                 <!-- 1. Alcance de la limpieza (Todo vs Sitio Específico) -->
                 <Border Background="#15151F" BorderBrush="#252538" BorderThickness="1" CornerRadius="10" Padding="20,16" Margin="0,0,0,16">
@@ -707,12 +714,12 @@
                             </Grid.Style>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="280"/>
+                                <ColumnDefinition Width="*" MaxWidth="320"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Sitio a limpiar:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <ComboBox x:Name="CboScopeTargetDomain" Grid.Column="1" Style="{StaticResource DarkCombo}"/>
-                            <TextBlock Text="(ej: youtube.com, futbollibresgol.pe)" Grid.Column="2" FontSize="11" Foreground="#52525B" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            <TextBlock Text="(ej: youtube.com, futbollibresgol.pe)" Grid.Column="2" FontSize="11" Foreground="#8B8B96" VerticalAlignment="Center" Margin="10,0,0,0"/>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -725,7 +732,7 @@
                         <Grid Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="260"/>
+                                <ColumnDefinition Width="*" MaxWidth="280"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Eliminar desde hace:" FontSize="12" Foreground="#F4F4F5" VerticalAlignment="Center" Margin="0,0,12,0"/>
                             <ComboBox x:Name="CboClearTimePreset" Grid.Column="1" Style="{StaticResource DarkCombo}" SelectionChanged="CboClearTimePreset_SelectionChanged">
@@ -788,8 +795,8 @@
                         <Border Background="#191924" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
                             <CheckBox x:Name="ChkDataTypeHistory" IsChecked="True" Style="{StaticResource DarkCheck}">
                                 <StackPanel Margin="6,0,0,0">
-                                    <TextBlock Text="📚 Historial de navegación y rutas visitadas" Foreground="#FFFFFF" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Limpia los enlaces y títulos registrados en el historial de navegación." FontSize="11" Foreground="#71717A"/>
+                                    <TextBlock Text="📚 Historial de navegación y rutas visitadas" Foreground="#FFFFFF" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Limpia los enlaces y títulos registrados en el historial de navegación." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </CheckBox>
                         </Border>
@@ -798,8 +805,8 @@
                         <Border Background="#191924" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
                             <CheckBox x:Name="ChkDataTypeCookies" IsChecked="True" Style="{StaticResource DarkCheck}">
                                 <StackPanel Margin="6,0,0,0">
-                                    <TextBlock Text="🍪 Cookies y sesiones de inicio activas" Foreground="#FFFFFF" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Cierra sesiones activas en los sitios seleccionados y borra identificadores de seguimiento." FontSize="11" Foreground="#71717A"/>
+                                    <TextBlock Text="🍪 Cookies y sesiones de inicio activas" Foreground="#FFFFFF" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Cierra sesiones activas en los sitios seleccionados y borra identificadores de seguimiento." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </CheckBox>
                         </Border>
@@ -808,8 +815,8 @@
                         <Border Background="#191924" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
                             <CheckBox x:Name="ChkDataTypeCache" IsChecked="True" Style="{StaticResource DarkCheck}">
                                 <StackPanel Margin="6,0,0,0">
-                                    <TextBlock Text="⚡ Archivos e imágenes en caché" Foreground="#FFFFFF" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Libera espacio en el disco duro eliminando archivos temporales descargados por las webs." FontSize="11" Foreground="#71717A"/>
+                                    <TextBlock Text="⚡ Archivos e imágenes en caché" Foreground="#FFFFFF" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Libera espacio en el disco duro eliminando archivos temporales descargados por las webs." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </CheckBox>
                         </Border>
@@ -818,8 +825,8 @@
                         <Border Background="#191924" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
                             <CheckBox x:Name="ChkDataTypePasswords" IsChecked="False" Style="{StaticResource DarkCheck}">
                                 <StackPanel Margin="6,0,0,0">
-                                    <TextBlock Text="🔑 Contraseñas y datos de autocompletado de formularios" Foreground="#FFFFFF" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Elimina credenciales guardadas y sugerencias automáticas de texto escritas en formularios." FontSize="11" Foreground="#71717A"/>
+                                    <TextBlock Text="🔑 Contraseñas y datos de autocompletado de formularios" Foreground="#FFFFFF" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Elimina credenciales guardadas y sugerencias automáticas de texto escritas en formularios." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </CheckBox>
                         </Border>
@@ -828,8 +835,8 @@
                         <Border Background="#191924" CornerRadius="6" Padding="12,10">
                             <CheckBox x:Name="ChkDataTypeLocalStorage" IsChecked="True" Style="{StaticResource DarkCheck}">
                                 <StackPanel Margin="6,0,0,0">
-                                    <TextBlock Text="💾 Almacenamiento local del sitio (LocalStorage, IndexedDB, WebSQL)" Foreground="#FFFFFF" FontWeight="SemiBold"/>
-                                    <TextBlock Text="Elimina bases de datos offline, preferencias guardadas y estados locales de aplicaciones web." FontSize="11" Foreground="#71717A"/>
+                                    <TextBlock Text="💾 Almacenamiento local del sitio (LocalStorage, IndexedDB, WebSQL)" Foreground="#FFFFFF" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="Elimina bases de datos offline, preferencias guardadas y estados locales de aplicaciones web." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </CheckBox>
                         </Border>

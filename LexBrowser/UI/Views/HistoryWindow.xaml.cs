@@ -666,6 +666,13 @@ public partial class HistoryWindow : Window
 
     private void LstHistory_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (GlobalScrollBehavior.HasAnyOpenComboBox())
+        {
+            e.Handled = true;
+            GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
+            return;
+        }
+
         e.Handled = true;
         var scrollViewer = FindVisualChild<ScrollViewer>(LstHistory);
         if (scrollViewer == null) return;
@@ -680,6 +687,14 @@ public partial class HistoryWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        // Si hay algún ComboBox abierto, consumir la rueda para que el fondo no se mueva y scrollear el combo abierto
+        if (GlobalScrollBehavior.HasAnyOpenComboBox())
+        {
+            e.Handled = true;
+            GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
+            return;
+        }
+
         e.Handled = true;
         if (sender is ScrollViewer scrollViewer)
         {

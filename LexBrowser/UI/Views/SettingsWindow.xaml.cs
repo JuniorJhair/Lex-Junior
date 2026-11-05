@@ -16,6 +16,13 @@ public partial class SettingsWindow : Window
     {
         _core = core;
         InitializeComponent();
+
+        var ver = typeof(SettingsWindow).Assembly.GetName().Version;
+        if (TxtSettingsVersionBadge != null && ver != null)
+        {
+            TxtSettingsVersionBadge.Text = $"⚡ Lex Junior v{ver.Major}.{ver.Minor}.{ver.Build}";
+        }
+
         LoadCurrentSettings();
         _isInitializing = false;
         Activated += (s, e) => UpdateDefaultBrowserUI();
@@ -240,6 +247,13 @@ public partial class SettingsWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (GlobalScrollBehavior.HasAnyOpenComboBox())
+        {
+            e.Handled = true;
+            GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
+            return;
+        }
+
         e.Handled = true;
         if (sender is ScrollViewer scrollViewer)
         {

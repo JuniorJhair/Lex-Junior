@@ -9,6 +9,8 @@
         Background="#0D0D12"
         Topmost="True"
         ShowInTaskbar="True"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         ResizeMode="CanResizeWithGrip"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
@@ -135,7 +137,7 @@
 
                     <!-- Badge -->
                     <Border Grid.Column="0" Background="#1E1E6A" CornerRadius="4" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtPipBadge" Text="🗖 Página Flotante" Foreground="#818CF8" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtPipBadge" Text="🗖 Página Flotante" Foreground="#818CF8" FontSize="10.5" FontWeight="Bold"/>
                     </Border>
 
                     <!-- Título de la página / video -->
@@ -148,7 +150,7 @@
                             ToolTip="Elegir tamaño de ventana rápido (Compacto, Grande, Shorts o Pantalla Completa)"
                             Click="BtnSizePresets_Click" Margin="0,0,5,0" Padding="7,3"
                             WindowChrome.IsHitTestVisibleInChrome="True">
-                        <TextBlock Text="📐 Tamaño ▾" FontSize="10" FontWeight="Bold" Foreground="#A78BFA"/>
+                        <TextBlock Text="📐 Tamaño ▾" FontSize="10.5" FontWeight="Bold" Foreground="#A78BFA"/>
                         <Button.ContextMenu>
                             <ContextMenu Background="#1A1A24" BorderBrush="#2A2A38" Foreground="#FFFFFF">
                                 <MenuItem Header="📱 Shorts / Vertical (420 × 740)" Click="PresetSize_Click" Tag="420x740"/>
@@ -183,14 +185,14 @@
                             ToolTip="Volver a la pestaña de origen (abre ventana principal)"
                             Click="BtnReturnToTab_Click" Margin="0,0,5,0" Padding="8,3"
                             WindowChrome.IsHitTestVisibleInChrome="True">
-                        <TextBlock Text="⇱ Volver" FontSize="10" FontWeight="Bold" Foreground="#A5B4FC"/>
+                        <TextBlock Text="⇱ Volver" FontSize="10.5" FontWeight="Bold" Foreground="#A5B4FC"/>
                     </Button>
 
                     <!-- Cerrar PiP -->
                     <Button Grid.Column="6" Style="{StaticResource CloseBtn}" 
                             ToolTip="Cerrar página flotante y pausar video" Click="BtnClose_Click" Padding="7,3"
                             WindowChrome.IsHitTestVisibleInChrome="True">
-                        <TextBlock Text="✕" FontSize="10" FontWeight="Bold"/>
+                        <TextBlock Text="✕" FontSize="10.5" FontWeight="Bold"/>
                     </Button>
                 </Grid>
             </Border>

@@ -281,6 +281,8 @@ public partial class MainWindow : Window
     private bool _canRecordUserPipResize = false;
     private int _pipSessionId = 0;
     private DispatcherTimer? _nativePipTimer;
+    private int _nativePipLostTicks = 0;
+    private BrowserTab? _nativePipSourceTab;
 
     private IntPtr FindNativePipWindow()
     {
@@ -382,12 +384,14 @@ public partial class MainWindow : Window
         NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, newLeft, newTop, targetW, targetH, NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
     }
 
-    private void StartNativePipMonitoring(bool isVertical)
+    private void StartNativePipMonitoring(bool isVertical, BrowserTab? sourceTab = null)
     {
         int session = ++_pipSessionId;
         _nativePipIsVertical = isVertical;
+        _nativePipSourceTab = sourceTab ?? _activeTab;
         _canRecordUserPipResize = false;
         _nativePipHwnd = IntPtr.Zero;
+        _nativePipLostTicks = 0;
 
         if (_nativePipTimer == null)
         {
@@ -455,10 +459,32 @@ public partial class MainWindow : Window
 
     private void NativePipTimer_Tick(object? sender, EventArgs e)
     {
-        if (_nativePipHwnd == IntPtr.Zero || !NativeMethods.IsWindow(_nativePipHwnd) || !NativeMethods.IsWindowVisible(_nativePipHwnd))
+        // Si el HWND existe y sigue siendo una ventana válida en Windows, NO está perdido (incluso si está minimizado)
+        if (_nativePipHwnd != IntPtr.Zero && NativeMethods.IsWindow(_nativePipHwnd))
         {
+            _nativePipLostTicks = 0;
+            if (!NativeMethods.IsWindowVisible(_nativePipHwnd))
+            {
+                // Ventana minimizada u oculta temporalmente: no grabamos tamaño pero no llamamos a EnumWindows
+                return;
+            }
+        }
+        else
+        {
+            // Solo se cuenta como perdido y se busca con EnumWindows cuando el HWND es inválido o IsWindow() es falso
             _nativePipHwnd = FindNativePipWindow();
-            if (_nativePipHwnd == IntPtr.Zero) return;
+            if (_nativePipHwnd == IntPtr.Zero || !NativeMethods.IsWindow(_nativePipHwnd))
+            {
+                _nativePipLostTicks++;
+                if (_nativePipLostTicks >= 15) // ~1.5 s de reintentos máximos antes de apagar el timer
+                {
+                    _nativePipTimer?.Stop();
+                    _nativePipLostTicks = 0;
+                    _nativePipSourceTab = null;
+                }
+                return;
+            }
+            _nativePipLostTicks = 0;
         }
 
         if (!UpdateCachedNativePipBounds(_nativePipHwnd)) return;
@@ -1230,7 +1256,7 @@ public partial class MainWindow : Window
                     string pipUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
                     bool isVert = (vh > vw) || pipUrl.Contains("/shorts/", StringComparison.OrdinalIgnoreCase);
 
-                    win.Dispatcher.BeginInvoke(() => win.StartNativePipMonitoring(isVert));
+                    win.Dispatcher.BeginInvoke(() => win.StartNativePipMonitoring(isVert, tab));
                 }
                 else if (type == "pip_leaving_now")
                 {
@@ -1245,7 +1271,7 @@ public partial class MainWindow : Window
                         if (h != IntPtr.Zero) win.UpdateCachedNativePipBounds(h);
                     }
 
-                    win.Dispatcher.BeginInvoke(() => win._nativePipTimer?.Stop());
+                    win.Dispatcher.BeginInvoke(() => { win._nativePipTimer?.Stop(); win._nativePipSourceTab = null; });
                 }
                 else if (type == "pip_left")
                 {
@@ -1508,7 +1534,16 @@ public partial class MainWindow : Window
             {
                 if (tab.IsDisposed) return;
                 tab.IsLoading = true;
-                if (win._activeTab == tab) win.LoadingProgressBar.Visibility = Visibility.Visible;
+                if (win._activeTab == tab)
+                {
+                    win.LoadingProgressBar.Visibility = Visibility.Visible;
+                }
+                if (win._nativePipSourceTab == tab)
+                {
+                    win._nativePipTimer?.Stop();
+                    win._nativePipLostTicks = 0;
+                    win._nativePipSourceTab = null;
+                }
 
                 // Auto-apagado y liberación de RAM del detector multimedia al cambiar/recargar página (salvo que el usuario marque mantener activo)
                 if (tab.SnifferSession != null && tab.SnifferSession.ConsumeExpectedReload())
@@ -3426,6 +3461,13 @@ public partial class MainWindow : Window
         if (tabToClose.IsDisposed) return;
         tabToClose.IsDisposed = true;
 
+        if (_nativePipSourceTab == tabToClose)
+        {
+            _nativePipTimer?.Stop();
+            _nativePipLostTicks = 0;
+            _nativePipSourceTab = null;
+        }
+
         StopSnifferSessionForTab(tabToClose);
         tabToClose.CorsUnlocker?.Dispose();
         tabToClose.CorsUnlocker = null;
@@ -5238,6 +5280,13 @@ public partial class MainWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        if (LexBrowser.UI.GlobalScrollBehavior.HasAnyOpenComboBox())
+        {
+            e.Handled = true;
+            LexBrowser.UI.GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
+            return;
+        }
+
         e.Handled = true;
         if (sender is ScrollViewer scrollViewer)
         {

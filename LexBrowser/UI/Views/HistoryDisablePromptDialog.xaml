@@ -3,6 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Desactivar Historial - Lex Junior"
         Height="360" Width="480"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -33,7 +35,7 @@
                 </Border>
                 <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="¿Deseas eliminar el historial acumulado?" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF"/>
-                    <TextBlock Text="Opciones de privacidad al desactivar el registro" FontSize="11" Foreground="#71717A"/>
+                    <TextBlock Text="Opciones de privacidad al desactivar el registro" FontSize="11" Foreground="#8B8B96"/>
                 </StackPanel>
             </StackPanel>
 
@@ -49,11 +51,11 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0">
-                        <TextBlock Text="Páginas guardadas:" FontSize="11" Foreground="#71717A"/>
+                        <TextBlock Text="Páginas guardadas:" FontSize="11" Foreground="#8B8B96"/>
                         <TextBlock x:Name="TxtPagesCount" Text="0 visitas" FontWeight="Bold" FontSize="13" Foreground="#F4F4F5" Margin="0,2,0,0"/>
                     </StackPanel>
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Espacio en disco:" FontSize="11" Foreground="#71717A"/>
+                        <TextBlock Text="Espacio en disco:" FontSize="11" Foreground="#8B8B96"/>
                         <TextBlock x:Name="TxtStorageSize" Text="0 B" FontWeight="Bold" FontSize="13" Foreground="#818CF8" Margin="0,2,0,0"/>
                     </StackPanel>
                 </Grid>
