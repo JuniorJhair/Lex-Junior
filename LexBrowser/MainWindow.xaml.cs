@@ -1153,11 +1153,20 @@ public partial class MainWindow : Window
                     string? msg = status switch
                     {
                         "drm" => "🔒 Contenido con protección DRM: no se puede amplificar por encima de 100%.",
-                        "cors_blocked" => "🔇 Este reproductor no permite amplificar sobre 100%. El audio sigue normal.",
+                        "cors_blocked" or "route_failed" => "🔇 Este reproductor no permite amplificar sobre 100%. Volumen devuelto a 100%.",
                         _ => null
                     };
                     if (msg != null && tab.VolumeBoostPercent > 100)
-                        win.Dispatcher.BeginInvoke(() => win.ShowToast(msg));
+                    {
+                        win.Dispatcher.BeginInvoke(() =>
+                        {
+                            if (tab.IsDisposed) return;
+                            tab.VolumeBoostPercent = 100;
+                            if (win._activeTab == tab) win.UpdateVolumeBoosterUI();
+                            win.SendVolumeBoostToTab(tab);
+                            win.ShowToast(msg);
+                        });
+                    }
                 }
                 else if (type == "open_history")
                 {

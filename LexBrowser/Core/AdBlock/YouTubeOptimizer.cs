@@ -722,7 +722,6 @@ public static class YouTubeOptimizer
         if (!el || lexSeen.has(el)) return;
         lexSeen.add(el);
         lexRefs.push(new WeakRef(el));
-        el.addEventListener('emptied', () => { if (el.__lexState === 'unsupported') el.__lexState = undefined; });
         listenMedia(el);
     };
 
@@ -763,15 +762,24 @@ public static class YouTubeOptimizer
 
     // ── Clasificación previa: NUNCA enrutar si no estamos seguros (es irreversible) ──
     const classify = (el) => {
-        if (el.mediaKeys) return 'drm';                       // EME (Netflix...) => Web Audio daría silencio
+        if (el.mediaKeys) return 'drm';                       // EME (Netflix...) => Web Audio daria silencio
         if (el.srcObject) return 'safe';                      // MediaStream
         const src = el.currentSrc || '';
-        if (!src) return 'pending';                           // aún no sabemos: NO decidir
+        if (!src) return 'pending';                           // aun no sabemos: NO decidir
         if (/^(blob|data):/i.test(src)) return 'safe';        // MSE/HLS
         try { if (new URL(src, location.href).origin === location.origin) return 'safe'; } catch(_) { return 'pending'; }
         if (el.crossOrigin === 'anonymous' || el.crossOrigin === 'use-credentials') return 'safe';
         return 'cross';
     };
+
+    // Fuentes que ya fallaron: NO se reintenta hasta que el elemento cambie de src.
+    // (Antes, el evento 'emptied' borraba este estado y producia el bucle de recargas de 1 segundo.)
+    const lexFailedSrc = new WeakMap();
+    const markFailed = (el, src, why) => {
+        try { lexFailedSrc.set(el, src || ''); } catch(_) {}
+        reportOnce(why || 'cors_blocked', src);
+    };
+
     const armPending = (el) => {
         if (el.__lexPendingArmed) return;
         el.__lexPendingArmed = true;
@@ -780,15 +788,27 @@ public static class YouTubeOptimizer
         el.addEventListener('playing', retry, { once: true });
     };
 
-    // ── Nivel A: sonda CORS + recarga con crossOrigin ──
-    const probeCors = async (src) => {
+    // ── Sonda con un <video> DESECHABLE: prueba si la fuente carga con crossOrigin sin tocar el reproductor real ──
+    const probeCorsWithThrowaway = (src, timeoutMs) => new Promise((resolve) => {
+        let v = null, done = false, timer = null;
+        const finish = (ok) => {
+            if (done) return; done = true;
+            clearTimeout(timer);
+            try { v.onloadedmetadata = null; v.onerror = null; v.removeAttribute('src'); v.load(); } catch(_) {}
+            v = null;
+            resolve(ok);
+        };
         try {
-            const ctrl = new AbortController();
-            const r = await fetch(src, { method: 'GET', mode: 'cors', credentials: 'omit', cache: 'no-store', headers: { Range: 'bytes=0-0' }, signal: ctrl.signal });
-            ctrl.abort();
-            return r.ok || r.status === 206;
-        } catch(_) { return false; }
-    };
+            v = document.createElement('video');
+            v.muted = true; v.preload = 'metadata'; v.crossOrigin = 'anonymous';
+            v.onloadedmetadata = () => finish(true);
+            v.onerror = () => finish(false);
+            timer = setTimeout(() => finish(false), timeoutMs);
+            v.src = src;
+        } catch(_) { finish(false); }
+    });
+
+    // ── Recarga el elemento REAL con crossOrigin (solo se llama si la sonda ya paso) ──
     const reloadWithCors = (el) => new Promise((resolve) => {
         const t = el.currentTime, wasPlaying = !el.paused, rate = el.playbackRate;
         let done = false;
@@ -804,38 +824,49 @@ public static class YouTubeOptimizer
         };
         const onOk = () => finish(true);
         const onErr = () => finish(false);
-        const timer = setTimeout(() => finish(false), 5000);
+        const timer = setTimeout(() => finish(false), 8000);
         el.addEventListener('loadedmetadata', onOk, { once: true });
         el.addEventListener('error', onErr, { once: true });
         try { el.crossOrigin = 'anonymous'; el.load(); } catch(_) { finish(false); }
     });
 
-    // ── Nivel B: pedir al host que inyecte ACAO (CDP Fetch) ──
-    const pendingUnlock = new Map();
-    window.__lexCorsUnlockAck = (origin) => { const r = pendingUnlock.get(origin); if (r) { pendingUnlock.delete(origin); r(true); } };
+    // ── Pedir al host (C#) que inyecte Access-Control-Allow-Origin en respuestas de MEDIA ──
+    const pendingUnlock = new Map();   // origin -> [resolvers]
+    window.__lexCorsUnlockAck = (origin) => {
+        const arr = pendingUnlock.get(origin);
+        if (arr) { pendingUnlock.delete(origin); arr.forEach(r => r(true)); }
+    };
     const requestHostUnlock = (src) => new Promise((resolve) => {
         let origin;
         try { origin = new URL(src, location.href).origin; } catch(_) { return resolve(false); }
-        pendingUnlock.set(origin, resolve);
-        setTimeout(() => { if (pendingUnlock.delete(origin)) resolve(false); }, 3000);
+        const arr = pendingUnlock.get(origin) || [];
+        arr.push(resolve);
+        pendingUnlock.set(origin, arr);
+        setTimeout(() => {
+            const a = pendingUnlock.get(origin);
+            if (!a) return;
+            const i = a.indexOf(resolve);
+            if (i >= 0) { a.splice(i, 1); resolve(false); }
+            if (a.length === 0) pendingUnlock.delete(origin);
+        }, 4000);
         toHost('cors_unlock_req', { origin: origin });
     });
 
     const unlockCross = async (el) => {
+        const src = el.currentSrc;
         el.__lexBusy = true;
         try {
-            const src = el.currentSrc;
-            let ok = await probeCors(src);
-            if (!ok) ok = await requestHostUnlock(src);           // si el host no responde, ok=false
-            if (ok && await reloadWithCors(el)) return routeElement(el);
-            el.__lexState = 'unsupported';
-            reportOnce('cors_blocked', src);                      // Nivel C: aviso honesto
+            // 1) ¿El servidor ya manda CORS? 2) si no, C# inyecta ACAO y se vuelve a probar. El reproductor real NO se toca antes.
+            let ok = await probeCorsWithThrowaway(src, 6000);
+            if (!ok && await requestHostUnlock(src)) ok = await probeCorsWithThrowaway(src, 8000);
+            if (ok && el.currentSrc === src && await reloadWithCors(el) && routeElement(el)) return true;
+            markFailed(el, src, 'cors_blocked');                  // aviso honesto, sin reintentos
             return false;
-        } catch(_) { el.__lexState = 'unsupported'; return false; }
+        } catch(_) { markFailed(el, src, 'cors_blocked'); return false; }
         finally { el.__lexBusy = false; }
     };
 
-    // ── Cadena de audio: el compresor SOLO está activo por encima de 100% ──
+    // ── Cadena de audio: el compresor SOLO esta activo por encima de 100% ──
     const routeElement = (el) => {
         try {
             const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -852,7 +883,7 @@ public static class YouTubeOptimizer
             gain.connect(ctx.destination);                        // 100%: ruta transparente, sin compresor
             el.__lexGainNode = gain; el.__lexComp = comp; el.__lexUseComp = false; el.__lexState = 'routed';
             return true;
-        } catch(_) { el.__lexState = 'unsupported'; return false; }
+        } catch(_) { markFailed(el, el.currentSrc, 'route_failed'); return false; }
     };
     const setChain = (el, useComp) => {
         if (el.__lexState !== 'routed' || el.__lexUseComp === useComp) return;
@@ -869,7 +900,9 @@ public static class YouTubeOptimizer
 
     const ensureRouted = async (el) => {
         if (el.__lexState === 'routed') return true;
-        if (el.__lexBusy || el.__lexState === 'drm' || el.__lexState === 'unsupported') return false;
+        if (el.__lexBusy || el.__lexState === 'drm') return false;
+        const s = el.currentSrc || '';
+        if (s && lexFailedSrc.get(el) === s) return false;        // ya fallo con ESTA fuente: no insistir
         const c = classify(el);
         if (c === 'drm') { el.__lexState = 'drm'; reportOnce('drm'); return false; }
         if (c === 'pending') { armPending(el); return false; }
