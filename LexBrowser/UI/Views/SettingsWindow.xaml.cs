@@ -206,10 +206,12 @@ public partial class SettingsWindow : Window
             bool isDefault = InstallerService.IsDefaultBrowser();
             if (isDefault)
             {
-                TxtDefaultBrowserStatus.Text = "✓ Lex Junior es tu navegador predeterminado en Windows.";
+                TxtDefaultBrowserStatus.Text = "✓ Lex Junior ya es tu navegador predeterminado en Windows.";
                 TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#34D399"));
-                BtnSetDefaultBrowser.Content = "⚙ Cambiar opciones en Windows";
-                BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2E2E3A"));
+                BtnSetDefaultBrowser.Content = "✓ Ya es predeterminado";
+                BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#065F46"));
+                BtnSetDefaultBrowser.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#34D399"));
+                BtnSetDefaultBrowser.IsEnabled = false;
             }
             else
             {
@@ -217,6 +219,8 @@ public partial class SettingsWindow : Window
                 TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#71717A"));
                 BtnSetDefaultBrowser.Content = "🌐 Establecer como predeterminado";
                 BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#6366F1"));
+                BtnSetDefaultBrowser.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF"));
+                BtnSetDefaultBrowser.IsEnabled = true;
             }
         }
         catch { }

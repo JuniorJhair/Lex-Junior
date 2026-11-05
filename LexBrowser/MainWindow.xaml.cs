@@ -671,21 +671,50 @@ public partial class MainWindow : Window
     private async Task CheckDefaultBrowserStatusAsync()
     {
         // 0.0% CPU: solo se verifica una vez tras arrancar la ventana, sin hilos ni procesos en segundo plano
-        if (_isGuestSession || SettingsManager.Current.HasPromptedDefaultBrowser) return;
+        if (_isGuestSession) return;
 
-        await Task.Delay(2000);
+        // Esperar 1.5s para no competir con el arranque inicial de pestañas
+        await Task.Delay(1500);
 
         try
         {
             bool isDefault = await Task.Run(() => InstallerService.IsDefaultBrowser());
-            if (!isDefault && !SettingsManager.Current.HasPromptedDefaultBrowser)
+
+            // 1. Si ya es predeterminado: NUNCA mostrar el aviso
+            if (isDefault)
             {
-                DefaultBrowserPromptBanner.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                SettingsManager.Current.HasPromptedDefaultBrowser = true;
+                SettingsManager.Current.WasPreviouslyDefaultBrowser = true;
                 SettingsManager.Save();
+                DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            // 2. Si antes era predeterminado y ahora dejó de serlo (otra app lo cambió):
+            // reactivar para darle otra oportunidad de decidir
+            if (SettingsManager.Current.WasPreviouslyDefaultBrowser)
+            {
+                SettingsManager.Current.WasPreviouslyDefaultBrowser = false;
+                SettingsManager.Current.UserDecidedDefaultBrowser = false;
+                SettingsManager.Save();
+            }
+
+            // 3. Si el usuario ya tomó una decisión explícita (hizo clic en "Sí" o en "Ahora no"):
+            // respetamos su decisión y no volvemos a mostrarlo
+            if (SettingsManager.Current.UserDecidedDefaultBrowser)
+            {
+                DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            // 4. Si aún no ha decidido (o lo ignoró en aperturas previas), mostrarlo en la infobar superior
+            DefaultBrowserPromptBanner.Visibility = Visibility.Visible;
+
+            // 5. Permanecer visible por al menos 3 minutos. Si el usuario lo ignora por más de 3 minutos, desaparece esta sesión
+            // Task.Delay usa 0.0% CPU y no deja procesos en segundo plano
+            await Task.Delay(TimeSpan.FromMinutes(3));
+            if (!SettingsManager.Current.UserDecidedDefaultBrowser && DefaultBrowserPromptBanner.Visibility == Visibility.Visible)
+            {
+                DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
             }
         }
         catch { }
@@ -694,7 +723,8 @@ public partial class MainWindow : Window
     private void BtnSetAsDefault_Click(object sender, RoutedEventArgs e)
     {
         DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
-        SettingsManager.Current.HasPromptedDefaultBrowser = true;
+        SettingsManager.Current.UserDecidedDefaultBrowser = true;
+        SettingsManager.Current.WasPreviouslyDefaultBrowser = true;
         SettingsManager.Save();
 
         try
@@ -711,7 +741,7 @@ public partial class MainWindow : Window
     private void BtnDismissDefaultBrowser_Click(object sender, RoutedEventArgs e)
     {
         DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
-        SettingsManager.Current.HasPromptedDefaultBrowser = true;
+        SettingsManager.Current.UserDecidedDefaultBrowser = true;
         SettingsManager.Save();
 
         ShowToast(
@@ -892,6 +922,7 @@ public partial class MainWindow : Window
                     win.RowHeader.Height = new GridLength(0);
                     win.RowNavBar.Height = new GridLength(0);
                     win.RowBookmarksBar.Height = new GridLength(0);
+                    win.RowInfoBar.Height = new GridLength(0);
                     win.RowProgressBar.Height = new GridLength(0);
 
                     // Eliminar WindowChrome durante fullscreen para evitar bordes negros o franjas de taskbar
@@ -908,6 +939,7 @@ public partial class MainWindow : Window
                     win.RowHeader.Height = new GridLength(42);
                     win.RowNavBar.Height = new GridLength(50);
                     win.RowBookmarksBar.Height = SettingsManager.Current.ShowBookmarksBar ? new GridLength(34) : new GridLength(0);
+                    win.RowInfoBar.Height = GridLength.Auto;
                     win.RowProgressBar.Height = new GridLength(2);
 
                     // Restaurar WindowChrome normal
@@ -3040,10 +3072,23 @@ public partial class MainWindow : Window
             {
                 if (IsSafeHttpUrl(url))
                 {
-                    if (_activeTab?.WebView?.CoreWebView2 != null)
+                    bool isCurrentTabEmpty = _activeTab != null &&
+                        (_activeTab.IsNewTab ||
+                         string.IsNullOrWhiteSpace(_activeTab.Url) ||
+                         _activeTab.Url.Equals("about:blank", StringComparison.OrdinalIgnoreCase) ||
+                         _activeTab.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase));
+
+                    if (isCurrentTabEmpty && _activeTab?.WebView?.CoreWebView2 != null)
+                    {
+                        _activeTab.IsNewTab = false;
+                        _activeTab.Url = url;
                         _activeTab.WebView.CoreWebView2.Navigate(url);
+                    }
                     else
-                        await AddNewTabAsync(url);
+                    {
+                        var newTab = await AddNewTabAsync(url);
+                        SelectTab(newTab, force: true);
+                    }
                 }
             };
             historyWin.ShowDialog();

@@ -663,4 +663,31 @@ public partial class HistoryWindow : Window
         }
         catch { }
     }
+
+    private void LstHistory_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+        var scrollViewer = FindVisualChild<ScrollViewer>(LstHistory);
+        if (scrollViewer == null) return;
+
+        // Amortiguación precisa del scroll: 28 píxeles por muesca estándar de 120 delta
+        // Evita saltos bruscos y proporciona un deslizamiento suave tanto en ratón como en trackpads de laptop
+        double deltaUnits = e.Delta / 120.0;
+        double scrollPixels = deltaUnits * 28.0;
+        double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
+        scrollViewer.ScrollToVerticalOffset(newOffset);
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent == null) return null;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            var descendant = FindVisualChild<T>(child);
+            if (descendant != null) return descendant;
+        }
+        return null;
+    }
 }

@@ -139,7 +139,6 @@ public static class AdBlockFilter
     {
         "/api/stats/ads",
         "/pagead/",
-        "/ptracking",
         "/youtubei/v1/player/ad_break",
         "/get_midroll_info",
         "adformat=",
@@ -225,6 +224,25 @@ public static class AdBlockFilter
         string host = uri.Host;
         string path = uri.AbsolutePath;
         string fullUrl = uri.AbsoluteUri;
+
+        // Regla especial de YouTube: proteger el registro del historial del usuario (watchtime, playback, ptracking)
+        // YouTube requiere s.youtube.com/api/stats/watchtime, playback, etc., para guardar el historial y sincronizar el progreso.
+        if (host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith("googlevideo.com", StringComparison.OrdinalIgnoreCase))
+        {
+            // Solo bloquear anuncios explícitos conocidos dentro de YouTube
+            if (path.StartsWith("/api/stats/ads", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/youtubei/v1/player/ad_break", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/get_midroll_info", StringComparison.OrdinalIgnoreCase) ||
+                fullUrl.Contains("googleads.g.doubleclick.net", StringComparison.OrdinalIgnoreCase) ||
+                fullUrl.Contains("&adformat=", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            // Permitir todo lo demás de YouTube (watchtime, playback, log_event, player, streams de video)
+            return false;
+        }
 
         // 1. Bloquear dominios completos (incluyendo subdominios)
         if (HostMatchesSet(host, BlockedDomains)) return true;

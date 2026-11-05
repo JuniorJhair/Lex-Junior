@@ -367,6 +367,7 @@ public static class InstallerService
                 {
                     appKey.SetValue("", "Lex Junior Browser", RegistryValueKind.String);
                     appKey.SetValue("FriendlyAppName", "Lex Junior Browser", RegistryValueKind.String);
+                    appKey.SetValue("AppUserModelID", "LexJunior.Browser", RegistryValueKind.String);
 
                     using (var sup = appKey.CreateSubKey("SupportedProtocols"))
                     {
@@ -562,31 +563,141 @@ public static class InstallerService
                 try { File.Delete(lnkPath); } catch { }
             }
 
-            Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType == null) return;
-            dynamic? shell = Activator.CreateInstance(shellType);
-            if (shell == null) return;
+            // Crear mediante IShellLinkW e IPropertyStore para asignar System.AppUserModel.ID
+            // Esto garantiza que el icono anclado en la barra de tareas y la ventana en ejecución
+            // tengan EXACTAMENTE el mismo ID ("LexJunior.Browser"), previniendo que se duplique al abrirse.
+            var shellLink = (IShellLinkW)new CShellLink();
+            shellLink.SetPath(targetExe);
+            shellLink.SetWorkingDirectory(workingDir);
+            shellLink.SetDescription(description);
 
-            dynamic shortcut = shell.CreateShortcut(lnkPath);
-            shortcut.TargetPath = targetExe;
-            shortcut.WorkingDirectory = workingDir;
-            shortcut.Description = description;
             if (File.Exists(iconPath))
             {
-                shortcut.IconLocation = $"{iconPath},0";
+                shellLink.SetIconLocation(iconPath, 0);
             }
             else
             {
-                shortcut.IconLocation = $"{targetExe},0";
+                shellLink.SetIconLocation(targetExe, 0);
             }
-            shortcut.Save();
+
+            try
+            {
+                var propertyStore = (IPropertyStore)shellLink;
+                // PKEY_AppUserModel_ID: {9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}, 5
+                var pkey = new PROPERTYKEY(new Guid("{9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3}"), 5);
+                var pv = new PROPVARIANT
+                {
+                    vt = 31, // VT_LPWSTR
+                    pwszVal = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUni("LexJunior.Browser")
+                };
+                try
+                {
+                    propertyStore.SetValue(ref pkey, ref pv);
+                    propertyStore.Commit();
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.FreeCoTaskMem(pv.pwszVal);
+                }
+            }
+            catch { }
+
+            var persistFile = (IPersistFile)shellLink;
+            persistFile.Save(lnkPath, true);
 
             if (File.Exists(lnkPath))
             {
                 try { File.SetLastWriteTime(lnkPath, DateTime.Now); } catch { }
             }
         }
-        catch { }
+        catch
+        {
+            // Respaldo WScript.Shell si la API COM nativa falla
+            try
+            {
+                Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null) return;
+                dynamic? shell = Activator.CreateInstance(shellType);
+                if (shell == null) return;
+
+                dynamic shortcut = shell.CreateShortcut(lnkPath);
+                shortcut.TargetPath = targetExe;
+                shortcut.WorkingDirectory = workingDir;
+                shortcut.Description = description;
+                shortcut.IconLocation = File.Exists(iconPath) ? $"{iconPath},0" : $"{targetExe},0";
+                shortcut.Save();
+            }
+            catch { }
+        }
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.Guid("00021401-0000-0000-C000-000000000046")]
+    private class CShellLink { }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+    [System.Runtime.InteropServices.Guid("000214F9-0000-0000-C000-000000000046")]
+    private interface IShellLinkW
+    {
+        void GetPath([System.Runtime.InteropServices.Out, System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] System.Text.StringBuilder pszFile, int cchMaxPath, out IntPtr pfd, uint fFlags);
+        void GetIDList(out IntPtr ppidl);
+        void SetIDList(IntPtr pidl);
+        void GetDescription([System.Runtime.InteropServices.Out, System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] System.Text.StringBuilder pszName, int cchMaxName);
+        void SetDescription([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszName);
+        void GetWorkingDirectory([System.Runtime.InteropServices.Out, System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] System.Text.StringBuilder pszDir, int cchMaxPath);
+        void SetWorkingDirectory([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszDir);
+        void GetArguments([System.Runtime.InteropServices.Out, System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] System.Text.StringBuilder pszArgs, int cchMaxPath);
+        void SetArguments([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszArgs);
+        void GetHotkey(out short pwHotkey);
+        void SetHotkey(short wHotkey);
+        void GetShowCmd(out int piShowCmd);
+        void SetShowCmd(int iShowCmd);
+        void GetIconLocation([System.Runtime.InteropServices.Out, System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] System.Text.StringBuilder pszIconPath, int cchIconPath, out int piIcon);
+        void SetIconLocation([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
+        void SetRelativePath([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
+        void Resolve(IntPtr hwnd, uint fFlags);
+        void SetPath([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszFile);
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+    [System.Runtime.InteropServices.Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")]
+    private interface IPropertyStore
+    {
+        void GetCount(out uint cProps);
+        void GetAt(uint iProp, out PROPERTYKEY pkey);
+        void GetValue(ref PROPERTYKEY key, out PROPVARIANT pv);
+        void SetValue(ref PROPERTYKEY key, ref PROPVARIANT pv);
+        void Commit();
+    }
+
+    [System.Runtime.InteropServices.ComImport]
+    [System.Runtime.InteropServices.InterfaceType(System.Runtime.InteropServices.ComInterfaceType.InterfaceIsIUnknown)]
+    [System.Runtime.InteropServices.Guid("0000010B-0000-0000-C000-000000000046")]
+    private interface IPersistFile
+    {
+        void GetClassID(out Guid pClassID);
+        void IsDirty();
+        void Load([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
+        void Save([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszFileName, [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)] bool fRemember);
+        void SaveCompleted([System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] string pszFileName);
+        void GetCurFile([System.Runtime.InteropServices.Out, System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.LPWStr)] System.Text.StringBuilder ppszFileName);
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 4)]
+    private struct PROPERTYKEY
+    {
+        public Guid fmtid;
+        public uint pid;
+        public PROPERTYKEY(Guid guid, uint id) { fmtid = guid; pid = id; }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit)]
+    private struct PROPVARIANT
+    {
+        [System.Runtime.InteropServices.FieldOffset(0)] public ushort vt;
+        [System.Runtime.InteropServices.FieldOffset(8)] public IntPtr pwszVal;
     }
 
     private static void RegisterInWindowsAddRemovePrograms(string iconPath)

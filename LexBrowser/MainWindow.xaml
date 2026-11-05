@@ -202,9 +202,11 @@
             <RowDefinition x:Name="RowNavBar" Height="50"/>
             <!-- Fila 2: Barra de Accesos Directos Pro (Bookmarks Bar) -->
             <RowDefinition x:Name="RowBookmarksBar" Height="34"/>
-            <!-- Fila 3: Indicador de carga sutil -->
+            <!-- Fila 3: Fila Infobar Superior (Navegador predeterminado - CERO interferencia con WebView2) -->
+            <RowDefinition x:Name="RowInfoBar" Height="Auto"/>
+            <!-- Fila 4: Indicador de carga sutil -->
             <RowDefinition x:Name="RowProgressBar" Height="2"/>
-            <!-- Fila 4: Contenedor del navegador (WebView2) -->
+            <!-- Fila 5: Contenedor del navegador (WebView2) -->
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -491,18 +493,14 @@
 
                         <!-- Selector de idioma con tema oscuro completo -->
                         <TextBlock Text="Traducir al idioma:" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,6"/>
-                        <ComboBox x:Name="CmbTargetLanguage" Height="32" Background="#202030" Foreground="#FFFFFF"
-                                  BorderBrush="#3E3E58" BorderThickness="1" Padding="8,4" Margin="0,0,0,12"
-                                  DisplayMemberPath="Name" SelectedValuePath="Code" MaxDropDownHeight="320">
-                            <ComboBox.Resources>
-                                <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#1B1B26"/>
-                                <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#FFFFFF"/>
-                            </ComboBox.Resources>
+                        <ComboBox x:Name="CmbTargetLanguage" Height="34" Margin="0,0,0,12"
+                                  DisplayMemberPath="Name" SelectedValuePath="Code" MaxDropDownHeight="300"
+                                  SnapsToDevicePixels="True" OverridesDefaultStyle="True">
                             <ComboBox.ItemContainerStyle>
                                 <Style TargetType="ComboBoxItem">
-                                    <Setter Property="Background" Value="#1B1B26"/>
+                                    <Setter Property="Background" Value="#171722"/>
                                     <Setter Property="Foreground" Value="#F4F4F5"/>
-                                    <Setter Property="Padding" Value="8,6"/>
+                                    <Setter Property="Padding" Value="10,6"/>
                                     <Setter Property="Cursor" Value="Hand"/>
                                     <Setter Property="Template">
                                         <Setter.Value>
@@ -512,7 +510,8 @@
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="ItemBorder" Property="Background" Value="#2D2D44"/>
+                                                        <Setter TargetName="ItemBorder" Property="Background" Value="#2A2A3D"/>
+                                                        <Setter Property="Foreground" Value="#FFFFFF"/>
                                                     </Trigger>
                                                     <Trigger Property="IsSelected" Value="True">
                                                         <Setter TargetName="ItemBorder" Property="Background" Value="#2563EB"/>
@@ -524,6 +523,65 @@
                                     </Setter>
                                 </Style>
                             </ComboBox.ItemContainerStyle>
+                            <ComboBox.Template>
+                                <ControlTemplate TargetType="ComboBox">
+                                    <Grid>
+                                        <ToggleButton x:Name="ToggleButton" Focusable="False" ClickMode="Press"
+                                                      IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                            <ToggleButton.Template>
+                                                <ControlTemplate TargetType="ToggleButton">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition/>
+                                                            <ColumnDefinition Width="28"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <Border x:Name="Border" Grid.ColumnSpan="2" CornerRadius="6"
+                                                                Background="#1B1B26" BorderBrush="#35354A" BorderThickness="1"/>
+                                                        <Path x:Name="Arrow" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                              Data="M 0 0 L 4 4 L 8 0 Z" Fill="#A1A1AA"/>
+                                                    </Grid>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="Border" Property="BorderBrush" Value="#38BDF8"/>
+                                                            <Setter TargetName="Arrow" Property="Fill" Value="#FFFFFF"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter TargetName="Border" Property="BorderBrush" Value="#38BDF8"/>
+                                                            <Setter TargetName="Border" Property="Background" Value="#222232"/>
+                                                            <Setter TargetName="Arrow" Property="Fill" Value="#38BDF8"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </ToggleButton.Template>
+                                        </ToggleButton>
+                                        <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
+                                                          Content="{TemplateBinding SelectionBoxItem}"
+                                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                          Margin="10,0,28,0" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <TextBlock.Foreground>
+                                                <SolidColorBrush Color="#F4F4F5"/>
+                                            </TextBlock.Foreground>
+                                        </ContentPresenter>
+                                        <Popup x:Name="Popup" Placement="Bottom"
+                                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                                               AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                                            <Grid x:Name="DropDown" SnapsToDevicePixels="True"
+                                                  MinWidth="{TemplateBinding ActualWidth}" MaxHeight="280">
+                                                <Border x:Name="DropDownBorder" Background="#161622" BorderBrush="#2D2D42"
+                                                        BorderThickness="1" CornerRadius="8" Padding="4" Margin="0,4,0,4">
+                                                    <Border.Effect>
+                                                        <DropShadowEffect BlurRadius="16" ShadowDepth="4" Direction="270" Opacity="0.6" Color="Black"/>
+                                                    </Border.Effect>
+                                                    <ScrollViewer SnapsToDevicePixels="True">
+                                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                                    </ScrollViewer>
+                                                </Border>
+                                            </Grid>
+                                        </Popup>
+                                    </Grid>
+                                </ControlTemplate>
+                            </ComboBox.Template>
                         </ComboBox>
 
                         <!-- Botones de Acción -->
@@ -1059,41 +1117,28 @@
             </Border>
         </Grid>
 
-        <!-- Fila 3: Barra de progreso sutil -->
-        <ProgressBar x:Name="LoadingProgressBar" Grid.Row="3" Height="2" Background="Transparent" 
-                     Foreground="{StaticResource AccentColor}" BorderThickness="0" Visibility="Collapsed" IsIndeterminate="True"/>
-
-        <!-- Fila 4: Contenedor donde se inserta el WebView2 activo -->
-        <Grid x:Name="BrowserContainer" Grid.Row="4" Background="#0A0A0E">
-            <!-- Los WebViews de las pestañas se alojan aquí dinámicamente -->
-        </Grid>
-
-        <!-- Banner Amable de Navegador Predeterminado (Solo una vez en Grid.Row="4" centrado) -->
-        <Border x:Name="DefaultBrowserPromptBanner" Grid.Row="4" HorizontalAlignment="Center" VerticalAlignment="Top"
-                Margin="0,16,0,0" MaxWidth="640" Background="#161622" BorderBrush="#38BDF8" BorderThickness="1.5"
-                CornerRadius="12" Padding="16,12" Visibility="Collapsed" Panel.ZIndex="1050">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="22" ShadowDepth="4" Opacity="0.8" Color="#000000"/>
-            </Border.Effect>
-            <Grid>
+        <!-- Fila 3: Banner Amable de Navegador Predeterminado (Infobar nativa superior, CERO conflicto de solapamiento con WebView2) -->
+        <Border x:Name="DefaultBrowserPromptBanner" Grid.Row="3" Background="#141420" BorderBrush="#38BDF8" BorderThickness="0,0,0,1"
+                Padding="16,8" Visibility="Collapsed" Panel.ZIndex="100">
+            <Grid HorizontalAlignment="Center" MaxWidth="900">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0" Text="✨" FontSize="20" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <TextBlock Grid.Column="0" Text="✨" FontSize="18" VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
                     <TextBlock Text="¿Te gustaría tener a Lex Junior como tu navegador predeterminado?"
                                FontWeight="Bold" FontSize="12.5" Foreground="#FFFFFF"/>
                     <TextBlock Text="Hemos detectado que aún no somos tu navegador predeterminado."
-                               FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                               FontSize="11" Foreground="#94A3B8" Margin="0,2,0,0"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="BtnSetAsDefault" Content="Sí, establecer" Background="#2563EB" Foreground="#FFFFFF"
-                            FontWeight="SemiBold" FontSize="11.5" Padding="12,6" Cursor="Hand" Click="BtnSetAsDefault_Click" Margin="0,0,8,0">
+                            FontWeight="SemiBold" FontSize="11.5" Padding="14,6" Cursor="Hand" Click="BtnSetAsDefault_Click" Margin="0,0,8,0">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -1112,8 +1157,17 @@
             </Grid>
         </Border>
 
+        <!-- Fila 4: Barra de progreso sutil -->
+        <ProgressBar x:Name="LoadingProgressBar" Grid.Row="4" Height="2" Background="Transparent" 
+                     Foreground="{StaticResource AccentColor}" BorderThickness="0" Visibility="Collapsed" IsIndeterminate="True"/>
+
+        <!-- Fila 5: Contenedor donde se inserta el WebView2 activo -->
+        <Grid x:Name="BrowserContainer" Grid.Row="5" Background="#0A0A0E">
+            <!-- Los WebViews de las pestañas se alojan aquí dinámicamente -->
+        </Grid>
+
         <!-- Banner Flotante para Guardar o Actualizar Contraseña al iniciar sesión (Esquina Superior Derecha) -->
-        <Border x:Name="SavePasswordBanner" Grid.Row="4" HorizontalAlignment="Right" VerticalAlignment="Top"
+        <Border x:Name="SavePasswordBanner" Grid.Row="5" HorizontalAlignment="Right" VerticalAlignment="Top"
                 Margin="0,14,24,0" Width="365" Background="#161622" BorderBrush="#6366F1" BorderThickness="1.5"
                 CornerRadius="12" Padding="16,14" Visibility="Collapsed" Panel.ZIndex="1100">
             <Border.Effect>

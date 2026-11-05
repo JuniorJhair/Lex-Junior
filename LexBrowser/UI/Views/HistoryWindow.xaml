@@ -559,7 +559,8 @@
             <ListView x:Name="LstHistory" Grid.Row="1" Background="#0C0C10" BorderThickness="0" Foreground="#E4E4E7"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       ScrollViewer.VerticalScrollBarVisibility="Auto"
-                      ScrollViewer.CanContentScroll="False">
+                      ScrollViewer.CanContentScroll="False"
+                      PreviewMouseWheel="LstHistory_PreviewMouseWheel">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="Background" Value="Transparent"/>

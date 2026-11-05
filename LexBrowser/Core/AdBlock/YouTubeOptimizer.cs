@@ -27,9 +27,6 @@ public static class YouTubeOptimizer
                     if (data.adPlacements) data.adPlacements = [];
                     if (data.playerAds) data.playerAds = [];
                     if (data.adSlots) data.adSlots = [];
-                    if (data.playbackTracking && data.playbackTracking.videostatsPlaybackUrl) {
-                        data.playbackTracking.videostatsPlaybackUrl.baseUrl = '';
-                    }
                 } catch(_) {}
                 return data;
             };
@@ -53,9 +50,6 @@ public static class YouTubeOptimizer
                     if (Array.isArray(data.adSlots)) data.adSlots = [];
                     if (data.playerResponse) cleanPlayerPayload(data.playerResponse);
                     if (data.contents) cleanPlayerPayload(data.contents);
-                    if (data.playbackTracking && data.playbackTracking.videostatsPlaybackUrl) {
-                        data.playbackTracking.videostatsPlaybackUrl.baseUrl = '';
-                    }
                 } catch(_) {}
                 return data;
             };
