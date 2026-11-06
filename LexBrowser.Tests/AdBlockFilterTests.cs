@@ -24,7 +24,6 @@ public class AdBlockFilterTests
     [InlineData("https://a.realsrv.com/slider.php?zone=456")]
     [InlineData("https://ads.trafficjunky.net/video?zone_id=789")]
     [InlineData("https://engine.adglare.net/?456")]
-    [InlineData("https://cdn.hentaipros.com/banner.jpg")]
     [InlineData("https://a.adtng.com/get/10016594?time=1769790006402")]
     [InlineData("https://a.pemsrv.com/ad-provider.js")]
     [InlineData("https://s.opoxv.com/v1/link.php")]
@@ -76,11 +75,11 @@ public class AdBlockFilterTests
 
     // ── IsSameSiteOrDomain ────────────────────────────────────────────────
     [Theory]
-    [InlineData("https://www.xvideos.com/video123", "https://www.xvideos.com/", true)]
-    [InlineData("https://sub.xvideos.com/tag", "https://xvideos.com/home", true)]
-    [InlineData("https://hentaila.com/media/ep1", "https://hentaila.com/", true)]
-    [InlineData("https://ad-delivery.net/click", "https://xvideos.com/", false)]
-    [InlineData("https://magsrv.com/splash.php", "https://hentaila.com/", false)]
+    [InlineData("https://video.portal.com/stream123", "https://video.portal.com/", true)]
+    [InlineData("https://sub.portal.com/tag", "https://portal.com/home", true)]
+    [InlineData("https://media.server.org/media/ep1", "https://media.server.org/", true)]
+    [InlineData("https://ad-delivery.net/click", "https://portal.com/", false)]
+    [InlineData("https://magsrv.com/splash.php", "https://portal.com/", false)]
     public void Identifies_same_site_or_cross_domain(string urlA, string urlB, bool expected)
     {
         bool result = AdBlockFilter.IsSameSiteOrDomain(new Uri(urlA), new Uri(urlB));

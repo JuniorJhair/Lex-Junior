@@ -98,7 +98,7 @@ public static class AdBlockFilter
         "jerkmate.com",
         "jasmin.com",
 
-        // Redes especializadas de video ads (VAST/Fluid Player/sliders) y rotadores en streaming adulto
+        // Redes especializadas de video ads (VAST/reproductores/sliders) y rotadores en streaming
         "magsrv.com",
         "realsrv.com",
         "exdynsrv.com",
@@ -120,7 +120,6 @@ public static class AdBlockFilter
         "etahub.com",
         "wpushsdk.com",
         "creative.mycdn.me",
-        "hentaipros.com",
         "runative-syndicate.com",
         "runative.com",
         "adtng.com",

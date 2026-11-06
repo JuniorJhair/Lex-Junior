@@ -177,14 +177,11 @@ public static class WebShield
                     iframe[src*='juicyads'],
                     iframe[src*='adglare'],
                     iframe[src*='plugrush'],
-                    iframe[src*='hentaipros'],
                     iframe[src*='adxvip'],
                     iframe[src*='etahub'],
                     iframe[src*='tsyndicate'],
                     iframe[src*='ero-advertising'],
                     iframe[src*='adtng.com'],
-                    a[href*='hentaipros'],
-                    img[src*='hentaipros'],
                     a[href*='tsyndicate'],
                     a[href*='adtng.com'],
                     img[src*='adtng.com'],
@@ -223,7 +220,7 @@ public static class WebShield
     // ─────────────────────────────────────────────────────────────────
     // 1. ESCUDO ANTI-CLICKJACKING Y ANTI-POPUNDERS (Streaming / Web)
     // ─────────────────────────────────────────────────────────────────
-    const adDomainsRegex = /(propellerads|popcash|popads|adsterra|monetag|bet365|1xbet|clickadu|hilltopads|exoclick|juicyads|syndication|doubleclick|adservice|outbrain|taboola|criteo|adnxs|pubmatic|onclick|trafficstars|adcash|revcontent|smartadserver|r2ads|llvpn|streamtp|trkr|ppof\.net|visariomedia|qojseyonoj|hfryyynvqwgy|magsrv|realsrv|exdynsrv|trafficjunky|adglare|plugrush|adxvip|etahub|hentaipros|ptgnadsv2|videoplayerhub|runative|adtng|pemsrv|opoxv)/i;
+    const adDomainsRegex = /(propellerads|popcash|popads|adsterra|monetag|bet365|1xbet|clickadu|hilltopads|exoclick|juicyads|syndication|doubleclick|adservice|outbrain|taboola|criteo|adnxs|pubmatic|onclick|trafficstars|adcash|revcontent|smartadserver|r2ads|llvpn|streamtp|trkr|ppof\.net|visariomedia|qojseyonoj|hfryyynvqwgy|magsrv|realsrv|exdynsrv|trafficjunky|adglare|plugrush|adxvip|etahub|ptgnadsv2|videoplayerhub|runative|adtng|pemsrv|opoxv)/i;
 
     // 1.1 Defusor de window.open para popunders con señuelo Proxy (closed: false)
     const trustedOAuthRegex = /^https:\/\/([a-z0-9-]+\.)?(google\.com|apple\.com|microsoft\.com|microsoftonline\.com|live\.com|github\.com|facebook\.com|discord\.com|x\.com|twitter\.com|paypal\.com)(\/|$)/i;
