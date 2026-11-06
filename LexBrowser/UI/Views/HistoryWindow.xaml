@@ -719,7 +719,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Sitio a limpiar:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,10,0"/>
                             <ComboBox x:Name="CboScopeTargetDomain" Grid.Column="1" Style="{StaticResource DarkCombo}"/>
-                            <TextBlock Text="(ej: youtube.com, futbollibresgol.pe)" Grid.Column="2" FontSize="11" Foreground="#8B8B96" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            <TextBlock Text="(ej: youtube.com, instagram.com)" Grid.Column="2" FontSize="11" Foreground="#8B8B96" VerticalAlignment="Center" Margin="10,0,0,0"/>
                         </Grid>
                     </StackPanel>
                 </Border>

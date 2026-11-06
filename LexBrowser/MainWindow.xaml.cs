@@ -5280,18 +5280,14 @@ public partial class MainWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // 1. Si el evento proviene de un ComboBox abierto o de su lista desplegable (Popup), ignorarlo para que scrollee el combo
-        if (LexBrowser.UI.GlobalScrollBehavior.IsInsideOpenComboBoxOrPopup(e.OriginalSource as DependencyObject))
+        // 1. Si el evento proviene de un ComboBox abierto con scroll interno, desplazar el combo suavemente a 28 px
+        if (LexBrowser.UI.GlobalScrollBehavior.TryScrollOpenComboBox(e.OriginalSource as DependencyObject, e.Delta))
         {
+            e.Handled = true;
             return;
         }
 
-        // 2. Si el puntero está sobre la ventana pero hay algún ComboBox abierto, cerrarlo de inmediato
-        if (LexBrowser.UI.GlobalScrollBehavior.HasAnyOpenComboBox())
-        {
-            LexBrowser.UI.GlobalScrollBehavior.CloseAllOpenComboBoxes();
-        }
-
+        // 2. Si el puntero está fuera, o el combo no tiene scroll interno: desplazar la ventana principal suavemente a 28 px
         e.Handled = true;
         if (sender is ScrollViewer scrollViewer)
         {

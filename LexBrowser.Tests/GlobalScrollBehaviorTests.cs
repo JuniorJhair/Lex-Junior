@@ -146,4 +146,43 @@ public class GlobalScrollBehaviorTests
             }
         });
     }
+
+    [Fact]
+    public void IsElementVisibleInViewport_DetectsVisibilityCorrectly()
+    {
+        RunOnSta(() =>
+        {
+            var sv = new ScrollViewer { Width = 300, Height = 300 };
+            var panel = new StackPanel { Height = 1000 };
+            var cb = new ComboBox { Width = 100, Height = 30 };
+            panel.Children.Add(cb);
+            sv.Content = panel;
+
+            var win = new Window { Content = sv, Width = 400, Height = 400 };
+            win.Show();
+            win.UpdateLayout();
+
+            try
+            {
+                Assert.True(GlobalScrollBehavior.IsElementVisibleInViewport(cb, sv));
+            }
+            finally
+            {
+                win.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public void TryScrollOpenComboBox_WithNullOrClosed_ReturnsFalse()
+    {
+        RunOnSta(() =>
+        {
+            Assert.False(GlobalScrollBehavior.TryScrollOpenComboBox(null, -120));
+
+            var cb = new ComboBox();
+            cb.IsDropDownOpen = false;
+            Assert.False(GlobalScrollBehavior.TryScrollOpenComboBox(cb, -120));
+        });
+    }
 }

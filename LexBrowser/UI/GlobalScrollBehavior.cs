@@ -133,54 +133,145 @@ public static class GlobalScrollBehavior
     /// </summary>
     public static void ScrollActiveComboBox(int delta)
     {
-        ComboBox? activeCb = null;
+        ComboBox? activeCb = GetFirstOpenComboBox();
+        if (activeCb == null) return;
 
+        var sv = GetDropDownScrollViewer(activeCb);
+        if (sv != null && sv.ScrollableHeight > 0)
+        {
+            double deltaUnits = delta / 120.0;
+            double scrollPixels = deltaUnits * 28.0;
+            double newOffset = Math.Clamp(sv.VerticalOffset - scrollPixels, 0, sv.ScrollableHeight);
+            sv.ScrollToVerticalOffset(newOffset);
+        }
+    }
+
+    /// <summary>
+    /// Si el elemento apuntado pertenece a un ComboBox abierto con scroll interno, desplaza sus opciones y devuelve true.
+    /// Si el ComboBox no tiene scroll (pocas opciones) o el puntero está fuera, devuelve false para permitir desplazar el padre.
+    /// </summary>
+    public static bool TryScrollOpenComboBox(DependencyObject? hitSource, int delta)
+    {
+        if (hitSource == null) return false;
+        if (!IsInsideOpenComboBoxOrPopup(hitSource)) return false;
+
+        ScrollViewer? targetSv = null;
+        DependencyObject? curr = hitSource;
+        int depth = 0;
+
+        while (curr != null && depth < 30)
+        {
+            depth++;
+            if (curr is ScrollViewer sv && !string.IsNullOrEmpty(sv.Name) && sv.Name.Contains("DropDown", StringComparison.OrdinalIgnoreCase))
+            {
+                targetSv = sv;
+                break;
+            }
+            if (curr is ComboBox cb && cb.IsDropDownOpen)
+            {
+                targetSv = GetDropDownScrollViewer(cb);
+                break;
+            }
+            if (curr is Popup pop && pop.IsOpen)
+            {
+                if (pop.PlacementTarget is ComboBox pcb && pcb.IsDropDownOpen)
+                    targetSv = GetDropDownScrollViewer(pcb);
+                else if (pop.Child != null)
+                    targetSv = FindVisualChild<ScrollViewer>(pop.Child);
+                break;
+            }
+
+            DependencyObject? parent = null;
+            try
+            {
+                if (curr is Visual or System.Windows.Media.Media3D.Visual3D)
+                    parent = VisualTreeHelper.GetParent(curr);
+            }
+            catch { }
+
+            if (parent == null)
+            {
+                if (curr is FrameworkElement fe && fe.Parent != null)
+                    parent = fe.Parent;
+                else
+                    parent = LogicalTreeHelper.GetParent(curr);
+
+                if (parent == null && curr is FrameworkElement fe2 && fe2.TemplatedParent != null)
+                    parent = fe2.TemplatedParent;
+
+                if (parent == null && curr is Popup p && p.PlacementTarget != null)
+                    parent = p.PlacementTarget;
+            }
+            curr = parent;
+        }
+
+        if (targetSv == null)
+        {
+            ComboBox? activeCb = GetFirstOpenComboBox();
+            if (activeCb != null)
+            {
+                targetSv = GetDropDownScrollViewer(activeCb);
+            }
+        }
+
+        if (targetSv != null)
+        {
+            if (targetSv.ScrollableHeight > 0)
+            {
+                double deltaUnits = delta / 120.0;
+                double scrollPixels = deltaUnits * 28.0;
+                double newOffset = Math.Clamp(targetSv.VerticalOffset - scrollPixels, 0, targetSv.ScrollableHeight);
+                targetSv.ScrollToVerticalOffset(newOffset);
+                return true;
+            }
+            return false;
+        }
+
+        return false;
+    }
+
+    public static ScrollViewer? GetDropDownScrollViewer(ComboBox cb)
+    {
+        if (cb == null) return null;
+        Popup? popup = cb.Template?.FindName("Popup", cb) as Popup ?? FindVisualChild<Popup>(cb);
+        if (popup != null && popup.Child != null)
+        {
+            return FindVisualChild<ScrollViewer>(popup.Child);
+        }
+        return null;
+    }
+
+    public static ComboBox? GetFirstOpenComboBox()
+    {
         lock (_lock)
         {
             for (int i = _openComboBoxes.Count - 1; i >= 0; i--)
             {
                 if (_openComboBoxes[i].TryGetTarget(out var cb) && cb.IsDropDownOpen)
                 {
-                    activeCb = cb;
-                    break;
+                    return cb;
                 }
             }
         }
 
-        if (activeCb == null)
+        try
         {
-            try
+            var app = Application.Current;
+            if (app != null)
             {
-                var app = Application.Current;
-                if (app != null)
+                foreach (Window win in app.Windows)
                 {
-                    foreach (Window win in app.Windows)
+                    if (win.IsVisible)
                     {
-                        if (win.IsVisible)
-                        {
-                            activeCb = FindFirstOpenComboBox(win);
-                            if (activeCb != null) break;
-                        }
+                        var found = FindFirstOpenComboBox(win);
+                        if (found != null) return found;
                     }
                 }
             }
-            catch { }
         }
+        catch { }
 
-        if (activeCb == null) return;
-
-        Popup? popup = activeCb.Template?.FindName("Popup", activeCb) as Popup ?? FindVisualChild<Popup>(activeCb);
-        if (popup != null && popup.Child != null)
-        {
-            var sv = FindVisualChild<ScrollViewer>(popup.Child);
-            if (sv != null && sv.ScrollableHeight > 0)
-            {
-                double deltaUnits = delta / 120.0;
-                double scrollPixels = deltaUnits * 28.0;
-                double newOffset = Math.Clamp(sv.VerticalOffset - scrollPixels, 0, sv.ScrollableHeight);
-                sv.ScrollToVerticalOffset(newOffset);
-            }
-        }
+        return null;
     }
 
     private static ComboBox? FindFirstOpenComboBox(DependencyObject parent)
@@ -393,7 +484,15 @@ public static class GlobalScrollBehavior
     {
         if (sender is ComboBox cb && cb.IsDropDownOpen)
         {
-            e.Handled = true;
+            var sv = GetDropDownScrollViewer(cb);
+            if (sv != null && sv.ScrollableHeight > 0)
+            {
+                double deltaUnits = e.Delta / 120.0;
+                double scrollPixels = deltaUnits * 28.0;
+                double newOffset = Math.Clamp(sv.VerticalOffset - scrollPixels, 0, sv.ScrollableHeight);
+                sv.ScrollToVerticalOffset(newOffset);
+                e.Handled = true;
+            }
         }
     }
 
@@ -480,10 +579,93 @@ public static class GlobalScrollBehavior
         // Filtrar estrictamente por VerticalChange != 0 para no cerrar desplegables por simples cambios de layout o scroll horizontal
         if (e.VerticalChange == 0) return;
         if (_suppressScrollClose) return;
-        if (sender is not DependencyObject d) return;
-        if (IsInsideComboBoxOrPopup(d)) return;
+        if (sender is not ScrollViewer parentSv) return;
+        if (IsInsideComboBoxOrPopup(parentSv)) return;
 
-        CloseAllOpenComboBoxes();
+        CloseOutOfViewComboBoxes(parentSv);
+    }
+
+    /// <summary>
+    /// Cierra únicamente los ComboBoxes que hayan salido del área visual (viewport) del ScrollViewer.
+    /// Si el ComboBox todavía se puede ver en la ventana, permanece abierto acompañando al control.
+    /// </summary>
+    public static void CloseOutOfViewComboBoxes(ScrollViewer parentSv)
+    {
+        List<ComboBox> toClose = new();
+
+        lock (_lock)
+        {
+            for (int i = _openComboBoxes.Count - 1; i >= 0; i--)
+            {
+                if (_openComboBoxes[i].TryGetTarget(out var cb) && cb.IsDropDownOpen)
+                {
+                    if (IsDescendantOf(cb, parentSv))
+                    {
+                        if (!IsElementVisibleInViewport(cb, parentSv))
+                        {
+                            toClose.Add(cb);
+                        }
+                    }
+                }
+                else
+                {
+                    _openComboBoxes.RemoveAt(i);
+                }
+            }
+        }
+
+        foreach (var cb in toClose)
+        {
+            cb.IsDropDownOpen = false;
+        }
+    }
+
+    public static bool IsElementVisibleInViewport(FrameworkElement element, ScrollViewer parentSv)
+    {
+        try
+        {
+            if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+                return false;
+
+            GeneralTransform transform = element.TransformToAncestor(parentSv);
+            Rect elementBounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+            Rect viewportBounds = new Rect(0, 0, parentSv.ActualWidth, parentSv.ActualHeight);
+
+            return elementBounds.IntersectsWith(viewportBounds);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsDescendantOf(DependencyObject node, DependencyObject potentialAncestor)
+    {
+        DependencyObject? curr = node;
+        int depth = 0;
+        while (curr != null && depth < 50)
+        {
+            depth++;
+            if (ReferenceEquals(curr, potentialAncestor)) return true;
+
+            DependencyObject? parent = null;
+            try
+            {
+                if (curr is Visual or System.Windows.Media.Media3D.Visual3D)
+                    parent = VisualTreeHelper.GetParent(curr);
+            }
+            catch { }
+
+            if (parent == null)
+            {
+                if (curr is FrameworkElement fe && fe.Parent != null)
+                    parent = fe.Parent;
+                else
+                    parent = LogicalTreeHelper.GetParent(curr);
+            }
+            curr = parent;
+        }
+        return false;
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
