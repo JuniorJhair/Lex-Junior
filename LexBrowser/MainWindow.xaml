@@ -405,7 +405,7 @@
                 <Button x:Name="BtnRefresh" Style="{StaticResource NavBtn}" Content="↻" FontSize="14" FontWeight="Bold"
                         ToolTip="Recargar página (Ctrl+R / F5)" Click="BtnRefresh_Click"/>
                 <Button x:Name="BtnHome" Style="{StaticResource NavBtn}" Content="⌂" FontSize="14"
-                        ToolTip="Ir a YouTube" Click="BtnHome_Click"/>
+                        ToolTip="Página de inicio (Nueva pestaña)" Click="BtnHome_Click"/>
             </StackPanel>
 
             <!-- Barra de Direcciones / Omnibox (Estilo Chrome / Brave con logo G y autocompletado inteligente) -->

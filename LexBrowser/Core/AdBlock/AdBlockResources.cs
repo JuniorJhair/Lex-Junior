@@ -35,9 +35,10 @@ public static class AdBlockResources
         // Controlado por el interruptor independiente EnableImaSdkStub en Configuración.
         // Excepción: Dailymotion cuenta con su propio módulo aislado (DailymotionOptimizer) que
         // requiere el SDK original para validar el ciclo de reproducción y acelerar/saltar los anuncios sin congelar el reproductor.
-        bool isDailymotion = !string.IsNullOrEmpty(originHost) &&
+        bool isDailymotion = (!string.IsNullOrEmpty(originHost) &&
                              (originHost.Equals("dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
-                              originHost.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase));
+                              originHost.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase))) ||
+                             full.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase);
 
         if (!isDailymotion &&
             SettingsManager.Current?.EnableImaSdkStub != false &&

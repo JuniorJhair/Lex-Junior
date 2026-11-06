@@ -68,12 +68,8 @@ public static class DailymotionOptimizer
 
     function isMainContentUrl(url) {
         if (!url || typeof url !== 'string') return false;
-        return (url.includes('/cdn/manifest/video/') ||
-                url.includes('cdndirector.dailymotion.com') ||
-                url.includes('dmxleo.dailymotion.com/cdn/manifest/') ||
-                (url.includes('dmcdn.net') && url.includes('/video/')) ||
-                url.includes('vod3.cf.dmcdn.net') ||
-                url.includes('.cf.dmcdn.net/sec'));
+        return (url.includes('vod') && url.includes('dmcdn.net')) ||
+               (url.includes('.cf.dmcdn.net/sec') && (url.includes('/video/') || url.includes('/frag(')));
     }
 
     function onMainVideoReceived() {
@@ -188,13 +184,13 @@ public static class DailymotionOptimizer
 
                 // PROTECCIÓN TOTAL: Si el video dura más de 90 segundos o proviene de la CDN de video,
                 // ES EL CONTENIDO PRINCIPAL. Desactivar acelerador inmediatamente.
-                if (isMainContentUrl(src) || (duration && !isNaN(duration) && duration > 90)) {
+                if ((duration && !isNaN(duration) && duration > 90) || (src && isMainContentUrl(src))) {
                     onMainVideoReceived();
                     return;
                 }
 
-                // Es anuncio solo si tiene duración corta (<= 90s) y coincide con indicadores publicitarios
-                const isShortDuration = !duration || isNaN(duration) || (duration > 0 && duration <= 90);
+                // Es anuncio solo si tiene duración corta confirmada (<= 90s) y coincide con indicadores publicitarios
+                const isShortDuration = duration && !isNaN(duration) && duration > 0 && duration <= 90;
                 const isAdSource = (isAdActive ||
                                     src.includes('/ad/') ||
                                     src.includes('googleads') ||

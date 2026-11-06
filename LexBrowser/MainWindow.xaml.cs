@@ -933,7 +933,7 @@ public partial class MainWindow : Window
         }
         catch { }
 
-        // Atajos F12, Ctrl+Shift+I (DevTools) y Ctrl+Shift+L (Shield Logger) cuando el foco está sobre el WebView
+        // Atajos F12, Ctrl+Shift+I (DevTools), Ctrl+Shift+L (Shield Logger) y control de Zoom cuando el foco está sobre el WebView
         tab.WebView.PreviewKeyDown += (s, e) =>
         {
             if (e.Key == Key.F12 || (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I))
@@ -945,6 +945,38 @@ public partial class MainWindow : Window
             {
                 e.Handled = true;
                 CopyOrExportShieldLog();
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.D0 || e.Key == Key.NumPad0))
+            {
+                e.Handled = true;
+                (tab.OwnerWindow ?? this).ResetZoom();
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add || e.Key == Key.Oem1 || e.Key == Key.Oem6))
+            {
+                e.Handled = true;
+                (tab.OwnerWindow ?? this).ZoomIn();
+            }
+            else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract || e.Key == Key.OemQuestion || e.Key == Key.OemPeriod))
+            {
+                e.Handled = true;
+                (tab.OwnerWindow ?? this).ZoomOut();
+            }
+        };
+
+        // Zoom suave con Ctrl + Rueda del ratón cuando el cursor está sobre el WebView
+        tab.WebView.PreviewMouseWheel += (s, e) =>
+        {
+            if (Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                e.Handled = true;
+                if (e.Delta > 0)
+                {
+                    (tab.OwnerWindow ?? this).ZoomIn();
+                }
+                else if (e.Delta < 0)
+                {
+                    (tab.OwnerWindow ?? this).ZoomOut();
+                }
             }
         };
 
@@ -1186,6 +1218,11 @@ public partial class MainWindow : Window
             {
                 // Detección forense del origen y contexto del marco (MainFrame vs Subframe/Iframe del reproductor)
                 string originHost = tab.CurrentUri?.Host ?? "unknown";
+                if (originHost == "unknown" && !string.IsNullOrEmpty(tab.Url) && Uri.TryCreate(tab.Url, UriKind.Absolute, out var tabUrlUri))
+                {
+                    originHost = tabUrlUri.Host;
+                }
+
                 string frameDesc = e.ResourceContext.ToString();
 
                 string referer = string.Empty;
@@ -1201,18 +1238,33 @@ public partial class MainWindow : Window
 
                 if (!string.IsNullOrEmpty(referer) && Uri.TryCreate(referer, UriKind.Absolute, out var refUri))
                 {
-                    if (tab.CurrentUri != null && !refUri.Host.Equals(tab.CurrentUri.Host, StringComparison.OrdinalIgnoreCase))
+                    if (originHost == "unknown" || !refUri.Host.Equals(originHost, StringComparison.OrdinalIgnoreCase))
                     {
                         originHost = refUri.Host;
                         frameDesc = $"Subframe:{refUri.Host}|{e.ResourceContext}";
                     }
                 }
-                else if (e.ResourceContext == CoreWebView2WebResourceContext.Document &&
-                         tab.CurrentUri != null &&
-                         !uri.Host.Equals(tab.CurrentUri.Host, StringComparison.OrdinalIgnoreCase))
+                else if (e.ResourceContext == CoreWebView2WebResourceContext.Document)
                 {
-                    originHost = uri.Host;
-                    frameDesc = $"SubframeDoc:{uri.Host}";
+                    if (originHost == "unknown" || !uri.Host.Equals(originHost, StringComparison.OrdinalIgnoreCase))
+                    {
+                        originHost = uri.Host;
+                        frameDesc = $"SubframeDoc:{uri.Host}";
+                    }
+                }
+
+                // Detección contextual infalible de Dailymotion (incluso en cold start antes de asentarse CurrentUri)
+                bool isDailymotionContext = (tab.CurrentUri != null && (tab.CurrentUri.Host.Equals("dailymotion.com", StringComparison.OrdinalIgnoreCase) || tab.CurrentUri.Host.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase))) ||
+                                            (!string.IsNullOrEmpty(tab.Url) && tab.Url.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase)) ||
+                                            (!string.IsNullOrEmpty(referer) && referer.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase)) ||
+                                            uri.Host.Equals("dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
+                                            uri.Host.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
+                                            originHost.Equals("dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
+                                            originHost.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase);
+
+                if (isDailymotionContext && (originHost == "unknown" || (!originHost.Equals("dailymotion.com", StringComparison.OrdinalIgnoreCase) && !originHost.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase))))
+                {
+                    originHost = "geo.dailymotion.com";
                 }
 
                 byte[] stubBytes = Array.Empty<byte>();
@@ -3438,7 +3490,32 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ResetZoom()
+    private static readonly double[] ZoomSteps =
+    {
+        0.25, 0.33, 0.50, 0.67, 0.75, 0.80, 0.90, 1.00, 1.10, 1.25, 1.50, 1.75, 2.00, 2.50, 3.00, 4.00, 5.00
+    };
+
+    public void ZoomIn()
+    {
+        if (_activeTab?.WebView == null) return;
+        double current = _activeTab.WebView.ZoomFactor;
+        double next = ZoomSteps.FirstOrDefault(s => s > current + 0.015);
+        if (next == 0) next = ZoomSteps[^1];
+        _activeTab.WebView.ZoomFactor = next;
+        UpdateZoomIndicatorUI(showFloating: true);
+    }
+
+    public void ZoomOut()
+    {
+        if (_activeTab?.WebView == null) return;
+        double current = _activeTab.WebView.ZoomFactor;
+        double prev = ZoomSteps.LastOrDefault(s => s < current - 0.015);
+        if (prev == 0) prev = ZoomSteps[0];
+        _activeTab.WebView.ZoomFactor = prev;
+        UpdateZoomIndicatorUI(showFloating: true);
+    }
+
+    public void ResetZoom()
     {
         if (_activeTab?.WebView != null)
         {
@@ -3460,20 +3537,12 @@ public partial class MainWindow : Window
 
     private void BtnZoomIn_Click(object sender, RoutedEventArgs e)
     {
-        if (_activeTab?.WebView != null)
-        {
-            _activeTab.WebView.ZoomFactor = Math.Min(5.0, _activeTab.WebView.ZoomFactor + 0.1);
-            UpdateZoomIndicatorUI(showFloating: true);
-        }
+        ZoomIn();
     }
 
     private void BtnZoomOut_Click(object sender, RoutedEventArgs e)
     {
-        if (_activeTab?.WebView != null)
-        {
-            _activeTab.WebView.ZoomFactor = Math.Max(0.25, _activeTab.WebView.ZoomFactor - 0.1);
-            UpdateZoomIndicatorUI(showFloating: true);
-        }
+        ZoomOut();
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -3633,18 +3702,18 @@ public partial class MainWindow : Window
         }
 
         // 10.3 Ctrl + +: Aumentar zoom
-        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add))
+        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add || e.Key == Key.Oem1 || e.Key == Key.Oem6))
         {
             e.Handled = true;
-            BtnZoomIn_Click(sender, e);
+            ZoomIn();
             return;
         }
 
         // 10.4 Ctrl + -: Reducir zoom
-        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract))
+        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract || e.Key == Key.OemQuestion || e.Key == Key.OemPeriod))
         {
             e.Handled = true;
-            BtnZoomOut_Click(sender, e);
+            ZoomOut();
             return;
         }
 
@@ -3894,7 +3963,15 @@ public partial class MainWindow : Window
 
     private void BtnHome_Click(object sender, RoutedEventArgs e)
     {
-        _activeTab?.WebView?.CoreWebView2?.Navigate("https://www.youtube.com");
+        if (_activeTab?.WebView?.CoreWebView2 != null)
+        {
+            _activeTab.IsNewTab = true;
+            _activeTab.Url = "";
+            _activeTab.Title = _activeTab.IsIncognito ? "Nueva pestaña incógnito" : "Nueva pestaña";
+            TxtUrl.Text = "";
+            _activeTab.WebView.NavigateToString(NewTabPage.GetHtml(_activeTab.IsIncognito));
+            UpdateNavigationButtons();
+        }
     }
 
     private void BtnMinimize_Click(object sender, RoutedEventArgs e)

@@ -158,6 +158,19 @@ public class AdBlockFilterTests
         Assert.Contains("lex-dm-cosmetics", script);
         Assert.Contains("isMainContentUrl", script);
         Assert.Contains("onMainVideoReceived", script);
+        Assert.Contains("duration > 90", script);
+        Assert.Contains("duration <= 90", script);
+    }
+
+    [Fact]
+    public void Ima_sdk_redirect_stub_exempts_dailymotion_with_full_uri()
+    {
+        var uri = new Uri("https://imasdk.googleapis.com/js/sdkloader/ima3.js?partner=dailymotion.com");
+        var s = SettingsManager.Current;
+        s.EnableImaSdkStub = true;
+
+        bool isStub = AdBlockResources.TryGetRedirectStub(uri, out _, out _, null);
+        Assert.False(isStub);
     }
 }
 
