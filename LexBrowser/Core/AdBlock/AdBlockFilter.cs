@@ -91,6 +91,38 @@ public static class AdBlockFilter
         "bongacams.com",
         "chaturbate.com",
         "stripchat.com",
+        "camsoda.com",
+        "flirt4free.com",
+        "streamate.com",
+        "imlive.com",
+        "jerkmate.com",
+        "jasmin.com",
+
+        // Redes especializadas de video ads (VAST/Fluid Player/sliders) y rotadores en streaming adulto
+        "magsrv.com",
+        "realsrv.com",
+        "exdynsrv.com",
+        "trafficjunky.net",
+        "tjassets.com",
+        "trafficstars.net",
+        "t-stars.com",
+        "ts-adserver.com",
+        "trafficfactory.com",
+        "tf-adserver.com",
+        "adglare.net",
+        "adglare.com",
+        "plugrush.com",
+        "plugrush.net",
+        "adxvip.com",
+        "xv-adserver.com",
+        "ptgnadsv2.com",
+        "videoplayerhub.com",
+        "etahub.com",
+        "wpushsdk.com",
+        "creative.mycdn.me",
+        "hentaipros.com",
+        "runative-syndicate.com",
+        "runative.com",
 
         // Dominios ad-hoc descubiertos en auditoría forense (redes rotadoras)
         "r2ads.net",
@@ -165,7 +197,14 @@ public static class AdBlockFilter
         "cloud3-easiness925.workers.dev",
         "/banners/pr_advertising_",
         "pr_advertising_ads_banner",
-        "an-advert-banner"
+        "an-advert-banner",
+        "splash.php?",
+        "/slider.php",
+        "/ad-provider.js",
+        "zone_id=",
+        "idzone=",
+        "ad_type=vast",
+        "/vast.php"
     };
 
     // ── TLDs comúnmente dedicados casi exclusivamente a spam y popunders ───
@@ -339,5 +378,29 @@ public static class AdBlockFilter
     }
 
     public static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);
+
+    /// <summary>
+    /// Comprueba si dos URIs pertenecen al mismo sitio o dominio raíz registrable (ej: sub.sitio.com y sitio.com).
+    /// </summary>
+    public static bool IsSameSiteOrDomain(Uri? a, Uri? b)
+    {
+        if (a == null || b == null) return false;
+        string hostA = a.Host.ToLowerInvariant();
+        string hostB = b.Host.ToLowerInvariant();
+        if (hostA == hostB) return true;
+        if (hostA.EndsWith("." + hostB) || hostB.EndsWith("." + hostA)) return true;
+
+        string rootA = GetRegistrableDomain(hostA);
+        string rootB = GetRegistrableDomain(hostB);
+        return !string.IsNullOrEmpty(rootA) && string.Equals(rootA, rootB, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetRegistrableDomain(string host)
+    {
+        if (string.IsNullOrEmpty(host)) return string.Empty;
+        var parts = host.Split('.');
+        if (parts.Length <= 2) return host;
+        return parts[^2] + "." + parts[^1];
+    }
 }
 

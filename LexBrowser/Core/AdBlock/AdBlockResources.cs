@@ -11,7 +11,10 @@ namespace LexBrowser.Core.AdBlock;
 public static class AdBlockResources
 {
     private static readonly byte[] VastEmptyBytes = Encoding.UTF8.GetBytes("<VAST version=\"3.0\"></VAST>");
-    private static readonly byte[] PopadsDummyBytes = Encoding.UTF8.GetBytes("(function(){delete window.PopAds;delete window.popns;Object.defineProperties(window,{PopAds:{value:{}},popns:{value:{}}});})();");
+    private static readonly byte[] PopadsDummyBytes = Encoding.UTF8.GetBytes(
+        "window.aclib={runPop:function(){return false;},runBanner:function(){return false;},runSlider:function(){return false;},runInterstitial:function(){return false;},runVideo:function(){return false;}};" +
+        "window.popMagic={init:function(){},pop:function(){},capture:function(){},click:function(){},check:function(){return false;}};" +
+        "(function(){delete window.PopAds;delete window.popns;Object.defineProperties(window,{PopAds:{value:{}},popns:{value:{}}});})();");
     private static readonly byte[] InstreamStatusBytes = Encoding.UTF8.GetBytes("window.google_ad_status = 1;");
     private static readonly byte[] GoogleImaShimBytes = Encoding.UTF8.GetBytes(GoogleImaScript);
 
@@ -33,19 +36,34 @@ public static class AdBlockResources
             return true;
         }
 
-        // 2. VAST Empty XML para reproductores de streaming - el reproductor lee 'cero anuncios' e inicia el video
-        if (path.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
-            (path.Contains("vast", StringComparison.OrdinalIgnoreCase) || full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase)))
+        // 2. VAST Empty XML para reproductores de streaming (Fluid Player, VideoJS, JWPlayer, etc.)
+        // Al responder '0 anuncios en VAST' con 200 OK, el reproductor inicia inmediatamente el video principal
+        // sin reproducir el comercial pre-roll (Brazzers, etc.) ni contar hacia atrás el reloj de espera.
+        bool isVast = full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase) ||
+                      full.Contains("format=vast", StringComparison.OrdinalIgnoreCase) ||
+                      full.Contains("output=vast", StringComparison.OrdinalIgnoreCase) ||
+                      full.Contains("type=vast", StringComparison.OrdinalIgnoreCase) ||
+                      path.Contains("/vast", StringComparison.OrdinalIgnoreCase) ||
+                      path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase) ||
+                      ((host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
+                        host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
+                        host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase)) && path.Contains("splash.php", StringComparison.OrdinalIgnoreCase)) ||
+                      ((host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
+                        host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase)));
+
+        if (isVast)
         {
             responseBytes = VastEmptyBytes;
             contentType = "Content-Type: text/xml; charset=utf-8";
             return true;
         }
 
-        // 3. PopAds / PopCash dummy
+        // 3. PopAds / PopCash / Aclib / PopMagic dummy
         if (host.Contains("popads.net", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith("/popads.js", StringComparison.OrdinalIgnoreCase) ||
-            (host.Contains("popcash.net", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/pop.js", StringComparison.OrdinalIgnoreCase)))
+            (host.Contains("popcash.net", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/pop.js", StringComparison.OrdinalIgnoreCase)) ||
+            path.EndsWith("/aclib.js", StringComparison.OrdinalIgnoreCase) ||
+            path.EndsWith("/ad-provider.js", StringComparison.OrdinalIgnoreCase))
         {
             responseBytes = PopadsDummyBytes;
             contentType = "Content-Type: application/javascript; charset=utf-8";

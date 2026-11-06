@@ -1008,6 +1008,7 @@ public partial class MainWindow : Window
         {
             var win = tab.OwnerWindow ?? this;
             string url = e.Uri ?? string.Empty;
+            tab.LastNewWindowRequestedTime = DateTime.UtcNow;
 
             Uri? currentUri = null;
             try
@@ -1623,6 +1624,48 @@ public partial class MainWindow : Window
         {
             if (tab.IsDisposed) return;
             ShieldLogger.Log("NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}");
+
+            // Filtro de seguridad y anti-secuestro de pestaña (Tab-under / Reverse Popunder)
+            if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Uri, UriKind.Absolute, out var targetUri))
+            {
+                if (targetUri.Scheme == "http" || targetUri.Scheme == "https")
+                {
+                    // 1. Bloqueo directo de dominios de publicidad / malware si una página o script intenta navegar hacia ellos
+                    if (AdBlockFilter.ShouldBlock(targetUri))
+                    {
+                        e.Cancel = true;
+                        ShieldLogger.Log("NAVIGATION_CANCELLED", tab.CurrentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Blocked ad/malware domain on navigation");
+                        return;
+                    }
+
+                    // 2. Detección y neutralización de Tab-under:
+                    // Si la pestaña abrió una nueva ventana hace menos de 3.5 segundos y un script intenta redirigir
+                    // la pestaña actual a un dominio distinto y no confiable, se cancela para mantener la pestaña original intacta.
+                    var currentUri = tab.CurrentUri;
+                    bool isCrossDomain = currentUri != null && !AdBlockFilter.IsSameSiteOrDomain(targetUri, currentUri);
+                    bool isTrusted = AdBlockFilter.IsTrustedDomain(targetUri.Host);
+
+                    if (!e.IsUserInitiated && isCrossDomain && !isTrusted)
+                    {
+                        if (tab.LastNewWindowRequestedTime.HasValue &&
+                            (DateTime.UtcNow - tab.LastNewWindowRequestedTime.Value).TotalMilliseconds < 3500)
+                        {
+                            e.Cancel = true;
+                            ShieldLogger.Log("TAB_UNDER_PREVENTED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Script navigation hijacked original tab after new window open");
+                            return;
+                        }
+
+                        // 3. Bloqueo de redirecciones automáticas por script hacia dominios sospechosos / trackers
+                        if (AdBlockFilter.IsSuspiciousPopup(targetUri, currentUri))
+                        {
+                            e.Cancel = true;
+                            ShieldLogger.Log("NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Suspicious script-initiated cross-origin redirect");
+                            return;
+                        }
+                    }
+                }
+            }
+
             var win = tab.OwnerWindow ?? this;
 
             win.Dispatcher.Invoke(() =>

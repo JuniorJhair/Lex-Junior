@@ -34,16 +34,41 @@ public static class ShieldLogger
 
     /// <summary>
     /// Registra un evento de seguridad / bloqueo en el buffer circular.
+    /// Sanitiza URLs de tipo data: y cadenas excesivamente largas para no saturar memoria ni el portapapeles.
     /// </summary>
     public static void Log(string eventType, string sourceDomain, string url, string frame, string reason)
     {
+        string sanitizedUrl = url ?? string.Empty;
+        if (sanitizedUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            int commaIdx = sanitizedUrl.IndexOf(',');
+            string prefix = commaIdx > 0 && commaIdx <= 40 ? sanitizedUrl.Substring(0, commaIdx + 1) : "data:...";
+            sanitizedUrl = $"{prefix}[data-uri truncated, len={sanitizedUrl.Length}]";
+        }
+        else if (sanitizedUrl.Length > 256)
+        {
+            sanitizedUrl = sanitizedUrl.Substring(0, 253) + "...";
+        }
+
+        string sanitizedReason = reason ?? string.Empty;
+        if (sanitizedReason.Length > 200)
+        {
+            sanitizedReason = sanitizedReason.Substring(0, 197) + "...";
+        }
+
+        string sanitizedSource = string.IsNullOrWhiteSpace(sourceDomain) ? "about:blank" : sourceDomain;
+        if (sanitizedSource.Length > 100)
+        {
+            sanitizedSource = sanitizedSource.Substring(0, 97) + "...";
+        }
+
         var entry = new ShieldLogEntry
         {
             EventType = eventType ?? "UNKNOWN",
-            SourceDomain = string.IsNullOrWhiteSpace(sourceDomain) ? "about:blank" : sourceDomain,
-            Url = url ?? string.Empty,
+            SourceDomain = sanitizedSource,
+            Url = sanitizedUrl,
             Frame = string.IsNullOrWhiteSpace(frame) ? "MainFrame" : frame,
-            Reason = reason ?? string.Empty
+            Reason = sanitizedReason
         };
 
         lock (SyncLock)

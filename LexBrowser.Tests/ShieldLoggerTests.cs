@@ -59,5 +59,28 @@ public class ShieldLoggerTests
 
         Assert.Equal(500, ShieldLogger.Count);
     }
+
+    [Fact]
+    public void ShieldLogger_Sanitizes_Data_Uris_And_Long_Strings()
+    {
+        ShieldLogger.Clear();
+
+        string massiveDataUri = "data:text/html;charset=utf-8;base64," + new string('A', 50000);
+        string massiveReason = new string('B', 1000);
+        string massiveSource = new string('C', 500);
+
+        ShieldLogger.Log("TEST_DATA_URI", massiveSource, massiveDataUri, "MainFrame", massiveReason);
+
+        Assert.Equal(1, ShieldLogger.Count);
+        string dump = ShieldLogger.DumpLog();
+
+        // No debe contener la cadena gigante
+        Assert.DoesNotContain(massiveDataUri, dump);
+        Assert.Contains("[data-uri truncated, len=", dump);
+
+        // Longitudes de reason y source deben estar acotadas
+        Assert.DoesNotContain(massiveReason, dump);
+        Assert.DoesNotContain(massiveSource, dump);
+    }
 }
 

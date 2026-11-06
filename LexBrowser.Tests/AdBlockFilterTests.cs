@@ -20,6 +20,11 @@ public class AdBlockFilterTests
     [InlineData("https://www.youtube.com/get_midroll_info?x=1")]
     [InlineData("https://onclickads.net/x")]
     [InlineData("https://ads.exoclick.com/x")]
+    [InlineData("https://s.magsrv.com/splash.php?type=3&idzone=123")]
+    [InlineData("https://a.realsrv.com/slider.php?zone=456")]
+    [InlineData("https://ads.trafficjunky.net/video?zone_id=789")]
+    [InlineData("https://engine.adglare.net/?456")]
+    [InlineData("https://cdn.hentaipros.com/banner.jpg")]
     [InlineData("https://shop.example.com/static/ads.js")]
     [InlineData("https://connect.facebook.net/en_US/fbevents.js")]
     [InlineData("https://www.facebook.net/tr?id=1")]
@@ -65,5 +70,34 @@ public class AdBlockFilterTests
     [InlineData("https://popunder-network.com/x", "https://miweb.com/")]
     [InlineData("https://unknown-host.net/go?url=https://other.com/landing", "https://miweb.com/")]
     public void Ad_popups_are_blocked(string target, string current) => Assert.True(Popup(target, current));
+
+    // ── IsSameSiteOrDomain ────────────────────────────────────────────────
+    [Theory]
+    [InlineData("https://www.xvideos.com/video123", "https://www.xvideos.com/", true)]
+    [InlineData("https://sub.xvideos.com/tag", "https://xvideos.com/home", true)]
+    [InlineData("https://hentaila.com/media/ep1", "https://hentaila.com/", true)]
+    [InlineData("https://ad-delivery.net/click", "https://xvideos.com/", false)]
+    [InlineData("https://magsrv.com/splash.php", "https://hentaila.com/", false)]
+    public void Identifies_same_site_or_cross_domain(string urlA, string urlB, bool expected)
+    {
+        bool result = AdBlockFilter.IsSameSiteOrDomain(new Uri(urlA), new Uri(urlB));
+        Assert.Equal(expected, result);
+    }
+
+    // ── AdBlockResources VAST stubs ────────────────────────────────────────
+    [Theory]
+    [InlineData("https://s.magsrv.com/splash.php?type=3&idzone=999")]
+    [InlineData("https://syndication.exoclick.com/splash.php?type=3")]
+    [InlineData("https://ads.trafficjunky.net/video?zone_id=123")]
+    [InlineData("https://example.com/api/ad?format=vast")]
+    [InlineData("https://streaming.net/vast.xml")]
+    public void VAST_requests_receive_200_ok_empty_vast_stub(string url)
+    {
+        bool isStub = AdBlockResources.TryGetRedirectStub(new Uri(url), out var bytes, out var contentType);
+        Assert.True(isStub);
+        Assert.Contains("text/xml", contentType);
+        string xml = System.Text.Encoding.UTF8.GetString(bytes);
+        Assert.Contains("<VAST", xml);
+    }
 }
 

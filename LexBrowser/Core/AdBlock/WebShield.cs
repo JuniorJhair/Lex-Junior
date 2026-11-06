@@ -36,12 +36,39 @@ public static class WebShield
         window.popns = window.popns || {};
 
         // Emular bibliotecas de popunder para que se desactiven pacíficamente sin romper el reproductor
-        window.aclib = {
+        const fakeAclib = {
             runPop: function() { return false; },
             runBanner: function() { return false; },
             runSlider: function() { return false; },
-            runInterstitial: function() { return false; }
+            runInterstitial: function() { return false; },
+            runVideo: function() { return false; }
         };
+        try {
+            window.aclib = fakeAclib;
+            Object.defineProperty(window, 'aclib', {
+                get: function() { return fakeAclib; },
+                set: function() {},
+                configurable: true
+            });
+        } catch(_) {}
+
+        const noop = function() {};
+        const fakePopMagic = {
+            init: noop,
+            pop: noop,
+            capture: noop,
+            click: noop,
+            check: function() { return false; }
+        };
+        try {
+            window.popMagic = fakePopMagic;
+            Object.defineProperty(window, 'popMagic', {
+                get: function() { return fakePopMagic; },
+                set: function() {},
+                configurable: true
+            });
+        } catch(_) {}
+
         window.popns = {};
         window._pop = [];
         window._monetag = {};
@@ -131,9 +158,60 @@ public static class WebShield
     } catch(e) {}
 
     // ─────────────────────────────────────────────────────────────────
+    // 0.1 ESCUDO COSMÉTICO (Ocultamiento de banners, iframes y sliders publicitarios)
+    // ─────────────────────────────────────────────────────────────────
+    try {
+        const applyCosmeticStyles = function() {
+            try {
+                if (document.getElementById('__lex_cosmetic_shield')) return;
+                const target = document.head || document.documentElement;
+                if (!target) return;
+                const style = document.createElement('style');
+                style.id = '__lex_cosmetic_shield';
+                style.textContent = `
+                    iframe[src*='magsrv.com'],
+                    iframe[src*='realsrv.com'],
+                    iframe[src*='exoclick.com'],
+                    iframe[src*='trafficjunky'],
+                    iframe[src*='trafficstars'],
+                    iframe[src*='juicyads'],
+                    iframe[src*='adglare'],
+                    iframe[src*='plugrush'],
+                    iframe[src*='hentaipros'],
+                    iframe[src*='adxvip'],
+                    iframe[src*='etahub'],
+                    div[class*='ad-banner']:not(:has(video)):not([class*='player']),
+                    div[class*='ad_banner']:not(:has(video)):not([class*='player']),
+                    div[id*='ad-banner']:not(:has(video)):not([class*='player']),
+                    div[class*='ad-zone'],
+                    div[class*='ad-placement'],
+                    div[class*='exo-slider'],
+                    div[id*='exo-slider'],
+                    div[class*='pr_advertising_'],
+                    div[id*='pr_advertising_'],
+                    [data-zone-id]:not([class*='player']),
+                    .ad-container:not(#player):not([class*='player']):not(:has(video)) {
+                        display: none !important;
+                        visibility: hidden !important;
+                        height: 0 !important;
+                        min-height: 0 !important;
+                        opacity: 0 !important;
+                        pointer-events: none !important;
+                    }
+                `;
+                target.appendChild(style);
+            } catch(_) {}
+        };
+        applyCosmeticStyles();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', applyCosmeticStyles, { once: true });
+        }
+    } catch(e) {}
+
+    // ─────────────────────────────────────────────────────────────────
     // 1. ESCUDO ANTI-CLICKJACKING Y ANTI-POPUNDERS (Streaming / Web)
     // ─────────────────────────────────────────────────────────────────
-    const adDomainsRegex = /(propellerads|popcash|popads|adsterra|monetag|bet365|1xbet|clickadu|hilltopads|exoclick|juicyads|syndication|doubleclick|adservice|outbrain|taboola|criteo|adnxs|pubmatic|onclick|trafficstars|adcash|revcontent|smartadserver|r2ads|llvpn|streamtp|trkr|ppof\.net|visariomedia|qojseyonoj|hfryyynvqwgy)/i;
+    const adDomainsRegex = /(propellerads|popcash|popads|adsterra|monetag|bet365|1xbet|clickadu|hilltopads|exoclick|juicyads|syndication|doubleclick|adservice|outbrain|taboola|criteo|adnxs|pubmatic|onclick|trafficstars|adcash|revcontent|smartadserver|r2ads|llvpn|streamtp|trkr|ppof\.net|visariomedia|qojseyonoj|hfryyynvqwgy|magsrv|realsrv|exdynsrv|trafficjunky|adglare|plugrush|adxvip|etahub|hentaipros|ptgnadsv2|videoplayerhub|runative)/i;
 
     // 1.1 Defusor de window.open para popunders con señuelo Proxy (closed: false)
     const trustedOAuthRegex = /^https:\/\/([a-z0-9-]+\.)?(google\.com|apple\.com|microsoft\.com|microsoftonline\.com|live\.com|github\.com|facebook\.com|discord\.com|x\.com|twitter\.com|paypal\.com)(\/|$)/i;
