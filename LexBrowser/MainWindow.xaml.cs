@@ -1213,13 +1213,9 @@ public partial class MainWindow : Window
                     frameDesc = $"SubframeDoc:{uri.Host}";
                 }
 
-                bool isContextForStub = e.ResourceContext == CoreWebView2WebResourceContext.XmlHttpRequest ||
-                                        e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
-                                        e.ResourceContext == CoreWebView2WebResourceContext.Script ||
-                                        e.ResourceContext == CoreWebView2WebResourceContext.Other;
                 byte[] stubBytes = Array.Empty<byte>();
                 string stubContentType = string.Empty;
-                bool isRedirectStub = isContextForStub && AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType);
+                bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType);
                 if (isRedirectStub || AdBlockFilter.ShouldBlock(uri))
                 {
                     int statusCode = 403;
@@ -1229,7 +1225,7 @@ public partial class MainWindow : Window
 
                     if (isRedirectStub)
                     {
-                        // Stubs HTTP 200 OK para recursos conocidos (IMA SDK, VAST XML vacío, PopAds dummy)
+                        // Stubs HTTP 200 OK para recursos conocidos (IMA SDK, VAST XML vacío, PopAds dummy, dmads)
                         // que los reproductores de streaming esperan para no congelarse ni mostrar pantalla negra.
                         statusCode = 200;
                         statusReason = "OK";
@@ -1250,8 +1246,10 @@ public partial class MainWindow : Window
                         ShieldLogger.Log("REQUEST_BLOCKED_403", originHost, uri.AbsoluteUri, frameDesc, "Blocked ad domain or pattern");
                     }
 
+                    string responseHeaders = $"{contentType}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: *";
+
                     e.Response = core.Environment.CreateWebResourceResponse(
-                        new MemoryStream(responseBytes, writable: false), statusCode, statusReason, contentType);
+                        new MemoryStream(responseBytes, writable: false), statusCode, statusReason, responseHeaders);
 
                     var win = tab.OwnerWindow ?? this;
                     win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>

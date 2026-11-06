@@ -30,6 +30,10 @@ public class AdBlockFilterTests
     [InlineData("https://shop.example.com/static/ads.js")]
     [InlineData("https://connect.facebook.net/en_US/fbevents.js")]
     [InlineData("https://www.facebook.net/tr?id=1")]
+    [InlineData("https://c.bannerflow.net/a/6a22b164bb2c1dbc62e5858d")]
+    [InlineData("https://s2.adform.net/banners/scripts/assets/images/close-sprite.png")]
+    [InlineData("https://fast.nexx360.io/setuid")]
+    [InlineData("https://dmads.dailymotion.com/other")]
     public void Blocks_known_ad_and_tracking_urls(string url) => Assert.True(Blocked(url));
 
     // ── NO debe bloquear (falsos positivos detectados en la auditoría) ───
@@ -102,6 +106,19 @@ public class AdBlockFilterTests
         Assert.Contains("text/xml", contentType);
         string xml = System.Text.Encoding.UTF8.GetString(bytes);
         Assert.Contains("<VAST", xml);
+    }
+
+    [Theory]
+    [InlineData("https://dmads.dailymotion.com/js/dailymotion/dmads.dailymotion-latest.min.js", "application/javascript")]
+    [InlineData("https://dmads.dailymotion.com/js/dailymotion/dmads.dailymotion.prebid-latest.min.js", "application/javascript")]
+    [InlineData("https://dmads.dailymotion.com/js/dailymotion/backfill_with_consent/dmAds.safeframe.dailymotion.html", "text/html")]
+    [InlineData("https://dmads.dailymotion.com/api/v1/ping", "application/json")]
+    public void Dailymotion_requests_receive_200_ok_stubs(string url, string expectedType)
+    {
+        bool isStub = AdBlockResources.TryGetRedirectStub(new Uri(url), out var bytes, out var contentType);
+        Assert.True(isStub);
+        Assert.Contains(expectedType, contentType);
+        Assert.NotEmpty(bytes);
     }
 }
 

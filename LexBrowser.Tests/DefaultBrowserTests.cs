@@ -37,3 +37,4 @@ public class DefaultBrowserTests
         Assert.True(result || !result);
     }
 }
+

@@ -98,6 +98,16 @@ public static class WebShield
         window._monetag = {};
         window.adcash = {};
 
+        // Emulación de servicio publicitario de Dailymotion para evitar que su reproductor quede colgado
+        if (hostname.endsWith('dailymotion.com')) {
+            window.dmads = window.dmads || {
+                init: function(){},
+                getBids: function(){ return Promise.resolve([]); },
+                hasAd: function(){ return false; },
+                destroy: function(){}
+            };
+        }
+
         // Neutralizar variables globales de inyección VAST en reproductores incrustados (Brave / uBO set-constant)
         try {
             const emptyStrDesc = { get: function() { return ''; }, set: function() {}, configurable: true };
@@ -228,6 +238,14 @@ public static class WebShield
                     iframe[src*='tsyndicate'],
                     iframe[src*='ero-advertising'],
                     iframe[src*='adtng.com'],
+                    iframe[src*='dmads.dailymotion.com'],
+                    iframe[src*='bannerflow.net'],
+                    iframe[src*='adform.net'],
+                    div[class*='dm-ad'],
+                    div[id*='dmads'],
+                    div[data-testid*='ad-container'],
+                    div[data-testid*='advertisement'],
+                    div[class*='ad-placeholder'],
                     a[href*='tsyndicate'],
                     a[href*='adtng.com'],
                     img[src*='adtng.com'],
@@ -536,16 +554,19 @@ public static class WebShield
             }
 
             // 3. Capas trampas colocadas como hermanas sobre contenedores de video o iframes
-            const players = document.querySelectorAll('[class*=player], [id*=player], iframe, video');
-            for (let i = 0; i < players.length; i++) {
-                const p = players[i];
-                const siblings = p.parentElement ? p.parentElement.children : [];
-                for (let j = 0; j < siblings.length; j++) {
-                    const sib = siblings[j];
-                    if (sib !== p && isGhostOverlay(sib)) {
-                        sib.remove();
-                        if (window.chrome && window.chrome.webview) {
-                            window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'player_sibling_overlay_removed' });
+            // Excluir plataformas de video legítimas de la remoción de hermanos para preservar controles nativos
+            if (!hostname.endsWith('dailymotion.com') && !hostname.endsWith('youtube.com') && !hostname.endsWith('twitch.tv') && !hostname.endsWith('vimeo.com')) {
+                const players = document.querySelectorAll('[class*=player], [id*=player], iframe, video');
+                for (let i = 0; i < players.length; i++) {
+                    const p = players[i];
+                    const siblings = p.parentElement ? p.parentElement.children : [];
+                    for (let j = 0; j < siblings.length; j++) {
+                        const sib = siblings[j];
+                        if (sib !== p && isGhostOverlay(sib)) {
+                            sib.remove();
+                            if (window.chrome && window.chrome.webview) {
+                                window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'player_sibling_overlay_removed' });
+                            }
                         }
                     }
                 }
