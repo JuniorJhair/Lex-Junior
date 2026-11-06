@@ -25,6 +25,9 @@ public class AdBlockFilterTests
     [InlineData("https://ads.trafficjunky.net/video?zone_id=789")]
     [InlineData("https://engine.adglare.net/?456")]
     [InlineData("https://cdn.hentaipros.com/banner.jpg")]
+    [InlineData("https://a.adtng.com/get/10016594?time=1769790006402")]
+    [InlineData("https://a.pemsrv.com/ad-provider.js")]
+    [InlineData("https://s.opoxv.com/v1/link.php")]
     [InlineData("https://shop.example.com/static/ads.js")]
     [InlineData("https://connect.facebook.net/en_US/fbevents.js")]
     [InlineData("https://www.facebook.net/tr?id=1")]
@@ -89,6 +92,7 @@ public class AdBlockFilterTests
     [InlineData("https://s.magsrv.com/splash.php?type=3&idzone=999")]
     [InlineData("https://syndication.exoclick.com/splash.php?type=3")]
     [InlineData("https://ads.trafficjunky.net/video?zone_id=123")]
+    [InlineData("https://a.adtng.com/vast?id=10016594")]
     [InlineData("https://example.com/api/ad?format=vast")]
     [InlineData("https://streaming.net/vast.xml")]
     public void VAST_requests_receive_200_ok_empty_vast_stub(string url)

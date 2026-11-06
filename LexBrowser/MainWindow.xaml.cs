@@ -1170,7 +1170,12 @@ public partial class MainWindow : Window
         {
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri))
             {
-                bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out var stubBytes, out var stubContentType);
+                bool isContextForStub = e.ResourceContext == CoreWebView2WebResourceContext.XmlHttpRequest ||
+                                        e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
+                                        e.ResourceContext == CoreWebView2WebResourceContext.Script;
+                byte[] stubBytes = Array.Empty<byte>();
+                string stubContentType = string.Empty;
+                bool isRedirectStub = isContextForStub && AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType);
                 if (isRedirectStub || AdBlockFilter.ShouldBlock(uri))
                 {
                     int statusCode = 403;

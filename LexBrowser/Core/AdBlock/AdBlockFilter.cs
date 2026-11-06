@@ -123,6 +123,10 @@ public static class AdBlockFilter
         "hentaipros.com",
         "runative-syndicate.com",
         "runative.com",
+        "adtng.com",
+        "adtng.net",
+        "pemsrv.com",
+        "opoxv.com",
 
         // Dominios ad-hoc descubiertos en auditoría forense (redes rotadoras)
         "r2ads.net",

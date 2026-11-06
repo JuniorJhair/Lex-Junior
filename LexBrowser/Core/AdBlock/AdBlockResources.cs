@@ -45,9 +45,11 @@ public static class AdBlockResources
                       full.Contains("type=vast", StringComparison.OrdinalIgnoreCase) ||
                       path.Contains("/vast", StringComparison.OrdinalIgnoreCase) ||
                       path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase) ||
+                      host.Contains("adtng.com", StringComparison.OrdinalIgnoreCase) ||
                       ((host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
                         host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                        host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase)) && path.Contains("splash.php", StringComparison.OrdinalIgnoreCase)) ||
+                        host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase) ||
+                        host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("splash.php", StringComparison.OrdinalIgnoreCase) || path.Contains("vast.php", StringComparison.OrdinalIgnoreCase))) ||
                       ((host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
                         host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase))) ||
                       ((host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
