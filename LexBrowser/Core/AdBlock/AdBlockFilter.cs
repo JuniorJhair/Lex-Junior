@@ -338,6 +338,6 @@ public static class AdBlockFilter
         return false;
     }
 
-    private static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);
+    public static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);
 }
 

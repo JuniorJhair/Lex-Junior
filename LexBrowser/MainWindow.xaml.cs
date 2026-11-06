@@ -998,10 +998,35 @@ public partial class MainWindow : Window
             }
             catch { }
 
+            // 2.0 Detectar si la petición proviene de un subframe (iframe, embed, object)
+            bool isFromSubframe = false;
+            Uri? frameSourceUri = null;
+            try
+            {
+                if (e.OriginalSourceFrameInfo != null)
+                {
+                    isFromSubframe = e.OriginalSourceFrameInfo.FrameKind != Microsoft.Web.WebView2.Core.CoreWebView2FrameKind.MainFrame;
+                    if (!string.IsNullOrEmpty(e.OriginalSourceFrameInfo.Source) &&
+                        Uri.TryCreate(e.OriginalSourceFrameInfo.Source, UriKind.Absolute, out var fUri))
+                    {
+                        frameSourceUri = fUri;
+                    }
+                }
+            }
+            catch { }
+
+            // Determinar si es OAuth legítimo
+            bool isOAuthUrl = url.Contains("accounts.google.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("appleid.apple.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("login.microsoftonline.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("login.live.com", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("/oauth", StringComparison.OrdinalIgnoreCase) ||
+                              url.Contains("gsi/select", StringComparison.OrdinalIgnoreCase);
+
             // 2.1 Si la URL es vacía o about:blank sin interacción del usuario en un sitio no confiable, bloquear popunder
             if (string.IsNullOrWhiteSpace(url) || url == "about:blank")
             {
-                if (!e.IsUserInitiated)
+                if (isFromSubframe || !e.IsUserInitiated)
                 {
                     e.Handled = true;
                     return;
@@ -1009,16 +1034,35 @@ public partial class MainWindow : Window
             }
             else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                if (SettingsManager.Current.EnableAdBlocker && (AdBlockFilter.ShouldBlock(uri) || AdBlockFilter.IsSuspiciousPopup(uri, currentUri)))
+                if (SettingsManager.Current.EnableAdBlocker && !isOAuthUrl)
                 {
-                    e.Handled = true;
-                    win.Dispatcher.Invoke(() =>
+                    bool shouldBlock = AdBlockFilter.ShouldBlock(uri) || AdBlockFilter.IsSuspiciousPopup(uri, currentUri);
+
+                    // Si proviene de un subframe (ej. reproductor de anime/streaming) hacia un dominio cruzado ajeno
+                    if (!shouldBlock && isFromSubframe)
                     {
-                        tab.BlockedAdsCount++;
-                        if (win._activeTab == tab)
-                            win.UpdateShieldBadgeText();
-                    });
-                    return;
+                        string targetHost = uri.Host.ToLowerInvariant();
+                        bool matchesMainSite = currentUri != null && (targetHost == currentUri.Host || targetHost.EndsWith("." + currentUri.Host));
+                        bool matchesFrameSite = frameSourceUri != null && (targetHost == frameSourceUri.Host || targetHost.EndsWith("." + frameSourceUri.Host));
+
+                        // Un reproductor embebido jamás debe abrir popups hacia un tercer dominio no confiable
+                        if (!matchesMainSite && !matchesFrameSite && !AdBlockFilter.IsTrustedDomain(targetHost))
+                        {
+                            shouldBlock = true;
+                        }
+                    }
+
+                    if (shouldBlock)
+                    {
+                        e.Handled = true;
+                        win.Dispatcher.Invoke(() =>
+                        {
+                            tab.BlockedAdsCount++;
+                            if (win._activeTab == tab)
+                                win.UpdateShieldBadgeText();
+                        });
+                        return;
+                    }
                 }
             }
 
@@ -1036,13 +1080,6 @@ public partial class MainWindow : Window
                 }
             }
             catch { }
-
-            bool isOAuthUrl = url.Contains("accounts.google.com", StringComparison.OrdinalIgnoreCase) ||
-                              url.Contains("appleid.apple.com", StringComparison.OrdinalIgnoreCase) ||
-                              url.Contains("login.microsoftonline.com", StringComparison.OrdinalIgnoreCase) ||
-                              url.Contains("login.live.com", StringComparison.OrdinalIgnoreCase) ||
-                              url.Contains("/oauth", StringComparison.OrdinalIgnoreCase) ||
-                              url.Contains("gsi/select", StringComparison.OrdinalIgnoreCase);
 
             var deferral = e.GetDeferral();
             win.Dispatcher.InvokeAsync(async () =>

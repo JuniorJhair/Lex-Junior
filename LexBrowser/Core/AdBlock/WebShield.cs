@@ -121,33 +121,95 @@ public static class WebShield
     // ─────────────────────────────────────────────────────────────────
     const adDomainsRegex = /(propellerads|popcash|popads|adsterra|monetag|bet365|1xbet|clickadu|hilltopads|exoclick|juicyads|syndication|doubleclick|adservice|outbrain|taboola|criteo|adnxs|pubmatic|onclick|trafficstars|adcash|revcontent|smartadserver|r2ads|llvpn|streamtp|trkr|ppof\.net|visariomedia|qojseyonoj|hfryyynvqwgy)/i;
 
-    // 1.1 Defusor de window.open para popunders no solicitados (excluyendo dominios OAuth de confianza)
+    // 1.1 Defusor de window.open para popunders con señuelo Proxy (closed: false)
     const trustedOAuthRegex = /^https:\/\/([a-z0-9-]+\.)?(google\.com|apple\.com|microsoft\.com|microsoftonline\.com|live\.com|github\.com|facebook\.com|discord\.com|x\.com|twitter\.com|paypal\.com)(\/|$)/i;
+
+    const isAdOrSuspiciousUrl = (u) => {
+        if (!u || typeof u !== 'string') return false;
+        if (trustedOAuthRegex.test(u)) return false;
+        const lower = u.toLowerCase();
+        return adDomainsRegex.test(lower) ||
+               lower.includes('/ad/') ||
+               lower.includes('/ads/') ||
+               lower.includes('popunder') ||
+               lower.includes('direct-link') ||
+               lower.includes('link?z=') ||
+               lower.includes('?z=') ||
+               lower.includes('&z=') ||
+               lower.includes('zoneid') ||
+               lower.includes('zoneId') ||
+               lower.includes('trkr.') ||
+               (lower.includes('click') && lower.includes('track'));
+    };
+
+    // Señuelo inteligente de ventana (Proxy) para que reproductores y scripts invasores
+    // crean que el popup se abrió correctamente (.closed === false) y no detengan la reproducción.
+    const createDecoyPopup = () => {
+        const noop = () => {};
+        const noopObj = { write: noop, open: noop, close: noop, createElement: () => ({ style: {} }) };
+        const noopLoc = { href: 'about:blank', replace: noop, assign: noop, reload: noop };
+        try {
+            return new Proxy({ closed: false }, {
+                get: (target, prop) => {
+                    if (prop === 'closed') return false;
+                    if (prop === 'document') return noopObj;
+                    if (prop === 'location') return noopLoc;
+                    if (prop === 'opener') return window;
+                    if (prop === 'self' || prop === 'window') return target;
+                    return noop;
+                },
+                set: () => true
+            });
+        } catch(_) {
+            return {
+                closed: false,
+                focus: noop,
+                blur: noop,
+                close: noop,
+                postMessage: noop,
+                addEventListener: noop,
+                removeEventListener: noop,
+                document: noopObj,
+                location: noopLoc,
+                opener: window
+            };
+        }
+    };
+
     try {
         const originalOpen = window.open;
         window.open = function(url, target, features) {
-            if (url && typeof url === 'string' && !trustedOAuthRegex.test(url)) {
-                const isAd = adDomainsRegex.test(url) ||
-                             url.includes('/ad/') ||
-                             url.includes('/ads/') ||
-                             url.includes('popunder') ||
-                             url.includes('direct-link') ||
-                             url.includes('link?z=') ||
-                             url.includes('?z=') ||
-                             url.includes('&z=') ||
-                             url.includes('zoneid') ||
-                             url.includes('zoneId') ||
-                             url.includes('trkr.') ||
-                             (url.includes('click') && url.includes('track'));
+            const urlStr = (typeof url === 'string') ? url : (url && url.toString ? url.toString() : '');
+            const isInsideFrame = (window.self !== window.top);
+            const isSuspicious = isAdOrSuspiciousUrl(urlStr);
 
-                if (isAd) {
+            // 1. Si es detectado como anuncio explícito
+            if (isSuspicious) {
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage({ type: 'ad_blocked', url: urlStr, reason: 'window_open_ad_pattern' });
+                }
+                return createDecoyPopup();
+            }
+
+            // 2. Si proviene de un iframe (común en anime/streaming) y navega hacia un dominio cruzado no OAuth
+            if (isInsideFrame) {
+                const isCrossDomain = urlStr && !urlStr.startsWith(window.location.origin) && !trustedOAuthRegex.test(urlStr);
+                const isBlankPop = !urlStr || urlStr === 'about:blank';
+                if (isCrossDomain || isBlankPop) {
                     if (window.chrome && window.chrome.webview) {
-                        window.chrome.webview.postMessage({ type: 'ad_blocked', url: url, reason: 'window_open' });
+                        window.chrome.webview.postMessage({ type: 'ad_blocked', url: urlStr || 'about:blank', reason: 'window_open_iframe_popunder' });
                     }
-                    return null;
+                    return createDecoyPopup();
                 }
             }
-            return originalOpen.apply(this, arguments);
+
+            // 3. Ejecución normal. Si el navegador cancela la apertura (e.Handled = true), devolver señuelo para no romper el reproductor
+            try {
+                const win = originalOpen.apply(this, arguments);
+                return win || createDecoyPopup();
+            } catch(err) {
+                return createDecoyPopup();
+            }
         };
     } catch(e) {}
 
