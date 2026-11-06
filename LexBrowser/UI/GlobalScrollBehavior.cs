@@ -587,7 +587,8 @@ public static class GlobalScrollBehavior
 
     /// <summary>
     /// Cierra únicamente los ComboBoxes que hayan salido del área visual (viewport) del ScrollViewer.
-    /// Si el ComboBox todavía se puede ver en la ventana, permanece abierto acompañando al control.
+    /// Si el ComboBox todavía se puede ver en la ventana, sincroniza la posición del desplegable (Reposition)
+    /// para que permanezca perfectamente pegado al control mientras se desplaza.
     /// </summary>
     public static void CloseOutOfViewComboBoxes(ScrollViewer parentSv)
     {
@@ -605,6 +606,10 @@ public static class GlobalScrollBehavior
                         {
                             toClose.Add(cb);
                         }
+                        else
+                        {
+                            RepositionComboBoxPopup(cb);
+                        }
                     }
                 }
                 else
@@ -618,6 +623,33 @@ public static class GlobalScrollBehavior
         {
             cb.IsDropDownOpen = false;
         }
+    }
+
+    private static readonly System.Reflection.MethodInfo? _popupRepositionMethod =
+        typeof(Popup).GetMethod("Reposition", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+    public static void RepositionComboBoxPopup(ComboBox cb)
+    {
+        try
+        {
+            Popup? popup = cb.Template?.FindName("Popup", cb) as Popup
+                        ?? cb.Template?.FindName("PART_Popup", cb) as Popup
+                        ?? FindVisualChild<Popup>(cb);
+
+            if (popup != null && popup.IsOpen)
+            {
+                if (_popupRepositionMethod != null)
+                {
+                    _popupRepositionMethod.Invoke(popup, null);
+                }
+                else
+                {
+                    popup.HorizontalOffset += 0.0001;
+                    popup.HorizontalOffset -= 0.0001;
+                }
+            }
+        }
+        catch { }
     }
 
     public static bool IsElementVisibleInViewport(FrameworkElement element, ScrollViewer parentSv)
