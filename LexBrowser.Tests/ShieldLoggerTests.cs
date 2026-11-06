@@ -60,3 +60,4 @@ public class ShieldLoggerTests
         Assert.Equal(500, ShieldLogger.Count);
     }
 }
+
