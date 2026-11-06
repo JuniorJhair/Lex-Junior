@@ -98,6 +98,28 @@ public static class WebShield
         window._monetag = {};
         window.adcash = {};
 
+        // Neutralizar variables globales de inyección VAST en reproductores incrustados (Brave / uBO set-constant)
+        try {
+            const emptyStrDesc = { get: function() { return ''; }, set: function() {}, configurable: true };
+            const emptyArrDesc = { get: function() { return []; }, set: function() {}, configurable: true };
+
+            try { Object.defineProperty(window, 'vastUrl', emptyStrDesc); } catch(_) {}
+            try { Object.defineProperty(window, 'vast_url', emptyStrDesc); } catch(_) {}
+            try { Object.defineProperty(window, 'vastURL', emptyStrDesc); } catch(_) {}
+            try { Object.defineProperty(window, 'vastAds', emptyArrDesc); } catch(_) {}
+            try { Object.defineProperty(window, 'ad_tags', emptyArrDesc); } catch(_) {}
+
+            // Pre-configurar timestamps en localStorage para satisfacer comprobaciones de tiempo de reproductores
+            try {
+                if (window.localStorage) {
+                    const futureTime = (Date.now() + 86400000).toString();
+                    localStorage.setItem('ads-last-seen', futureTime);
+                    localStorage.setItem('ad_last_seen', futureTime);
+                    localStorage.setItem('vast_last_seen', futureTime);
+                }
+            } catch(_) {}
+        } catch(_) {}
+
         // Neutralizar detectores basados en elementos trampa BAB (BlockAdBlock)
         try {
             const origGetElem = document.getElementById;

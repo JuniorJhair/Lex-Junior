@@ -92,6 +92,7 @@ public class AdBlockFilterTests
     [InlineData("https://syndication.exoclick.com/splash.php?type=3")]
     [InlineData("https://ads.trafficjunky.net/video?zone_id=123")]
     [InlineData("https://a.adtng.com/vast?id=10016594")]
+    [InlineData("https://a.adtng.com/get/10016589?time=1769787459769")]
     [InlineData("https://example.com/api/ad?format=vast")]
     [InlineData("https://streaming.net/vast.xml")]
     public void VAST_requests_receive_200_ok_empty_vast_stub(string url)

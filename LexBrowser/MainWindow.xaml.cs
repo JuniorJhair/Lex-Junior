@@ -1203,7 +1203,8 @@ public partial class MainWindow : Window
 
                 bool isContextForStub = e.ResourceContext == CoreWebView2WebResourceContext.XmlHttpRequest ||
                                         e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
-                                        e.ResourceContext == CoreWebView2WebResourceContext.Script;
+                                        e.ResourceContext == CoreWebView2WebResourceContext.Script ||
+                                        e.ResourceContext == CoreWebView2WebResourceContext.Other;
                 byte[] stubBytes = Array.Empty<byte>();
                 string stubContentType = string.Empty;
                 bool isRedirectStub = isContextForStub && AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType);
