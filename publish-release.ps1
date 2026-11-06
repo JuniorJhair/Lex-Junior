@@ -31,6 +31,7 @@ dotnet publish $csprojPath -c Release -r win-x64 --self-contained true `
     -p:EnableCompressionInSingleFile=true `
     -p:DebugType=none `
     -p:DebugSymbols=false `
+    -p:NuGetAudit=false `
     -o $publishTempDir
 
 $builtExe = Join-Path $publishTempDir "LexBrowser.exe"
