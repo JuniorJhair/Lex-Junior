@@ -921,13 +921,18 @@ public partial class MainWindow : Window
         }
         catch { }
 
-        // Atajos F12 y Ctrl+Shift+I cuando el foco está sobre el WebView
+        // Atajos F12, Ctrl+Shift+I (DevTools) y Ctrl+Shift+L (Shield Logger) cuando el foco está sobre el WebView
         tab.WebView.PreviewKeyDown += (s, e) =>
         {
             if (e.Key == Key.F12 || (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I))
             {
                 e.Handled = true;
                 try { core.OpenDevToolsWindow(); } catch { }
+            }
+            else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
+            {
+                e.Handled = true;
+                CopyOrExportShieldLog();
             }
         };
 
@@ -1044,6 +1049,7 @@ public partial class MainWindow : Window
             {
                 if (isFromSubframe || !e.IsUserInitiated)
                 {
+                    ShieldLogger.Log("NEW_WINDOW_CANCELLED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", "Empty/about:blank popunder");
                     e.Handled = true;
                     return;
                 }
@@ -1053,6 +1059,7 @@ public partial class MainWindow : Window
                 if (SettingsManager.Current.EnableAdBlocker && !isOAuthUrl)
                 {
                     bool shouldBlock = AdBlockFilter.ShouldBlock(uri) || AdBlockFilter.IsSuspiciousPopup(uri, currentUri);
+                    string blockReason = "AdBlockFilter domain or suspicious pattern";
 
                     // Si proviene de un subframe (ej. reproductor de anime/streaming) hacia un dominio cruzado ajeno
                     if (!shouldBlock && isFromSubframe)
@@ -1065,11 +1072,13 @@ public partial class MainWindow : Window
                         if (!matchesMainSite && !matchesFrameSite && !AdBlockFilter.IsTrustedDomain(targetHost))
                         {
                             shouldBlock = true;
+                            blockReason = "Cross-origin subframe unauthorized popunder";
                         }
                     }
 
                     if (shouldBlock)
                     {
+                        ShieldLogger.Log("NEW_WINDOW_CANCELLED", currentUri?.Host ?? "unknown", uri.AbsoluteUri, isFromSubframe ? "Subframe" : "MainFrame", blockReason);
                         e.Handled = true;
                         win.Dispatcher.Invoke(() =>
                         {
@@ -1096,6 +1105,8 @@ public partial class MainWindow : Window
                 }
             }
             catch { }
+
+            ShieldLogger.Log("NEW_WINDOW_ALLOWED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", isOAuthUrl ? "OAuth login window" : (hasPopupSize ? "Popup window with dimensions" : "User initiated new window"));
 
             var deferral = e.GetDeferral();
             win.Dispatcher.InvokeAsync(async () =>
@@ -1173,12 +1184,19 @@ public partial class MainWindow : Window
                         statusReason = "OK";
                         contentType = stubContentType;
                         responseBytes = stubBytes;
+
+                        ShieldLogger.Log("REQUEST_STUB_200", tab.CurrentUri?.Host ?? "unknown", uri.AbsoluteUri, e.ResourceContext.ToString(), "AdBlockResources redirect stub (200 OK)");
                     }
                     else if (uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
                              uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
                     {
                         statusCode = 204;
                         statusReason = "No Content";
+                        ShieldLogger.Log("REQUEST_BLOCKED_204", "youtube.com", uri.AbsoluteUri, e.ResourceContext.ToString(), "YouTube ad/telemetry endpoint");
+                    }
+                    else
+                    {
+                        ShieldLogger.Log("REQUEST_BLOCKED_403", tab.CurrentUri?.Host ?? "unknown", uri.AbsoluteUri, e.ResourceContext.ToString(), "Blocked ad domain or pattern");
                     }
 
                     e.Response = core.Environment.CreateWebResourceResponse(
@@ -1289,6 +1307,14 @@ public partial class MainWindow : Window
 
                 if (type == "ad_blocked")
                 {
+                    string reason = root.TryGetProperty("reason", out var rProp) ? (rProp.GetString() ?? "") : "ad_script";
+                    string adUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                    string eventType = reason.Contains("overlay") || reason.Contains("sibling") || reason.Contains("anchor")
+                        ? "OVERLAY_REMOVED"
+                        : (reason.Contains("window_open") ? "POPUP_DECOY_INJECTED" : "SCRIPT_DEFUSED");
+
+                    ShieldLogger.Log(eventType, tab.CurrentUri?.Host ?? "unknown", string.IsNullOrEmpty(adUrl) ? (tab.CurrentUri?.AbsoluteUri ?? "") : adUrl, "DOM", reason);
+
                     win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                     {
                         if (tab.IsDisposed) return;
@@ -1596,6 +1622,7 @@ public partial class MainWindow : Window
         core.NavigationStarting += (s, e) =>
         {
             if (tab.IsDisposed) return;
+            ShieldLogger.Log("NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}");
             var win = tab.OwnerWindow ?? this;
 
             win.Dispatcher.Invoke(() =>
@@ -3341,6 +3368,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 0.05 Ctrl + Shift + L: Volcar y copiar Shield Logger (registro de seguridad y bloqueos)
+        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
+        {
+            e.Handled = true;
+            CopyOrExportShieldLog();
+            return;
+        }
+
         // 0.1 Ctrl + Shift + K: Abrir Bóveda de Contraseñas
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.K)
         {
@@ -4904,6 +4939,51 @@ public partial class MainWindow : Window
             }
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Vuelca y copia el registro de eventos del Shield Logger al portapapeles y genera un archivo en el Escritorio.
+    /// Atajo universal: Ctrl + Shift + L
+    /// </summary>
+    public void CopyOrExportShieldLog()
+    {
+        try
+        {
+            string dump = ShieldLogger.DumpLog();
+            int count = ShieldLogger.Count;
+
+            // 1. Copiar al portapapeles
+            try
+            {
+                Clipboard.SetDataObject(dump, true);
+            }
+            catch { }
+
+            // 2. Guardar archivo en el Escritorio para diagnóstico seguro
+            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string logPath = Path.Combine(desktopPath, "LexJunior_ShieldLog.txt");
+            try
+            {
+                File.WriteAllText(logPath, dump, System.Text.Encoding.UTF8);
+            }
+            catch { }
+
+            ShowToast($"🛡️ Shield Log copiado ({count} eventos)", "Abrir Log 📄", () =>
+            {
+                try
+                {
+                    if (File.Exists(logPath))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(logPath) { UseShellExecute = true });
+                    }
+                }
+                catch { }
+            });
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Error al exportar Shield Log: {ex.Message}");
+        }
     }
 
     private void BtnPasswordVault_Click(object sender, RoutedEventArgs e)

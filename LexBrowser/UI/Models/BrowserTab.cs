@@ -98,6 +98,21 @@ public class BrowserTab : INotifyPropertyChanged
     /// <summary>Desbloqueador dinámico CORS para amplificación de audio > 100% en orígenes cruzados.</summary>
     public LexBrowser.Core.CorsMediaUnlocker? CorsUnlocker { get; set; }
 
+    /// <summary>URI actual de navegación de la pestaña, si está disponible.</summary>
+    public Uri? CurrentUri
+    {
+        get
+        {
+            try
+            {
+                if (WebView?.Source != null) return WebView.Source;
+                if (!string.IsNullOrEmpty(_url) && Uri.TryCreate(_url, UriKind.Absolute, out var u)) return u;
+            }
+            catch { }
+            return null;
+        }
+    }
+
     /// <summary>Lista acotada de recursos multimedia/documentos detectados cuando el sniffer está activo.</summary>
     public ObservableCollection<DetectedMediaItem> DetectedMedia { get; } = new();
 
