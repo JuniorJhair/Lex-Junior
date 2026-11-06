@@ -156,6 +156,8 @@ public class AdBlockFilterTests
         Assert.Contains("isDailymotion", script);
         Assert.Contains("playbackRate = 16.0", script);
         Assert.Contains("lex-dm-cosmetics", script);
+        Assert.Contains("isMainContentUrl", script);
+        Assert.Contains("onMainVideoReceived", script);
     }
 }
 
