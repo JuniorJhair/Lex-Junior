@@ -1139,30 +1139,44 @@ public partial class MainWindow : Window
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Other);
         core.WebResourceRequested += (s, e) =>
         {
-            if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && AdBlockFilter.ShouldBlock(uri))
+            if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri))
             {
-                // En YouTube, responder con 204 No Content en endpoints de anuncios para que los scripts
-                // anti-bloqueador de YouTube no fuercen la pausa artificial al primer segundo de video
-                int statusCode = 403;
-                string statusReason = "Blocked by LexShield";
-                if (uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
-                    uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
+                bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out var stubBytes, out var stubContentType);
+                if (isRedirectStub || AdBlockFilter.ShouldBlock(uri))
                 {
-                    statusCode = 204;
-                    statusReason = "No Content";
+                    int statusCode = 403;
+                    string statusReason = "Blocked by LexShield";
+                    string contentType = "Content-Type: text/plain";
+                    byte[] responseBytes = EmptyResponseBytes;
+
+                    if (isRedirectStub)
+                    {
+                        // Stubs HTTP 200 OK para recursos conocidos (IMA SDK, VAST XML vacío, PopAds dummy)
+                        // que los reproductores de streaming esperan para no congelarse ni mostrar pantalla negra.
+                        statusCode = 200;
+                        statusReason = "OK";
+                        contentType = stubContentType;
+                        responseBytes = stubBytes;
+                    }
+                    else if (uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
+                             uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
+                    {
+                        statusCode = 204;
+                        statusReason = "No Content";
+                    }
+
+                    e.Response = core.Environment.CreateWebResourceResponse(
+                        new MemoryStream(responseBytes, writable: false), statusCode, statusReason, contentType);
+
+                    var win = tab.OwnerWindow ?? this;
+                    win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                    {
+                        if (tab.IsDisposed) return;
+                        tab.BlockedAdsCount++;
+                        if (win._activeTab == tab)
+                            win.UpdateShieldBadgeText();
+                    });
                 }
-
-                e.Response = core.Environment.CreateWebResourceResponse(
-                    new MemoryStream(EmptyResponseBytes, writable: false), statusCode, statusReason, "Content-Type: text/plain");
-
-                var win = tab.OwnerWindow ?? this;
-                win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
-                {
-                    if (tab.IsDisposed) return;
-                    tab.BlockedAdsCount++;
-                    if (win._activeTab == tab)
-                        win.UpdateShieldBadgeText();
-                });
             }
         };
 

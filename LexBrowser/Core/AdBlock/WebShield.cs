@@ -28,9 +28,12 @@ public static class WebShield
         window.canRunAds = true;
         window.isAdBlockActive = false;
         window.adblock = false;
+        window.google_ad_status = 1;
         window.adsbygoogle = window.adsbygoogle || [];
         window.adsbygoogle.push = function() { return 0; };
         window.google_ad_client = 'ca-pub-test';
+        window.PopAds = window.PopAds || {};
+        window.popns = window.popns || {};
 
         // Emular bibliotecas de popunder para que se desactiven pacíficamente sin romper el reproductor
         window.aclib = {
@@ -43,6 +46,17 @@ public static class WebShield
         window._pop = [];
         window._monetag = {};
         window.adcash = {};
+
+        // Neutralizar detectores basados en elementos trampa BAB (BlockAdBlock)
+        try {
+            const origGetElem = document.getElementById;
+            document.getElementById = function(id) {
+                if (id === 'babasbmsgx' || (typeof id === 'string' && id.startsWith('bab_'))) {
+                    return null;
+                }
+                return origGetElem.apply(this, arguments);
+            };
+        } catch(_) {}
 
         // Emular y neutralizar ZorDon / Zordon (FuckAdBlock / BlockAdBlock usado por Byse / JWPlayer)
         try {
