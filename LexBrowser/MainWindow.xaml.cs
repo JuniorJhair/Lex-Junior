@@ -915,6 +915,22 @@ public partial class MainWindow : Window
         var core = tab.WebView.CoreWebView2;
         if (core == null) return;
 
+        try
+        {
+            core.Settings.AreDevToolsEnabled = true;
+        }
+        catch { }
+
+        // Atajos F12 y Ctrl+Shift+I cuando el foco está sobre el WebView
+        tab.WebView.PreviewKeyDown += (s, e) =>
+        {
+            if (e.Key == Key.F12 || (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I))
+            {
+                e.Handled = true;
+                try { core.OpenDevToolsWindow(); } catch { }
+            }
+        };
+
         // Inyectar script universal de optimización, anti-anuncios, iframes, PiP, traducción limpia y captura/autocompletado pasivo de contraseñas
         try
         {
@@ -3317,7 +3333,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 0. Ctrl + Shift + K: Abrir Bóveda de Contraseñas
+        // 0. F12 o Ctrl + Shift + I: Abrir Herramientas de Desarrollo (DevTools) en la pestaña activa
+        if (e.Key == Key.F12 || (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I))
+        {
+            e.Handled = true;
+            OpenDevToolsForActiveTab();
+            return;
+        }
+
+        // 0.1 Ctrl + Shift + K: Abrir Bóveda de Contraseñas
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.K)
         {
             e.Handled = true;
@@ -4864,6 +4888,23 @@ public partial class MainWindow : Window
     private DispatcherTimer? _promptPeekTimer;
     private DispatcherTimer? _clipboardShieldTimer;
     private string _lastCopiedSecretPassword = string.Empty;
+
+    /// <summary>
+    /// Abre la ventana nativa de herramientas de desarrollo (DevTools) de Chromium en la pestaña activa.
+    /// </summary>
+    public void OpenDevToolsForActiveTab()
+    {
+        try
+        {
+            var core = _activeTab?.WebView?.CoreWebView2;
+            if (core != null)
+            {
+                core.Settings.AreDevToolsEnabled = true;
+                core.OpenDevToolsWindow();
+            }
+        }
+        catch { }
+    }
 
     private void BtnPasswordVault_Click(object sender, RoutedEventArgs e)
     {
