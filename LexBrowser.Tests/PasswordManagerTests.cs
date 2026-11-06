@@ -29,6 +29,8 @@ public class PasswordManagerTests : IDisposable
                 File.Delete(_tempSettingsPath);
             if (File.Exists(_tempSettingsPath + ".tmp"))
                 File.Delete(_tempSettingsPath + ".tmp");
+            if (File.Exists(SettingsManager.SecuritySetupMarkerPath))
+                File.Delete(SettingsManager.SecuritySetupMarkerPath);
         }
         catch { }
         finally
@@ -135,6 +137,26 @@ public class PasswordManagerTests : IDisposable
         // Limpiar estado de prueba
         PasswordManager.DisableMasterPassword();
         Assert.False(PasswordManager.HasMasterPasswordConfigured());
+    }
+
+    [Fact]
+    public void InitialSecuritySetup_UserDecisionPersistsWithoutRePrompting()
+    {
+        // Simular que el usuario eligió "No me gustaría usar contraseña" en primer inicio
+        SettingsManager.Current.BrowserLockMode = "None";
+        SettingsManager.Current.HasCompletedInitialSecuritySetup = true;
+        SettingsManager.Save();
+
+        Assert.True(File.Exists(SettingsManager.SecuritySetupMarkerPath));
+        Assert.True(SettingsManager.Current.HasCompletedInitialSecuritySetup);
+        Assert.False(PasswordManager.HasMasterPasswordConfigured());
+        Assert.False(PasswordManager.ShouldRequireUnlockOnStartup());
+
+        // Simular reinicio completo del navegador (Load desde disco)
+        SettingsManager.Load();
+        Assert.True(SettingsManager.Current.HasCompletedInitialSecuritySetup);
+        Assert.False(PasswordManager.HasMasterPasswordConfigured());
+        Assert.False(PasswordManager.ShouldRequireUnlockOnStartup());
     }
 }
 

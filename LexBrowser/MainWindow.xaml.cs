@@ -545,8 +545,11 @@ public partial class MainWindow : Window
         CleanLegacyDiagnosticLogs();
 
         // Verificar si es la primera vez que abre el navegador (para ofrecer configurar PIN o elegir "No me gustaría usar contraseña")
+        bool hasCompletedSecuritySetup = SettingsManager.Current.HasCompletedInitialSecuritySetup ||
+                                         File.Exists(SettingsManager.SecuritySetupMarkerPath);
+
         if (_initialAttachedTab == null &&
-            !SettingsManager.Current.HasCompletedInitialSecuritySetup &&
+            !hasCompletedSecuritySetup &&
             !PasswordManager.HasMasterPasswordConfigured())
         {
             ShowFirstTimeSecuritySetupOverlay();
@@ -5361,6 +5364,7 @@ public partial class MainWindow : Window
     {
         SettingsManager.Current.BrowserLockMode = "None";
         SettingsManager.Current.HasCompletedInitialSecuritySetup = true;
+        try { File.WriteAllText(SettingsManager.SecuritySetupMarkerPath, "1"); } catch { }
         SettingsManager.Save();
 
         CompleteOverlayUnlock();

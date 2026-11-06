@@ -22,7 +22,7 @@ public static class InstallerService
         Path.Combine(InstallDir, "LexBrowser.exe");
 
     public static string UserDataDir =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexJuniorBrowser");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexBrowser");
 
     public static string DesktopShortcutPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Lex Junior Browser.lnk");
@@ -181,14 +181,24 @@ public static class InstallerService
             progress?.Report((75, "Limpiando datos de navegación, caché y configuración..."));
             await Task.Run(() =>
             {
-                try
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string[] dataFolders = new[]
                 {
-                    if (Directory.Exists(UserDataDir))
+                    Path.Combine(localApp, "LexBrowser"),
+                    Path.Combine(localApp, "LexJuniorBrowser")
+                };
+
+                foreach (var folder in dataFolders)
+                {
+                    try
                     {
-                        Directory.Delete(UserDataDir, recursive: true);
+                        if (Directory.Exists(folder))
+                        {
+                            Directory.Delete(folder, recursive: true);
+                        }
                     }
+                    catch { }
                 }
-                catch { }
             });
         }
 

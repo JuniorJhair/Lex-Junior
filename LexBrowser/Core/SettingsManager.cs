@@ -64,6 +64,11 @@ public static class SettingsManager
     public static string? CustomSettingsPath { get; set; }
     public static string SettingsPath => CustomSettingsPath ?? DefaultSettingsPath;
 
+    public static string SecuritySetupMarkerPath => Path.Combine(
+        Path.GetDirectoryName(SettingsPath) ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexBrowser"),
+        ".security_setup_done"
+    );
+
     public static BrowserSettings Current { get; private set; } = new();
 
     public static event Action? SettingsChanged;
@@ -78,10 +83,30 @@ public static class SettingsManager
         string path = SettingsPath;
         string tempPath = path + ".tmp";
 
+        // Si el archivo temporal es más reciente que el principal (por fallo en guardado previo), priorizarlo
+        bool tempIsNewer = false;
+        try
+        {
+            if (File.Exists(tempPath) && File.Exists(path))
+            {
+                tempIsNewer = File.GetLastWriteTimeUtc(tempPath) > File.GetLastWriteTimeUtc(path);
+            }
+        }
+        catch { }
+
+        if (tempIsNewer && TryLoadFromFile(tempPath, out var fromTemp))
+        {
+            Current = fromTemp!;
+            SyncSecurityMarker();
+            Save(notify: false);
+            return;
+        }
+
         // 1. Intentar cargar desde el archivo principal
         if (TryLoadFromFile(path, out var loaded))
         {
             Current = loaded!;
+            SyncSecurityMarker();
             return;
         }
 
@@ -90,12 +115,32 @@ public static class SettingsManager
         {
             LogSettingsEvent($"[RECOVERY] settings.json recuperado exitosamente desde {tempPath}");
             Current = recovered!;
+            SyncSecurityMarker();
             Save(notify: false);
             return;
         }
 
         Current = new BrowserSettings();
+        SyncSecurityMarker();
         Save(notify: false);
+    }
+
+    private static void SyncSecurityMarker()
+    {
+        try
+        {
+            if (File.Exists(SecuritySetupMarkerPath))
+            {
+                Current.HasCompletedInitialSecuritySetup = true;
+            }
+            else if (Current.HasCompletedInitialSecuritySetup)
+            {
+                string? dir = Path.GetDirectoryName(SecuritySetupMarkerPath);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllText(SecuritySetupMarkerPath, "1");
+            }
+        }
+        catch { }
     }
 
     private static bool TryLoadFromFile(string filePath, out BrowserSettings? result)
@@ -139,42 +184,75 @@ public static class SettingsManager
                     Directory.CreateDirectory(dir);
                 }
 
-                string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(tempPath, json);
+                // Sincronizar archivo centinela de seguridad para respetar siempre la decisión del usuario
+                if (Current.HasCompletedInitialSecuritySetup)
+                {
+                    try
+                    {
+                        File.WriteAllText(SecuritySetupMarkerPath, "1");
+                    }
+                    catch { }
+                }
 
-                bool replaced = false;
+                string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
+
+                // Escritura resistente a bloqueos en Windows: escribir primero en .tmp y copiar sobrescribiendo
+                bool saved = false;
                 Exception? lastEx = null;
+
+                try
+                {
+                    File.WriteAllText(tempPath, json);
+                }
+                catch (Exception ex)
+                {
+                    lastEx = ex;
+                }
 
                 for (int attempt = 0; attempt < 5; attempt++)
                 {
                     try
                     {
-                        if (File.Exists(path))
+                        if (File.Exists(tempPath))
                         {
-                            File.Replace(tempPath, path, null);
+                            File.Copy(tempPath, path, overwrite: true);
+                            saved = true;
+                            break;
                         }
-                        else
-                        {
-                            File.Move(tempPath, path);
-                        }
-                        replaced = true;
-                        break;
                     }
-                    catch (IOException ex)
-                    {
-                        lastEx = ex;
-                        Thread.Sleep(25 * (attempt + 1));
-                    }
-                    catch (UnauthorizedAccessException ex)
+                    catch (Exception ex)
                     {
                         lastEx = ex;
                         Thread.Sleep(25 * (attempt + 1));
                     }
                 }
 
-                if (!replaced)
+                if (!saved)
                 {
-                    LogSettingsEvent($"[SAVE_FAILED] No se pudo reemplazar {path} tras 5 intentos. El estado seguro queda en {tempPath}. Detalle: {lastEx?.Message}");
+                    // Fallback directo por si File.Copy tuviera alguna restricción específica de permisos
+                    try
+                    {
+                        File.WriteAllText(path, json);
+                        saved = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastEx = ex;
+                    }
+                }
+
+                try
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
+                catch { }
+
+                if (!saved)
+                {
+                    LogSettingsEvent($"[SAVE_FAILED] No se pudo guardar {path}: {lastEx?.Message}");
                 }
             }
 
