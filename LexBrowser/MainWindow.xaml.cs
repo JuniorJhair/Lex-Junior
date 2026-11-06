@@ -718,6 +718,15 @@ public partial class MainWindow : Window
                 DefaultBrowserPromptBanner.Visibility = Visibility.Collapsed;
                 return;
             }
+            else
+            {
+                // Si antes era predeterminado y ahora dejó de serlo en Windows
+                if (SettingsManager.Current.WasPreviouslyDefaultBrowser)
+                {
+                    SettingsManager.Current.WasPreviouslyDefaultBrowser = false;
+                    SettingsManager.Save();
+                }
+            }
 
             // 2. Si el usuario ya tomó una decisión explícita previa (hizo clic en "Sí" o en "Ahora no"):
             // respetamos absolutamente su decisión y no volvemos a interrumpirlo

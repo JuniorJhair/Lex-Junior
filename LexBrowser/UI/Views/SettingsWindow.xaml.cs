@@ -216,6 +216,10 @@ public partial class SettingsWindow : Window
             bool isDefault = InstallerService.IsDefaultBrowser();
             if (isDefault)
             {
+                SettingsManager.Current.WasPreviouslyDefaultBrowser = true;
+                SettingsManager.Current.UserDecidedDefaultBrowser = true;
+                SettingsManager.Save();
+
                 TxtDefaultBrowserStatus.Text = "🎉 ¡Gracias por preferirnos como tu navegador predeterminado en Windows!";
                 TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#34D399"));
                 BtnSetDefaultBrowser.Content = "✓ Ya es predeterminado";
@@ -225,6 +229,12 @@ public partial class SettingsWindow : Window
             }
             else
             {
+                if (SettingsManager.Current.WasPreviouslyDefaultBrowser)
+                {
+                    SettingsManager.Current.WasPreviouslyDefaultBrowser = false;
+                    SettingsManager.Save();
+                }
+
                 TxtDefaultBrowserStatus.Text = "Haz de Lex Junior tu navegador principal para abrir enlaces externos.";
                 TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#71717A"));
                 BtnSetDefaultBrowser.Content = "🌐 Establecer como predeterminado";
@@ -236,10 +246,21 @@ public partial class SettingsWindow : Window
         catch { }
     }
 
-    private void BtnSetDefaultBrowser_Click(object sender, RoutedEventArgs e)
+    private async void BtnSetDefaultBrowser_Click(object sender, RoutedEventArgs e)
     {
         InstallerService.OpenWindowsDefaultAppsSettings();
         UpdateDefaultBrowserUI();
+
+        for (int i = 0; i < 5; i++)
+        {
+            await Task.Delay(1000);
+            if (!IsLoaded) break;
+            if (InstallerService.IsDefaultBrowser())
+            {
+                UpdateDefaultBrowserUI();
+                break;
+            }
+        }
     }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)

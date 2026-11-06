@@ -2,6 +2,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using Microsoft.Win32;
@@ -207,49 +209,135 @@ public static class InstallerService
         progress?.Report((100, "Desinstalación completada."));
     }
 
+    [DllImport("shlwapi.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern uint AssocQueryString(
+        uint flags,
+        uint str,
+        string pszAssoc,
+        string? pszExtra,
+        [Out] StringBuilder pszOut,
+        ref uint pcchOut
+    );
+
+    private const uint ASSOCF_NONE = 0x00000000;
+    private const uint ASSOCSTR_EXECUTABLE = 2;
+    private const uint S_OK = 0;
+
     /// <summary>
-    /// Comprueba si Lex Junior está actualmente configurado como navegador predeterminado para HTTP/HTTPS o HTML.
+    /// Comprueba con 0% impacto en recursos si Lex Junior está actualmente configurado como navegador predeterminado en Windows.
+    /// Utiliza primero la API nativa de Shell (AssocQueryString) de Windows 10/11 y respaldo por Registro de Usuario (UserChoice).
     /// </summary>
     public static bool IsDefaultBrowser()
     {
+        // 1. Detección nativa del Shell de Windows (fuente de verdad definitiva para https/http)
         try
         {
-            // 1. Comprobar https
-            using (var httpsKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice"))
+            string? httpsExe = GetShellProtocolExecutable("https");
+            if (IsMatchingBrowserExe(httpsExe)) return true;
+
+            string? httpExe = GetShellProtocolExecutable("http");
+            if (IsMatchingBrowserExe(httpExe)) return true;
+        }
+        catch { }
+
+        // 2. Respaldo por Registro de Usuario (UserChoice)
+        try
+        {
+            if (CheckUserChoiceProgId(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice") ||
+                CheckUserChoiceProgId(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice") ||
+                CheckUserChoiceProgId(@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice"))
             {
-                var progId = httpsKey?.GetValue("ProgId") as string;
-                if (!string.IsNullOrEmpty(progId) &&
-                    (string.Equals(progId, BrowserProgId, StringComparison.OrdinalIgnoreCase) ||
-                     progId.Contains("LexJunior", StringComparison.OrdinalIgnoreCase)))
-                    return true;
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    private static string? GetShellProtocolExecutable(string protocol)
+    {
+        try
+        {
+            uint pcchOut = 1024;
+            var sb = new StringBuilder(1024);
+            uint hr = AssocQueryString(ASSOCF_NONE, ASSOCSTR_EXECUTABLE, protocol, "open", sb, ref pcchOut);
+            if (hr == S_OK && sb.Length > 0)
+            {
+                return sb.ToString().Trim('\"', ' ');
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    public static bool IsMatchingBrowserExe(string? exePath)
+    {
+        if (string.IsNullOrWhiteSpace(exePath)) return false;
+
+        try
+        {
+            string clean = exePath.Trim('\"', ' ');
+
+            // Si contiene argumentos o comillas intermedias, extraer solo la ruta del ejecutable
+            if (clean.EndsWith(".exe\"", StringComparison.OrdinalIgnoreCase) || clean.Contains(".exe ", StringComparison.OrdinalIgnoreCase))
+            {
+                int exeIdx = clean.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+                if (exeIdx > 0)
+                {
+                    clean = clean.Substring(0, exeIdx + 4).Trim('\"', ' ');
+                }
             }
 
-            // 2. Comprobar http
-            using (var httpKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice"))
+            string currentExe = Environment.ProcessPath ?? "";
+            string installedExe = InstalledExePath;
+
+            if (!string.IsNullOrEmpty(installedExe) &&
+                string.Equals(Path.GetFullPath(clean), Path.GetFullPath(installedExe), StringComparison.OrdinalIgnoreCase))
             {
-                var httpProgId = httpKey?.GetValue("ProgId") as string;
-                if (!string.IsNullOrEmpty(httpProgId) &&
-                    (string.Equals(httpProgId, BrowserProgId, StringComparison.OrdinalIgnoreCase) ||
-                     httpProgId.Contains("LexJunior", StringComparison.OrdinalIgnoreCase)))
-                    return true;
+                return true;
             }
 
-            // 3. Comprobar asociación de archivo .html
-            using (var htmlKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.html\UserChoice"))
+            if (!string.IsNullOrEmpty(currentExe) &&
+                string.Equals(Path.GetFullPath(clean), Path.GetFullPath(currentExe), StringComparison.OrdinalIgnoreCase))
             {
-                var progId = htmlKey?.GetValue("ProgId") as string;
-                if (!string.IsNullOrEmpty(progId) &&
-                    (string.Equals(progId, BrowserProgId, StringComparison.OrdinalIgnoreCase) ||
-                     progId.Contains("LexJunior", StringComparison.OrdinalIgnoreCase)))
-                    return true;
+                return true;
             }
+
+            string fileName = Path.GetFileName(clean);
+            if (fileName.Contains("LexBrowser", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Contains("LexJunior", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (clean.Contains("LexJunior", StringComparison.OrdinalIgnoreCase) ||
+                clean.Contains("LexBrowser", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    private static bool CheckUserChoiceProgId(string subKeyPath)
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(subKeyPath);
+            var progId = key?.GetValue("ProgId") as string;
+            if (string.IsNullOrEmpty(progId)) return false;
+
+            return string.Equals(progId, BrowserProgId, StringComparison.OrdinalIgnoreCase) ||
+                   progId.Contains("LexJunior", StringComparison.OrdinalIgnoreCase) ||
+                   progId.Contains("LexBrowser", StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
             return false;
         }
-
-        return false;
     }
 
     /// <summary>
