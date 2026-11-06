@@ -230,60 +230,99 @@ public static class WebShield
         };
     } catch(e) {}
 
-    // 1.3 Verificador Heurístico de Capas Fantasma / Overlays Trampa
+    // 1.3 Verificador de Controles Legítimos y Elementos con Significado Visual
+    const isControlOrMeaningful = (el) => {
+        if (!el) return false;
+        const tag = el.tagName || '';
+        if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'LABEL', 'VIDEO', 'AUDIO'].includes(tag)) return true;
+        if (tag === 'SVG' || el.closest('svg')) return true;
+
+        // Si tiene texto visible legítimo
+        const text = (el.innerText || el.textContent || '').trim();
+        if (text.length > 0) {
+            const style = window.getComputedStyle(el);
+            const opacity = parseFloat(style.opacity);
+            if (opacity > 0.3 && style.visibility !== 'hidden' && style.display !== 'none') {
+                return true;
+            }
+        }
+
+        // Si es un control explícito de la interfaz o reproductor
+        const cls = ((el.className || '') + ' ' + (el.id || '')).toLowerCase();
+        if (/(control|button|btn|play|pause|volume|mute|progress|slider|seek|timeline|time|setting|gear|fullscreen|quality|caption|subtitle|speed)/.test(cls)) {
+            return true;
+        }
+
+        return false;
+    };
+
+    // 1.4 Verificador Heurístico Fino de Capas Fantasma / Overlays Trampa sobre Video
     const isGhostOverlay = (el) => {
         if (!el || el === document.body || el === document.documentElement) return false;
         const tag = el.tagName || '';
-        if (['VIDEO', 'AUDIO', 'INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'IFRAME', 'CANVAS', 'FORM', 'DIALOG'].includes(tag)) return false;
+        if (['VIDEO', 'AUDIO', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tag)) return false;
 
-        // Whitelist absoluta: NUNCA tocar elementos de la estructura de la app, reproductores o containers
+        // NUNCA borrar el elemento raíz de frameworks SPA
         if (el.id === 'root' || el.id === 'app' || el.hasAttribute('data-reactroot')) return false;
-        if (el.closest('video, audio, iframe, canvas, form, dialog, #root, #app, [id*=player], [class*=player], [class*=jw8], [class*=jw-], [class*=plyr], [class*=vjs-], [class*=stage], [class*=video-], [id*=video], [class*=aniyt], [class*=mytsumi], [class*=abismo]')) return false;
 
-        // CRÍTICO: Si el elemento CONTIENE un video, iframe o spinner dentro, ES PARTE DEL REPRODUCTOR, NUNCA borrarlo!
-        if (el.querySelector('video, iframe, canvas, [class*=jw8], [class*=jw-], [class*=plyr], [class*=spinner]')) return false;
+        // CRÍTICO: Si el elemento CONTIENE un video o iframe dentro de su árbol, NO borrarlo (es el contenedor del reproductor)
+        if (el.querySelector('video, audio, iframe')) return false;
 
-        // Si tiene id o clase explícita de anuncio trampa (ej. first-click-ad en futbollibrelive/tvf90, pop-overlay, click-ad)
-        const idClass = ((el.id || '') + ' ' + (el.className || '')).toLowerCase();
-        const isExplicitAdName = /(first-click-ad|click-ad|ad-overlay|pop-overlay|popup-overlay|interads)/.test(idClass);
+        // Si contiene controles interactivos legítimos (botones, sliders, svgs, etc.)
+        if (el.querySelector('button, input, select, textarea, svg, [class*=control], [class*=btn]')) return false;
 
+        // Si tiene texto visible legítimo
+        const text = (el.innerText || el.textContent || '').trim();
         const style = window.getComputedStyle(el);
-        const isPositioned = (style.position === 'fixed' || style.position === 'absolute');
-        if (!isPositioned && !isExplicitAdName) return false;
-
-        // Si contiene controles interactivos legítimos
-        if (el.querySelector('input, button, select, textarea, a:not([target=_blank])')) return false;
-
         const opacity = parseFloat(style.opacity);
+        if (text.length > 0 && style.visibility !== 'hidden' && opacity > 0.3) return false;
+
+        // Verificar estilo visual de trampa (posicionado absoluto/fijo y transparente)
+        const isPositioned = (style.position === 'fixed' || style.position === 'absolute');
         const bg = style.backgroundColor || '';
         const isZeroAlpha = (!bg || bg === 'transparent' || (bg.includes('rgba(') && parseFloat(bg.split(',')[3] || '1') <= 0.08));
         const isTransparent = (opacity <= 0.08 || isZeroAlpha || style.visibility === 'hidden');
 
-        const text = (el.innerText || el.textContent || '').trim();
-        // Si tiene texto legítimo y visible
-        if (text.length > 0 && style.visibility !== 'hidden' && opacity > 0.3) return false;
+        // Nombre explícito de anuncio trampa
+        const idClass = ((el.id || '') + ' ' + (el.className || '')).toLowerCase();
+        const isExplicitAdName = /(first-click-ad|click-ad|ad-overlay|pop-overlay|popup-overlay|interads|pop-under|banner-overlay)/.test(idClass);
 
+        if (!isPositioned && !isExplicitAdName) return false;
         if (!isTransparent && !isExplicitAdName) return false;
 
-        const isGhostAnchor = (tag === 'A' || el.closest('a')) && isTransparent && !text;
+        // Caso 1: Enlace fantasma (<a> transparente o con target=_blank o apuntando a ad/cross-origin)
+        const anchor = (tag === 'A') ? el : el.querySelector('a');
+        if (anchor) {
+            const href = (anchor.href || '').toLowerCase();
+            const isAdLink = adDomainsRegex.test(href) || isAdOrSuspiciousUrl(href) || anchor.target === '_blank';
+            if (isAdLink || !text) return true;
+        }
 
-        // Solo considerar overlay trampa si es un nombre explícito de anuncio, o un anchor trampa sin contenido
-        return (isExplicitAdName || isGhostAnchor);
+        // Caso 2: Capa trampantojo sobre reproductor o ventana con z-index alto
+        const zIndex = parseInt(style.zIndex, 10);
+        const rect = el.getBoundingClientRect();
+        const isLargeCoverage = (rect.width > 200 && rect.height > 150);
+
+        if (isLargeCoverage && (zIndex >= 10 || isNaN(zIndex) || isExplicitAdName) && isTransparent && !text) {
+            return true;
+        }
+
+        return isExplicitAdName;
     };
 
-    // 1.4 Interceptor en Fase de Captura Pre-Clic (Destrucción inmediata + Click Pass-Through)
+    // 1.5 Interceptor en Fase de Captura Pre-Clic (Destrucción inmediata + Click Pass-Through)
     const handleCaptureClick = (e) => {
         let target = e.target;
         if (!target) return;
 
-        // Si el usuario hace clic dentro de un reproductor o control legítimo, permitir inmediatamente
-        if (target.closest('video, audio, iframe, button, input, select, textarea, [class*=jw], [class*=plyr], [class*=player], [class*=aniyt], [class*=mytsumi]')) {
+        // Si es un control legítimo o contiene texto/iconos reales, permitir inmediatamente
+        if (isControlOrMeaningful(target)) {
             return;
         }
 
         let ghost = null;
         let curr = target;
-        for (let i = 0; i < 4 && curr; i++) {
+        for (let i = 0; i < 5 && curr && curr !== document.body; i++) {
             if (isGhostOverlay(curr)) {
                 ghost = curr;
                 break;
@@ -305,7 +344,7 @@ public static class WebShield
                 window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'ghost_overlay_capture' });
             }
 
-            // Click Pass-Through: Pasar el clic al elemento legítimo que estaba oculto debajo
+            // Click Pass-Through: Pasar el clic al elemento legítimo o video que estaba atrapado debajo
             try {
                 const underlying = document.elementFromPoint(x, y);
                 if (underlying && underlying !== ghost) {
@@ -322,10 +361,11 @@ public static class WebShield
     window.addEventListener('click', handleCaptureClick, true);
     window.addEventListener('pointerdown', handleCaptureClick, true);
 
-    // 1.5 Limpieza proactiva de capas trampas en el DOM (restringido estrictamente a ads explícitos y anchors fantasma)
+    // 1.6 Limpieza proactiva de capas trampas en el DOM (restringido estrictamente a ads explícitos, anchors fantasma y hermanos sobre videos)
     const clearClickjackOverlays = () => {
         try {
-            const explicitAds = document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads]');
+            // 1. Elementos con nombres explícitos de anuncio
+            const explicitAds = document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads], [id*=popunder], [class*=popunder]');
             for (let i = 0; i < explicitAds.length; i++) {
                 const el = explicitAds[i];
                 if (isGhostOverlay(el)) {
@@ -336,6 +376,7 @@ public static class WebShield
                 }
             }
 
+            // 2. Enlaces transparentes con target=_blank
             const ghostAnchors = document.querySelectorAll('a[target=_blank]');
             for (let i = 0; i < ghostAnchors.length; i++) {
                 const a = ghostAnchors[i];
@@ -343,6 +384,22 @@ public static class WebShield
                     a.remove();
                     if (window.chrome && window.chrome.webview) {
                         window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'ghost_anchor_scanned' });
+                    }
+                }
+            }
+
+            // 3. Capas trampas colocadas como hermanas sobre contenedores de video o iframes
+            const players = document.querySelectorAll('[class*=player], [id*=player], iframe, video');
+            for (let i = 0; i < players.length; i++) {
+                const p = players[i];
+                const siblings = p.parentElement ? p.parentElement.children : [];
+                for (let j = 0; j < siblings.length; j++) {
+                    const sib = siblings[j];
+                    if (sib !== p && isGhostOverlay(sib)) {
+                        sib.remove();
+                        if (window.chrome && window.chrome.webview) {
+                            window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'player_sibling_overlay_removed' });
+                        }
                     }
                 }
             }
