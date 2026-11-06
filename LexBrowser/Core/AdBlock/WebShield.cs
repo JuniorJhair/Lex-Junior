@@ -283,6 +283,17 @@ public static class WebShield
                     div[id*='exo-slider'],
                     div[class*='pr_advertising_'],
                     div[id*='pr_advertising_'],
+                    .adsbytrafficjunky,
+                    .adsbyexoclick,
+                    .adsbyjuicyads,
+                    div[class*='banner']:not(:has(video)):not([class*='player']):not([id*='player']),
+                    div[id*='banner']:not(:has(video)):not([class*='player']):not([id*='player']),
+                    div[class*='ads-']:not(:has(video)):not([class*='player']):not([id*='player']),
+                    div[id*='ads-']:not(:has(video)):not([class*='player']):not([id*='player']),
+                    div[class*='ad-']:not(:has(video)):not([class*='player']):not([id*='player']),
+                    div[id*='ad-']:not(:has(video)):not([class*='player']):not([id*='player']),
+                    div[class*='adv-']:not(:has(video)):not([class*='player']):not([id*='player']),
+                    div[id*='adv-']:not(:has(video)):not([class*='player']):not([id*='player']),
                     [data-zone-id]:not([class*='player']),
                     .ad-container:not(#player):not([class*='player']):not(:has(video)) {
                         display: none !important;
@@ -297,6 +308,8 @@ public static class WebShield
                         padding: 0 !important;
                         opacity: 0 !important;
                         pointer-events: none !important;
+                        border: none !important;
+                        background: transparent !important;
                     }
                 `;
                 target.appendChild(style);
@@ -566,7 +579,7 @@ public static class WebShield
                           hostname.endsWith('twitch.tv') ||
                           hostname.endsWith('vimeo.com');
 
-    if (!isTrustedSite && (isTopWindow || __LEX_ENABLE_SUBFRAME_SHIELD)) {
+    if (!isTrustedSite) {
         window.addEventListener('click', handleCaptureClick, true);
         window.addEventListener('pointerdown', handleCaptureClick, true);
     }
@@ -574,7 +587,6 @@ public static class WebShield
     // 1.6 Limpieza proactiva de capas trampas en el DOM (restringido estrictamente a ads explícitos, anchors fantasma y hermanos sobre videos)
     const clearClickjackOverlays = () => {
         if (isTrustedSite) return;
-        if (!isTopWindow && !__LEX_ENABLE_SUBFRAME_SHIELD) return;
         try {
             // 1. Elementos con nombres explícitos de anuncio
             const explicitAds = document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads], [id*=popunder], [class*=popunder]');
@@ -660,14 +672,18 @@ public static class WebShield
         try {
             // A. Clic automático en botones de saltar comercial (JW, Fluid, VideoJS, VAST)
             const skipBtns = document.querySelectorAll(
-                'button[class*=""skip"" i], div[class*=""skip"" i], a[class*=""skip"" i], ' +
-                '.videoAdUiSkipButton, .vast-skip-button, .skip-button, [class*=""skip-ad"" i], [id*=""skip"" i]'
+                'button[class*=""skip"" i], div[class*=""skip"" i], a[class*=""skip"" i], span[class*=""skip"" i], ' +
+                '.videoAdUiSkipButton, .vast-skip-button, .skip-button, .skip_button, .skip_ad, [class*=""skip-ad"" i], [id*=""skip"" i], ' +
+                '.fluid_ad_countdown, [class*=""countdown"" i]'
             );
             for (let i = 0; i < skipBtns.length; i++) {
                 const b = skipBtns[i];
                 if (b && b.offsetParent !== null && typeof b.click === 'function') {
-                    b.click();
-                    break;
+                    const txt = (b.textContent || '').trim().toLowerCase();
+                    if (!txt.includes('in ') || txt.includes('skip ad in 0') || txt.includes('skip in 0') || txt === 'skip' || txt === 'saltar' || txt === 'skip ad') {
+                        b.click();
+                        break;
+                    }
                 }
             }
 
@@ -680,7 +696,8 @@ public static class WebShield
                 if (dur && !isNaN(dur) && dur > 0 && dur <= 90) {
                     const hasAdMarker = document.querySelector(
                         '[class*=""ad-"" i], [class*=""ad_"" i], [class*=""vast"" i], ' +
-                        '.videoAdUi, [id*=""ad-"" i], [id*=""ad_"" i]'
+                        '.videoAdUi, [id*=""ad-"" i], [id*=""ad_"" i], .skip_button, .skip_ad, [class*=""fluid"" i], ' +
+                        '.fluid_ad_countdown, [class*=""countdown"" i], [class*=""skip"" i], [id*=""skip"" i]'
                     );
                     if (hasAdMarker) {
                         v.muted = true;

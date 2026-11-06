@@ -1,35 +1,58 @@
 using System;
 using System.Text;
+using Microsoft.Web.WebView2.Core;
 
 namespace LexBrowser.Core.AdBlock;
 
 /// <summary>
 /// Respuestas señuelo (stubs / mocks) con HTTP 200 OK para recursos publicitarios conocidos
 /// que los reproductores de streaming (anime, series, video) esperan para iniciar la reproducción.
-/// Basado en las reglas de redirección (\) de Brave Shields y uBlock Origin.
+/// Basado en las reglas de redirección y mocks de Brave Shields y uBlock Origin.
 /// </summary>
 public static class AdBlockResources
 {
     private static readonly byte[] VastEmptyBytes = Encoding.UTF8.GetBytes("<VAST version=\"3.0\"></VAST>");
+    private static readonly byte[] VmapEmptyBytes = Encoding.UTF8.GetBytes("<vmap:VMAP xmlns:vmap=\"http://www.iab.net/videosuite/vmap\" version=\"1.0\"></vmap:VMAP>");
     private static readonly byte[] PopadsDummyBytes = Encoding.UTF8.GetBytes(
-        "window.aclib={runPop:function(){return false;},runBanner:function(){return false;},runSlider:function(){return false;},runInterstitial:function(){return false;},runVideo:function(){return false;}};" +
-        "window.popMagic={init:function(){},pop:function(){},capture:function(){},click:function(){},check:function(){return false;}};" +
-        "(function(){delete window.PopAds;delete window.popns;Object.defineProperties(window,{PopAds:{value:{}},popns:{value:{}}});})();");
+        "window.aclib={runPop:function(){return false;},runBanner:function(){return false;},runSlider:function(){return false;},runInterstitial:function(){return false;},runVideo:function(){return false;}};\n" +
+        "window.popMagic={init:function(){},pop:function(){},capture:function(){},click:function(){},check:function(){return false;}};\n" +
+        "(function(){try{delete window.PopAds;delete window.popns;Object.defineProperties(window,{PopAds:{value:{}},popns:{value:{}}});}catch(_){}})();");
+    private static readonly byte[] NoopJsBytes = Encoding.UTF8.GetBytes("/* noop */\ntry{window.popMagic={init:function(){},pop:function(){},check:function(){return false;}};}catch(_){}");
     private static readonly byte[] InstreamStatusBytes = Encoding.UTF8.GetBytes("window.google_ad_status = 1;");
+    private static readonly byte[] DailymotionCanaryBytes = Encoding.UTF8.GetBytes("window.__NATIVEADS_CANARY__ = true;");
+    private static readonly byte[] Gif1x1Bytes = new byte[] { 71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 255, 255, 255, 255, 255, 255, 33, 249, 4, 1, 10, 0, 1, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 76, 1, 0, 59 };
     private static readonly byte[] GoogleImaShimBytes = Encoding.UTF8.GetBytes(GoogleImaScript);
 
     public static bool TryGetRedirectStub(Uri uri, out byte[] responseBytes, out string contentType)
-        => TryGetRedirectStub(uri, out responseBytes, out contentType, null);
+        => TryGetRedirectStub(uri, out responseBytes, out contentType, null, null);
+
+    public static bool TryGetRedirectStub(Uri uri, out byte[] responseBytes, out string contentType, string? originHost)
+        => TryGetRedirectStub(uri, out responseBytes, out contentType, originHost, null);
 
     /// <summary>
     /// Comprueba si la URI coincide con un recurso que requiere un reemplazo 200 OK (stub)
     /// en lugar de un bloqueo 403, para que el reproductor no se congele.
     /// </summary>
-    public static bool TryGetRedirectStub(Uri uri, out byte[] responseBytes, out string contentType, string? originHost = null)
+    public static bool TryGetRedirectStub(
+        Uri uri, 
+        out byte[] responseBytes, 
+        out string contentType, 
+        string? originHost, 
+        CoreWebView2WebResourceContext? resourceContext)
     {
         string host = uri.Host;
         string path = uri.AbsolutePath;
         string full = uri.AbsoluteUri;
+
+        // 0. Dailymotion Canary Script (Anti-AdBlock Bypass de Brave: @@||dailymotion.com/nativeads.js^)
+        if ((host.EndsWith("dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
+             (!string.IsNullOrEmpty(originHost) && originHost.EndsWith("dailymotion.com", StringComparison.OrdinalIgnoreCase))) &&
+            (path.EndsWith("nativeads.js", StringComparison.OrdinalIgnoreCase) || path.Contains("/nativeads.")))
+        {
+            responseBytes = DailymotionCanaryBytes;
+            contentType = "Content-Type: application/javascript; charset=utf-8";
+            return true;
+        }
 
         // 1. Google IMA SDK (ima3.js) - evita la pantalla negra en reproductores con ad-bidding.
         // Controlado por el interruptor independiente EnableImaSdkStub en Configuración.
@@ -49,26 +72,73 @@ public static class AdBlockResources
             return true;
         }
 
-        // 2. VAST Empty XML para reproductores de streaming (Fluid Player, VideoJS, JWPlayer, etc.)
-        // Al responder '0 anuncios en VAST' con 200 OK, el reproductor inicia inmediatamente el video principal
-        // sin reproducir el comercial pre-roll ni contar hacia atrás el reloj de espera.
-        // Excepción: Dailymotion cuenta con su propio módulo aislado (DailymotionOptimizer).
+        // 2. VMAP / VAST Empty XML para reproductores de streaming (Fluid Player, VideoJS, JWPlayer, Dailymotion VMAP)
+        // Al responder '0 anuncios en VAST/VMAP' con 200 OK, el reproductor inicia inmediatamente el video principal
+        // sin reproducir comerciales pre-roll ni contar hacia atrás el reloj de espera.
+        bool isVmap = full.Contains("format=vmap", StringComparison.OrdinalIgnoreCase) ||
+                      full.Contains("output=vmap", StringComparison.OrdinalIgnoreCase) ||
+                      full.Contains("type=vmap", StringComparison.OrdinalIgnoreCase) ||
+                      full.Contains("_VMAP_", StringComparison.OrdinalIgnoreCase) ||
+                      full.Contains("monetization", StringComparison.OrdinalIgnoreCase) ||
+                      path.Contains("/vmap", StringComparison.OrdinalIgnoreCase) ||
+                      path.EndsWith("vmap.xml", StringComparison.OrdinalIgnoreCase);
+
+        if (isVmap)
+        {
+            responseBytes = VmapEmptyBytes;
+            contentType = "Content-Type: text/xml; charset=utf-8";
+            return true;
+        }
+
+        // 3. Stubs para redes publicitarias conocidas de video y popups
+        bool isAdNetwork = host.Contains("adtng.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("juicyads.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
+                           host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase);
+
+        bool isScriptContext = resourceContext == CoreWebView2WebResourceContext.Script ||
+                               path.EndsWith(".js", StringComparison.OrdinalIgnoreCase);
+
+        bool isImageContext = resourceContext == CoreWebView2WebResourceContext.Image ||
+                              path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+                              path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                              path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                              path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                              path.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
+
+        if (isAdNetwork)
+        {
+            if (isScriptContext)
+            {
+                responseBytes = NoopJsBytes;
+                contentType = "Content-Type: application/javascript; charset=utf-8";
+                return true;
+            }
+            if (isImageContext)
+            {
+                responseBytes = Gif1x1Bytes;
+                contentType = "Content-Type: image/gif";
+                return true;
+            }
+            // Por defecto para XHR/Fetch/XML o solicitudes de video ad: devolver VAST vacío
+            responseBytes = VastEmptyBytes;
+            contentType = "Content-Type: text/xml; charset=utf-8";
+            return true;
+        }
+
         bool isVast = !isDailymotion &&
                       (full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("format=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("output=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("type=vast", StringComparison.OrdinalIgnoreCase) ||
                        path.Contains("/vast", StringComparison.OrdinalIgnoreCase) ||
-                       path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase) ||
-                       host.Contains("adtng.com", StringComparison.OrdinalIgnoreCase) ||
-                       ((host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("splash.php", StringComparison.OrdinalIgnoreCase) || path.Contains("vast.php", StringComparison.OrdinalIgnoreCase) || path.Contains("tag.php", StringComparison.OrdinalIgnoreCase) || path.Contains("/delivery/", StringComparison.OrdinalIgnoreCase))) ||
-                       ((host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/delivery/", StringComparison.OrdinalIgnoreCase) || path.Contains("impression", StringComparison.OrdinalIgnoreCase))) ||
-                       ((host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("splash", StringComparison.OrdinalIgnoreCase) || path.Contains("/delivery/", StringComparison.OrdinalIgnoreCase))));
+                       path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase));
 
         if (isVast)
         {
@@ -77,7 +147,7 @@ public static class AdBlockResources
             return true;
         }
 
-        // 3. PopAds / PopCash / Aclib / PopMagic / TSyndicate dummy
+        // 4. PopAds / PopCash / Aclib / PopMagic / TSyndicate dummy
         if (host.Contains("popads.net", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith("/popads.js", StringComparison.OrdinalIgnoreCase) ||
             (host.Contains("popcash.net", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/pop.js", StringComparison.OrdinalIgnoreCase)) ||
@@ -90,7 +160,7 @@ public static class AdBlockResources
             return true;
         }
 
-        // 4. DoubleClick Instream Ad Status
+        // 5. DoubleClick Instream Ad Status
         if (path.EndsWith("/instream/ad_status.js", StringComparison.OrdinalIgnoreCase))
         {
             responseBytes = InstreamStatusBytes;

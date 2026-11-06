@@ -1268,7 +1268,7 @@ public partial class MainWindow : Window
 
                 byte[] stubBytes = Array.Empty<byte>();
                 string stubContentType = string.Empty;
-                bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType, originHost);
+                bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType, originHost, e.ResourceContext);
                 string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
                 if (isRedirectStub || AdBlockFilter.ShouldBlock(uri))
                 {

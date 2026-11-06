@@ -27,12 +27,29 @@ public static class DailymotionOptimizer
     if (!isDailymotion) return;
 
     // ─────────────────────────────────────────────────────────────────
+    // 0. SCRIPTLET CANARY DE DAILYMOTION (Anti-AdBlock Bypass de Brave / uBO)
+    // ─────────────────────────────────────────────────────────────────
+    try {
+        window.__NATIVEADS_CANARY__ = true;
+        Object.defineProperty(window, '__NATIVEADS_CANARY__', {
+            get: function() { return true; },
+            set: function() {},
+            configurable: true
+        });
+    } catch(_) {}
+
+    // ─────────────────────────────────────────────────────────────────
     // 1. OCULTACIÓN COSMÉTICA: Banners y patrocinadores en marco principal
     // ─────────────────────────────────────────────────────────────────
     try {
         const style = document.createElement('style');
         style.id = 'lex-dm-cosmetics';
         style.textContent = `
+            .WatchingDiscovery__adSection___eLtfR,
+            div[class^=""AdBanner""],
+            div[class^=""DisplayAd""],
+            div[class^=""NewWatchingDiscovery__adSection""],
+            div[class^=""VideoInfo__videoInfoAdContainer""],
             div[data-testid=""ad-slot""],
             div[class*=""ad_slot"" i],
             div[class*=""AdSlot"" i],
@@ -73,6 +90,8 @@ public static class DailymotionOptimizer
                 padding: 0 !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
+                border: none !important;
+                background: transparent !important;
             }
         `;
         (document.head || document.documentElement).appendChild(style);
@@ -157,7 +176,8 @@ public static class DailymotionOptimizer
                                     src.includes('/ad/') ||
                                     src.includes('googleads') ||
                                     src.includes('doubleclick') ||
-                                    src.includes('dmxleo') ||
+                                    src.includes('_VMAP_') ||
+                                    src.includes('monetization') ||
                                     src.includes('bannerflow')) && isShortDuration;
 
                 if (isAdSource) {

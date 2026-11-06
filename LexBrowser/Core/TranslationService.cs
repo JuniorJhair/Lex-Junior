@@ -13,61 +13,6 @@ namespace LexBrowser.Core;
 public static class TranslationService
 {
     /// <summary>
-    /// Script inyectado universalmente al crear documentos para neutralizar
-    /// de inmediato cualquier banner invasivo, tooltip o menú de Google Translate.
-    /// Garantiza 0% impacto visual no deseado y 0% consumo en reposo.
-    /// </summary>
-    public static readonly string InjectedShieldScript = @"
-(function() {
-    function injectShield() {
-        if (!document.getElementById('lex_gt_shield')) {
-            var st = document.createElement('style');
-            st.id = 'lex_gt_shield';
-            st.textContent = `
-                .goog-te-banner-frame,
-                .goog-te-menu-frame,
-                .skiptranslate,
-                #goog-gt-tt,
-                #goog-gt-vt,
-                .goog-tooltip,
-                iframe[class*=""goog-te-""],
-                iframe[class*=""VIpgJd""],
-                iframe[id*=""goog""],
-                div[id*=""goog-gt-""],
-                .VIpgJd-ZVi9od-OR95-s8QkWb-wOHMyf,
-                .VIpgJd-ZVi9od-SmfZ-OueRq-Wrql6b,
-                .VIpgJd-ZVi9od-aZ2wEe-wOHMyf,
-                .VIpgJd-ZVi9od-xl07Ob-OEVmcd {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    height: 0 !important;
-                    width: 0 !important;
-                    max-height: 0 !important;
-                    pointer-events: none !important;
-                }
-                body {
-                    top: 0px !important;
-                    position: static !important;
-                    margin-top: 0px !important;
-                }
-            `;
-            (document.head || document.documentElement).appendChild(st);
-        }
-        if (document.body && document.body.style.top && document.body.style.top !== '0px') {
-            document.body.style.top = '0px';
-        }
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', injectShield);
-    } else {
-        injectShield();
-    }
-})();
-";
-
-    /// <summary>
     /// Detecta el código de idioma principal de la página HTML actual (ej. "en", "ja", "fr", "es").
     /// </summary>
     public static async Task<string> DetectPageLanguageAsync(CoreWebView2? core)
