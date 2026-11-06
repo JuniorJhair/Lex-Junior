@@ -919,6 +919,7 @@ public partial class MainWindow : Window
         try
         {
             await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(WebShield.InjectedScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(PasswordManager.InjectedPasswordScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(TranslationService.InjectedShieldScript);
         }
