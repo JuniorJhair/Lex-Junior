@@ -1159,6 +1159,7 @@ public partial class MainWindow : Window
         // telemetría y banners (Script, XHR, Fetch, Image, Ping, Other).
         // Se excluyen deliberadamente 'Media' (streaming de video/audio de cientos de MBs),
         // 'Stylesheet' (CSS) y 'Font' para no saturar el bus COM ni retener buffers en memoria.
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Document);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Script);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.XmlHttpRequest);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Fetch);
@@ -1211,6 +1212,18 @@ public partial class MainWindow : Window
                         if (win._activeTab == tab)
                             win.UpdateShieldBadgeText();
                     });
+                }
+                else
+                {
+                    // Registro diagnóstico forense de recursos externos permitidos (Scripts, Iframes, XHR, Fetch)
+                    string reqHost = uri.Host;
+                    string? currentHost = tab.CurrentUri?.Host;
+                    if (!string.IsNullOrEmpty(currentHost) &&
+                        !reqHost.EndsWith(currentHost, StringComparison.OrdinalIgnoreCase) &&
+                        !AdBlockFilter.IsTrustedDomain(reqHost))
+                    {
+                        ShieldLogger.Log("REQUEST_ALLOWED", currentHost, uri.AbsoluteUri, e.ResourceContext.ToString(), "External third-party resource");
+                    }
                 }
             }
         };

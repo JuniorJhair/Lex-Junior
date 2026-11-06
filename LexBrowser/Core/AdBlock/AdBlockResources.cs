@@ -49,7 +49,9 @@ public static class AdBlockResources
                         host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
                         host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase)) && path.Contains("splash.php", StringComparison.OrdinalIgnoreCase)) ||
                       ((host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
-                        host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase)));
+                        host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase))) ||
+                      ((host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
+                        host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("splash", StringComparison.OrdinalIgnoreCase)));
 
         if (isVast)
         {
@@ -58,12 +60,13 @@ public static class AdBlockResources
             return true;
         }
 
-        // 3. PopAds / PopCash / Aclib / PopMagic dummy
+        // 3. PopAds / PopCash / Aclib / PopMagic / TSyndicate dummy
         if (host.Contains("popads.net", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith("/popads.js", StringComparison.OrdinalIgnoreCase) ||
             (host.Contains("popcash.net", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/pop.js", StringComparison.OrdinalIgnoreCase)) ||
             path.EndsWith("/aclib.js", StringComparison.OrdinalIgnoreCase) ||
-            path.EndsWith("/ad-provider.js", StringComparison.OrdinalIgnoreCase))
+            path.EndsWith("/ad-provider.js", StringComparison.OrdinalIgnoreCase) ||
+            (host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) && path.Contains("video.instant.message.js", StringComparison.OrdinalIgnoreCase)))
         {
             responseBytes = PopadsDummyBytes;
             contentType = "Content-Type: application/javascript; charset=utf-8";
