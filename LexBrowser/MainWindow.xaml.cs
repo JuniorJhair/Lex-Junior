@@ -1058,11 +1058,12 @@ public partial class MainWindow : Window
                               url.Contains("gsi/select", StringComparison.OrdinalIgnoreCase);
 
             // 2.1 Si la URL es vacía o about:blank sin interacción del usuario en un sitio no confiable, bloquear popunder
+            string tabDesc = $"Tab:{tab.TabId} ({(currentUri != null ? currentUri.Host : "blank")})";
             if (string.IsNullOrWhiteSpace(url) || url == "about:blank")
             {
                 if (isFromSubframe || !e.IsUserInitiated)
                 {
-                    ShieldLogger.Log("NEW_WINDOW_CANCELLED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", "Empty/about:blank popunder");
+                    ShieldLogger.Log("NEW_WINDOW_CANCELLED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", "Empty/about:blank popunder", tabDesc);
                     e.Handled = true;
                     return;
                 }
@@ -1091,7 +1092,7 @@ public partial class MainWindow : Window
 
                     if (shouldBlock)
                     {
-                        ShieldLogger.Log("NEW_WINDOW_CANCELLED", currentUri?.Host ?? "unknown", uri.AbsoluteUri, isFromSubframe ? "Subframe" : "MainFrame", blockReason);
+                        ShieldLogger.Log("NEW_WINDOW_CANCELLED", currentUri?.Host ?? "unknown", uri.AbsoluteUri, isFromSubframe ? "Subframe" : "MainFrame", blockReason, tabDesc);
                         e.Handled = true;
                         win.Dispatcher.Invoke(() =>
                         {
@@ -1119,7 +1120,7 @@ public partial class MainWindow : Window
             }
             catch { }
 
-            ShieldLogger.Log("NEW_WINDOW_ALLOWED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", isOAuthUrl ? "OAuth login window" : (hasPopupSize ? "Popup window with dimensions" : "User initiated new window"));
+            ShieldLogger.Log("NEW_WINDOW_ALLOWED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", isOAuthUrl ? "OAuth login window" : (hasPopupSize ? "Popup window with dimensions" : "User initiated new window"), tabDesc);
 
             var deferral = e.GetDeferral();
             win.Dispatcher.InvokeAsync(async () =>
@@ -1216,6 +1217,7 @@ public partial class MainWindow : Window
                 byte[] stubBytes = Array.Empty<byte>();
                 string stubContentType = string.Empty;
                 bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType);
+                string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
                 if (isRedirectStub || AdBlockFilter.ShouldBlock(uri))
                 {
                     int statusCode = 403;
@@ -1225,25 +1227,25 @@ public partial class MainWindow : Window
 
                     if (isRedirectStub)
                     {
-                        // Stubs HTTP 200 OK para recursos conocidos (IMA SDK, VAST XML vacío, PopAds dummy, dmads)
+                        // Stubs HTTP 200 OK para recursos conocidos (IMA SDK, VAST XML vacío, PopAds dummy)
                         // que los reproductores de streaming esperan para no congelarse ni mostrar pantalla negra.
                         statusCode = 200;
                         statusReason = "OK";
                         contentType = stubContentType;
                         responseBytes = stubBytes;
 
-                        ShieldLogger.Log("REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "AdBlockResources redirect stub (200 OK)");
+                        ShieldLogger.Log("REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "AdBlockResources redirect stub (200 OK)", tabDesc);
                     }
                     else if (uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
                              uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
                     {
                         statusCode = 204;
                         statusReason = "No Content";
-                        ShieldLogger.Log("REQUEST_BLOCKED_204", "youtube.com", uri.AbsoluteUri, frameDesc, "YouTube ad/telemetry endpoint");
+                        ShieldLogger.Log("REQUEST_BLOCKED_204", "youtube.com", uri.AbsoluteUri, frameDesc, "YouTube ad/telemetry endpoint", tabDesc);
                     }
                     else
                     {
-                        ShieldLogger.Log("REQUEST_BLOCKED_403", originHost, uri.AbsoluteUri, frameDesc, "Blocked ad domain or pattern");
+                        ShieldLogger.Log("REQUEST_BLOCKED_403", originHost, uri.AbsoluteUri, frameDesc, "Blocked ad domain or pattern", tabDesc);
                     }
 
                     string responseHeaders = $"{contentType}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: *";
@@ -1271,13 +1273,13 @@ public partial class MainWindow : Window
                                           e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
                                           e.ResourceContext == CoreWebView2WebResourceContext.Document))
                     {
-                        ShieldLogger.Log("REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "Subframe media/network request");
+                        ShieldLogger.Log("REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "Subframe media/network request", tabDesc);
                     }
                     else if (!string.IsNullOrEmpty(currentHost) &&
                              !reqHost.EndsWith(currentHost, StringComparison.OrdinalIgnoreCase) &&
                              !AdBlockFilter.IsTrustedDomain(reqHost))
                     {
-                        ShieldLogger.Log("REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "External third-party resource");
+                        ShieldLogger.Log("REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "External third-party resource", tabDesc);
                     }
                 }
             }
@@ -1322,7 +1324,8 @@ public partial class MainWindow : Window
             {
                 frame.NavigationStarting += (fs, fe) =>
                 {
-                    ShieldLogger.Log("SUBFRAME_NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "unknown", fe.Uri, "Subframe", $"IsUserInitiated={fe.IsUserInitiated}, IsRedirected={fe.IsRedirected}");
+                    string fTabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+                    ShieldLogger.Log("SUBFRAME_NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "unknown", fe.Uri, "Subframe", $"IsUserInitiated={fe.IsUserInitiated}, IsRedirected={fe.IsRedirected}", fTabDesc);
                 };
             }
             catch { }
@@ -1391,7 +1394,8 @@ public partial class MainWindow : Window
                         ? "OVERLAY_REMOVED"
                         : (reason.Contains("window_open") ? "POPUP_DECOY_INJECTED" : "SCRIPT_DEFUSED");
 
-                    ShieldLogger.Log(eventType, tab.CurrentUri?.Host ?? "unknown", string.IsNullOrEmpty(adUrl) ? (tab.CurrentUri?.AbsoluteUri ?? "") : adUrl, "DOM", reason);
+                    string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+                    ShieldLogger.Log(eventType, tab.CurrentUri?.Host ?? "unknown", string.IsNullOrEmpty(adUrl) ? (tab.CurrentUri?.AbsoluteUri ?? "") : adUrl, "DOM", reason, tabDesc);
 
                     win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                     {
@@ -1700,7 +1704,8 @@ public partial class MainWindow : Window
         core.NavigationStarting += (s, e) =>
         {
             if (tab.IsDisposed) return;
-            ShieldLogger.Log("NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}");
+            string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+            ShieldLogger.Log("NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}", tabDesc);
 
             // Filtro de seguridad y anti-secuestro de pestaña (Tab-under / Reverse Popunder)
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Uri, UriKind.Absolute, out var targetUri))
@@ -1711,7 +1716,7 @@ public partial class MainWindow : Window
                     if (AdBlockFilter.ShouldBlock(targetUri))
                     {
                         e.Cancel = true;
-                        ShieldLogger.Log("NAVIGATION_CANCELLED", tab.CurrentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Blocked ad/malware domain on navigation");
+                        ShieldLogger.Log("NAVIGATION_CANCELLED", tab.CurrentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Blocked ad/malware domain on navigation", tabDesc);
                         return;
                     }
 
@@ -1728,7 +1733,7 @@ public partial class MainWindow : Window
                             (DateTime.UtcNow - tab.LastNewWindowRequestedTime.Value).TotalMilliseconds < 3500)
                         {
                             e.Cancel = true;
-                            ShieldLogger.Log("TAB_UNDER_PREVENTED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Script navigation hijacked original tab after new window open");
+                            ShieldLogger.Log("TAB_UNDER_PREVENTED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Script navigation hijacked original tab after new window open", tabDesc);
                             return;
                         }
 
@@ -1736,7 +1741,7 @@ public partial class MainWindow : Window
                         if (AdBlockFilter.IsSuspiciousPopup(targetUri, currentUri))
                         {
                             e.Cancel = true;
-                            ShieldLogger.Log("NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Suspicious script-initiated cross-origin redirect");
+                            ShieldLogger.Log("NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Suspicious script-initiated cross-origin redirect", tabDesc);
                             return;
                         }
                     }

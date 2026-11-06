@@ -259,6 +259,39 @@
 
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <StackPanel>
+                                <CheckBox x:Name="ChkImaSdkStub" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="Simulador de Google IMA SDK (ima3.js)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Neutraliza solicitudes publicitarias de video simulando la API de Google IMA. Desactívalo para usar el SDK original de Google si un reproductor presenta incompatibilidad." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <StackPanel>
+                                <CheckBox x:Name="ChkCosmeticShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="Filtrado Cosmético de Anuncios y Banners" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Oculta espacios publicitarios vacíos y contenedores de banners promocionales para una visualización limpia." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <StackPanel>
+                                <CheckBox x:Name="ChkSubframeWebShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="Inspección de Clics en Submarcos / Iframes (WebShield)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Por defecto desactivado para respetar el DOM nativo y controles táctiles/clic de reproductores en subdominios como Dailymotion o YouTube." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <StackPanel>
                                 <CheckBox x:Name="ChkEnableHistory" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Guardar Historial de Navegación" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>

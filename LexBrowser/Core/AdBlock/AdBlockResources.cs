@@ -17,16 +17,6 @@ public static class AdBlockResources
         "(function(){delete window.PopAds;delete window.popns;Object.defineProperties(window,{PopAds:{value:{}},popns:{value:{}}});})();");
     private static readonly byte[] InstreamStatusBytes = Encoding.UTF8.GetBytes("window.google_ad_status = 1;");
     private static readonly byte[] GoogleImaShimBytes = Encoding.UTF8.GetBytes(GoogleImaScript);
-    private static readonly byte[] DailymotionAdsStubBytes = Encoding.UTF8.GetBytes(
-        "(function(){" +
-        "window.dmads=window.dmads||{};" +
-        "window.dmads.init=function(){};" +
-        "window.dmads.getBids=function(){return Promise.resolve([]);};" +
-        "window.dmads.hasAd=function(){return false;};" +
-        "window.dmads.destroy=function(){};" +
-        "})();");
-    private static readonly byte[] EmptyHtmlBytes = Encoding.UTF8.GetBytes("<!DOCTYPE html><html><head></head><body></body></html>");
-    private static readonly byte[] EmptyJsonBytes = Encoding.UTF8.GetBytes("{}");
 
     /// <summary>
     /// Comprueba si la URI coincide con un recurso que requiere un reemplazo 200 OK (stub)
@@ -39,7 +29,9 @@ public static class AdBlockResources
         string full = uri.AbsoluteUri;
 
         // 1. Google IMA SDK (ima3.js) - evita la pantalla negra en reproductores con ad-bidding
-        if (host.EndsWith("googleapis.com", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/ima3.js", StringComparison.OrdinalIgnoreCase))
+        // Controlado por el interruptor independiente EnableImaSdkStub en Configuración.
+        if (SettingsManager.Current?.EnableImaSdkStub != false &&
+            host.EndsWith("googleapis.com", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/ima3.js", StringComparison.OrdinalIgnoreCase))
         {
             responseBytes = GoogleImaShimBytes;
             contentType = "Content-Type: application/javascript; charset=utf-8";
@@ -90,28 +82,6 @@ public static class AdBlockResources
         {
             responseBytes = InstreamStatusBytes;
             contentType = "Content-Type: application/javascript; charset=utf-8";
-            return true;
-        }
-
-        // 5. Dailymotion Ad Service (dmads.dailymotion.com)
-        // Neutraliza Prebid y el subframe publicitario devolviendo promesas resueltas vacías (0 anuncios)
-        // para que el reproductor inicie el video inmediatamente sin esperar pujas ni fallar por CORS.
-        if (host.Equals("dmads.dailymotion.com", StringComparison.OrdinalIgnoreCase))
-        {
-            if (path.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
-            {
-                responseBytes = DailymotionAdsStubBytes;
-                contentType = "Content-Type: application/javascript; charset=utf-8";
-                return true;
-            }
-            if (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".htm", StringComparison.OrdinalIgnoreCase))
-            {
-                responseBytes = EmptyHtmlBytes;
-                contentType = "Content-Type: text/html; charset=utf-8";
-                return true;
-            }
-            responseBytes = EmptyJsonBytes;
-            contentType = "Content-Type: application/json; charset=utf-8";
             return true;
         }
 

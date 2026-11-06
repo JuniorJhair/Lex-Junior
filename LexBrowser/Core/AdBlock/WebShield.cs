@@ -19,11 +19,19 @@ public static class WebShield
     /// <summary>
     /// Devuelve el script de escudo a inyectar en el documento según las preferencias actuales.
     /// </summary>
-    public static string InjectedScript => GetInjectedScript(EnableVideoPlayerDefuser);
+    public static string InjectedScript => GetInjectedScript(
+        EnableVideoPlayerDefuser,
+        SettingsManager.Current?.EnableWebShieldInSubframes ?? false,
+        SettingsManager.Current?.EnableCosmeticShield ?? true
+    );
 
-    public static string GetInjectedScript(bool enableVideoDefuser)
+    public static string GetInjectedScript(bool enableVideoDefuser, bool enableSubframes = false, bool enableCosmetic = true)
     {
-        return enableVideoDefuser ? BaseScript + VideoPlayerDefuserScript : BaseScript;
+        string script = BaseScript
+            .Replace("const __LEX_ENABLE_SUBFRAME_SHIELD = false;", $"const __LEX_ENABLE_SUBFRAME_SHIELD = {(enableSubframes ? "true" : "false")};")
+            .Replace("const __LEX_ENABLE_COSMETIC_SHIELD = true;", $"const __LEX_ENABLE_COSMETIC_SHIELD = {(enableCosmetic ? "true" : "false")};");
+
+        return enableVideoDefuser ? script + VideoPlayerDefuserScript : script;
     }
 
     /// <summary>
@@ -35,7 +43,12 @@ public static class WebShield
     if (window.__lex_web_shield_injected) return;
     window.__lex_web_shield_injected = true;
 
+    const __LEX_ENABLE_SUBFRAME_SHIELD = false;
+    const __LEX_ENABLE_COSMETIC_SHIELD = true;
+
     const hostname = window.location.hostname || '';
+    const isTopWindow = (window.top === window.self);
+
     const isYouTube = hostname === 'youtube.com' ||
                       hostname === 'www.youtube.com' ||
                       hostname.endsWith('.youtube.com') ||
@@ -44,6 +57,15 @@ public static class WebShield
 
     // YouTube cuenta con su propio optimizador aislado y no debe ser intervenido por este escudo genérico
     if (isYouTube) return;
+
+    const isTrustedSite = hostname.endsWith('dailymotion.com') ||
+                          hostname.endsWith('youtube.com') ||
+                          hostname.endsWith('twitch.tv') ||
+                          hostname.endsWith('vimeo.com');
+
+    // Si es un iframe de una plataforma de video confiable o los subframes están desactivados,
+    // NO inyectar ni intervenir en el marco del reproductor para garantizar su reproducción nativa pura
+    if (!isTopWindow && (isTrustedSite || !__LEX_ENABLE_SUBFRAME_SHIELD)) return;
 
     // ─────────────────────────────────────────────────────────────────
     // 0. SCRIPTLETS DE EMULACIÓN ANTI-ANTI-ADBLOCK & NOTIFICATION DEFUSER
@@ -97,16 +119,6 @@ public static class WebShield
         window._pop = [];
         window._monetag = {};
         window.adcash = {};
-
-        // Emulación de servicio publicitario de Dailymotion para evitar que su reproductor quede colgado
-        if (hostname.endsWith('dailymotion.com')) {
-            window.dmads = window.dmads || {
-                init: function(){},
-                getBids: function(){ return Promise.resolve([]); },
-                hasAd: function(){ return false; },
-                destroy: function(){}
-            };
-        }
 
         // Neutralizar variables globales de inyección VAST en reproductores incrustados (Brave / uBO set-constant)
         try {
@@ -219,6 +231,7 @@ public static class WebShield
     try {
         const applyCosmeticStyles = function() {
             try {
+                if (!__LEX_ENABLE_COSMETIC_SHIELD) return;
                 if (document.getElementById('__lex_cosmetic_shield')) return;
                 const target = document.head || document.documentElement;
                 if (!target) return;
@@ -500,10 +513,21 @@ public static class WebShield
             const x = e.clientX;
             const y = e.clientY;
 
+            const r = ghost.getBoundingClientRect ? ghost.getBoundingClientRect() : { width: 0, height: 0 };
+            const cs = window.getComputedStyle ? window.getComputedStyle(ghost) : {};
+            const tag = ghost.tagName || '';
+            const id = ghost.id ? ('#' + ghost.id) : '';
+            const cls = (ghost.className && typeof ghost.className === 'string') ? ('.' + ghost.className.trim().split(/\s+/).join('.')) : '';
+            const zi = cs.zIndex || 'auto';
+            const elDesc = `${tag}${id}${cls} [${Math.round(r.width)}x${Math.round(r.height)}, z:${zi}]`;
+
             ghost.remove();
 
             if (window.chrome && window.chrome.webview) {
-                window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'ghost_overlay_capture' });
+                window.chrome.webview.postMessage({
+                    type: 'ad_blocked',
+                    reason: `ghost_overlay_capture -> ${elDesc}`
+                });
             }
 
             // Click Pass-Through: Pasar el clic al elemento legítimo o video que estaba atrapado debajo
@@ -539,9 +563,16 @@ public static class WebShield
             for (let i = 0; i < explicitAds.length; i++) {
                 const el = explicitAds[i];
                 if (isGhostOverlay(el)) {
+                    const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 0, height: 0 };
+                    const tag = el.tagName || '';
+                    const id = el.id ? ('#' + el.id) : '';
+                    const cls = (el.className && typeof el.className === 'string') ? ('.' + el.className.trim().split(/\s+/).join('.')) : '';
                     el.remove();
                     if (window.chrome && window.chrome.webview) {
-                        window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'ghost_overlay_explicit' });
+                        window.chrome.webview.postMessage({
+                            type: 'ad_blocked',
+                            reason: `ghost_overlay_explicit -> ${tag}${id}${cls} [${Math.round(r.width)}x${Math.round(r.height)}]`
+                        });
                     }
                 }
             }
@@ -551,9 +582,13 @@ public static class WebShield
             for (let i = 0; i < ghostAnchors.length; i++) {
                 const a = ghostAnchors[i];
                 if (isGhostOverlay(a)) {
+                    const r = a.getBoundingClientRect ? a.getBoundingClientRect() : { width: 0, height: 0 };
                     a.remove();
                     if (window.chrome && window.chrome.webview) {
-                        window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'ghost_anchor_scanned' });
+                        window.chrome.webview.postMessage({
+                            type: 'ad_blocked',
+                            reason: `ghost_anchor_scanned -> A [${Math.round(r.width)}x${Math.round(r.height)}]`
+                        });
                     }
                 }
             }
@@ -568,9 +603,13 @@ public static class WebShield
                     for (let j = 0; j < siblings.length; j++) {
                         const sib = siblings[j];
                         if (sib !== p && isGhostOverlay(sib)) {
+                            const r = sib.getBoundingClientRect ? sib.getBoundingClientRect() : { width: 0, height: 0 };
                             sib.remove();
                             if (window.chrome && window.chrome.webview) {
-                                window.chrome.webview.postMessage({ type: 'ad_blocked', reason: 'player_sibling_overlay_removed' });
+                                window.chrome.webview.postMessage({
+                                    type: 'ad_blocked',
+                                    reason: `player_sibling_overlay_removed -> ${sib.tagName} [${Math.round(r.width)}x${Math.round(r.height)}]`
+                                });
                             }
                         }
                     }

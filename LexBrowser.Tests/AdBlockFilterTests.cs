@@ -1,3 +1,4 @@
+using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
 using Xunit;
 
@@ -108,17 +109,24 @@ public class AdBlockFilterTests
         Assert.Contains("<VAST", xml);
     }
 
-    [Theory]
-    [InlineData("https://dmads.dailymotion.com/js/dailymotion/dmads.dailymotion-latest.min.js", "application/javascript")]
-    [InlineData("https://dmads.dailymotion.com/js/dailymotion/dmads.dailymotion.prebid-latest.min.js", "application/javascript")]
-    [InlineData("https://dmads.dailymotion.com/js/dailymotion/backfill_with_consent/dmAds.safeframe.dailymotion.html", "text/html")]
-    [InlineData("https://dmads.dailymotion.com/api/v1/ping", "application/json")]
-    public void Dailymotion_requests_receive_200_ok_stubs(string url, string expectedType)
+    [Fact]
+    public void Ima_sdk_redirect_stub_respects_settings_toggle()
     {
-        bool isStub = AdBlockResources.TryGetRedirectStub(new Uri(url), out var bytes, out var contentType);
-        Assert.True(isStub);
-        Assert.Contains(expectedType, contentType);
-        Assert.NotEmpty(bytes);
+        var uri = new Uri("https://imasdk.googleapis.com/js/sdkloader/ima3.js");
+        var s = SettingsManager.Current;
+        
+        s.EnableImaSdkStub = true;
+        bool stubEnabled = AdBlockResources.TryGetRedirectStub(uri, out var bytesEnabled, out var typeEnabled);
+        Assert.True(stubEnabled);
+        Assert.Contains("application/javascript", typeEnabled);
+        Assert.NotEmpty(bytesEnabled);
+
+        s.EnableImaSdkStub = false;
+        bool stubDisabled = AdBlockResources.TryGetRedirectStub(uri, out _, out _);
+        Assert.False(stubDisabled);
+
+        // Restaurar estado por defecto
+        s.EnableImaSdkStub = true;
     }
 }
 

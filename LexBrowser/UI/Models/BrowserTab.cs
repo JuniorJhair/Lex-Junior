@@ -63,6 +63,7 @@ public class BrowserTab : INotifyPropertyChanged
     private bool _keepSnifferActiveOnNavigate = false;
 
     public Guid Id { get; } = Guid.NewGuid();
+    public string TabId => Id.ToString()[..8];
     public WebView2 WebView { get; }
     public MainWindow? OwnerWindow { get; set; }
     public bool IsDisposed { get; set; } = false;

@@ -15,10 +15,12 @@ public sealed class ShieldLogEntry
     public string Url { get; set; } = string.Empty;
     public string Frame { get; set; } = "MainFrame";
     public string Reason { get; set; } = string.Empty;
+    public string TabName { get; set; } = string.Empty;
 
     public override string ToString()
     {
-        return $"[{Timestamp:HH:mm:ss.fff}] [{EventType}] [{Frame}] Origin: {SourceDomain} | Url: {Url} | Reason: {Reason}";
+        string tabPart = string.IsNullOrEmpty(TabName) ? "" : $"[{TabName}] ";
+        return $"[{Timestamp:HH:mm:ss.fff}] [{EventType}] {tabPart}[{Frame}] Origin: {SourceDomain} | Url: {Url} | Reason: {Reason}";
     }
 }
 
@@ -36,7 +38,7 @@ public static class ShieldLogger
     /// Registra un evento de seguridad / bloqueo en el buffer circular.
     /// Sanitiza URLs de tipo data: y cadenas excesivamente largas para no saturar memoria ni el portapapeles.
     /// </summary>
-    public static void Log(string eventType, string sourceDomain, string url, string frame, string reason)
+    public static void Log(string eventType, string sourceDomain, string url, string frame, string reason, string tabName = "")
     {
         string sanitizedUrl = url ?? string.Empty;
         if (sanitizedUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
@@ -68,7 +70,8 @@ public static class ShieldLogger
             SourceDomain = sanitizedSource,
             Url = sanitizedUrl,
             Frame = string.IsNullOrWhiteSpace(frame) ? "MainFrame" : frame,
-            Reason = sanitizedReason
+            Reason = sanitizedReason,
+            TabName = tabName ?? string.Empty
         };
 
         lock (SyncLock)
@@ -101,9 +104,9 @@ public static class ShieldLogger
     }
 
     /// <summary>
-    /// Vuelca todo el buffer de eventos a una cadena de texto estructurada.
+    /// Vuelca el buffer de eventos a una cadena de texto estructurada, opcionalmente filtrando por pestaña.
     /// </summary>
-    public static string DumpLog()
+    public static string DumpLog(string? tabFilter = null)
     {
         ShieldLogEntry[] snapshot;
         lock (SyncLock)
@@ -114,11 +117,18 @@ public static class ShieldLogger
         var sb = new StringBuilder();
         sb.AppendLine($"=== LEX JUNIOR - SHIELD LOGGER DUMP ({DateTime.Now:yyyy-MM-dd HH:mm:ss}) ===");
         sb.AppendLine($"Total entries: {snapshot.Length} (Buffer limit: {MaxEntries})");
+        if (!string.IsNullOrEmpty(tabFilter))
+        {
+            sb.AppendLine($"[Filtro activo: Pestaña '{tabFilter}']");
+        }
         sb.AppendLine(new string('=', 90));
 
         foreach (var entry in snapshot)
         {
-            sb.AppendLine(entry.ToString());
+            if (string.IsNullOrEmpty(tabFilter) || entry.TabName.Contains(tabFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                sb.AppendLine(entry.ToString());
+            }
         }
 
         sb.AppendLine(new string('=', 90));
