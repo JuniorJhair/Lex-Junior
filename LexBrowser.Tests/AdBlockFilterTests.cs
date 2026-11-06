@@ -187,5 +187,32 @@ public class AdBlockFilterTests
         bool isStub = AdBlockResources.TryGetRedirectStub(uri, out _, out _, null);
         Assert.False(isStub);
     }
+
+    [Fact]
+    public void WebShield_cosmetics_and_defuser_include_enhanced_collapse_and_skip_logic()
+    {
+        string script = WebShield.GetInjectedScript(enableVideoDefuser: true, enableSubframes: true, enableCosmetic: true);
+        Assert.Contains("banner-container", script);
+        Assert.Contains("banner-wrapper", script);
+        Assert.Contains("ad-slot", script);
+        Assert.Contains("trySkipPreRoll", script);
+        Assert.Contains("videoAdUiSkipButton", script);
+    }
+
+    [Fact]
+    public void Vast_redirect_stub_matches_delivery_and_tag_urls()
+    {
+        var tjUri = new Uri("https://ads.trafficjunky.net/delivery/impressions.php?zone_id=123");
+        bool isTj = AdBlockResources.TryGetRedirectStub(tjUri, out var tjBytes, out var tjType, "streamingsite.com");
+        Assert.True(isTj);
+        Assert.Contains("text/xml", tjType);
+        Assert.NotEmpty(tjBytes);
+
+        var exoUri = new Uri("https://syndication.exoclick.com/tag.php?zoneid=456");
+        bool isExo = AdBlockResources.TryGetRedirectStub(exoUri, out var exoBytes, out var exoType, "streamingsite.com");
+        Assert.True(isExo);
+        Assert.Contains("text/xml", exoType);
+        Assert.NotEmpty(exoBytes);
+    }
 }
 

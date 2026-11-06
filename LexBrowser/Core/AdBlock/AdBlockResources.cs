@@ -64,11 +64,11 @@ public static class AdBlockResources
                        ((host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
                          host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
                          host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("splash.php", StringComparison.OrdinalIgnoreCase) || path.Contains("vast.php", StringComparison.OrdinalIgnoreCase))) ||
+                         host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("splash.php", StringComparison.OrdinalIgnoreCase) || path.Contains("vast.php", StringComparison.OrdinalIgnoreCase) || path.Contains("tag.php", StringComparison.OrdinalIgnoreCase) || path.Contains("/delivery/", StringComparison.OrdinalIgnoreCase))) ||
                        ((host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase))) ||
+                         host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/delivery/", StringComparison.OrdinalIgnoreCase) || path.Contains("impression", StringComparison.OrdinalIgnoreCase))) ||
                        ((host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
-                         host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("splash", StringComparison.OrdinalIgnoreCase))));
+                         host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("splash", StringComparison.OrdinalIgnoreCase) || path.Contains("/delivery/", StringComparison.OrdinalIgnoreCase))));
 
         if (isVast)
         {

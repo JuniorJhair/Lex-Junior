@@ -21,14 +21,14 @@ public static class WebShield
     /// </summary>
     public static string InjectedScript => GetInjectedScript(
         EnableVideoPlayerDefuser,
-        SettingsManager.Current?.EnableWebShieldInSubframes ?? false,
+        SettingsManager.Current?.EnableWebShieldInSubframes ?? true,
         SettingsManager.Current?.EnableCosmeticShield ?? true
     );
 
-    public static string GetInjectedScript(bool enableVideoDefuser, bool enableSubframes = false, bool enableCosmetic = true)
+    public static string GetInjectedScript(bool enableVideoDefuser, bool enableSubframes = true, bool enableCosmetic = true)
     {
         string script = BaseScript
-            .Replace("const __LEX_ENABLE_SUBFRAME_SHIELD = false;", $"const __LEX_ENABLE_SUBFRAME_SHIELD = {(enableSubframes ? "true" : "false")};")
+            .Replace("const __LEX_ENABLE_SUBFRAME_SHIELD = true;", $"const __LEX_ENABLE_SUBFRAME_SHIELD = {(enableSubframes ? "true" : "false")};")
             .Replace("const __LEX_ENABLE_COSMETIC_SHIELD = true;", $"const __LEX_ENABLE_COSMETIC_SHIELD = {(enableCosmetic ? "true" : "false")};");
 
         return enableVideoDefuser ? script + VideoPlayerDefuserScript : script;
@@ -43,7 +43,7 @@ public static class WebShield
     if (window.__lex_web_shield_injected) return;
     window.__lex_web_shield_injected = true;
 
-    const __LEX_ENABLE_SUBFRAME_SHIELD = false;
+    const __LEX_ENABLE_SUBFRAME_SHIELD = true;
     const __LEX_ENABLE_COSMETIC_SHIELD = true;
 
     const hostname = window.location.hostname || '';
@@ -261,11 +261,23 @@ public static class WebShield
                     div[class*='video-instant-message'],
                     div[id*='video-instant-message'],
                     .banner-container,
+                    .banner-wrapper,
                     div[class*='banner-container'],
+                    div[class*='banner-wrapper'],
+                    div[class*='ad-slot'],
+                    div[id*='ad-slot'],
+                    div[class*='ad-zone'],
+                    div[id*='ad-zone'],
+                    div[class*='ad-box'],
+                    div[id*='ad-box'],
+                    div[class*='ad_box'],
+                    div[id*='ad_box'],
+                    div[class*='ads-holder'],
+                    div[class*='ad-block'],
+                    div[id*='ad-block'],
                     div[class*='ad-banner']:not(:has(video)):not([class*='player']),
                     div[class*='ad_banner']:not(:has(video)):not([class*='player']),
                     div[id*='ad-banner']:not(:has(video)):not([class*='player']),
-                    div[class*='ad-zone'],
                     div[class*='ad-placement'],
                     div[class*='exo-slider'],
                     div[id*='exo-slider'],
@@ -277,6 +289,12 @@ public static class WebShield
                         visibility: hidden !important;
                         height: 0 !important;
                         min-height: 0 !important;
+                        max-height: 0 !important;
+                        width: 0 !important;
+                        min-width: 0 !important;
+                        max-width: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
                         opacity: 0 !important;
                         pointer-events: none !important;
                     }
@@ -637,6 +655,47 @@ public static class WebShield
     public const string VideoPlayerDefuserScript = @"
 (function() {
     let attempts = 0;
+
+    function trySkipPreRoll() {
+        try {
+            // A. Clic automático en botones de saltar comercial (JW, Fluid, VideoJS, VAST)
+            const skipBtns = document.querySelectorAll(
+                'button[class*=""skip"" i], div[class*=""skip"" i], a[class*=""skip"" i], ' +
+                '.videoAdUiSkipButton, .vast-skip-button, .skip-button, [class*=""skip-ad"" i], [id*=""skip"" i]'
+            );
+            for (let i = 0; i < skipBtns.length; i++) {
+                const b = skipBtns[i];
+                if (b && b.offsetParent !== null && typeof b.click === 'function') {
+                    b.click();
+                    break;
+                }
+            }
+
+            // B. Fast-forward pasivo si un anuncio corto (<= 90s) está reproduciendo
+            const videos = document.querySelectorAll('video');
+            for (let i = 0; i < videos.length; i++) {
+                const v = videos[i];
+                if (!v) continue;
+                const dur = v.duration;
+                if (dur && !isNaN(dur) && dur > 0 && dur <= 90) {
+                    const hasAdMarker = document.querySelector(
+                        '[class*=""ad-"" i], [class*=""ad_"" i], [class*=""vast"" i], ' +
+                        '.videoAdUi, [id*=""ad-"" i], [id*=""ad_"" i]'
+                    );
+                    if (hasAdMarker) {
+                        v.muted = true;
+                        try { v.playbackRate = 16.0; } catch(_) {}
+                        try { v.currentTime = dur; } catch(_) {}
+                    }
+                } else if (dur && !isNaN(dur) && dur > 90) {
+                    if (v.playbackRate !== 1.0) {
+                        try { v.playbackRate = 1.0; } catch(_) {}
+                    }
+                }
+            }
+        } catch(_) {}
+    }
+
     const attachSafePlayerListener = () => {
         try {
             if (typeof window.jwplayer === 'function') {
@@ -665,10 +724,20 @@ public static class WebShield
             setTimeout(attachSafePlayerListener, 500);
         }
     };
+
+    try {
+        document.addEventListener('play', trySkipPreRoll, true);
+        document.addEventListener('timeupdate', trySkipPreRoll, true);
+    } catch(_) {}
+
     if (document.readyState === 'complete') {
         attachSafePlayerListener();
+        trySkipPreRoll();
     } else {
-        window.addEventListener('load', attachSafePlayerListener, { once: true });
+        window.addEventListener('load', () => {
+            attachSafePlayerListener();
+            trySkipPreRoll();
+        }, { once: true });
     }
 })();
 ";

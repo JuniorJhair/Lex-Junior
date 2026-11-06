@@ -36,12 +36,26 @@ public static class DailymotionOptimizer
             div[data-testid=""ad-slot""],
             div[class*=""ad_slot"" i],
             div[class*=""AdSlot"" i],
+            div[class*=""ad-slot"" i],
+            div[id*=""ad-slot"" i],
+            div[class*=""ad-container"" i],
+            div[id*=""ad-container"" i],
+            div[class*=""ad-wrapper"" i],
+            div[id*=""ad-wrapper"" i],
+            div[class*=""dm-ad"" i],
+            div[id*=""dmads"" i],
+            div[class*=""dmads"" i],
+            div[class*=""pub-container"" i],
+            div[class*=""ad_billboard"" i],
+            div[class*=""ad_leaderboard"" i],
             div[class*=""sponsored"" i],
             div[class*=""Sponsored"" i],
             div[id*=""google_ads"" i],
             div[id*=""bannerflow"" i],
             div[id*=""adform"" i],
             div[class*=""AdBanner"" i],
+            [data-ad-slot],
+            [data-ad-type],
             iframe[src*=""dmads.dailymotion.com"" i],
             iframe[src*=""bannerflow"" i],
             iframe[src*=""adform"" i],
@@ -50,7 +64,13 @@ public static class DailymotionOptimizer
                 display: none !important;
                 visibility: hidden !important;
                 height: 0 !important;
+                min-height: 0 !important;
+                max-height: 0 !important;
                 width: 0 !important;
+                min-width: 0 !important;
+                max-width: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
             }

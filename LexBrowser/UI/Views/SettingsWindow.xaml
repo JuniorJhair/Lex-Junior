@@ -283,8 +283,8 @@
                             <StackPanel>
                                 <CheckBox x:Name="ChkSubframeWebShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
-                                        <TextBlock Text="Inspección de Clics en Submarcos / Iframes (WebShield)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Por defecto desactivado para respetar el DOM nativo y controles táctiles/clic de reproductores en subdominios como Dailymotion o YouTube." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Protección Activa en Submarcos e Iframes (WebShield)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Neutraliza popunders, enlaces trampa y comerciales pre-roll dentro de reproductores incrustados y marcos secundarios." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>

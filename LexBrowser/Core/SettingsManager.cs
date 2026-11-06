@@ -10,10 +10,10 @@ public class BrowserSettings
     public bool EnableAutoVideoPip { get; set; } = true;
     public bool ShowBookmarksBar { get; set; } = true;
     public bool EnableAdBlocker { get; set; } = true;
-    public bool EnableVideoPlayerDefuser { get; set; } = false;
+    public bool EnableVideoPlayerDefuser { get; set; } = true;
     public bool EnableImaSdkStub { get; set; } = true;
     public bool EnableCosmeticShield { get; set; } = true;
-    public bool EnableWebShieldInSubframes { get; set; } = false;
+    public bool EnableWebShieldInSubframes { get; set; } = true;
     public bool EnableHistory { get; set; } = true;
     public double FloatingPipWidth { get; set; } = 640;
     public double FloatingPipHeight { get; set; } = 390;
