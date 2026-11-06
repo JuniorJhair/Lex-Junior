@@ -9,8 +9,8 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>1.1.6</Version>
-    <AssemblyVersion>1.1.5.0</AssemblyVersion>
-    <FileVersion>1.1.5.0</FileVersion>
+    <AssemblyVersion>1.1.6.0</AssemblyVersion>
+    <FileVersion>1.1.6.0</FileVersion>
     <Product>Lex Junior Browser</Product>
     <Company>Lex Junior</Company>
   </PropertyGroup>
@@ -22,5 +22,6 @@
   </ItemGroup>
 
 </Project>
+
 
 
