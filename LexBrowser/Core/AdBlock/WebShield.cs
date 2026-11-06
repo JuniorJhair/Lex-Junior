@@ -63,9 +63,8 @@ public static class WebShield
                           hostname.endsWith('twitch.tv') ||
                           hostname.endsWith('vimeo.com');
 
-    // Si es un iframe de una plataforma de video confiable o los subframes están desactivados,
-    // NO inyectar ni intervenir en el marco del reproductor para garantizar su reproducción nativa pura
-    if (!isTopWindow && (isTrustedSite || !__LEX_ENABLE_SUBFRAME_SHIELD)) return;
+    // Sitios dedicados con optimizador propio (YouTube, Dailymotion, Twitch, Vimeo)
+    if (isTrustedSite) return;
 
     // ─────────────────────────────────────────────────────────────────
     // 0. SCRIPTLETS DE EMULACIÓN ANTI-ANTI-ADBLOCK & NOTIFICATION DEFUSER
@@ -549,7 +548,7 @@ public static class WebShield
                           hostname.endsWith('twitch.tv') ||
                           hostname.endsWith('vimeo.com');
 
-    if (!isTrustedSite) {
+    if (!isTrustedSite && (isTopWindow || __LEX_ENABLE_SUBFRAME_SHIELD)) {
         window.addEventListener('click', handleCaptureClick, true);
         window.addEventListener('pointerdown', handleCaptureClick, true);
     }
@@ -557,6 +556,7 @@ public static class WebShield
     // 1.6 Limpieza proactiva de capas trampas en el DOM (restringido estrictamente a ads explícitos, anchors fantasma y hermanos sobre videos)
     const clearClickjackOverlays = () => {
         if (isTrustedSite) return;
+        if (!isTopWindow && !__LEX_ENABLE_SUBFRAME_SHIELD) return;
         try {
             // 1. Elementos con nombres explícitos de anuncio
             const explicitAds = document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads], [id*=popunder], [class*=popunder]');

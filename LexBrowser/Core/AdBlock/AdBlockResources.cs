@@ -51,22 +51,24 @@ public static class AdBlockResources
 
         // 2. VAST Empty XML para reproductores de streaming (Fluid Player, VideoJS, JWPlayer, etc.)
         // Al responder '0 anuncios en VAST' con 200 OK, el reproductor inicia inmediatamente el video principal
-        // sin reproducir el comercial pre-roll (Brazzers, etc.) ni contar hacia atrás el reloj de espera.
-        bool isVast = full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase) ||
-                      full.Contains("format=vast", StringComparison.OrdinalIgnoreCase) ||
-                      full.Contains("output=vast", StringComparison.OrdinalIgnoreCase) ||
-                      full.Contains("type=vast", StringComparison.OrdinalIgnoreCase) ||
-                      path.Contains("/vast", StringComparison.OrdinalIgnoreCase) ||
-                      path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase) ||
-                      host.Contains("adtng.com", StringComparison.OrdinalIgnoreCase) ||
-                      ((host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
-                        host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                        host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                        host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("splash.php", StringComparison.OrdinalIgnoreCase) || path.Contains("vast.php", StringComparison.OrdinalIgnoreCase))) ||
-                      ((host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
-                        host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase))) ||
-                      ((host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
-                        host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("splash", StringComparison.OrdinalIgnoreCase)));
+        // sin reproducir el comercial pre-roll ni contar hacia atrás el reloj de espera.
+        // Excepción: Dailymotion cuenta con su propio módulo aislado (DailymotionOptimizer).
+        bool isVast = !isDailymotion &&
+                      (full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase) ||
+                       full.Contains("format=vast", StringComparison.OrdinalIgnoreCase) ||
+                       full.Contains("output=vast", StringComparison.OrdinalIgnoreCase) ||
+                       full.Contains("type=vast", StringComparison.OrdinalIgnoreCase) ||
+                       path.Contains("/vast", StringComparison.OrdinalIgnoreCase) ||
+                       path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase) ||
+                       host.Contains("adtng.com", StringComparison.OrdinalIgnoreCase) ||
+                       ((host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
+                         host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
+                         host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase) ||
+                         host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("splash.php", StringComparison.OrdinalIgnoreCase) || path.Contains("vast.php", StringComparison.OrdinalIgnoreCase))) ||
+                       ((host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
+                         host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("/vast", StringComparison.OrdinalIgnoreCase))) ||
+                       ((host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
+                         host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase)) && (path.Contains("/vast", StringComparison.OrdinalIgnoreCase) || path.Contains("/video", StringComparison.OrdinalIgnoreCase) || path.Contains("splash", StringComparison.OrdinalIgnoreCase))));
 
         if (isVast)
         {

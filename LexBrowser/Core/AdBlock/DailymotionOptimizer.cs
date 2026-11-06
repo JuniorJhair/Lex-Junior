@@ -59,86 +59,31 @@ public static class DailymotionOptimizer
     } catch(_) {}
 
     // ─────────────────────────────────────────────────────────────────
-    // 2. SENSOR DE RED: Reconocedor de entrega del video real (Manifiesto / VOD)
+    // 2. ACELERADOR INTELIGENTE DE ANUNCIOS (Fast-Forward Defuser)
     // ─────────────────────────────────────────────────────────────────
-    let _mainVideoReceived = false;
     let _isDefusingAd = false;
     let _originalMuted = null;
     let _observer = null;
 
-    function isMainContentUrl(url) {
-        if (!url || typeof url !== 'string') return false;
-        return (url.includes('vod') && url.includes('dmcdn.net')) ||
-               (url.includes('.cf.dmcdn.net/sec') && (url.includes('/video/') || url.includes('/frag(')));
-    }
-
-    function onMainVideoReceived() {
-        if (_mainVideoReceived) return;
-        _mainVideoReceived = true;
-
-        // Desactivación inmediata e irreversible del acelerador
-        try {
-            const videos = document.querySelectorAll('video');
-            for (const v of videos) {
-                try { v.playbackRate = 1.0; } catch(_) {}
-                if (v.muted && _originalMuted === false) {
-                    try { v.muted = false; } catch(_) {}
-                }
-            }
-        } catch(_) {}
-
-        if (_observer) {
-            try { _observer.disconnect(); } catch(_) {}
-            _observer = null;
+    function isDynamicAdPresent() {
+        const dynamicAdSelectors = [
+            '.dmp_AdCountdown',
+            '.dmp_is-ad',
+            '.videoAdUi',
+            '.dmp_AdNotice',
+            '[class*=""dmp_AdCountdown"" i]',
+            '.ad-showing'
+        ];
+        for (const sel of dynamicAdSelectors) {
+            const el = document.querySelector(sel);
+            if (el && el.offsetParent !== null) return true;
         }
+        return false;
     }
 
-    // Interceptar fetch dentro del reproductor
-    try {
-        const origFetch = window.fetch;
-        window.fetch = function(input, init) {
-            const url = (typeof input === 'string') ? input : (input && input.url);
-            const p = origFetch.apply(this, arguments);
-            if (isMainContentUrl(url)) {
-                p.then(function(res) {
-                    if (res && (res.status === 200 || res.status === 206 || res.ok)) {
-                        onMainVideoReceived();
-                    }
-                }).catch(function() {});
-            }
-            return p;
-        };
-    } catch(_) {}
-
-    // Interceptar XMLHttpRequest dentro del reproductor
-    try {
-        const origXhrOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function(method, url) {
-            this.__lex_dm_url = url;
-            return origXhrOpen.apply(this, arguments);
-        };
-
-        const origXhrSend = XMLHttpRequest.prototype.send;
-        XMLHttpRequest.prototype.send = function() {
-            if (isMainContentUrl(this.__lex_dm_url)) {
-                this.addEventListener('load', function() {
-                    if (this.status === 200 || this.status === 206) {
-                        onMainVideoReceived();
-                    }
-                }, { once: true });
-            }
-            return origXhrSend.apply(this, arguments);
-        };
-    } catch(_) {}
-
-    // ─────────────────────────────────────────────────────────────────
-    // 3. ACELERADOR INTELIGENTE DE ANUNCIOS (Fast-Forward Defuser)
-    // ─────────────────────────────────────────────────────────────────
     function checkAndDefuseAd() {
-        if (_mainVideoReceived) return;
-
         try {
-            // A. Salto automático si aparece botón interactivo de saltar
+            // A. Salto automático instantáneo si aparece botón interactivo de saltar
             const skipSelectors = [
                 '.dmp_SkipButton',
                 'button[class*=""skip"" i]',
@@ -155,38 +100,35 @@ public static class DailymotionOptimizer
                 }
             }
 
-            // B. Detección ESTRICTA de comerciales activos
-            // No usamos selectores persistentes (.ima-ad-container) que permanecen para siempre en el DOM.
-            const dynamicAdSelectors = [
-                '.dmp_AdCountdown',
-                '.dmp_is-ad',
-                '.videoAdUi',
-                '.dmp_AdNotice',
-                '[class*=""dmp_AdCountdown"" i]',
-                '.ad-showing'
-            ];
-            let isAdActive = false;
-            for (const sel of dynamicAdSelectors) {
-                const el = document.querySelector(sel);
-                if (el && el.offsetParent !== null) {
-                    isAdActive = true;
-                    break;
-                }
-            }
-
-            // C. Inspección y aceleración de videos en reproducción
+            const isAdActive = isDynamicAdPresent();
             const videos = document.querySelectorAll('video');
+
             for (const video of videos) {
                 if (!video) continue;
 
-                const src = video.currentSrc || video.src || '';
                 const duration = video.duration;
+                const src = video.currentSrc || video.src || '';
 
-                // PROTECCIÓN TOTAL: Si el video dura más de 90 segundos o proviene de la CDN de video,
-                // ES EL CONTENIDO PRINCIPAL. Desactivar acelerador inmediatamente.
-                if ((duration && !isNaN(duration) && duration > 90) || (src && isMainContentUrl(src))) {
-                    onMainVideoReceived();
-                    return;
+                // PROTECCIÓN TOTAL DEL CONTENIDO PRINCIPAL:
+                // Si la duración supera los 90 segundos, ES EL VIDEO REAL. Nunca acelerar.
+                if (duration && !isNaN(duration) && duration > 90) {
+                    if (video.playbackRate !== 1.0) {
+                        try { video.playbackRate = 1.0; } catch(_) {}
+                    }
+                    if (_isDefusingAd) {
+                        _isDefusingAd = false;
+                        if (_originalMuted !== null) {
+                            try { video.muted = _originalMuted; } catch(_) {}
+                            _originalMuted = null;
+                        }
+                    }
+
+                    // Si el video principal ya reprodujo más de 5 segundos, suspender el observer para 0% uso de CPU
+                    if (video.currentTime > 5 && _observer) {
+                        try { _observer.disconnect(); } catch(_) {}
+                        _observer = null;
+                    }
+                    continue;
                 }
 
                 // Es anuncio solo si tiene duración corta confirmada (<= 90s) y coincide con indicadores publicitarios
@@ -204,18 +146,16 @@ public static class DailymotionOptimizer
                         _originalMuted = video.muted;
                     }
 
-                    // Silenciar y acelerar al máximo (16x) para consumir el anuncio instantáneamente
+                    // Silenciar y acelerar al máximo (16x) saltando al final para consumir el comercial
                     video.muted = true;
                     try { video.playbackRate = 16.0; } catch(_) {}
-                    if (duration && !isNaN(duration) && duration > 0) {
-                        try { video.currentTime = duration; } catch(_) {}
-                    }
+                    try { video.currentTime = duration; } catch(_) {}
                 } else if (_isDefusingAd) {
                     // El comercial concluyó: restaurar parámetros para el video real
                     _isDefusingAd = false;
                     try { video.playbackRate = 1.0; } catch(_) {}
                     if (_originalMuted !== null) {
-                        video.muted = _originalMuted;
+                        try { video.muted = _originalMuted; } catch(_) {}
                         _originalMuted = null;
                     }
                 }
@@ -223,25 +163,30 @@ public static class DailymotionOptimizer
         } catch(_) {}
     }
 
-    // D. Observador continuo ultra liviano
+    // ─────────────────────────────────────────────────────────────────
+    // 3. OBSERVADOR Y VIGILANCIA DE REPRODUCTOR
+    // ─────────────────────────────────────────────────────────────────
     function setupObserver() {
-        if (_mainVideoReceived) return;
         try {
-            _observer = new MutationObserver(checkAndDefuseAd);
-            _observer.observe(document.documentElement || document.body, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['class', 'src', 'style']
-            });
-
-            document.addEventListener('play', checkAndDefuseAd, true);
-            document.addEventListener('timeupdate', checkAndDefuseAd, true);
-            document.addEventListener('loadedmetadata', checkAndDefuseAd, true);
-
+            if (!_observer) {
+                _observer = new MutationObserver(checkAndDefuseAd);
+                _observer.observe(document.documentElement || document.body, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    attributeFilter: ['class', 'src', 'style']
+                });
+            }
             checkAndDefuseAd();
         } catch(_) {}
     }
+
+    try {
+        document.addEventListener('play', checkAndDefuseAd, true);
+        document.addEventListener('timeupdate', checkAndDefuseAd, true);
+        document.addEventListener('loadedmetadata', checkAndDefuseAd, true);
+        document.addEventListener('loadstart', setupObserver, true);
+    } catch(_) {}
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', setupObserver, { once: true });

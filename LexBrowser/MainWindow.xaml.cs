@@ -980,14 +980,13 @@ public partial class MainWindow : Window
             }
         };
 
-        // Inyectar script universal de optimización, anti-anuncios, iframes, PiP, traducción limpia y captura/autocompletado pasivo de contraseñas
+        // Inyectar script universal de optimización, anti-anuncios, iframes, PiP y captura/autocompletado pasivo de contraseñas
         try
         {
             await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(DailymotionOptimizer.InjectedScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(WebShield.InjectedScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(PasswordManager.InjectedPasswordScript);
-            await core.AddScriptToExecuteOnDocumentCreatedAsync(TranslationService.InjectedShieldScript);
         }
         catch { }
 

@@ -34,7 +34,7 @@ public class AdBlockFilterTests
     [InlineData("https://c.bannerflow.net/a/6a22b164bb2c1dbc62e5858d")]
     [InlineData("https://s2.adform.net/banners/scripts/assets/images/close-sprite.png")]
     [InlineData("https://fast.nexx360.io/setuid")]
-    [InlineData("https://dmads.dailymotion.com/other")]
+    [InlineData("https://bidr.io/ad")]
     public void Blocks_known_ad_and_tracking_urls(string url) => Assert.True(Blocked(url));
 
     // ── NO debe bloquear (falsos positivos detectados en la auditoría) ───
@@ -156,10 +156,25 @@ public class AdBlockFilterTests
         Assert.Contains("isDailymotion", script);
         Assert.Contains("playbackRate = 16.0", script);
         Assert.Contains("lex-dm-cosmetics", script);
-        Assert.Contains("isMainContentUrl", script);
-        Assert.Contains("onMainVideoReceived", script);
+        Assert.Contains("isDynamicAdPresent", script);
         Assert.Contains("duration > 90", script);
         Assert.Contains("duration <= 90", script);
+    }
+
+    [Fact]
+    public void Vast_redirect_stub_exempts_dailymotion_but_protects_other_sites()
+    {
+        var vastUri = new Uri("https://bid.g.doubleclick.net/dbm/vast?param=1");
+
+        // Dailymotion no debe recibir VAST vacio para no romper su reproductor IMA
+        bool dmVast = AdBlockResources.TryGetRedirectStub(vastUri, out _, out _, "dailymotion.com");
+        Assert.False(dmVast);
+
+        // Sitios de streaming comunes si reciben VAST vacio para neutralizar anuncios pre-roll
+        bool streamingVast = AdBlockResources.TryGetRedirectStub(vastUri, out var bytes, out var type, "animeflv.net");
+        Assert.True(streamingVast);
+        Assert.Contains("text/xml", type);
+        Assert.NotEmpty(bytes);
     }
 
     [Fact]

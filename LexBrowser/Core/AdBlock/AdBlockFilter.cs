@@ -72,7 +72,6 @@ public static class AdBlockFilter
         "zmaticoo.com",
         "kueezrtb.com",
         "marphezis.com",
-        "dmads.dailymotion.com",
 
         // Redes rusas / Yandex ad context
         "an.yandex.ru",
