@@ -128,5 +128,34 @@ public class AdBlockFilterTests
         // Restaurar estado por defecto
         s.EnableImaSdkStub = true;
     }
+
+    [Fact]
+    public void Ima_sdk_redirect_stub_exempts_dailymotion_for_isolated_optimizer()
+    {
+        var uri = new Uri("https://imasdk.googleapis.com/js/sdkloader/ima3.js");
+        var s = SettingsManager.Current;
+        s.EnableImaSdkStub = true;
+
+        // Dailymotion debe ser eximido para que DailymotionOptimizer acelere y salte anuncios nativos
+        bool dmTopStub = AdBlockResources.TryGetRedirectStub(uri, out _, out _, "dailymotion.com");
+        Assert.False(dmTopStub);
+
+        bool dmSubframeStub = AdBlockResources.TryGetRedirectStub(uri, out _, out _, "geo.dailymotion.com");
+        Assert.False(dmSubframeStub);
+
+        // Otros dominios sí reciben el stub normal
+        bool otherDomainStub = AdBlockResources.TryGetRedirectStub(uri, out _, out _, "animeflv.net");
+        Assert.True(otherDomainStub);
+    }
+
+    [Fact]
+    public void Dailymotion_optimizer_script_is_valid()
+    {
+        string script = DailymotionOptimizer.InjectedScript;
+        Assert.False(string.IsNullOrWhiteSpace(script));
+        Assert.Contains("isDailymotion", script);
+        Assert.Contains("playbackRate = 16.0", script);
+        Assert.Contains("lex-dm-cosmetics", script);
+    }
 }
 

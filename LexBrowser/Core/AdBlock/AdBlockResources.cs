@@ -18,19 +18,29 @@ public static class AdBlockResources
     private static readonly byte[] InstreamStatusBytes = Encoding.UTF8.GetBytes("window.google_ad_status = 1;");
     private static readonly byte[] GoogleImaShimBytes = Encoding.UTF8.GetBytes(GoogleImaScript);
 
+    public static bool TryGetRedirectStub(Uri uri, out byte[] responseBytes, out string contentType)
+        => TryGetRedirectStub(uri, out responseBytes, out contentType, null);
+
     /// <summary>
     /// Comprueba si la URI coincide con un recurso que requiere un reemplazo 200 OK (stub)
     /// en lugar de un bloqueo 403, para que el reproductor no se congele.
     /// </summary>
-    public static bool TryGetRedirectStub(Uri uri, out byte[] responseBytes, out string contentType)
+    public static bool TryGetRedirectStub(Uri uri, out byte[] responseBytes, out string contentType, string? originHost = null)
     {
         string host = uri.Host;
         string path = uri.AbsolutePath;
         string full = uri.AbsoluteUri;
 
-        // 1. Google IMA SDK (ima3.js) - evita la pantalla negra en reproductores con ad-bidding
+        // 1. Google IMA SDK (ima3.js) - evita la pantalla negra en reproductores con ad-bidding.
         // Controlado por el interruptor independiente EnableImaSdkStub en Configuración.
-        if (SettingsManager.Current?.EnableImaSdkStub != false &&
+        // Excepción: Dailymotion cuenta con su propio módulo aislado (DailymotionOptimizer) que
+        // requiere el SDK original para validar el ciclo de reproducción y acelerar/saltar los anuncios sin congelar el reproductor.
+        bool isDailymotion = !string.IsNullOrEmpty(originHost) &&
+                             (originHost.Equals("dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
+                              originHost.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase));
+
+        if (!isDailymotion &&
+            SettingsManager.Current?.EnableImaSdkStub != false &&
             host.EndsWith("googleapis.com", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/ima3.js", StringComparison.OrdinalIgnoreCase))
         {
             responseBytes = GoogleImaShimBytes;

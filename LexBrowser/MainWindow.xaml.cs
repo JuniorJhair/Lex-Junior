@@ -952,6 +952,7 @@ public partial class MainWindow : Window
         try
         {
             await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(DailymotionOptimizer.InjectedScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(WebShield.InjectedScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(PasswordManager.InjectedPasswordScript);
             await core.AddScriptToExecuteOnDocumentCreatedAsync(TranslationService.InjectedShieldScript);
@@ -1216,7 +1217,7 @@ public partial class MainWindow : Window
 
                 byte[] stubBytes = Array.Empty<byte>();
                 string stubContentType = string.Empty;
-                bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType);
+                bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType, originHost);
                 string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
                 if (isRedirectStub || AdBlockFilter.ShouldBlock(uri))
                 {
