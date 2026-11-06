@@ -666,11 +666,16 @@ public partial class HistoryWindow : Window
 
     private void LstHistory_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        // 1. Si el evento proviene de un ComboBox abierto o de su lista desplegable (Popup), ignorarlo para que scrollee el combo
+        if (GlobalScrollBehavior.IsInsideOpenComboBoxOrPopup(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        // 2. Si el puntero está en la lista pero hay algún ComboBox abierto, cerrarlo de inmediato
         if (GlobalScrollBehavior.HasAnyOpenComboBox())
         {
-            e.Handled = true;
-            GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
-            return;
+            GlobalScrollBehavior.CloseAllOpenComboBoxes();
         }
 
         e.Handled = true;
@@ -687,12 +692,16 @@ public partial class HistoryWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // Si hay algún ComboBox abierto, consumir la rueda para que el fondo no se mueva y scrollear el combo abierto
+        // 1. Si el evento proviene de un ComboBox abierto o de su lista desplegable (Popup), ignorarlo para que scrollee el combo
+        if (GlobalScrollBehavior.IsInsideOpenComboBoxOrPopup(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        // 2. Si el puntero está sobre la ventana pero hay algún ComboBox abierto, cerrarlo de inmediato
         if (GlobalScrollBehavior.HasAnyOpenComboBox())
         {
-            e.Handled = true;
-            GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
-            return;
+            GlobalScrollBehavior.CloseAllOpenComboBoxes();
         }
 
         e.Handled = true;

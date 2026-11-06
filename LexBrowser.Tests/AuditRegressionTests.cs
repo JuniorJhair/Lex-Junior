@@ -10,6 +10,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
+[Collection("SettingsCollection")]
 public class AuditRegressionTests
 {
     private static byte[] CreateValidPngBytes()

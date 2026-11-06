@@ -104,7 +104,7 @@ public static class FaviconService
                 {
                     using var ms = new MemoryStream();
                     await webViewStream.CopyToAsync(ms);
-                    if (ms.Length > 200)
+                    if (ms.Length > 0)
                     {
                         ms.Position = 0;
                         return CreateFrozenBitmapFromMemory(ms);
@@ -145,7 +145,7 @@ public static class FaviconService
             {
                 using var ms = new MemoryStream();
                 await webViewStream.CopyToAsync(ms);
-                if (ms.Length >= 380)
+                if (ms.Length > 0)
                 {
                     ms.Position = 0;
                     candidate = CreateFrozenBitmapFromMemory(ms);

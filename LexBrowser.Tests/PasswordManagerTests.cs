@@ -5,6 +5,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
+[Collection("SettingsCollection")]
 public class PasswordManagerTests : IDisposable
 {
     private readonly string _tempVaultPath;

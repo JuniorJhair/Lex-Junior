@@ -35,6 +35,18 @@ public static class GlobalScrollBehavior
         // 2. Registro inmediato de eventos al interactuar con cualquier ComboBox
         EventManager.RegisterClassHandler(
             typeof(ComboBox),
+            UIElement.MouseEnterEvent,
+            new MouseEventHandler(OnComboBoxMouseEnter),
+            handledEventsToo: true);
+
+        EventManager.RegisterClassHandler(
+            typeof(ComboBox),
+            UIElement.GotFocusEvent,
+            new RoutedEventHandler(OnComboBoxGotFocus),
+            handledEventsToo: true);
+
+        EventManager.RegisterClassHandler(
+            typeof(ComboBox),
             UIElement.PreviewMouseDownEvent,
             new MouseButtonEventHandler(OnComboBoxPreviewMouseDown),
             handledEventsToo: true);
@@ -186,24 +198,99 @@ public static class GlobalScrollBehavior
         return null;
     }
 
+    /// <summary>
+    /// Determina si un elemento visual de origen proviene de un ComboBox ABIERTO o de su lista desplegable (Popup).
+    /// Si el ComboBox está cerrado, devuelve false para que la rueda pueda desplazar el ScrollViewer de la página normalmente.
+    /// </summary>
+    public static bool IsInsideOpenComboBoxOrPopup(DependencyObject? obj)
+    {
+        if (obj == null) return false;
+        DependencyObject? current = obj;
+        int depth = 0;
+
+        while (current != null && depth < 60)
+        {
+            depth++;
+
+            if (current is ComboBox cb)
+            {
+                return cb.IsDropDownOpen;
+            }
+
+            if (current is Popup pop)
+            {
+                return pop.IsOpen;
+            }
+
+            if (current is ComboBoxItem cbi)
+            {
+                var parentCombo = ItemsControl.ItemsControlFromItemContainer(cbi) as ComboBox;
+                return parentCombo == null || parentCombo.IsDropDownOpen;
+            }
+
+            if (current is FrameworkElement fe)
+            {
+                if (fe.TemplatedParent is ComboBox parentCb)
+                    return parentCb.IsDropDownOpen;
+                if (fe.TemplatedParent is Popup parentPop)
+                    return parentPop.IsOpen;
+                if (!string.IsNullOrEmpty(fe.Name) && fe.Name.StartsWith("DropDown", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (fe.Parent is ComboBox pCb)
+                    return pCb.IsDropDownOpen;
+                if (fe.Parent is Popup pPop)
+                    return pPop.IsOpen;
+            }
+
+            string typeName = current.GetType().Name;
+            if (typeName.Contains("PopupRoot"))
+                return true;
+
+            DependencyObject? parent = null;
+            try
+            {
+                if (current is Visual or System.Windows.Media.Media3D.Visual3D)
+                {
+                    parent = VisualTreeHelper.GetParent(current);
+                }
+            }
+            catch { }
+
+            if (parent == null)
+            {
+                if (current is FrameworkElement fe2 && fe2.Parent != null)
+                    parent = fe2.Parent;
+                else
+                    parent = LogicalTreeHelper.GetParent(current);
+
+                if (parent == null && current is Popup popup && popup.PlacementTarget != null)
+                    parent = popup.PlacementTarget;
+            }
+
+            current = parent;
+        }
+
+        return false;
+    }
+
     public static bool IsInsideComboBoxOrPopup(DependencyObject? obj)
     {
         if (obj == null) return false;
         DependencyObject? current = obj;
         int depth = 0;
 
-        while (current != null && depth < 50)
+        while (current != null && depth < 60)
         {
             depth++;
-            if (current is ComboBox) return true;
-            if (current is Popup) return true;
-            if (current is ComboBoxItem) return true;
+            if (current is ComboBox or Popup or ComboBoxItem) return true;
 
             if (current is FrameworkElement fe)
             {
-                if (fe.TemplatedParent is ComboBox || fe.TemplatedParent is Popup)
+                if (fe.TemplatedParent is ComboBox or Popup)
                     return true;
                 if (!string.IsNullOrEmpty(fe.Name) && fe.Name.StartsWith("DropDown", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                if (fe.Parent is ComboBox or Popup)
                     return true;
             }
 
@@ -221,15 +308,25 @@ public static class GlobalScrollBehavior
             }
             catch { }
 
-            current = parent ?? LogicalTreeHelper.GetParent(current);
+            if (parent == null)
+            {
+                if (current is FrameworkElement fe2 && fe2.Parent != null)
+                    parent = fe2.Parent;
+                else
+                    parent = LogicalTreeHelper.GetParent(current);
+
+                if (parent == null && current is Popup pop && pop.PlacementTarget != null)
+                    parent = pop.PlacementTarget;
+            }
+
+            current = parent;
         }
         return false;
     }
 
     public static bool IsEventFromOpenComboBoxOrPopup(DependencyObject? source)
     {
-        if (source == null) return false;
-        return IsInsideComboBoxOrPopup(source);
+        return IsInsideOpenComboBoxOrPopup(source);
     }
 
     /// <summary>
@@ -300,26 +397,32 @@ public static class GlobalScrollBehavior
         }
     }
 
+    private static void HookComboBoxEvents(ComboBox cb)
+    {
+        cb.DropDownOpened -= OnDropDownOpened;
+        cb.DropDownOpened += OnDropDownOpened;
+        cb.DropDownClosed -= OnDropDownClosed;
+        cb.DropDownClosed += OnDropDownClosed;
+    }
+
+    private static void OnComboBoxMouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is ComboBox cb) HookComboBoxEvents(cb);
+    }
+
+    private static void OnComboBoxGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is ComboBox cb) HookComboBoxEvents(cb);
+    }
+
     private static void OnComboBoxPreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is ComboBox cb)
-        {
-            cb.DropDownOpened -= OnDropDownOpened;
-            cb.DropDownOpened += OnDropDownOpened;
-            cb.DropDownClosed -= OnDropDownClosed;
-            cb.DropDownClosed += OnDropDownClosed;
-        }
+        if (sender is ComboBox cb) HookComboBoxEvents(cb);
     }
 
     private static void OnComboBoxLoaded(object sender, RoutedEventArgs e)
     {
-        if (sender is ComboBox cb)
-        {
-            cb.DropDownOpened -= OnDropDownOpened;
-            cb.DropDownOpened += OnDropDownOpened;
-            cb.DropDownClosed -= OnDropDownClosed;
-            cb.DropDownClosed += OnDropDownClosed;
-        }
+        if (sender is ComboBox cb) HookComboBoxEvents(cb);
     }
 
     private static void OnComboBoxUnloaded(object sender, RoutedEventArgs e)
@@ -340,14 +443,7 @@ public static class GlobalScrollBehavior
     {
         if (sender is ComboBox cb)
         {
-            _suppressScrollClose = true;
-            var disp = cb.Dispatcher ?? Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-            disp.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
-            {
-                _suppressScrollClose = false;
-            }));
-
-            RegisterOpenComboBox(cb);
+            HandleDropDownOpened(cb);
         }
     }
 
@@ -355,10 +451,27 @@ public static class GlobalScrollBehavior
     {
         if (sender is ComboBox cb)
         {
-            lock (_lock)
-            {
-                _openComboBoxes.RemoveAll(w => !w.TryGetTarget(out var target) || ReferenceEquals(target, cb));
-            }
+            HandleDropDownClosed(cb);
+        }
+    }
+
+    private static void HandleDropDownOpened(ComboBox cb)
+    {
+        _suppressScrollClose = true;
+        var disp = cb.Dispatcher ?? Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        disp.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _suppressScrollClose = false;
+        }));
+
+        RegisterOpenComboBox(cb);
+    }
+
+    private static void HandleDropDownClosed(ComboBox cb)
+    {
+        lock (_lock)
+        {
+            _openComboBoxes.RemoveAll(w => !w.TryGetTarget(out var target) || ReferenceEquals(target, cb));
         }
     }
 

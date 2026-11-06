@@ -42,20 +42,20 @@ public class OmniboxSuggestionTests
         Assert.Equal(" - Búsqueda de Google", suggestions[0].SecondaryText);
         Assert.True(suggestions[0].IsSelected);
 
-        // 2. Búsqueda reciente con icono de reloj 🕒
-        Assert.Equal(OmniboxSuggestionKind.RecentSearch, suggestions[1].Kind);
-        Assert.Equal("juegos battle royale", suggestions[1].PrimaryText);
-        Assert.Equal("🕒", suggestions[1].IconText);
+        // 2. Página/video ya visitado en YouTube con ranking prioritario (history-first ranking)
+        Assert.Equal(OmniboxSuggestionKind.VisitedPage, suggestions[1].Kind);
+        Assert.Equal("▶", suggestions[1].IconText);
+        Assert.Contains("ahora los juegos", suggestions[1].PrimaryText);
+        Assert.Contains("youtube.com/results", suggestions[1].SecondaryText);
 
-        // 3. Sugerencia predictiva en vivo de Google 🔍
-        Assert.Equal(OmniboxSuggestionKind.LiveSearchSuggestion, suggestions[2].Kind);
-        Assert.Equal("juegos gratis para pc", suggestions[2].PrimaryText);
+        // 3. Búsqueda reciente con icono de reloj 🕒
+        Assert.Equal(OmniboxSuggestionKind.RecentSearch, suggestions[2].Kind);
+        Assert.Equal("juegos battle royale", suggestions[2].PrimaryText);
+        Assert.Equal("🕒", suggestions[2].IconText);
 
-        // 4. Página/video ya visitado en YouTube con icono ▶ rojo y URL limpia
-        Assert.Equal(OmniboxSuggestionKind.VisitedPage, suggestions[3].Kind);
-        Assert.Equal("▶", suggestions[3].IconText);
-        Assert.Contains("ahora los juegos", suggestions[3].PrimaryText);
-        Assert.Contains("youtube.com/results", suggestions[3].SecondaryText);
+        // 4. Sugerencia predictiva en vivo de Google 🔍
+        Assert.Equal(OmniboxSuggestionKind.LiveSearchSuggestion, suggestions[3].Kind);
+        Assert.Equal("juegos gratis para pc", suggestions[3].PrimaryText);
     }
 }
 

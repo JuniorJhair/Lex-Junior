@@ -2560,7 +2560,7 @@ public partial class MainWindow : Window
             BorderCurrentTabBookmark.BorderBrush = new SolidColorBrush(Color.FromRgb(0x2E, 0x2E, 0x3A));
             BorderCurrentTabBookmark.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x18, 0x22));
             TxtCurrentTabBookmarkIcon.Text = "＋";
-            TxtCurrentTabBookmarkIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x71, 0x71, 0x7A));
+            TxtCurrentTabBookmarkIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x96));
             TxtCurrentTabBookmarkTitle.Text = "Anclar página";
             return;
         }
@@ -4451,7 +4451,7 @@ public partial class MainWindow : Window
         TxtMediaSnifferLabel.Text = active && count > 0 ? $"Multimedia ({count})" : "Multimedia";
         DotMediaSnifferStatus.Fill = active
             ? new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81))
-            : new SolidColorBrush(Color.FromRgb(0x71, 0x71, 0x7A));
+            : new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x96));
 
         BorderMediaSniffer.Background = active
             ? new SolidColorBrush(Color.FromRgb(0x1E, 0x3A, 0x3A))
@@ -5280,11 +5280,16 @@ public partial class MainWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
+        // 1. Si el evento proviene de un ComboBox abierto o de su lista desplegable (Popup), ignorarlo para que scrollee el combo
+        if (LexBrowser.UI.GlobalScrollBehavior.IsInsideOpenComboBoxOrPopup(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        // 2. Si el puntero está sobre la ventana pero hay algún ComboBox abierto, cerrarlo de inmediato
         if (LexBrowser.UI.GlobalScrollBehavior.HasAnyOpenComboBox())
         {
-            e.Handled = true;
-            LexBrowser.UI.GlobalScrollBehavior.ScrollActiveComboBox(e.Delta);
-            return;
+            LexBrowser.UI.GlobalScrollBehavior.CloseAllOpenComboBoxes();
         }
 
         e.Handled = true;

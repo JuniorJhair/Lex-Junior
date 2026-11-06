@@ -235,6 +235,7 @@ public static class AdBlockFilter
             if (path.StartsWith("/api/stats/ads", StringComparison.OrdinalIgnoreCase) ||
                 path.StartsWith("/youtubei/v1/player/ad_break", StringComparison.OrdinalIgnoreCase) ||
                 path.StartsWith("/get_midroll_info", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/pagead", StringComparison.OrdinalIgnoreCase) ||
                 fullUrl.Contains("googleads.g.doubleclick.net", StringComparison.OrdinalIgnoreCase) ||
                 fullUrl.Contains("&adformat=", StringComparison.OrdinalIgnoreCase))
             {
