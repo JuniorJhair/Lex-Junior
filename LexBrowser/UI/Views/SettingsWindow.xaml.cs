@@ -35,6 +35,7 @@ public partial class SettingsWindow : Window
         ChkAutoVideoPip.IsChecked = s.EnableAutoVideoPip;
         ChkBookmarksBar.IsChecked = s.ShowBookmarksBar;
         ChkAdBlocker.IsChecked = s.EnableAdBlocker;
+        ChkVideoPlayerDefuser.IsChecked = s.EnableVideoPlayerDefuser;
         ChkRestoreSession.IsChecked = s.RestorePreviousSession;
         ChkEnableHistory.IsChecked = s.EnableHistory;
         TxtSettingsHistoryStorage.Text = $"Espacio ocupado: {HistoryManager.GetHistoryFileSizeFormatted()}";
@@ -98,6 +99,7 @@ public partial class SettingsWindow : Window
         s.EnableAutoVideoPip = ChkAutoVideoPip.IsChecked == true;
         s.ShowBookmarksBar = ChkBookmarksBar.IsChecked == true;
         s.EnableAdBlocker = ChkAdBlocker.IsChecked == true;
+        s.EnableVideoPlayerDefuser = ChkVideoPlayerDefuser.IsChecked == true;
         s.RestorePreviousSession = ChkRestoreSession.IsChecked == true;
 
         bool wantsHistory = ChkEnableHistory.IsChecked == true;

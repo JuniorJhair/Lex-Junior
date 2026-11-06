@@ -1170,6 +1170,37 @@ public partial class MainWindow : Window
         {
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri))
             {
+                // Detección forense del origen y contexto del marco (MainFrame vs Subframe/Iframe del reproductor)
+                string originHost = tab.CurrentUri?.Host ?? "unknown";
+                string frameDesc = e.ResourceContext.ToString();
+
+                string referer = string.Empty;
+                try
+                {
+                    var reqHeaders = e.Request.Headers;
+                    if (reqHeaders.Contains("Referer"))
+                        referer = reqHeaders.GetHeader("Referer");
+                    else if (reqHeaders.Contains("Origin"))
+                        referer = reqHeaders.GetHeader("Origin");
+                }
+                catch { }
+
+                if (!string.IsNullOrEmpty(referer) && Uri.TryCreate(referer, UriKind.Absolute, out var refUri))
+                {
+                    if (tab.CurrentUri != null && !refUri.Host.Equals(tab.CurrentUri.Host, StringComparison.OrdinalIgnoreCase))
+                    {
+                        originHost = refUri.Host;
+                        frameDesc = $"Subframe:{refUri.Host}|{e.ResourceContext}";
+                    }
+                }
+                else if (e.ResourceContext == CoreWebView2WebResourceContext.Document &&
+                         tab.CurrentUri != null &&
+                         !uri.Host.Equals(tab.CurrentUri.Host, StringComparison.OrdinalIgnoreCase))
+                {
+                    originHost = uri.Host;
+                    frameDesc = $"SubframeDoc:{uri.Host}";
+                }
+
                 bool isContextForStub = e.ResourceContext == CoreWebView2WebResourceContext.XmlHttpRequest ||
                                         e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
                                         e.ResourceContext == CoreWebView2WebResourceContext.Script;
@@ -1192,18 +1223,18 @@ public partial class MainWindow : Window
                         contentType = stubContentType;
                         responseBytes = stubBytes;
 
-                        ShieldLogger.Log("REQUEST_STUB_200", tab.CurrentUri?.Host ?? "unknown", uri.AbsoluteUri, e.ResourceContext.ToString(), "AdBlockResources redirect stub (200 OK)");
+                        ShieldLogger.Log("REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "AdBlockResources redirect stub (200 OK)");
                     }
                     else if (uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
                              uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
                     {
                         statusCode = 204;
                         statusReason = "No Content";
-                        ShieldLogger.Log("REQUEST_BLOCKED_204", "youtube.com", uri.AbsoluteUri, e.ResourceContext.ToString(), "YouTube ad/telemetry endpoint");
+                        ShieldLogger.Log("REQUEST_BLOCKED_204", "youtube.com", uri.AbsoluteUri, frameDesc, "YouTube ad/telemetry endpoint");
                     }
                     else
                     {
-                        ShieldLogger.Log("REQUEST_BLOCKED_403", tab.CurrentUri?.Host ?? "unknown", uri.AbsoluteUri, e.ResourceContext.ToString(), "Blocked ad domain or pattern");
+                        ShieldLogger.Log("REQUEST_BLOCKED_403", originHost, uri.AbsoluteUri, frameDesc, "Blocked ad domain or pattern");
                     }
 
                     e.Response = core.Environment.CreateWebResourceResponse(
@@ -1223,11 +1254,19 @@ public partial class MainWindow : Window
                     // Registro diagnóstico forense de recursos externos permitidos (Scripts, Iframes, XHR, Fetch)
                     string reqHost = uri.Host;
                     string? currentHost = tab.CurrentUri?.Host;
-                    if (!string.IsNullOrEmpty(currentHost) &&
-                        !reqHost.EndsWith(currentHost, StringComparison.OrdinalIgnoreCase) &&
-                        !AdBlockFilter.IsTrustedDomain(reqHost))
+                    bool isSubframeReq = frameDesc.StartsWith("Subframe", StringComparison.OrdinalIgnoreCase);
+
+                    if (isSubframeReq && (e.ResourceContext == CoreWebView2WebResourceContext.XmlHttpRequest ||
+                                          e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
+                                          e.ResourceContext == CoreWebView2WebResourceContext.Document))
                     {
-                        ShieldLogger.Log("REQUEST_ALLOWED", currentHost, uri.AbsoluteUri, e.ResourceContext.ToString(), "External third-party resource");
+                        ShieldLogger.Log("REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "Subframe media/network request");
+                    }
+                    else if (!string.IsNullOrEmpty(currentHost) &&
+                             !reqHost.EndsWith(currentHost, StringComparison.OrdinalIgnoreCase) &&
+                             !AdBlockFilter.IsTrustedDomain(reqHost))
+                    {
+                        ShieldLogger.Log("REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "External third-party resource");
                     }
                 }
             }
@@ -1267,6 +1306,15 @@ public partial class MainWindow : Window
             var frame = e.Frame;
             tab.ActiveFrames.TryAdd(frame, 0);
             frame.Destroyed += (fs, fe) => tab.ActiveFrames.TryRemove(frame, out _);
+
+            try
+            {
+                frame.NavigationStarting += (fs, fe) =>
+                {
+                    ShieldLogger.Log("SUBFRAME_NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "unknown", fe.Uri, "Subframe", $"IsUserInitiated={fe.IsUserInitiated}, IsRedirected={fe.IsRedirected}");
+                };
+            }
+            catch { }
 
             int currentBoost = tab.VolumeBoostPercent;
             if (currentBoost != 100)

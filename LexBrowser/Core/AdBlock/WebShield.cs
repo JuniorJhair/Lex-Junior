@@ -3,10 +3,34 @@ namespace LexBrowser.Core.AdBlock;
 public static class WebShield
 {
     /// <summary>
-    /// Escudo universal para navegación web, sitios de streaming y páginas con publicidad invasiva.
+    /// Interruptor para activar/desactivar el desarmador pasivo de anuncios en reproductores (JW Player / Fluid Player).
+    /// Controlado por la configuración del usuario en Ajustes (por defecto false para máxima estabilidad).
+    /// </summary>
+    public static bool EnableVideoPlayerDefuser
+    {
+        get => SettingsManager.Current?.EnableVideoPlayerDefuser ?? false;
+        set
+        {
+            if (SettingsManager.Current != null)
+                SettingsManager.Current.EnableVideoPlayerDefuser = value;
+        }
+    }
+
+    /// <summary>
+    /// Devuelve el script de escudo a inyectar en el documento según las preferencias actuales.
+    /// </summary>
+    public static string InjectedScript => GetInjectedScript(EnableVideoPlayerDefuser);
+
+    public static string GetInjectedScript(bool enableVideoDefuser)
+    {
+        return enableVideoDefuser ? BaseScript + VideoPlayerDefuserScript : BaseScript;
+    }
+
+    /// <summary>
+    /// Escudo base universal para navegación web, sitios de streaming y páginas con publicidad invasiva.
     /// Neutraliza pop-unders, click-jacking, enlaces trampa y detectores anti-adblock sin tocar YouTube.
     /// </summary>
-    public const string InjectedScript = @"
+    public const string BaseScript = @"
 (function() {
     if (window.__lex_web_shield_injected) return;
     window.__lex_web_shield_injected = true;
@@ -515,6 +539,50 @@ public static class WebShield
     const runClear = () => { if (!document.hidden) clearClickjackOverlays(); };
     onLoaded(() => [600, 3000, 8000].forEach(ms => setTimeout(runClear, ms)));
     document.addEventListener('visibilitychange', runClear);
+})();
+";
+
+    /// <summary>
+    /// Desarmador pasivo y no invasivo para reproductores de video (JW Player / Fluid Player).
+    /// Nunca reemplaza window.jwplayer ni modifica setup() para preservar licencias y flujos HLS.
+    /// Solo activo si EnableVideoPlayerDefuser es true.
+    /// </summary>
+    public const string VideoPlayerDefuserScript = @"
+(function() {
+    let attempts = 0;
+    const attachSafePlayerListener = () => {
+        try {
+            if (typeof window.jwplayer === 'function') {
+                const p = window.jwplayer();
+                if (p && typeof p.on === 'function') {
+                    p.on('adTime', function() {
+                        try {
+                            if (typeof p.skipAd === 'function') p.skipAd();
+                        } catch(_) {}
+                    });
+                    p.on('adError', function() {
+                        try {
+                            if (typeof p.play === 'function') p.play();
+                        } catch(_) {}
+                    });
+                    p.on('adBlock', function() {
+                        try {
+                            if (typeof p.play === 'function') p.play();
+                        } catch(_) {}
+                    });
+                    return;
+                }
+            }
+        } catch(_) {}
+        if (++attempts < 20) {
+            setTimeout(attachSafePlayerListener, 500);
+        }
+    };
+    if (document.readyState === 'complete') {
+        attachSafePlayerListener();
+    } else {
+        window.addEventListener('load', attachSafePlayerListener, { once: true });
+    }
 })();
 ";
 }
