@@ -243,9 +243,6 @@ public static class WebShield
                     iframe[src*='adform.net'],
                     div[class*='dm-ad'],
                     div[id*='dmads'],
-                    div[data-testid*='ad-container'],
-                    div[data-testid*='advertisement'],
-                    div[class*='ad-placeholder'],
                     a[href*='tsyndicate'],
                     a[href*='adtng.com'],
                     img[src*='adtng.com'],
@@ -523,11 +520,19 @@ public static class WebShield
         }
     };
 
-    window.addEventListener('click', handleCaptureClick, true);
-    window.addEventListener('pointerdown', handleCaptureClick, true);
+    const isTrustedSite = hostname.endsWith('dailymotion.com') ||
+                          hostname.endsWith('youtube.com') ||
+                          hostname.endsWith('twitch.tv') ||
+                          hostname.endsWith('vimeo.com');
+
+    if (!isTrustedSite) {
+        window.addEventListener('click', handleCaptureClick, true);
+        window.addEventListener('pointerdown', handleCaptureClick, true);
+    }
 
     // 1.6 Limpieza proactiva de capas trampas en el DOM (restringido estrictamente a ads explícitos, anchors fantasma y hermanos sobre videos)
     const clearClickjackOverlays = () => {
+        if (isTrustedSite) return;
         try {
             // 1. Elementos con nombres explícitos de anuncio
             const explicitAds = document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads], [id*=popunder], [class*=popunder]');

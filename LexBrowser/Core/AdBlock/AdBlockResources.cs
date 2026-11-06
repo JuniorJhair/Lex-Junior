@@ -325,15 +325,6 @@ if (!window.google || !window.google.ima || !window.google.ima.VERSION) {
         const event = new ima.AdsManagerLoadedEvent(ADS_MANAGER_LOADED, _r, _c);
         this._dispatch(event);
       });
-      const error = new ima.AdError(
-        "adPlayError",
-        1205, 1205,
-        "The browser prevented playback initiated without user interaction.",
-        _r, _c
-      );
-      requestAnimationFrame( () => {
-        this._dispatch(new ima.AdErrorEvent(error));
-      });
     }
   }
 
@@ -391,11 +382,6 @@ if (!window.google || !window.google.ima || !window.google.ima.VERSION) {
         for (const type of [
           AdEvent.Type.LOADED,
           AdEvent.Type.STARTED,
-          AdEvent.Type.CONTENT_PAUSE_REQUESTED,
-          AdEvent.Type.AD_BUFFERING,
-          AdEvent.Type.FIRST_QUARTILE,
-          AdEvent.Type.MIDPOINT,
-          AdEvent.Type.THIRD_QUARTILE,
           AdEvent.Type.COMPLETE,
           AdEvent.Type.ALL_ADS_COMPLETED,
           AdEvent.Type.CONTENT_RESUME_REQUESTED,
