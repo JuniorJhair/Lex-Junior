@@ -69,77 +69,6 @@ public static class WebShield
             });
         } catch(_) {}
 
-        // ─────────────────────────────────────────────────────────────
-        // 0.2 DEFUSOR DE PUBLICIDAD EN REPRODUCTORES (JW PLAYER 8, FLUID PLAYER)
-        // ─────────────────────────────────────────────────────────────
-        try {
-            let _realJwPlayer = window.jwplayer;
-            const wrapJwPlayer = function(origFn) {
-                if (typeof origFn !== 'function') return origFn;
-                const jwProxy = function() {
-                    const inst = origFn.apply(this, arguments);
-                    if (inst && typeof inst.setup === 'function' && !inst.__lex_setup_hooked) {
-                        inst.__lex_setup_hooked = true;
-                        const origSetup = inst.setup;
-                        inst.setup = function(options) {
-                            if (options && typeof options === 'object') {
-                                delete options.advertising;
-                                delete options.adschedule;
-                                delete options.schedule;
-                                delete options.adList;
-                                delete options.preroll;
-                            }
-                            const res = origSetup.call(this, options);
-                            try {
-                                if (typeof inst.skipAd === 'function') {
-                                    inst.on('adPlay', function() { inst.skipAd(); });
-                                    inst.on('adTime', function() { inst.skipAd(); });
-                                    inst.on('adStarted', function() { inst.skipAd(); });
-                                }
-                            } catch(_) {}
-                            return res;
-                        };
-                    }
-                    return inst;
-                };
-                for (const k in origFn) {
-                    try { jwProxy[k] = origFn[k]; } catch(_) {}
-                }
-                return jwProxy;
-            };
-
-            if (_realJwPlayer) {
-                window.jwplayer = wrapJwPlayer(_realJwPlayer);
-            }
-
-            Object.defineProperty(window, 'jwplayer', {
-                get: function() { return _realJwPlayer; },
-                set: function(val) {
-                    _realJwPlayer = wrapJwPlayer(val);
-                },
-                configurable: true
-            });
-        } catch(_) {}
-
-        try {
-            let _realFp = window.fluidPlayer;
-            const wrapFp = function(origFn) {
-                if (typeof origFn !== 'function') return origFn;
-                return function(id, options) {
-                    if (options && typeof options === 'object' && options.vastOptions) {
-                        options.vastOptions.adList = [];
-                    }
-                    return origFn.apply(this, arguments);
-                };
-            };
-            if (_realFp) window.fluidPlayer = wrapFp(_realFp);
-            Object.defineProperty(window, 'fluidPlayer', {
-                get: function() { return _realFp; },
-                set: function(val) { _realFp = wrapFp(val); },
-                configurable: true
-            });
-        } catch(_) {}
-
         window.popns = {};
         window._pop = [];
         window._monetag = {};
@@ -577,25 +506,6 @@ public static class WebShield
             }
         } catch(e) {}
     };
-
-    // 1.7 Auto-salto y adelanto de comerciales en reproductores de video (JW Player, HTML5 ads)
-    const autoSkipVideoAds = () => {
-        try {
-            const skipBtn = document.querySelector('.jw-skip, .fluid_ad_skip_button, [class*=skip-button], [class*=skip__button], button[class*=skip]');
-            if (skipBtn && skipBtn.offsetParent !== null) {
-                skipBtn.click();
-            }
-
-            const adVideos = document.querySelectorAll('.jw-flag-ads video, .fluid_ad video, [class*=vast] video');
-            for (let i = 0; i < adVideos.length; i++) {
-                const v = adVideos[i];
-                if (v && !v.paused && v.duration > 0 && v.duration <= 90) {
-                    v.currentTime = v.duration;
-                }
-            }
-        } catch(_) {}
-    };
-    setInterval(autoSkipVideoAds, 350);
 
     const onLoaded = (fn) => {
         if (document.readyState === 'complete') fn();
