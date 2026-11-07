@@ -46,6 +46,11 @@ public class BrowserSettings
     public bool HasCompletedInitialSecuritySetup { get; set; } = false;
     public bool UserDecidedDefaultBrowser { get; set; } = false;
     public bool WasPreviouslyDefaultBrowser { get; set; } = false;
+
+    // Sistema de Notificaciones Web (0% CPU en reposo)
+    // Valores: "Ask" (Preguntar al usuario), "BlockAll" (Bloquear todas en silencio - comportamiento previo), "SilentAll" (Permitir solo en centro)
+    public string NotificationGlobalPolicy { get; set; } = "Ask";
+    public string NotificationDndShortcut { get; set; } = "Ctrl+Shift+D";
 }
 
 public static class SettingsManager

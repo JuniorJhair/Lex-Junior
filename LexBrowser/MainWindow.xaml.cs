@@ -18,6 +18,7 @@ using Microsoft.Web.WebView2.Wpf;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
 using LexBrowser.Core.Engine;
+using LexBrowser.Core.Notifications;
 using LexBrowser.UI.Models;
 using LexBrowser.UI.Views;
 
@@ -1337,14 +1338,10 @@ public partial class MainWindow : Window
             }
         };
 
-        // 3.1 Escudo contra secuestro de notificaciones y permisos invasivos
+        // 3.1 Manejo granular de permisos (Notificaciones web nativas con control por sitio)
         core.PermissionRequested += (s, e) =>
         {
-            if (SettingsManager.Current.EnableAdBlocker && e.PermissionKind == CoreWebView2PermissionKind.Notifications)
-            {
-                e.State = CoreWebView2PermissionState.Deny;
-                e.Handled = true;
-            }
+            HandleCorePermissionRequested(tab, core, e);
         };
 
         // 3.2 Recuperación automática si el proceso de renderizado de la pestaña falla inesperadamente
@@ -1393,12 +1390,27 @@ public partial class MainWindow : Window
             }
         };
 
-        // Al iniciar una navegación en el frame principal, descartar subframes obsoletos y desbloqueadores de la página previa
+        // Al iniciar una navegación en el frame principal, descartar subframes obsoletos y solicitudes pendientes
         core.NavigationStarting += (s, e) =>
         {
             tab.ActiveFrames.Clear();
             tab.CorsUnlocker?.Dispose();
             tab.CorsUnlocker = null;
+
+            if (tab.PendingNotificationRequest != null)
+            {
+                tab.PendingNotificationRequest.Resolve(CoreWebView2PermissionState.Default, savesInProfile: false);
+                tab.PendingNotificationRequest = null;
+                var win = tab.OwnerWindow ?? this;
+                win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                {
+                    if (win._activeTab == tab)
+                    {
+                        win.PillNotificationPermission.Visibility = Visibility.Collapsed;
+                        win.PopupNotificationPermission.IsOpen = false;
+                    }
+                });
+            }
         };
 
         // Detección nativa de reproducción de audio para suspender o priorizar memoria
@@ -2134,6 +2146,7 @@ public partial class MainWindow : Window
             UpdateZoomIndicatorUI(showFloating: false);
             UpdateVolumeBoosterUI();
             UpdateMediaSnifferUI();
+            UpdateNotificationPermissionUI();
             _ = UpdateTranslateIndicatorUIAsync(tab);
             FocusOmniboxIfNewTab(tab);
         }
@@ -2367,6 +2380,207 @@ public partial class MainWindow : Window
         TxtTranslateAction.Text = "Traducir";
         PillTranslateIndicator.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E293B"));
         ShowToast("Página restaurada al idioma original.");
+    }
+
+    // ── Notificaciones Web: Interfaz y Permisos Granulares (Fase 1) ──
+
+    private void UpdateNotificationPermissionUI()
+    {
+        if (_activeTab?.PendingNotificationRequest != null && !_activeTab.PendingNotificationRequest.IsResolved)
+        {
+            string host = _activeTab.PendingNotificationRequest.DisplayHost;
+            TxtNotificationPromptTitle.Text = string.IsNullOrEmpty(host) ? "Permiso de notificaciones" : $"{host} solicita permiso";
+            TxtNotificationPromptMessage.Text = string.IsNullOrEmpty(host)
+                ? "Este sitio solicita permiso para enviarte alertas y novedades en el escritorio."
+                : $"El sitio {host} desea enviarte avisos y novedades en el escritorio.";
+            PillNotificationPermission.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            PillNotificationPermission.Visibility = Visibility.Collapsed;
+            PopupNotificationPermission.IsOpen = false;
+        }
+    }
+
+    private void PillNotificationPermission_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab?.PendingNotificationRequest != null && !_activeTab.PendingNotificationRequest.IsResolved)
+        {
+            PopupNotificationPermission.IsOpen = !PopupNotificationPermission.IsOpen;
+        }
+    }
+
+    private void BtnNotificationAllow_Click(object sender, RoutedEventArgs e)
+    {
+        ResolveActiveNotificationPermission(SiteNotificationMode.Allow, CoreWebView2PermissionState.Allow, savesInProfile: !_activeTab?.IsIncognito ?? true);
+    }
+
+    private void BtnNotificationSilent_Click(object sender, RoutedEventArgs e)
+    {
+        ResolveActiveNotificationPermission(SiteNotificationMode.Silent, CoreWebView2PermissionState.Allow, savesInProfile: !_activeTab?.IsIncognito ?? true);
+    }
+
+    private void BtnNotificationDismiss_Click(object sender, RoutedEventArgs e)
+    {
+        ResolveActiveNotificationPermission(SiteNotificationMode.Ask, CoreWebView2PermissionState.Default, savesInProfile: false);
+    }
+
+    private void BtnNotificationBlock_Click(object sender, RoutedEventArgs e)
+    {
+        ResolveActiveNotificationPermission(SiteNotificationMode.Block, CoreWebView2PermissionState.Deny, savesInProfile: !_activeTab?.IsIncognito ?? true);
+    }
+
+    private void ResolveActiveNotificationPermission(SiteNotificationMode mode, CoreWebView2PermissionState state, bool savesInProfile)
+    {
+        PopupNotificationPermission.IsOpen = false;
+        PillNotificationPermission.Visibility = Visibility.Collapsed;
+
+        var tab = _activeTab;
+        if (tab?.PendingNotificationRequest == null || tab.PendingNotificationRequest.IsResolved) return;
+
+        var req = tab.PendingNotificationRequest;
+        tab.PendingNotificationRequest = null;
+
+        if (mode != SiteNotificationMode.Ask)
+        {
+            NotificationPermissionManager.SetSiteMode(req.Origin, mode, tab.IsIncognito);
+        }
+
+        req.Resolve(state, savesInProfile);
+
+        string eventType = state switch
+        {
+            CoreWebView2PermissionState.Allow => "NOTIFICATION_PERMISSION_ALLOWED",
+            CoreWebView2PermissionState.Deny => "NOTIFICATION_PERMISSION_BLOCKED",
+            _ => "NOTIFICATION_PERMISSION_DISMISSED"
+        };
+
+        string tabDesc = $"Tab:{tab.TabId} ({req.DisplayHost})";
+        ShieldLogger.Log(eventType, req.DisplayHost, req.Origin, "MainFrame", $"User selected {mode} (State={state})", tabDesc);
+    }
+
+    private void HandleCorePermissionRequested(BrowserTab tab, CoreWebView2 core, CoreWebView2PermissionRequestedEventArgs e)
+    {
+        if (tab.IsDisposed) return;
+
+        if (e.PermissionKind != CoreWebView2PermissionKind.Notifications)
+        {
+            return;
+        }
+
+        string uriStr = e.Uri ?? string.Empty;
+        string host = "unknown";
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(uriStr)) host = new Uri(uriStr).Host;
+        }
+        catch { }
+
+        string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+
+        // 1. Denegar si la solicitud proviene de un subframe/iframe de origen cruzado
+        bool isCrossOriginOrSubframe = false;
+        try
+        {
+            if (tab.CurrentUri != null && !string.IsNullOrWhiteSpace(e.Uri))
+            {
+                var reqHost = new Uri(e.Uri).Host;
+                var mainHost = tab.CurrentUri.Host;
+                if (!string.Equals(reqHost, mainHost, StringComparison.OrdinalIgnoreCase) &&
+                    !reqHost.EndsWith("." + mainHost, StringComparison.OrdinalIgnoreCase))
+                {
+                    isCrossOriginOrSubframe = true;
+                }
+            }
+        }
+        catch { }
+
+        if (isCrossOriginOrSubframe)
+        {
+            e.State = CoreWebView2PermissionState.Deny;
+            e.SavesInProfile = false;
+            e.Handled = true;
+            ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "Subframe", "Cross-origin subframe blocked by security policy", tabDesc);
+            return;
+        }
+
+        // 2. Política global: Bloquear todas las solicitudes (comportamiento previo de Lex Junior)
+        if (SettingsManager.Current.NotificationGlobalPolicy == "BlockAll")
+        {
+            e.State = CoreWebView2PermissionState.Deny;
+            e.SavesInProfile = false;
+            e.Handled = true;
+            ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Blocked by global policy (BlockAll)", tabDesc);
+            return;
+        }
+
+        // 3. Denegar en silencio si el origen coincide con la lista negra de publicidad/rastreo
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(uriStr) && AdBlockFilter.ShouldBlock(new Uri(uriStr)))
+            {
+                e.State = CoreWebView2PermissionState.Deny;
+                e.SavesInProfile = false;
+                e.Handled = true;
+                ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Origin in ad/tracking filter list", tabDesc);
+                return;
+            }
+        }
+        catch { }
+
+        // 4. Comprobar preferencias previamente guardadas para este origen
+        string origin = NotificationPermissionManager.NormalizeOrigin(uriStr);
+        var existingMode = NotificationPermissionManager.GetSiteMode(origin, tab.IsIncognito);
+
+        if (existingMode == SiteNotificationMode.Block)
+        {
+            e.State = CoreWebView2PermissionState.Deny;
+            e.SavesInProfile = !tab.IsIncognito;
+            e.Handled = true;
+            ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Previously blocked by user preference", tabDesc);
+            return;
+        }
+
+        if (existingMode == SiteNotificationMode.Allow ||
+            existingMode == SiteNotificationMode.Silent ||
+            existingMode == SiteNotificationMode.Digest)
+        {
+            e.State = CoreWebView2PermissionState.Allow;
+            e.SavesInProfile = !tab.IsIncognito;
+            e.Handled = true;
+            ShieldLogger.Log("NOTIFICATION_PERMISSION_ALLOWED", host, uriStr, "MainFrame", $"Previously allowed (Mode={existingMode})", tabDesc);
+            return;
+        }
+
+        // 5. Política global "SilentAll": permitir solo en centro sin preguntar
+        if (SettingsManager.Current.NotificationGlobalPolicy == "SilentAll")
+        {
+            NotificationPermissionManager.SetSiteMode(origin, SiteNotificationMode.Silent, tab.IsIncognito);
+            e.State = CoreWebView2PermissionState.Allow;
+            e.SavesInProfile = !tab.IsIncognito;
+            e.Handled = true;
+            ShieldLogger.Log("NOTIFICATION_PERMISSION_ALLOWED", host, uriStr, "MainFrame", "Auto-allowed as Silent by global policy", tabDesc);
+            return;
+        }
+
+        // 6. Nueva solicitud (Ask): Retener con GetDeferral y mostrar prompt discreto en omnibox
+        var deferral = e.GetDeferral();
+        e.Handled = true;
+
+        var pendingReq = new PendingNotificationPermissionRequest(e, deferral, origin, host);
+        tab.PendingNotificationRequest = pendingReq;
+
+        ShieldLogger.Log("NOTIFICATION_PERMISSION_REQUESTED", host, uriStr, "MainFrame", "User prompted via omnibox chip", tabDesc);
+
+        var win = tab.OwnerWindow ?? this;
+        win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            if (win._activeTab == tab)
+            {
+                win.UpdateNotificationPermissionUI();
+                win.PopupNotificationPermission.IsOpen = true;
+            }
+        });
     }
 
     private void UpdateNavigationButtons()
@@ -3544,6 +3758,25 @@ public partial class MainWindow : Window
         ZoomOut();
     }
 
+    public static bool IsDoNotDisturbActive { get; set; } = false;
+
+    private void ToggleNotificationDoNotDisturb()
+    {
+        IsDoNotDisturbActive = !IsDoNotDisturbActive;
+        string status = IsDoNotDisturbActive ? "activado (alertas silenciadas al Centro)" : "desactivado (alertas normales)";
+        ShowToast($"🔕 Modo No Molestar {status}");
+    }
+
+    private bool IsNotificationDndShortcut(KeyEventArgs e)
+    {
+        string shortcut = SettingsManager.Current.NotificationDndShortcut ?? "Ctrl+Shift+D";
+        if (shortcut.Equals("Ctrl+Shift+D", StringComparison.OrdinalIgnoreCase))
+        {
+            return Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.D;
+        }
+        return false;
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // GESTOR DE ATAJOS DE TECLADO GLOBALES (UNIVERSALES)
     // ─────────────────────────────────────────────────────────────────────
@@ -3567,6 +3800,14 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             CopyOrExportShieldLog();
+            return;
+        }
+
+        // 0.08 Atajo configurable para No Molestar (por defecto Ctrl + Shift + D)
+        if (IsNotificationDndShortcut(e))
+        {
+            e.Handled = true;
+            ToggleNotificationDoNotDisturb();
             return;
         }
 
@@ -3777,6 +4018,12 @@ public partial class MainWindow : Window
         tabToClose.CorsUnlocker?.Dispose();
         tabToClose.CorsUnlocker = null;
         tabToClose.ClearDetectedMedia();
+
+        if (tabToClose.PendingNotificationRequest != null)
+        {
+            tabToClose.PendingNotificationRequest.Resolve(CoreWebView2PermissionState.Default, savesInProfile: false);
+            tabToClose.PendingNotificationRequest = null;
+        }
 
         // Privacidad de Incógnito: jamás guardar pestañas de incógnito en el historial de Ctrl+Shift+T
         if (!tabToClose.IsIncognito && !string.IsNullOrWhiteSpace(tabToClose.Url) && !tabToClose.IsNewTab)

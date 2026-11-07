@@ -417,6 +417,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Logo G multicolor de Google (visible al buscar o en Nueva Pestaña) + Icono de Seguridad HTTPS -->
@@ -486,6 +487,30 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="🌐 " FontSize="10.5" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtTranslateAction" Text="Traducir" FontSize="11" FontWeight="SemiBold" Foreground="#38BDF8" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Pill de Permiso de Notificaciones en Omnibox (Fase 1: No invasivo, estilo Brave/Chrome) -->
+                    <Button x:Name="PillNotificationPermission" Grid.Column="5" Background="#261E38" BorderBrush="#8B5CF6" BorderThickness="1"
+                            Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
+                            Cursor="Hand" ToolTip="Este sitio solicita permiso para enviarte notificaciones"
+                            Click="PillNotificationPermission_Click" FocusVisualStyle="{StaticResource LexFocusVisual}" SnapsToDevicePixels="True">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="pillBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="6,2">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="pillBorder" Property="Background" Value="#352654"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🔔 " FontSize="10.5" VerticalAlignment="Center"/>
+                            <TextBlock Text="Notificaciones" FontSize="11" FontWeight="SemiBold" Foreground="#A78BFA" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </Grid>
@@ -638,6 +663,103 @@
 
                             <Button x:Name="BtnRestoreTranslate" Grid.Column="1" Style="{StaticResource LexSecondaryButton}"
                                     Content="Ver original" Height="30" Padding="12,0" Click="BtnRestoreTranslate_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <!-- Popup Discreto de Permiso de Notificaciones (Fase 1: No invasivo, estilo Brave/Chrome) -->
+            <Popup x:Name="PopupNotificationPermission" PlacementTarget="{Binding ElementName=PillNotificationPermission}"
+                   Placement="Bottom" VerticalOffset="6" HorizontalOffset="-160"
+                   StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Background="#161622" BorderBrush="#2D2D42" BorderThickness="1.5" CornerRadius="12" Padding="14,12" MinWidth="320" MaxWidth="360">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.7" Color="#000000"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <!-- Encabezado con Icono y Sitio -->
+                        <Grid Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="🔔" FontSize="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtNotificationPromptTitle" Text="Notificaciones del sitio" FontWeight="Bold" FontSize="13" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button Style="{StaticResource LexGhostButton}" Content="✕" Width="26" Height="26" Padding="0"
+                                    HorizontalAlignment="Right" Click="BtnNotificationDismiss_Click" ToolTip="Cerrar"/>
+                        </Grid>
+
+                        <TextBlock x:Name="TxtNotificationPromptMessage" Text="Este sitio solicita permiso para enviarte alertas y novedades en el escritorio."
+                                   FontSize="11.5" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,12" LineHeight="16"/>
+
+                        <!-- Botones de Acción -->
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Permitir -->
+                            <Button Grid.Row="0" Grid.Column="0" Margin="0,0,4,6" Height="30"
+                                    Background="#6366F1" BorderBrush="#818CF8" BorderThickness="1"
+                                    Foreground="#FFFFFF" FontSize="11.5" FontWeight="SemiBold" Cursor="Hand"
+                                    Click="BtnNotificationAllow_Click" ToolTip="Permitir notificaciones con avisos emergentes">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="8,4">
+                                            <TextBlock Text="Permitir" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <!-- Permitir en silencio -->
+                            <Button Grid.Row="0" Grid.Column="1" Margin="4,0,0,6" Height="30"
+                                    Background="#222234" BorderBrush="#3D3D56" BorderThickness="1"
+                                    Foreground="#E4E4E7" FontSize="11.5" FontWeight="Medium" Cursor="Hand"
+                                    Click="BtnNotificationSilent_Click" ToolTip="Permitir solo en el centro de notificaciones, sin avisos emergentes">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="8,4">
+                                            <TextBlock Text="Silencioso" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <!-- Ahora no -->
+                            <Button Grid.Row="1" Grid.Column="0" Margin="0,2,4,0" Height="28"
+                                    Background="Transparent" BorderBrush="#2D2D42" BorderThickness="1"
+                                    Foreground="#A1A1AA" FontSize="11" FontWeight="Medium" Cursor="Hand"
+                                    Click="BtnNotificationDismiss_Click" ToolTip="No otorgar permiso por ahora">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="8,3">
+                                            <TextBlock Text="Ahora no" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+
+                            <!-- Bloquear -->
+                            <Button Grid.Row="1" Grid.Column="1" Margin="4,2,0,0" Height="28"
+                                    Background="#25161A" BorderBrush="#4C222A" BorderThickness="1"
+                                    Foreground="#F87171" FontSize="11" FontWeight="Medium" Cursor="Hand"
+                                    Click="BtnNotificationBlock_Click" ToolTip="Bloquear permanentemente las notificaciones de este sitio">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="8,3">
+                                            <TextBlock Text="Bloquear" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
                         </Grid>
                     </StackPanel>
                 </Border>

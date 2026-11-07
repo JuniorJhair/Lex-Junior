@@ -25,6 +25,14 @@ public class GlobalScrollBehaviorTests
             {
                 ex = e;
             }
+            finally
+            {
+                try
+                {
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+                }
+                catch { }
+            }
         });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();

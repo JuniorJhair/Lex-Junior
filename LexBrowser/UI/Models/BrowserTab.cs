@@ -99,6 +99,9 @@ public class BrowserTab : INotifyPropertyChanged
     /// <summary>Desbloqueador dinámico CORS para amplificación de audio > 100% en orígenes cruzados.</summary>
     public LexBrowser.Core.CorsMediaUnlocker? CorsUnlocker { get; set; }
 
+    /// <summary>Solicitud de permiso de notificaciones pendiente de respuesta del usuario para esta pestaña.</summary>
+    public LexBrowser.Core.Notifications.PendingNotificationPermissionRequest? PendingNotificationRequest { get; set; }
+
     /// <summary>
     /// Marca de tiempo UTC de la última vez que esta pestaña solicitó abrir una nueva ventana o pestaña (NewWindowRequested).
     /// Utilizado para detectar y neutralizar ataques de secuestro de pestaña original (tab-under / reverse popunder).
