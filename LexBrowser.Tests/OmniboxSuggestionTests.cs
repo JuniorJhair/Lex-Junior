@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using LexBrowser.Core;
+using LexBrowser.UI.Models;
 using Xunit;
 
 namespace LexBrowser.Tests;
@@ -56,6 +57,44 @@ public class OmniboxSuggestionTests
         // 4. Sugerencia predictiva en vivo de Google 🔍
         Assert.Equal(OmniboxSuggestionKind.LiveSearchSuggestion, suggestions[3].Kind);
         Assert.Equal("juegos gratis para pc", suggestions[3].PrimaryText);
+    }
+
+    [Theory]
+    [InlineData("you", "youtube.com")]
+    [InlineData("git", "github.com")]
+    [InlineData("goog", "google.com")]
+    [InlineData("wha", "whatsapp.com")]
+    [InlineData("web.wh", "web.whatsapp.com")]
+    public void GetInlineAutocompleteMatch_MatchesPopularDomains(string input, string expected)
+    {
+        string? match = OmniboxSuggestionService.GetInlineAutocompleteMatch(input, null, null);
+        Assert.Equal(expected, match);
+    }
+
+    [Fact]
+    public void GetInlineAutocompleteMatch_PrioritizesBookmarksAndHistory()
+    {
+        var bookmarks = new List<BookmarkItem>
+        {
+            new() { Url = "https://customproject.org/app", Title = "Custom App" }
+        };
+
+        var history = new List<HistoryEntry>
+        {
+            new() { Url = "https://myworkstation.net/dashboard", Title = "Work Dashboard" }
+        };
+
+        // Bookmark match
+        string? matchBm = OmniboxSuggestionService.GetInlineAutocompleteMatch("custom", history, bookmarks);
+        Assert.Equal("customproject.org", matchBm);
+
+        // History match
+        string? matchHist = OmniboxSuggestionService.GetInlineAutocompleteMatch("mywork", history, bookmarks);
+        Assert.Equal("myworkstation.net", matchHist);
+
+        // Space at end suppresses inline autocomplete
+        string? matchSpace = OmniboxSuggestionService.GetInlineAutocompleteMatch("you ", history, bookmarks);
+        Assert.Null(matchSpace);
     }
 }
 

@@ -56,6 +56,8 @@ public partial class MainWindow : Window
     private bool _isDraggingTab = false;
     private BrowserTab? _initialAttachedTab;
     private string? _initialUrl;
+    private readonly bool _startInIncognito = false;
+    private readonly bool _startInGuest = false;
 
     public MainWindow() : this((string?)null, null)
     {
@@ -69,10 +71,21 @@ public partial class MainWindow : Window
     {
     }
 
-    public MainWindow(string? initialUrl, BrowserTab? initialTab)
+    public MainWindow(string? initialUrl, BrowserTab? initialTab) : this(initialUrl, initialTab, false, false)
+    {
+    }
+
+    public MainWindow(string? initialUrl, BrowserTab? initialTab = null, bool startInIncognito = false, bool startInGuest = false)
     {
         _initialUrl = NormalizeExternalUrl(initialUrl);
         _initialAttachedTab = initialTab;
+        _startInIncognito = startInIncognito;
+        _startInGuest = startInGuest;
+        if (startInGuest)
+        {
+            _isGuestSession = true;
+        }
+
         InitializeComponent();
         InitializeTranslateLanguageList();
         TabsItemsControl.ItemsSource = Tabs;
@@ -555,29 +568,47 @@ public partial class MainWindow : Window
     {
         CleanLegacyDiagnosticLogs();
 
-        // Verificar si es la primera vez que abre el navegador (para ofrecer configurar PIN o elegir "No me gustaría usar contraseña")
-        bool hasCompletedSecuritySetup = SettingsManager.Current.HasCompletedInitialSecuritySetup ||
-                                         File.Exists(SettingsManager.SecuritySetupMarkerPath);
+        // Si fue abierto explícitamente en Modo Invitado desde la barra de tareas
+        if (_startInGuest)
+        {
+            _isGuestSession = true;
+            ApplySettings();
+            await AddNewTabAsync(_initialUrl, isIncognito: true);
+            ShowToast("👤 Modo Invitado activo: navegas en una sesión aislada sin acceso a las contraseñas ni marcadores del propietario.");
+        }
+        else
+        {
+            // Verificar si es la primera vez que abre el navegador (para ofrecer configurar PIN o elegir "No me gustaría usar contraseña")
+            bool hasCompletedSecuritySetup = SettingsManager.Current.HasCompletedInitialSecuritySetup ||
+                                             File.Exists(SettingsManager.SecuritySetupMarkerPath);
 
-        if (_initialAttachedTab == null &&
-            !hasCompletedSecuritySetup &&
-            !PasswordManager.HasMasterPasswordConfigured())
-        {
-            ShowFirstTimeSecuritySetupOverlay();
-        }
-        else if (_initialAttachedTab == null && PasswordManager.ShouldRequireUnlockOnStartup())
-        {
-            ShowBrowserLockOverlay();
-        }
-        else if (_initialAttachedTab != null)
-        {
-            var initial = _initialAttachedTab;
-            _initialAttachedTab = null;
-            AttachExistingTab(initial);
-        }
-        else if (Tabs.Count == 0)
-        {
-            await RestoreOrInitializeSessionTabsAsync();
+            if (_initialAttachedTab == null &&
+                !hasCompletedSecuritySetup &&
+                !PasswordManager.HasMasterPasswordConfigured())
+            {
+                ShowFirstTimeSecuritySetupOverlay();
+            }
+            else if (_initialAttachedTab == null && PasswordManager.ShouldRequireUnlockOnStartup())
+            {
+                ShowBrowserLockOverlay();
+            }
+            else if (_initialAttachedTab != null)
+            {
+                var initial = _initialAttachedTab;
+                _initialAttachedTab = null;
+                AttachExistingTab(initial);
+            }
+            else if (Tabs.Count == 0)
+            {
+                if (_startInIncognito)
+                {
+                    await AddNewTabAsync(_initialUrl, isIncognito: true);
+                }
+                else
+                {
+                    await RestoreOrInitializeSessionTabsAsync();
+                }
+            }
         }
 
         // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
@@ -672,6 +703,41 @@ public partial class MainWindow : Window
             try { return new Uri(raw).AbsoluteUri; } catch { }
         }
         return raw;
+    }
+
+    public async Task HandleExternalIpcCommandAsync(string commandOrUrl)
+    {
+        if (string.IsNullOrWhiteSpace(commandOrUrl)) return;
+
+        if (string.Equals(commandOrUrl, "CMD:GUEST", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_isGuestSession)
+            {
+                await EnterGuestModeAsync();
+            }
+            return;
+        }
+
+        if (string.Equals(commandOrUrl, "CMD:INCOGNITO", StringComparison.OrdinalIgnoreCase))
+        {
+            if (BrowserLockOverlay.Visibility == Visibility.Visible) return;
+            if (_isGuestSession)
+            {
+                if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
+                    return;
+            }
+            await AddNewTabAsync(null, isIncognito: true);
+            return;
+        }
+
+        if (string.Equals(commandOrUrl, "CMD:NEW_TAB", StringComparison.OrdinalIgnoreCase))
+        {
+            if (BrowserLockOverlay.Visibility == Visibility.Visible) return;
+            await AddNewTabAsync(null, isIncognito: _isGuestSession);
+            return;
+        }
+
+        await AddNewTabFromExternalAsync(commandOrUrl);
     }
 
     public async Task AddNewTabFromExternalAsync(string url)
@@ -3300,6 +3366,7 @@ public partial class MainWindow : Window
     // BARRA DE URL / OMNIBOX INTELIGENTE (SUGERENCIAS EN VIVO + HISTORIAL)
     // ─────────────────────────────────────────────────────────────────────
     private bool _isUpdatingOmniboxTextProgrammatically = false;
+    private bool _suppressInlineAutocomplete = false;
     private readonly List<OmniboxSuggestionItem> _omniboxSuggestions = new();
     private int _selectedOmniboxIndex = 0;
     private System.Threading.CancellationTokenSource? _omniboxLiveSuggestCts;
@@ -3336,13 +3403,40 @@ public partial class MainWindow : Window
         if (_isUpdatingOmniboxTextProgrammatically || !TxtUrl.IsKeyboardFocusWithin)
             return;
 
-        string query = TxtUrl.Text.Trim();
+        string rawText = TxtUrl.Text;
+        string query = rawText.Trim();
         if (string.IsNullOrEmpty(query))
         {
             _omniboxLiveSuggestCts?.Cancel();
             PopupOmniboxSuggestions.IsOpen = false;
             return;
         }
+
+        // Autocompletado predictivo en línea (Inline Autocomplete estilo Chrome/Edge)
+        if (!_suppressInlineAutocomplete && TxtUrl.SelectionLength == 0 && !rawText.EndsWith(" "))
+        {
+            bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
+            var localHistory = isPrivate
+                ? (IReadOnlyList<HistoryEntry>)Array.Empty<HistoryEntry>()
+                : HistoryManager.GetEntries();
+            var localBookmarks = isPrivate
+                ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>()
+                : BookmarkManager.Bookmarks;
+
+            string? match = OmniboxSuggestionService.GetInlineAutocompleteMatch(rawText, localHistory, localBookmarks);
+            if (!string.IsNullOrEmpty(match) && match.StartsWith(rawText, StringComparison.OrdinalIgnoreCase) && match.Length > rawText.Length)
+            {
+                int userLen = rawText.Length;
+                string predicted = rawText + match.Substring(userLen);
+
+                _isUpdatingOmniboxTextProgrammatically = true;
+                TxtUrl.Text = predicted;
+                TxtUrl.SelectionStart = userLen;
+                TxtUrl.SelectionLength = predicted.Length - userLen;
+                _isUpdatingOmniboxTextProgrammatically = false;
+            }
+        }
+        _suppressInlineAutocomplete = false;
 
         _ = RefreshOmniboxSuggestionsAsync(query);
     }
@@ -3414,12 +3508,63 @@ public partial class MainWindow : Window
 
     private void TxtUrl_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Back || e.Key == Key.Delete)
+        {
+            _suppressInlineAutocomplete = true;
+
+            // Si hay una porción predictiva autocompletada y seleccionada al final del texto:
+            // al pulsar Backspace/Delete, se borra solo esa porción sugerida dejando el texto escrito intacto.
+            if (TxtUrl.SelectionLength > 0 && TxtUrl.SelectionStart + TxtUrl.SelectionLength == TxtUrl.Text.Length)
+            {
+                e.Handled = true;
+                int start = TxtUrl.SelectionStart;
+                _isUpdatingOmniboxTextProgrammatically = true;
+                TxtUrl.Text = TxtUrl.Text.Substring(0, start);
+                TxtUrl.SelectionStart = start;
+                TxtUrl.SelectionLength = 0;
+                _isUpdatingOmniboxTextProgrammatically = false;
+                return;
+            }
+        }
+        else if (e.Key == Key.Right || e.Key == Key.Tab || e.Key == Key.End)
+        {
+            // Aceptar la sugerencia predictiva y mover el cursor al final de la URL
+            if (TxtUrl.SelectionLength > 0 && TxtUrl.SelectionStart + TxtUrl.SelectionLength == TxtUrl.Text.Length)
+            {
+                e.Handled = true;
+                TxtUrl.SelectionStart = TxtUrl.Text.Length;
+                TxtUrl.SelectionLength = 0;
+                return;
+            }
+        }
+        else if (e.Key == Key.Escape)
+        {
+            if (TxtUrl.SelectionLength > 0 && TxtUrl.SelectionStart + TxtUrl.SelectionLength == TxtUrl.Text.Length)
+            {
+                e.Handled = true;
+                int start = TxtUrl.SelectionStart;
+                _isUpdatingOmniboxTextProgrammatically = true;
+                TxtUrl.Text = TxtUrl.Text.Substring(0, start);
+                TxtUrl.SelectionStart = start;
+                TxtUrl.SelectionLength = 0;
+                _isUpdatingOmniboxTextProgrammatically = false;
+                PopupOmniboxSuggestions.IsOpen = false;
+                return;
+            }
+            if (PopupOmniboxSuggestions.IsOpen)
+            {
+                e.Handled = true;
+                PopupOmniboxSuggestions.IsOpen = false;
+                return;
+            }
+        }
+        else
+        {
+            _suppressInlineAutocomplete = false;
+        }
+
         if (!PopupOmniboxSuggestions.IsOpen || _omniboxSuggestions.Count == 0)
         {
-            if (e.Key == Key.Escape)
-            {
-                PopupOmniboxSuggestions.IsOpen = false;
-            }
             return;
         }
 
@@ -3432,11 +3577,6 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             MoveOmniboxSelection(-1);
-        }
-        else if (e.Key == Key.Escape)
-        {
-            e.Handled = true;
-            PopupOmniboxSuggestions.IsOpen = false;
         }
     }
 
@@ -3495,7 +3635,7 @@ public partial class MainWindow : Window
 
         string input = TxtUrl.Text.Trim();
         if (PopupOmniboxSuggestions.IsOpen &&
-            _selectedOmniboxIndex >= 0 &&
+            _selectedOmniboxIndex > 0 &&
             _selectedOmniboxIndex < _omniboxSuggestions.Count)
         {
             input = _omniboxSuggestions[_selectedOmniboxIndex].TargetInputOrUrl.Trim();
@@ -6148,7 +6288,14 @@ public partial class MainWindow : Window
 
         if (Tabs.Count == 0)
         {
-            await RestoreOrInitializeSessionTabsAsync();
+            if (_startInIncognito)
+            {
+                await AddNewTabAsync(_initialUrl, isIncognito: true);
+            }
+            else
+            {
+                await RestoreOrInitializeSessionTabsAsync();
+            }
         }
     }
 
@@ -6189,16 +6336,27 @@ public partial class MainWindow : Window
 
     private async void BtnEnterGuestMode_Click(object sender, RoutedEventArgs e)
     {
+        await EnterGuestModeAsync();
+    }
+
+    public async Task EnterGuestModeAsync()
+    {
         _isGuestSession = true;
         BrowserLockOverlay.Visibility = Visibility.Collapsed;
         ApplySettings();
 
-        if (Tabs.Count == 0)
+        // Ocultar pestañas actuales del propietario para que el invitado no las vea
+        foreach (var t in Tabs.ToList())
         {
-            string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
-            _initialUrl = null;
-            await AddNewTabAsync(launchUrl, isIncognito: true);
+            if (t.WebView != null && !t.IsDisposed)
+            {
+                t.WebView.Visibility = Visibility.Collapsed;
+            }
         }
+
+        string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
+        _initialUrl = null;
+        await AddNewTabAsync(launchUrl, isIncognito: true);
 
         ShowToast("👤 Modo Invitado activo: navegas en una sesión aislada sin acceso a las contraseñas ni marcadores del propietario.");
     }

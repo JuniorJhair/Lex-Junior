@@ -435,4 +435,99 @@ public static class OmniboxSuggestionService
             return Array.Empty<string>();
         }
     }
+
+    private static readonly string[] PopularDomains =
+    {
+        "youtube.com", "google.com", "github.com", "facebook.com", "instagram.com",
+        "twitter.com", "x.com", "reddit.com", "wikipedia.org", "tiktok.com",
+        "twitch.tv", "netflix.com", "amazon.com", "dailymotion.com", "spotify.com",
+        "discord.com", "chatgpt.com", "openai.com", "web.whatsapp.com", "whatsapp.com",
+        "linkedin.com", "bing.com", "duckduckgo.com"
+    };
+
+    /// <summary>
+    /// Devuelve la mejor coincidencia para autocompletado predictivo en línea en el Omnibox.
+    /// Prioriza:
+    /// 1. Marcadores guardados por el usuario
+    /// 2. Páginas y búsquedas frecuentes del historial
+    /// 3. Dominios populares globales
+    /// </summary>
+    public static string? GetInlineAutocompleteMatch(
+        string? rawInput,
+        IReadOnlyList<HistoryEntry>? historyEntries,
+        IReadOnlyList<BookmarkItem>? bookmarks = null)
+    {
+        if (string.IsNullOrWhiteSpace(rawInput)) return null;
+        string query = rawInput.TrimStart();
+        if (query.Length < 1 || query.EndsWith(" ")) return null;
+
+        string qLower = query.ToLowerInvariant();
+
+        // 1. Coincidencia en Marcadores
+        if (bookmarks != null)
+        {
+            foreach (var b in bookmarks)
+            {
+                if (string.IsNullOrWhiteSpace(b.Url)) continue;
+                string clean = FormatCleanDisplayUrl(b.Url);
+                if (clean.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) && clean.Length > query.Length)
+                {
+                    // Si el clean tiene subrutas largas, sugerir el dominio base primero si coincide
+                    int slashIdx = clean.IndexOf('/');
+                    if (slashIdx > 0)
+                    {
+                        string domainOnly = clean.Substring(0, slashIdx);
+                        if (domainOnly.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) && domainOnly.Length > query.Length)
+                            return domainOnly;
+                    }
+                    return clean;
+                }
+            }
+        }
+
+        // 2. Coincidencia en Historial de navegación
+        if (historyEntries != null)
+        {
+            // Primero buscar coincidencia en dominios/URLs del historial
+            foreach (var h in historyEntries)
+            {
+                if (string.IsNullOrWhiteSpace(h.Url)) continue;
+                string clean = FormatCleanDisplayUrl(h.Url);
+                if (clean.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) && clean.Length > query.Length)
+                {
+                    int slashIdx = clean.IndexOf('/');
+                    if (slashIdx > 0)
+                    {
+                        string domainOnly = clean.Substring(0, slashIdx);
+                        if (domainOnly.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) && domainOnly.Length > query.Length)
+                            return domainOnly;
+                    }
+                    return clean;
+                }
+            }
+
+            // Segundo buscar en búsquedas previas del historial
+            foreach (var h in historyEntries)
+            {
+                string? prevSearch = TryExtractSearchQueryFromUrl(h.Url);
+                if (!string.IsNullOrWhiteSpace(prevSearch) &&
+                    prevSearch.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) &&
+                    prevSearch.Length > query.Length)
+                {
+                    return prevSearch;
+                }
+            }
+        }
+
+        // 3. Coincidencia en Dominios Populares Globales
+        foreach (string domain in PopularDomains)
+        {
+            if (domain.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) && domain.Length > query.Length)
+            {
+                return domain;
+            }
+        }
+
+        return null;
+    }
 }

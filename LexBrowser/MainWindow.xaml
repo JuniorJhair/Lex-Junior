@@ -240,21 +240,21 @@
                 <TextBlock x:Name="TxtBrandTitle" Text="LEX JUNIOR" FontWeight="Black" FontSize="11" Foreground="#818CF8" VerticalAlignment="Center"/>
             </StackPanel>
 
-            <!-- Lista de Pestañas con Drag & Drop y botones pegados a la última pestaña -->
+            <!-- Lista de Pestañas con Drag & Drop y botones pegados a la última pestaña (Ley de Fitts: se extiende hasta el tope superior y = 0) -->
             <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Stretch">
                 <ScrollViewer HorizontalAlignment="Left" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" 
-                              WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                              WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Stretch">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch">
                         <!-- ItemsControl de pestañas con soporte Drag & Drop -->
-                        <ItemsControl x:Name="TabsItemsControl">
+                        <ItemsControl x:Name="TabsItemsControl" VerticalAlignment="Stretch">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal"/>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch"/>
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border x:Name="TabBorder" Margin="2,4,2,0" CornerRadius="8,8,0,0" Padding="10,6,8,6" Cursor="Hand"
+                                    <Border x:Name="TabBorder" Margin="2,0,2,0" VerticalAlignment="Stretch" CornerRadius="8,8,0,0" Padding="10,0,8,0" Cursor="Hand"
                                             Background="#16161B"
                                             PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
                                             PreviewMouseMove="Tab_PreviewMouseMove"
@@ -281,7 +281,7 @@
                                             </ContextMenu>
                                         </Border.ContextMenu>
 
-                                        <Grid MinWidth="30">
+                                        <Grid MinWidth="30" VerticalAlignment="Center">
                                             <Grid.ColumnDefinitions>
                                                 <!-- Icono / Favicon -->
                                                 <ColumnDefinition Width="Auto"/>
@@ -368,11 +368,11 @@
 
                         <!-- Botón + pegado a la última pestaña -->
                         <Button Content="＋" Style="{StaticResource TabActionBtn}" ToolTip="Abrir nueva pestaña (Ctrl+T o Ctrl+N)"
-                                Click="BtnNewTab_Click" Margin="4,4,2,0" VerticalAlignment="Center"/>
+                                Click="BtnNewTab_Click" Margin="4,0,2,0" VerticalAlignment="Center"/>
 
                         <!-- Botón Incógnito pegado al botón + -->
                         <Button Content="🕵️" Style="{StaticResource TabActionBtn}" ToolTip="Abrir pestaña de incógnito (Ctrl+Shift+N)"
-                                Click="BtnNewIncognitoTab_Click" Margin="2,4,8,0" VerticalAlignment="Center"/>
+                                Click="BtnNewIncognitoTab_Click" Margin="2,0,8,0" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

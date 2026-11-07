@@ -66,23 +66,51 @@ public partial class App : Application
             return;
         }
 
-        // Extraer URL o ruta de archivo si el navegador fue ejecutado con argumentos externos
+        // Inicializar JumpList nativo en la barra de tareas de Windows (Tareas: Nueva pestaña, Incógnito, Invitado)
+        JumpListManager.Initialize();
+
+        // Extraer comandos o URL si el navegador fue ejecutado con argumentos externos
         string? initialUrl = null;
+        bool isIncognitoLaunch = false;
+        bool isGuestLaunch = false;
+        bool isNewTabLaunch = false;
+
         if (e.Args != null && e.Args.Length > 0)
         {
             foreach (var arg in e.Args)
             {
-                if (string.IsNullOrWhiteSpace(arg) || arg.StartsWith("-") || arg.StartsWith("/")) continue;
-                initialUrl = arg;
-                break;
+                if (string.Equals(arg, "--incognito", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(arg, "-incognito", StringComparison.OrdinalIgnoreCase))
+                {
+                    isIncognitoLaunch = true;
+                }
+                else if (string.Equals(arg, "--guest", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(arg, "-guest", StringComparison.OrdinalIgnoreCase))
+                {
+                    isGuestLaunch = true;
+                }
+                else if (string.Equals(arg, "--new-tab", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(arg, "-new-tab", StringComparison.OrdinalIgnoreCase))
+                {
+                    isNewTabLaunch = true;
+                }
+                else if (!arg.StartsWith("-") && !arg.StartsWith("/"))
+                {
+                    initialUrl = arg;
+                }
             }
         }
 
-        // Si ya hay una ventana de Lex Junior abierta en el sistema, reenviarle la URL por NamedPipe
+        // Si ya hay una ventana de Lex Junior abierta en el sistema, reenviarle la acción o URL por NamedPipe
         // y terminar este proceso en ~5ms (evita procesos duplicados y ahorra 100% de memoria RAM).
         if (!SingleInstanceIpc.TryAcquireSingleInstance())
         {
-            await SingleInstanceIpc.SendUrlToExistingInstanceAsync(initialUrl);
+            string payload = isGuestLaunch ? "CMD:GUEST" :
+                             isIncognitoLaunch ? "CMD:INCOGNITO" :
+                             isNewTabLaunch ? "CMD:NEW_TAB" :
+                             (initialUrl ?? "CMD:NEW_TAB");
+
+            await SingleInstanceIpc.SendUrlToExistingInstanceAsync(payload);
             Shutdown();
             return;
         }
@@ -94,11 +122,14 @@ public partial class App : Application
             try { InstallerService.CleanOldTempInstallers(); } catch { }
         });
 
-        var browserWindow = new MainWindow(initialUrl);
+        var browserWindow = new MainWindow(
+            initialUrl: initialUrl,
+            startInIncognito: isIncognitoLaunch,
+            startInGuest: isGuestLaunch);
         MainWindow = browserWindow;
 
         // Iniciar el servidor de escucha IPC para enlaces externos entrantes mientras el navegador esté abierto
-        SingleInstanceIpc.StartIpcServer(url =>
+        SingleInstanceIpc.StartIpcServer(payload =>
         {
             Dispatcher.BeginInvoke(() =>
             {
@@ -111,9 +142,9 @@ public partial class App : Application
                     win.Topmost = false;
                     win.Focus();
 
-                    if (!string.IsNullOrWhiteSpace(url))
+                    if (!string.IsNullOrWhiteSpace(payload))
                     {
-                        _ = win.AddNewTabFromExternalAsync(url);
+                        _ = win.HandleExternalIpcCommandAsync(payload);
                     }
                 }
             });
