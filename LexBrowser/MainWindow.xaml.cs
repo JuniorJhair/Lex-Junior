@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -140,6 +141,13 @@ public partial class MainWindow : Window
         StateChanged += MainWindow_StateChanged;
         SizeChanged += MainWindow_SizeOrLocationChanged;
         LocationChanged += MainWindow_SizeOrLocationChanged;
+        BrowserContainer.SizeChanged += (s, e) =>
+        {
+            if (_activeTab?.WebView != null && !_activeTab.IsDisposed)
+            {
+                try { GetController(_activeTab.WebView)?.NotifyParentWindowPositionChanged(); } catch { }
+            }
+        };
         UpdateWindowMargin();
     }
 
@@ -939,6 +947,17 @@ public partial class MainWindow : Window
     {
         var core = tab.WebView.CoreWebView2;
         if (core == null) return;
+
+        try
+        {
+            tab.WebView.ZoomFactor = 1.0;
+            var controller = GetController(tab.WebView);
+            if (controller != null)
+            {
+                controller.NotifyParentWindowPositionChanged();
+            }
+        }
+        catch { }
 
         try
         {
@@ -1770,7 +1789,7 @@ public partial class MainWindow : Window
             catch { }
         };
 
-        // Escuchar cambios de zoom en el WebView para actualizar el indicador y widget flotante
+        // Escuchar cambios de zoom en el WebView para actualizar el indicador en Omnibox
         tab.WebView.ZoomFactorChanged += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
@@ -1778,7 +1797,7 @@ public partial class MainWindow : Window
             {
                 if (win._activeTab == tab)
                 {
-                    win.UpdateZoomIndicatorUI(showFloating: true);
+                    win.UpdateZoomIndicatorUI(showFloating: false);
                 }
             });
         };
@@ -2142,6 +2161,11 @@ public partial class MainWindow : Window
                 }
 
                 tab.WebView.Visibility = Visibility.Visible;
+                try
+                {
+                    GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
+                }
+                catch { }
             }
 
             if (tab != null && tab.IsLazyLoaded && !string.IsNullOrWhiteSpace(tab.Url))
@@ -3801,6 +3825,27 @@ public partial class MainWindow : Window
         ZoomOut();
     }
 
+    /// <summary>
+    /// Acceso seguro mediante reflexión al CoreWebView2Controller nativo subyacente de WebView2 en WPF.
+    /// Permite sincronizar la posición y rasterización del HWND hijo con el monitor sin romper encapsulamiento.
+    /// </summary>
+    public static CoreWebView2Controller? GetController(WebView2? webView)
+    {
+        if (webView == null) return null;
+        try
+        {
+            var baseField = typeof(WebView2).GetField("m_webview2Base", BindingFlags.Instance | BindingFlags.NonPublic);
+            var baseObj = baseField?.GetValue(webView);
+            if (baseObj == null) return null;
+            var prop = baseObj.GetType().GetProperty("CoreWebView2Controller", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            return prop?.GetValue(baseObj) as CoreWebView2Controller;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static bool IsDoNotDisturbActive => SettingsManager.Current?.NotificationDndActive ?? false;
 
     private void ToggleNotificationDoNotDisturb()
@@ -4620,11 +4665,32 @@ public partial class MainWindow : Window
             ApplyRestoredWindowBounds();
         }
         UpdateResponsiveToolbarLayout();
+
+        foreach (var t in Tabs)
+        {
+            if (t.WebView != null && !t.IsDisposed)
+            {
+                try
+                {
+                    GetController(t.WebView)?.NotifyParentWindowPositionChanged();
+                }
+                catch { }
+            }
+        }
     }
 
     private void MainWindow_SizeOrLocationChanged(object? sender, EventArgs e)
     {
         UpdateResponsiveToolbarLayout();
+        if (_activeTab?.WebView != null && !_activeTab.IsDisposed)
+        {
+            try
+            {
+                GetController(_activeTab.WebView)?.NotifyParentWindowPositionChanged();
+            }
+            catch { }
+        }
+
         if (!IsLoaded || _isApplyingNormalBounds || WindowState != WindowState.Normal)
             return;
 
@@ -4747,7 +4813,50 @@ public partial class MainWindow : Window
 
     private void UpdateWindowMargin()
     {
-        RootWindowGrid.Margin = new Thickness(0);
+        bool isFullscreen = _activeTab?.WebView?.CoreWebView2?.ContainsFullScreenElement ?? false;
+        if (WindowState == WindowState.Maximized && !isFullscreen && WindowChrome.GetWindowChrome(this) != null)
+        {
+            // En WindowStyle="None" con WindowChrome, Win32 expande la ventana 8px fuera de la pantalla.
+            // Calculamos exactamente la conversión de 8 píxeles físicos a DIPs según el DPI del monitor actual
+            // (ej. 8.0 DIPs al 100%, 6.4 DIPs al 125%, 5.3 DIPs al 150%) para que todos los bordes, scrollbars,
+            // pestañas y la barra de reproducción/progreso de YouTube queden 100% dentro del monitor.
+            double marginDips = 6.4;
+            try
+            {
+                var source = PresentationSource.FromVisual(this);
+                if (source?.CompositionTarget != null)
+                {
+                    double dpiScale = source.CompositionTarget.TransformToDevice.M11;
+                    if (dpiScale > 0)
+                    {
+                        marginDips = Math.Round(8.0 / dpiScale, 1);
+                    }
+                }
+                else
+                {
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        uint dpi = NativeMethods.GetDpiForWindow(hwnd);
+                        if (dpi > 0)
+                        {
+                            marginDips = Math.Round(8.0 / (dpi / 96.0), 1);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                marginDips = 7.0;
+            }
+
+            RootWindowGrid.Margin = new Thickness(marginDips);
+        }
+        else
+        {
+            RootWindowGrid.Margin = new Thickness(0);
+        }
+
         if (BrowserContainer != null)
         {
             // En ventana restaurada (Normal), dejamos los 6px del borde de agarre (ResizeBorderThickness="6")

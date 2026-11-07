@@ -193,5 +193,16 @@ public class AuditRegressionTests
         Assert.True(InstallerService.ShouldRunAsSilentUpdate(new[] { "--silent-update" }));
         Assert.False(InstallerService.ShouldRunAsUninstaller(Array.Empty<string>()));
     }
+
+    [Fact]
+    public void WebView2_GetController_ReflectsExpectedMembers()
+    {
+        var type = typeof(Microsoft.Web.WebView2.Wpf.WebView2);
+        var baseField = type.GetField("m_webview2Base", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(baseField);
+        var controllerProp = baseField.FieldType.GetProperty("CoreWebView2Controller", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(controllerProp);
+        Assert.Equal(typeof(Microsoft.Web.WebView2.Core.CoreWebView2Controller), controllerProp.PropertyType);
+    }
 }
 
