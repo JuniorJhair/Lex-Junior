@@ -1104,7 +1104,8 @@ public partial class MainWindow : Window
         }
         catch { }
 
-        // 1. MANEJO DE PANTALLA COMPLETA REAL DE LAPTOP (CERO FRANJAS VACÍAS)
+        // 1. MANEJO DE PANTALLA COMPLETA REAL DE LAPTOP (CERO FRANJAS VACÍAS Y RESTABLECIMIENTO DE ZOOM)
+        double preFullScreenZoom = 1.0;
         core.ContainsFullScreenElementChanged += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
@@ -1112,6 +1113,7 @@ public partial class MainWindow : Window
             {
                 if (core.ContainsFullScreenElement)
                 {
+                    try { preFullScreenZoom = tab.WebView.ZoomFactor; } catch { preFullScreenZoom = 1.0; }
                     win._savedWindowState = win.WindowState;
                     win._savedResizeMode = win.ResizeMode;
 
@@ -1143,8 +1145,48 @@ public partial class MainWindow : Window
                     WindowChrome.SetWindowChrome(win, win.AppWindowChrome);
 
                     win.ResizeMode = win._savedResizeMode;
-                    win.WindowState = win._savedWindowState;
+
+                    // Si la ventana estaba maximizada antes de entrar a pantalla completa,
+                    // re-aplicar WindowState para forzar la actualización del layout nativo y área de trabajo
+                    if (win._savedWindowState == WindowState.Maximized)
+                    {
+                        win.WindowState = WindowState.Normal;
+                        win.WindowState = WindowState.Maximized;
+                    }
+                    else
+                    {
+                        win.WindowState = win._savedWindowState;
+                    }
+
                     win.UpdateWindowMargin();
+
+                    // Restablecer de inmediato el zoom previo y sincronizar el HWND del WebView2
+                    try
+                    {
+                        tab.WebView.ZoomFactor = preFullScreenZoom;
+                        GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
+                        win.UpdateZoomIndicatorUI(showFloating: false);
+                    }
+                    catch { }
+
+                    // Verificación de respaldo a los 150ms para neutralizar animaciones diferidas de Disney+, Netflix o Chromium
+                    _ = win.Dispatcher.InvokeAsync(async () =>
+                    {
+                        await Task.Delay(150);
+                        if (!tab.IsDisposed && tab.WebView != null && core != null && !core.ContainsFullScreenElement)
+                        {
+                            try
+                            {
+                                if (Math.Abs(tab.WebView.ZoomFactor - preFullScreenZoom) > 0.01)
+                                {
+                                    tab.WebView.ZoomFactor = preFullScreenZoom;
+                                }
+                                GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
+                                win.UpdateZoomIndicatorUI(showFloating: false);
+                            }
+                            catch { }
+                        }
+                    });
                 }
             });
         };
