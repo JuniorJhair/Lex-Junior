@@ -100,10 +100,12 @@ public partial class MainWindow : Window
             FloatingZoomWidget.Visibility = Visibility.Collapsed;
         };
 
-        // Escuchar cambios de configuración y descargas
+        // Escuchar cambios de configuración, descargas y notificaciones
         SettingsManager.SettingsChanged += ApplySettings;
         DownloadManager.DownloadsChanged += OnDownloadsChanged;
+        NotificationManager.OnNotificationsChanged += UpdateNotificationBadge;
         ApplySettings();
+        UpdateNotificationBadge();
 
         // Callback cuando el usuario pulsa "⇱ Volver" en la Página Flotante manual
         _pipWindow.OnReturnToTabRequested = (tab) =>
@@ -1344,6 +1346,12 @@ public partial class MainWindow : Window
             HandleCorePermissionRequested(tab, core, e);
         };
 
+        // 3.1b Despachador central de notificaciones W3C (Notification API)
+        core.NotificationReceived += (s, e) =>
+        {
+            NotificationManager.HandleNotificationReceived(tab, e);
+        };
+
         // 3.2 Recuperación automática si el proceso de renderizado de la pestaña falla inesperadamente
         core.ProcessFailed += (s, e) =>
         {
@@ -2457,6 +2465,23 @@ public partial class MainWindow : Window
 
         string tabDesc = $"Tab:{tab.TabId} ({req.DisplayHost})";
         ShieldLogger.Log(eventType, req.DisplayHost, req.Origin, "MainFrame", $"User selected {mode} (State={state})", tabDesc);
+
+        if (state == CoreWebView2PermissionState.Deny)
+        {
+            ShowToast(
+                $"🚫 Notificaciones bloqueadas para {req.DisplayHost}.",
+                "Ajustes ⚙️",
+                () => OpenSettings("Notifications")
+            );
+        }
+        else if (state == CoreWebView2PermissionState.Allow)
+        {
+            ShowToast(
+                $"🔔 Notificaciones permitidas para {req.DisplayHost}.",
+                "Personalizar ⚙️",
+                () => OpenSettings("Notifications")
+            );
+        }
     }
 
     private void HandleCorePermissionRequested(BrowserTab tab, CoreWebView2 core, CoreWebView2PermissionRequestedEventArgs e)
@@ -3758,13 +3783,14 @@ public partial class MainWindow : Window
         ZoomOut();
     }
 
-    public static bool IsDoNotDisturbActive { get; set; } = false;
+    public static bool IsDoNotDisturbActive => SettingsManager.Current?.NotificationDndActive ?? false;
 
     private void ToggleNotificationDoNotDisturb()
     {
-        IsDoNotDisturbActive = !IsDoNotDisturbActive;
-        string status = IsDoNotDisturbActive ? "activado (alertas silenciadas al Centro)" : "desactivado (alertas normales)";
+        bool active = NotificationManager.ToggleDnd();
+        string status = active ? "activado (alertas silenciadas al Centro)" : "desactivado (alertas normales)";
         ShowToast($"🔕 Modo No Molestar {status}");
+        UpdateNotificationBadge();
     }
 
     private bool IsNotificationDndShortcut(KeyEventArgs e)
@@ -3775,6 +3801,268 @@ public partial class MainWindow : Window
             return Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.D;
         }
         return false;
+    }
+
+    public void FocusAndSelectTab(BrowserTab tab)
+    {
+        if (tab == null || tab.IsDisposed) return;
+        SelectTab(tab, force: true);
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+        Activate();
+        Focus();
+    }
+
+    private void UpdateNotificationBadge()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(UpdateNotificationBadge);
+            return;
+        }
+
+        try
+        {
+            int unread = NotificationManager.GetUnreadCount();
+            bool isDnd = SettingsManager.Current?.NotificationDndActive ?? false;
+
+            if (unread > 0)
+            {
+                BadgeNotifications.Visibility = Visibility.Visible;
+                TxtBadgeNotificationsCount.Text = unread > 99 ? "99+" : unread.ToString();
+            }
+            else
+            {
+                BadgeNotifications.Visibility = Visibility.Collapsed;
+            }
+
+            TxtNotificationsBtnIcon.Text = isDnd ? "🔕" : "🔔";
+            BtnNotifications.ToolTip = isDnd
+                ? $"Notificaciones silenciadas (No Molestar activo · {unread} sin leer)"
+                : $"Centro de Notificaciones ({unread} sin leer · Ctrl+Shift+D para No Molestar)";
+
+            if (BtnToggleDnd != null)
+            {
+                BtnToggleDnd.Content = isDnd ? "🔔 Activar avisos" : "🔕 Silencio";
+            }
+        }
+        catch { }
+    }
+
+    private void BtnNotifications_Click(object sender, RoutedEventArgs e)
+    {
+        PopupNotifications.IsOpen = !PopupNotifications.IsOpen;
+        if (PopupNotifications.IsOpen)
+        {
+            NotificationManager.MarkAllAsRead();
+            UpdateNotificationBadge();
+            RenderNotificationCenterItems();
+        }
+    }
+
+    private void BtnToggleDnd_Click(object sender, RoutedEventArgs e)
+    {
+        ToggleNotificationDoNotDisturb();
+    }
+
+    private void BtnClearAllNotifications_Click(object sender, RoutedEventArgs e)
+    {
+        NotificationManager.ClearHistory();
+        RenderNotificationCenterItems();
+        UpdateNotificationBadge();
+    }
+
+    private void BtnOpenNotificationSettings_Click(object sender, RoutedEventArgs e)
+    {
+        PopupNotifications.IsOpen = false;
+        OpenSettings("Notifications");
+    }
+
+    private void RenderNotificationCenterItems()
+    {
+        var items = NotificationManager.GetHistory();
+        PanelNotificationsList.Children.Clear();
+
+        if (items.Count == 0)
+        {
+            PanelNotificationsEmpty.Visibility = Visibility.Visible;
+            PanelNotificationsList.Children.Add(PanelNotificationsEmpty);
+            return;
+        }
+
+        PanelNotificationsEmpty.Visibility = Visibility.Collapsed;
+
+        foreach (var item in items)
+        {
+            var card = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x2C)),
+                BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2D, 0x2D, 0x40)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 6),
+                Cursor = Cursors.Hand
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            // Favicon / Icono
+            var iconBorder = new Border
+            {
+                Width = 28,
+                Height = 28,
+                CornerRadius = new CornerRadius(6),
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x28, 0x28, 0x38)),
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 8, 0)
+            };
+            var iconImg = new System.Windows.Controls.Image
+            {
+                Width = 18,
+                Height = 18,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var iconTxt = new TextBlock
+            {
+                Text = "🔔",
+                FontSize = 13,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            try
+            {
+                var fav = FaviconService.GetCachedFavicon(item.DisplayHost);
+                if (fav != null)
+                {
+                    iconImg.Source = fav;
+                    iconBorder.Child = iconImg;
+                }
+                else
+                {
+                    iconBorder.Child = iconTxt;
+                }
+            }
+            catch
+            {
+                iconBorder.Child = iconTxt;
+            }
+            Grid.SetColumn(iconBorder, 0);
+            grid.Children.Add(iconBorder);
+
+            // Contenido central
+            var contentStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+
+            var headerGrid = new Grid();
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var hostBlock = new TextBlock
+            {
+                Text = item.DisplayHost,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x81, 0x8C, 0xF8)),
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            Grid.SetColumn(hostBlock, 0);
+            headerGrid.Children.Add(hostBlock);
+
+            var timeBlock = new TextBlock
+            {
+                Text = item.TimeFormatted,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x71, 0x71, 0x7A)),
+                FontSize = 9.5,
+                Margin = new Thickness(6, 0, 0, 0)
+            };
+            Grid.SetColumn(timeBlock, 1);
+            headerGrid.Children.Add(timeBlock);
+
+            contentStack.Children.Add(headerGrid);
+
+            var titleBlock = new TextBlock
+            {
+                Text = item.Title,
+                Foreground = System.Windows.Media.Brushes.White,
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(0, 2, 0, 1)
+            };
+            contentStack.Children.Add(titleBlock);
+
+            if (!string.IsNullOrWhiteSpace(item.Body))
+            {
+                var bodyBlock = new TextBlock
+                {
+                    Text = item.Body,
+                    Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x9C, 0xA3, 0xAF)),
+                    FontSize = 10.5,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxHeight = 30,
+                    TextWrapping = TextWrapping.Wrap
+                };
+                contentStack.Children.Add(bodyBlock);
+            }
+
+            Grid.SetColumn(contentStack, 1);
+            grid.Children.Add(contentStack);
+
+            // Botón eliminar individual
+            var removeBtn = new Button
+            {
+                Content = "✕",
+                FontSize = 10,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x71, 0x71, 0x7A)),
+                Background = System.Windows.Media.Brushes.Transparent,
+                BorderBrush = System.Windows.Media.Brushes.Transparent,
+                Padding = new Thickness(4, 2, 4, 2),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(6, 0, 0, 0)
+            };
+            string itemId = item.Id;
+            removeBtn.Click += (s, e) =>
+            {
+                e.Handled = true;
+                NotificationManager.RemoveHistoryItem(itemId);
+                RenderNotificationCenterItems();
+                UpdateNotificationBadge();
+            };
+            Grid.SetColumn(removeBtn, 2);
+            grid.Children.Add(removeBtn);
+
+            card.Child = grid;
+
+            // Al hacer clic en la tarjeta, navegar o enfocar la pestaña del origen
+            card.MouseLeftButtonUp += (s, e) =>
+            {
+                item.IsRead = true;
+                PopupNotifications.IsOpen = false;
+                UpdateNotificationBadge();
+
+                // Buscar pestaña abierta con ese origen
+                var existingTab = Tabs.FirstOrDefault(t => !t.IsDisposed && t.CurrentUri != null &&
+                    t.CurrentUri.GetLeftPart(UriPartial.Authority).Equals(item.Origin, StringComparison.OrdinalIgnoreCase));
+
+                if (existingTab != null)
+                {
+                    FocusAndSelectTab(existingTab);
+                }
+                else if (!string.IsNullOrEmpty(item.Origin))
+                {
+                    _ = AddNewTabAsync(item.Origin, isIncognito: false);
+                }
+            };
+
+            PanelNotificationsList.Children.Add(card);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────

@@ -87,4 +87,27 @@ public class NotificationPermissionManagerTests
         Assert.True(removed);
         Assert.Equal(SiteNotificationMode.Ask, NotificationPermissionManager.GetSiteMode(origin, isIncognito: false));
     }
+
+    [Fact]
+    public void UpdateSiteCustomization_SavesDailyLimitAndMode()
+    {
+        string origin = "https://test-custom-" + Guid.NewGuid().ToString("N") + ".com";
+        try
+        {
+            NotificationPermissionManager.UpdateSiteCustomization(
+                origin, dailyLimit: 3, mode: SiteNotificationMode.Silent, soundEnabled: false, isIncognito: false);
+
+            var entry = NotificationPermissionManager.GetSiteEntry(origin, isIncognito: false);
+            Assert.NotNull(entry);
+            Assert.Equal(3, entry.DailyLimit);
+            Assert.Equal(SiteNotificationMode.Silent, entry.Mode);
+            Assert.False(entry.SoundEnabled);
+            Assert.True(entry.IsCustomized);
+        }
+        finally
+        {
+            NotificationPermissionManager.RemoveSite(origin);
+        }
+    }
 }
+

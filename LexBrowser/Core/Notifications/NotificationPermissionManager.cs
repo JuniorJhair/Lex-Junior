@@ -25,6 +25,11 @@ public sealed class SiteNotificationEntry
     public DateTime? LastNotifiedAt { get; set; }
     public DateTime? MutedUntil { get; set; }
 
+    // Personalización granular por sitio
+    public int DailyLimit { get; set; } = 0; // 0 = Usa límite global predeterminado o ilimitado
+    public bool SoundEnabled { get; set; } = true;
+    public bool IsCustomized { get; set; } = false; // Indica si el usuario aplicó reglas personalizadas
+
     [JsonIgnore]
     public bool IsMuted
     {
@@ -211,6 +216,77 @@ public static class NotificationPermissionManager
     }
 
     /// <summary>
+    /// Obtiene la entrada detallada de un sitio (si existe).
+    /// </summary>
+    public static SiteNotificationEntry? GetSiteEntry(string rawOrigin, bool isIncognito)
+    {
+        string origin = NormalizeOrigin(rawOrigin);
+        if (string.IsNullOrEmpty(origin)) return null;
+
+        EnsureLoaded();
+
+        if (isIncognito && _incognitoEntries.TryGetValue(origin, out var incog))
+        {
+            return incog;
+        }
+
+        if (_persistentEntries.TryGetValue(origin, out var entry))
+        {
+            return entry;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Actualiza la personalización granular de un sitio (límite diario, modo visual, sonido).
+    /// </summary>
+    public static void UpdateSiteCustomization(string rawOrigin, int dailyLimit, SiteNotificationMode mode, bool soundEnabled, bool isIncognito)
+    {
+        string origin = NormalizeOrigin(rawOrigin);
+        if (string.IsNullOrEmpty(origin)) return;
+
+        EnsureLoaded();
+
+        var dict = isIncognito ? _incognitoEntries : _persistentEntries;
+        dict.AddOrUpdate(
+            origin,
+            _ => new SiteNotificationEntry
+            {
+                Origin = origin,
+                Mode = mode,
+                DailyLimit = dailyLimit,
+                SoundEnabled = soundEnabled,
+                IsCustomized = true,
+                CreatedAt = DateTime.UtcNow
+            },
+            (_, existing) =>
+            {
+                existing.Mode = mode;
+                existing.DailyLimit = dailyLimit;
+                existing.SoundEnabled = soundEnabled;
+                existing.IsCustomized = true;
+                return existing;
+            });
+
+        if (!isIncognito)
+        {
+            SaveToDisk();
+        }
+    }
+
+    /// <summary>
+    /// Restablece todos los permisos de sitios web a estado neutro (Preguntar).
+    /// </summary>
+    public static void ResetAllSites()
+    {
+        EnsureLoaded();
+        _persistentEntries.Clear();
+        _incognitoEntries.Clear();
+        SaveToDisk();
+    }
+
+    /// <summary>
     /// Limpia las entradas temporales de pestañas de incógnito cerradas.
     /// </summary>
     public static void ClearIncognitoCache()
@@ -335,3 +411,4 @@ public static class NotificationPermissionManager
         }
     }
 }
+

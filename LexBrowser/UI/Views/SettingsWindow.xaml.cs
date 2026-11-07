@@ -1,9 +1,14 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
 using LexBrowser.Core;
+using LexBrowser.Core.Engine;
+using LexBrowser.Core.Notifications;
 
 namespace LexBrowser.UI.Views;
 
@@ -60,7 +65,22 @@ public partial class SettingsWindow : Window
             default: RbGoogle.IsChecked = true; break;
         }
 
+        // Notificaciones Web (0.0% CPU en reposo)
+        switch (s.NotificationGlobalPolicy)
+        {
+            case "BlockAll": RbPolicyBlockAll.IsChecked = true; break;
+            case "SilentAll": RbPolicySilentAll.IsChecked = true; break;
+            default: RbPolicyAsk.IsChecked = true; break;
+        }
+
+        ChkDiscardOlder24h.IsChecked = s.NotificationDiscardOlderThan24Hours;
+        ChkDndFullscreen.IsChecked = s.NotificationDndOnFullscreen;
+
+        SetComboByTag(CmbGlobalDailyLimit, s.NotificationGlobalDailyLimit.ToString());
+        SetComboByTag(CmbDefaultSiteLimit, s.NotificationDefaultSiteDailyLimit.ToString());
+
         UpdateDefaultBrowserUI();
+        RefreshNotificationSitesList();
     }
 
     public void OpenToSection(string section)
@@ -72,6 +92,10 @@ public partial class SettingsWindow : Window
         else if (section.Equals("Bookmarks", StringComparison.OrdinalIgnoreCase))
         {
             TabBookmarks.IsChecked = true;
+        }
+        else if (section.Equals("Notifications", StringComparison.OrdinalIgnoreCase))
+        {
+            TabNotifications.IsChecked = true;
         }
         else if (section.Equals("Search", StringComparison.OrdinalIgnoreCase))
         {
@@ -85,12 +109,18 @@ public partial class SettingsWindow : Window
 
     private void Tab_Checked(object sender, RoutedEventArgs e)
     {
-        if (PanelGeneral == null || PanelSearch == null || PanelBookmarks == null || PanelTelemetry == null) return;
+        if (PanelGeneral == null || PanelSearch == null || PanelBookmarks == null || PanelTelemetry == null || PanelNotifications == null) return;
 
         PanelGeneral.Visibility = (TabGeneral.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
         PanelSearch.Visibility = (TabSearch.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
         PanelBookmarks.Visibility = (TabBookmarks.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
+        PanelNotifications.Visibility = (TabNotifications.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
         PanelTelemetry.Visibility = (TabTelemetry.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
+
+        if (TabNotifications.IsChecked == true)
+        {
+            RefreshNotificationSitesList();
+        }
     }
 
     private void SaveSettings_Click(object sender, RoutedEventArgs e)
@@ -107,6 +137,8 @@ public partial class SettingsWindow : Window
         s.EnableCosmeticShield = ChkCosmeticShield.IsChecked == true;
         s.EnableWebShieldInSubframes = ChkSubframeWebShield.IsChecked == true;
         s.RestorePreviousSession = ChkRestoreSession.IsChecked == true;
+        s.NotificationDiscardOlderThan24Hours = ChkDiscardOlder24h.IsChecked == true;
+        s.NotificationDndOnFullscreen = ChkDndFullscreen.IsChecked == true;
 
         bool wantsHistory = ChkEnableHistory.IsChecked == true;
         if (!wantsHistory && s.EnableHistory)
@@ -268,6 +300,555 @@ public partial class SettingsWindow : Window
             }
         }
     }
+
+    #region Métodos de Notificaciones Web (Nivel Senior, sin solapamientos)
+
+    private void SetComboByTag(ComboBox combo, string tagValue)
+    {
+        if (combo == null) return;
+        foreach (ComboBoxItem item in combo.Items)
+        {
+            if (string.Equals(item.Tag?.ToString(), tagValue, StringComparison.OrdinalIgnoreCase))
+            {
+                combo.SelectedItem = item;
+                break;
+            }
+        }
+    }
+
+    private void PolicyRadio_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing) return;
+        var s = SettingsManager.Current;
+        if (RbPolicyBlockAll.IsChecked == true) s.NotificationGlobalPolicy = "BlockAll";
+        else if (RbPolicySilentAll.IsChecked == true) s.NotificationGlobalPolicy = "SilentAll";
+        else s.NotificationGlobalPolicy = "Ask";
+
+        SettingsManager.Save();
+    }
+
+    private void Limits_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializing) return;
+        var s = SettingsManager.Current;
+
+        if (CmbGlobalDailyLimit?.SelectedItem is ComboBoxItem itemGlobal && int.TryParse(itemGlobal.Tag?.ToString(), out int globalLimit))
+        {
+            s.NotificationGlobalDailyLimit = globalLimit;
+        }
+
+        if (CmbDefaultSiteLimit?.SelectedItem is ComboBoxItem itemSite && int.TryParse(itemSite.Tag?.ToString(), out int siteLimit))
+        {
+            s.NotificationDefaultSiteDailyLimit = siteLimit;
+        }
+
+        SettingsManager.Save();
+    }
+
+    private void FilterSites_Checked(object sender, RoutedEventArgs e)
+    {
+        if (!_isInitializing) RefreshNotificationSitesList();
+    }
+
+    private void TxtSearchSite_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_isInitializing) RefreshNotificationSitesList();
+    }
+
+    private void BtnResetAllSites_Click(object sender, RoutedEventArgs e)
+    {
+        var result = MessageBox.Show(
+            "¿Estás seguro de que deseas restablecer todos los permisos de notificaciones?\n\nTodos los sitios volverán a su estado neutral (Preguntar).",
+            "Restablecer permisos de sitios",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result == MessageBoxResult.Yes)
+        {
+            NotificationPermissionManager.ResetAllSites();
+            RefreshNotificationSitesList();
+        }
+    }
+
+    private void RefreshNotificationSitesList()
+    {
+        if (PanelSitesContainer == null) return;
+
+        var allSites = NotificationPermissionManager.GetAllSites();
+        int totalSites = allSites.Count;
+        int blockedCount = allSites.Count(s => s.Mode == SiteNotificationMode.Block);
+        int allowedCount = allSites.Count(s => s.Mode == SiteNotificationMode.Allow);
+        int silentCount = allSites.Count(s => s.Mode == SiteNotificationMode.Silent);
+
+        if (FilterAll != null) FilterAll.Content = $"Todos ({totalSites})";
+        if (FilterBlocked != null) FilterBlocked.Content = $"Bloqueados ({blockedCount})";
+        if (FilterAllowed != null) FilterAllowed.Content = $"Permitidos ({allowedCount})";
+        if (FilterSilent != null) FilterSilent.Content = $"Silenciosos ({silentCount})";
+
+        if (TxtNotificationSitesSummary != null)
+        {
+            TxtNotificationSitesSummary.Text = $"Sitios registrados: {totalSites} · Bloqueados: {blockedCount} · Permitidos: {allowedCount} · Silenciosos: {silentCount}";
+        }
+
+        // Aplicar filtro de categoría
+        IEnumerable<SiteNotificationEntry> filtered = allSites;
+        if (FilterBlocked?.IsChecked == true)
+        {
+            filtered = filtered.Where(s => s.Mode == SiteNotificationMode.Block);
+        }
+        else if (FilterAllowed?.IsChecked == true)
+        {
+            filtered = filtered.Where(s => s.Mode == SiteNotificationMode.Allow);
+        }
+        else if (FilterSilent?.IsChecked == true)
+        {
+            filtered = filtered.Where(s => s.Mode == SiteNotificationMode.Silent);
+        }
+
+        // Aplicar filtro de búsqueda
+        string query = TxtSearchSite?.Text?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (!string.IsNullOrEmpty(query))
+        {
+            filtered = filtered.Where(s => s.Origin.ToLowerInvariant().Contains(query));
+        }
+
+        var list = filtered.OrderByDescending(s => s.CreatedAt).ToList();
+        PanelSitesContainer.Children.Clear();
+
+        if (list.Count == 0)
+        {
+            TxtNoSitesMessage.Visibility = Visibility.Visible;
+            return;
+        }
+
+        TxtNoSitesMessage.Visibility = Visibility.Collapsed;
+
+        foreach (var entry in list)
+        {
+            var rowCard = CreateSiteRowCard(entry);
+            PanelSitesContainer.Children.Add(rowCard);
+        }
+    }
+
+    private FrameworkElement CreateSiteRowCard(SiteNotificationEntry entry)
+    {
+        var container = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x18, 0x18, 0x24)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x29, 0x29, 0x3C)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12, 10, 12, 10),
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+
+        var rootStack = new StackPanel();
+
+        // 1. Fila Principal
+        var mainGrid = new Grid();
+        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        // Favicon
+        string host = "sitio";
+        try { host = new Uri(entry.Origin).Host; } catch { host = entry.Origin; }
+
+        var iconBorder = new Border
+        {
+            Width = 26,
+            Height = 26,
+            CornerRadius = new CornerRadius(6),
+            Background = new SolidColorBrush(Color.FromRgb(0x23, 0x23, 0x34)),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 10, 0)
+        };
+        var iconImg = new Image
+        {
+            Width = 16,
+            Height = 16,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        var iconTxt = new TextBlock
+        {
+            Text = "🔔",
+            FontSize = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        try
+        {
+            var fav = FaviconService.GetCachedFavicon(host);
+            if (fav != null)
+            {
+                iconImg.Source = fav;
+                iconBorder.Child = iconImg;
+            }
+            else
+            {
+                iconBorder.Child = iconTxt;
+            }
+        }
+        catch { iconBorder.Child = iconTxt; }
+        Grid.SetColumn(iconBorder, 0);
+        mainGrid.Children.Add(iconBorder);
+
+        // Información del sitio
+        var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
+
+        var titleBlock = new TextBlock
+        {
+            Text = host,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 12.5,
+            Foreground = Brushes.White,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        infoStack.Children.Add(titleBlock);
+
+        var detailsStack = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+
+        // Badge de estado
+        string badgeText;
+        Color badgeBgColor;
+        Color badgeFgColor;
+        switch (entry.Mode)
+        {
+            case SiteNotificationMode.Block:
+                badgeText = "🚫 Bloqueado";
+                badgeBgColor = Color.FromRgb(0x3B, 0x16, 0x1B);
+                badgeFgColor = Color.FromRgb(0xF8, 0x71, 0x71);
+                break;
+            case SiteNotificationMode.Allow:
+                badgeText = "✅ Permitido";
+                badgeBgColor = Color.FromRgb(0x0E, 0x33, 0x21);
+                badgeFgColor = Color.FromRgb(0x34, 0xD3, 0x99);
+                break;
+            case SiteNotificationMode.Silent:
+                badgeText = "🔕 Silencioso";
+                badgeBgColor = Color.FromRgb(0x28, 0x20, 0x48);
+                badgeFgColor = Color.FromRgb(0xA7, 0x8B, 0xFA);
+                break;
+            default:
+                badgeText = "❓ Preguntar";
+                badgeBgColor = Color.FromRgb(0x25, 0x25, 0x33);
+                badgeFgColor = Color.FromRgb(0xD4, 0xD4, 0xD8);
+                break;
+        }
+
+        var badgeBorder = new Border
+        {
+            Background = new SolidColorBrush(badgeBgColor),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(5, 1, 5, 1),
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        badgeBorder.Child = new TextBlock
+        {
+            Text = badgeText,
+            Foreground = new SolidColorBrush(badgeFgColor),
+            FontSize = 9.5,
+            FontWeight = FontWeights.SemiBold
+        };
+        detailsStack.Children.Add(badgeBorder);
+
+        // Límite diario
+        string quotaText = entry.DailyLimit > 0 ? $"Cuota: {entry.DailyLimit}/día" : "Cuota: Predeterminada";
+        detailsStack.Children.Add(new TextBlock
+        {
+            Text = quotaText,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x96)),
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        });
+
+        // Fecha de adición
+        detailsStack.Children.Add(new TextBlock
+        {
+            Text = $"Agregado: {entry.CreatedAt.ToLocalTime():dd/MM/yyyy}",
+            Foreground = new SolidColorBrush(Color.FromRgb(0x71, 0x71, 0x7A)),
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center
+        });
+
+        infoStack.Children.Add(detailsStack);
+        Grid.SetColumn(infoStack, 1);
+        mainGrid.Children.Add(infoStack);
+
+        // Botones de Acción según estado
+        var actionButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+
+        // Cajón desplegable de personalización (inicialmente colapsado)
+        var customDrawer = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x1F)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x31, 0x2E, 0x81)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(12, 10, 12, 10),
+            Margin = new Thickness(0, 10, 0, 0),
+            Visibility = Visibility.Collapsed
+        };
+
+        if (entry.Mode == SiteNotificationMode.Block)
+        {
+            // BOTÓN 1: Quitar bloqueo (vuelve a neutral)
+            var btnUnblock = new Button
+            {
+                Content = "Quitar bloqueo",
+                Style = (Style)FindResource("LexGhostButton"),
+                FontSize = 11,
+                Padding = new Thickness(10, 4, 10, 4),
+                Margin = new Thickness(0, 0, 6, 0),
+                Cursor = Cursors.Hand,
+                ToolTip = "Eliminar de la lista de bloqueo (volver a preguntar en próximas visitas)"
+            };
+            btnUnblock.Click += (s, e) =>
+            {
+                NotificationPermissionManager.RemoveSite(entry.Origin);
+                RefreshNotificationSitesList();
+            };
+            actionButtons.Children.Add(btnUnblock);
+
+            // BOTÓN 2: Desbloquear y Permitir (con opción guiada de personalización)
+            var btnUnblockAndAllow = new Button
+            {
+                Content = "Desbloquear y Permitir",
+                Background = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1)),
+                Foreground = Brushes.White,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 11,
+                Padding = new Thickness(12, 5, 12, 5),
+                Cursor = Cursors.Hand,
+                ToolTip = "Habilitar notificaciones para este sitio"
+            };
+            btnUnblockAndAllow.Resources.Add(typeof(Border), new Style(typeof(Border))
+            {
+                Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(6)) }
+            });
+
+            btnUnblockAndAllow.Click += (s, e) =>
+            {
+                // Alternar cajón de confirmación / personalización
+                customDrawer.Visibility = customDrawer.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            };
+            actionButtons.Children.Add(btnUnblockAndAllow);
+        }
+        else
+        {
+            // Para sitios Permitidos / Silenciosos: Botón Personalizar reglas
+            var btnCustomize = new Button
+            {
+                Content = "⚙️ Reglas",
+                Style = (Style)FindResource("LexGhostButton"),
+                FontSize = 10.5,
+                Padding = new Thickness(8, 4, 8, 4),
+                Margin = new Thickness(0, 0, 4, 0),
+                Cursor = Cursors.Hand,
+                ToolTip = "Ajustar cuota diaria y modo de este sitio"
+            };
+            btnCustomize.Click += (s, e) =>
+            {
+                customDrawer.Visibility = customDrawer.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+            };
+            actionButtons.Children.Add(btnCustomize);
+
+            // Botón Bloquear
+            var btnBlock = new Button
+            {
+                Content = "🚫",
+                Style = (Style)FindResource("LexGhostButton"),
+                FontSize = 11,
+                Padding = new Thickness(6, 4, 6, 4),
+                Margin = new Thickness(0, 0, 4, 0),
+                Cursor = Cursors.Hand,
+                ToolTip = "Bloquear notificaciones de este sitio"
+            };
+            btnBlock.Click += (s, e) =>
+            {
+                NotificationPermissionManager.SetSiteMode(entry.Origin, SiteNotificationMode.Block, isIncognito: false);
+                RefreshNotificationSitesList();
+            };
+            actionButtons.Children.Add(btnBlock);
+
+            // Botón Eliminar
+            var btnRemove = new Button
+            {
+                Content = "✕",
+                Style = (Style)FindResource("LexGhostButton"),
+                FontSize = 11,
+                Padding = new Thickness(6, 4, 6, 4),
+                Cursor = Cursors.Hand,
+                ToolTip = "Restablecer a neutro (Preguntar)"
+            };
+            btnRemove.Click += (s, e) =>
+            {
+                NotificationPermissionManager.RemoveSite(entry.Origin);
+                RefreshNotificationSitesList();
+            };
+            actionButtons.Children.Add(btnRemove);
+        }
+
+        Grid.SetColumn(actionButtons, 2);
+        mainGrid.Children.Add(actionButtons);
+        rootStack.Children.Add(mainGrid);
+
+        // 2. Contenido del Cajón de Personalización / Desbloqueo Guiado
+        var drawerStack = new StackPanel();
+
+        var promptGrid = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+        promptGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        promptGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var promptText = new TextBlock
+        {
+            Text = $"¿Cómo deseas configurar las notificaciones para {host}?",
+            Foreground = Brushes.White,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 11.5,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(promptText, 0);
+        promptGrid.Children.Add(promptText);
+
+        var btnCloseDrawer = new Button
+        {
+            Content = "✕",
+            Style = (Style)FindResource("LexGhostButton"),
+            FontSize = 9.5,
+            Padding = new Thickness(4, 2, 4, 2),
+            Cursor = Cursors.Hand
+        };
+        btnCloseDrawer.Click += (s, e) => customDrawer.Visibility = Visibility.Collapsed;
+        Grid.SetColumn(btnCloseDrawer, 1);
+        promptGrid.Children.Add(btnCloseDrawer);
+        drawerStack.Children.Add(promptGrid);
+
+        // Opciones de Ajuste Granular
+        var optionsGrid = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        // Columna 1: Cuota diaria de este sitio
+        var col1Stack = new StackPanel { Margin = new Thickness(0, 0, 6, 0) };
+        col1Stack.Children.Add(new TextBlock
+        {
+            Text = "Límite diario de este sitio:",
+            FontSize = 10.5,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xA1, 0xA1, 0xAA)),
+            Margin = new Thickness(0, 0, 0, 3)
+        });
+
+        var cmbSiteLimit = new ComboBox
+        {
+            Height = 26,
+            FontSize = 11,
+            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2A)),
+            Foreground = Brushes.White,
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x56))
+        };
+        cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Predeterminado (Global)", Tag = "0" });
+        cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Máx 1 al día", Tag = "1" });
+        cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Máx 2 al día", Tag = "2" });
+        cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Máx 3 al día", Tag = "3" });
+        cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Máx 5 al día", Tag = "5" });
+        cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Máx 10 al día", Tag = "10" });
+        SetComboByTag(cmbSiteLimit, entry.DailyLimit.ToString());
+        col1Stack.Children.Add(cmbSiteLimit);
+        Grid.SetColumn(col1Stack, 0);
+        optionsGrid.Children.Add(col1Stack);
+
+        // Columna 2: Modo visual
+        var col2Stack = new StackPanel { Margin = new Thickness(6, 0, 0, 0) };
+        col2Stack.Children.Add(new TextBlock
+        {
+            Text = "Modo de entrega:",
+            FontSize = 10.5,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xA1, 0xA1, 0xAA)),
+            Margin = new Thickness(0, 0, 0, 3)
+        });
+
+        var cmbSiteMode = new ComboBox
+        {
+            Height = 26,
+            FontSize = 11,
+            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2A)),
+            Foreground = Brushes.White,
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x56))
+        };
+        cmbSiteMode.Items.Add(new ComboBoxItem { Content = "Aviso emergente (Toast)", Tag = "Allow" });
+        cmbSiteMode.Items.Add(new ComboBoxItem { Content = "Solo silencioso (Centro)", Tag = "Silent" });
+        string currentModeTag = entry.Mode == SiteNotificationMode.Silent ? "Silent" : "Allow";
+        SetComboByTag(cmbSiteMode, currentModeTag);
+        col2Stack.Children.Add(cmbSiteMode);
+        Grid.SetColumn(col2Stack, 1);
+        optionsGrid.Children.Add(col2Stack);
+
+        drawerStack.Children.Add(optionsGrid);
+
+        // Botones de acción del cajón
+        var drawerButtons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+        var btnApplyDefault = new Button
+        {
+            Content = "Usar estándar",
+            Style = (Style)FindResource("LexGhostButton"),
+            FontSize = 10.5,
+            Padding = new Thickness(8, 3, 8, 3),
+            Margin = new Thickness(0, 0, 6, 0),
+            Cursor = Cursors.Hand
+        };
+        btnApplyDefault.Click += (s, e) =>
+        {
+            NotificationPermissionManager.UpdateSiteCustomization(entry.Origin, 0, SiteNotificationMode.Allow, soundEnabled: true, isIncognito: false);
+            RefreshNotificationSitesList();
+        };
+        drawerButtons.Children.Add(btnApplyDefault);
+
+        var btnSaveCustom = new Button
+        {
+            Content = "Guardar reglas",
+            Background = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1)),
+            Foreground = Brushes.White,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 10.5,
+            Padding = new Thickness(10, 4, 10, 4),
+            Cursor = Cursors.Hand
+        };
+        btnSaveCustom.Resources.Add(typeof(Border), new Style(typeof(Border))
+        {
+            Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(5)) }
+        });
+        btnSaveCustom.Click += (s, e) =>
+        {
+            int siteLimit = 0;
+            if (cmbSiteLimit.SelectedItem is ComboBoxItem limitItem && int.TryParse(limitItem.Tag?.ToString(), out int parsedLimit))
+            {
+                siteLimit = parsedLimit;
+            }
+
+            SiteNotificationMode targetMode = SiteNotificationMode.Allow;
+            if (cmbSiteMode.SelectedItem is ComboBoxItem modeItem && string.Equals(modeItem.Tag?.ToString(), "Silent", StringComparison.OrdinalIgnoreCase))
+            {
+                targetMode = SiteNotificationMode.Silent;
+            }
+
+            NotificationPermissionManager.UpdateSiteCustomization(entry.Origin, siteLimit, targetMode, soundEnabled: true, isIncognito: false);
+            RefreshNotificationSitesList();
+        };
+        drawerButtons.Children.Add(btnSaveCustom);
+
+        drawerStack.Children.Add(drawerButtons);
+        customDrawer.Child = drawerStack;
+        rootStack.Children.Add(customDrawer);
+
+        container.Child = rootStack;
+        return container;
+    }
+
+    #endregion
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {

@@ -51,6 +51,11 @@ public class BrowserSettings
     // Valores: "Ask" (Preguntar al usuario), "BlockAll" (Bloquear todas en silencio - comportamiento previo), "SilentAll" (Permitir solo en centro)
     public string NotificationGlobalPolicy { get; set; } = "Ask";
     public string NotificationDndShortcut { get; set; } = "Ctrl+Shift+D";
+    public bool NotificationDndActive { get; set; } = false;
+    public int NotificationGlobalDailyLimit { get; set; } = 0; // 0 = Ilimitado; 10, 20, 30
+    public int NotificationDefaultSiteDailyLimit { get; set; } = 0; // 0 = Ilimitado; 1, 2, 3, 5
+    public bool NotificationDiscardOlderThan24Hours { get; set; } = true;
+    public bool NotificationDndOnFullscreen { get; set; } = true;
 }
 
 public static class SettingsManager

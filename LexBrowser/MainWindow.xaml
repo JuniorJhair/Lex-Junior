@@ -1214,6 +1214,65 @@
                     </Border>
                 </Popup>
 
+                <!-- Botón Centro de Notificaciones 🔔 (0% CPU en reposo) -->
+                <Grid>
+                    <Button x:Name="BtnNotifications" Style="{StaticResource NavBtn}" ToolTip="Centro de Notificaciones (Ctrl+Shift+D para No Molestar)" Click="BtnNotifications_Click">
+                        <TextBlock x:Name="TxtNotificationsBtnIcon" Text="🔔" FontSize="13" Foreground="#A1A1AA"/>
+                    </Button>
+                    <Border x:Name="BadgeNotifications" Background="#EF4444" CornerRadius="6" MinWidth="14" Height="14" Padding="3,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0" Visibility="Collapsed" IsHitTestVisible="False">
+                        <TextBlock x:Name="TxtBadgeNotificationsCount" Text="0" Foreground="#FFFFFF" FontSize="8.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                </Grid>
+
+                <!-- Popup Centro de Notificaciones -->
+                <Popup x:Name="PopupNotifications" PlacementTarget="{Binding ElementName=BtnNotifications}" Placement="Bottom"
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" VerticalOffset="6" HorizontalOffset="-320">
+                    <Border Background="#161622" BorderBrush="#2D2D42" BorderThickness="1.5" CornerRadius="12" Padding="14,12" Width="380">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.65" Color="#000000"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <!-- Encabezado con título, botón DND y Limpiar -->
+                            <Grid Margin="0,0,0,10">
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="🔔 Notificaciones Web" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
+                                    <TextBlock x:Name="TxtNotificationsSubtitle" Text="Novedades y alertas de tus sitios" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Button x:Name="BtnToggleDnd" Style="{StaticResource LexGhostButton}" Content="🔕 Silencio" Click="BtnToggleDnd_Click"
+                                            FontSize="10.5" Padding="6,3" MinHeight="26" Margin="0,0,4,0" ToolTip="Alternar modo No Molestar (Ctrl+Shift+D)"/>
+                                    <Button x:Name="BtnClearAllNotifications" Style="{StaticResource LexGhostButton}" Content="Limpiar" Click="BtnClearAllNotifications_Click"
+                                            FontSize="10.5" Padding="6,3" MinHeight="26" ToolTip="Borrar historial de notificaciones"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Lista con scroll de notificaciones recientes -->
+                            <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="PanelNotificationsList">
+                                    <!-- Estado vacío por defecto -->
+                                    <Border x:Name="PanelNotificationsEmpty" Padding="0,24" HorizontalAlignment="Center">
+                                        <StackPanel HorizontalAlignment="Center">
+                                            <TextBlock Text="🔕" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                                            <TextBlock Text="No tienes notificaciones pendientes" Foreground="#71717A" FontSize="11.5" FontWeight="Medium" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <Border Height="1" Background="#272738" Margin="0,8"/>
+
+                            <!-- Pie de página: Enlace a Configuración -->
+                            <Button Style="{StaticResource LexGhostButton}" HorizontalAlignment="Stretch" Click="BtnOpenNotificationSettings_Click" Padding="6,4">
+                                <Grid>
+                                    <TextBlock Text="⚙️ Administrar permisos y límites" Foreground="#818CF8" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Left"/>
+                                    <TextBlock Text="➔" Foreground="#818CF8" FontSize="11" HorizontalAlignment="Right"/>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
                 <!-- Botón Historial 🕒 -->
                 <Button x:Name="BtnHistory" Style="{StaticResource NavBtn}" ToolTip="Historial de Navegación y Limpieza (Ctrl+H)" Click="BtnHistory_Click">
                     <TextBlock Text="🕒" FontSize="13" Foreground="#A1A1AA"/>
