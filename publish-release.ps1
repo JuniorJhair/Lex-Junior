@@ -60,6 +60,11 @@ try {
         Copy-Item $srcIcon $iconFile -Force
     }
 
+    try {
+        Copy-Item $setupExePath $exeFile -Force -ErrorAction SilentlyContinue
+        Write-Host "[OK] Binario instalado localmente actualizado en $exeFile" -ForegroundColor Green
+    } catch { }
+
     $deskPath = [Environment]::GetFolderPath('Desktop')
     $deskFile = Join-Path $deskPath 'Lex Junior Browser.lnk'
     if (Test-Path $deskFile) {
