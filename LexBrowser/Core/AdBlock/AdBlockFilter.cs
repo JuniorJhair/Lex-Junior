@@ -311,6 +311,23 @@ public static class AdBlockFilter
         // 1. Bloquear dominios completos (incluyendo subdominios)
         if (HostMatchesSet(host, BlockedDomains)) return true;
 
+        // Regla especial de Google: Proteger búsquedas, respuestas IA (Gemini / SGE) y endpoints asíncronos
+        // para que las consultas y respuestas nunca sean bloqueadas por coincidencia accidental con GenericAdUrlPatterns.
+        bool isGoogleServiceHost = host.Equals("google.com", StringComparison.OrdinalIgnoreCase) ||
+                                  host.EndsWith(".google.com", StringComparison.OrdinalIgnoreCase) ||
+                                  host.Contains(".google.") ||
+                                  host.StartsWith("google.");
+
+        if (isGoogleServiceHost)
+        {
+            if (path.StartsWith("/pagead", StringComparison.OrdinalIgnoreCase) ||
+                fullUrl.Contains("googleads.g.doubleclick.net", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return false;
+        }
+
         // 2. Bloquear Facebook solo en paths de tracking
         if (FacebookBlockedHosts.Contains(host) ||
             host.EndsWith(".facebook.net", StringComparison.OrdinalIgnoreCase))

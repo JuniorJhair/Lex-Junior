@@ -15,6 +15,10 @@ public class AdBlockFilterTests
     [InlineData("https://securepubads.g.doubleclick.net/gampad/ads?x=1")]
     [InlineData("https://doubleclick.net/")]
     [InlineData("https://a.b.c.googlesyndication.com/pagead/js/x.js")]
+    [InlineData("https://www.googleadservices.com/pagead/aclk?sa=l&ai=123")]
+    [InlineData("https://adservice.google.com/adsid/google/ui")]
+    [InlineData("https://www.google.com/pagead/adview?ai=1")]
+    [InlineData("https://googleads.g.doubleclick.net/pagead/ads?client=ca-pub")]
     [InlineData("https://www.youtube.com/api/stats/ads?ver=2")]
     [InlineData("https://www.youtube.com/pagead/adview?ai=1")]
     [InlineData("https://www.youtube.com/youtubei/v1/player/ad_break")]
@@ -39,6 +43,11 @@ public class AdBlockFilterTests
 
     // ── NO debe bloquear (falsos positivos detectados en la auditoría) ───
     [Theory]
+    [InlineData("https://www.google.com/search?q=como+bloquear+popunder+en+mi+sitio")]
+    [InlineData("https://www.google.com/search?q=direct-link+marketing")]
+    [InlineData("https://www.google.com/async/sge?q=inteligencia+artificial&ved=123")]
+    [InlineData("https://www.google.com.pe/search?q=noticias+de+hoy")]
+    [InlineData("https://www.google.com/complete/search?q=lex+junior")]
     [InlineData("https://rr3---sn-abc.googlevideo.com/videoplayback?expire=1&id=o-AB&itag=18")]
     [InlineData("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")]
     [InlineData("https://www.youtube.com/youtubei/v1/att/get")]

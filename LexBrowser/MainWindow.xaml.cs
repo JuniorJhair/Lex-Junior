@@ -883,6 +883,16 @@ public partial class MainWindow : Window
 
         SelectTab(tab);
 
+        if (isNewTabDefault)
+        {
+            _isUpdatingOmniboxTextProgrammatically = true;
+            TxtUrl.Text = "";
+            _isUpdatingOmniboxTextProgrammatically = false;
+            TxtUrl.Focus();
+            Keyboard.Focus(TxtUrl);
+            TxtUrl.CaretIndex = 0;
+        }
+
         try
         {
             var env = await BrowserEngine.GetEnvironmentAsync();
@@ -1879,7 +1889,6 @@ public partial class MainWindow : Window
                     win.LoadingProgressBar.Visibility = Visibility.Collapsed;
                     win.UpdateNavigationButtons();
                     win.UpdateCurrentTabBookmarkUI();
-                    if (tab.IsNewTab) win.FocusOmniboxIfNewTab(tab);
                 }
 
                 // Re-aplicar amplificación de volumen si la pestaña tenía un nivel distinto de 100%
@@ -1952,9 +1961,14 @@ public partial class MainWindow : Window
 
                 if (win._activeTab == tab)
                 {
-                    win._isUpdatingOmniboxTextProgrammatically = true;
-                    win.TxtUrl.Text = tab.Url;
-                    win._isUpdatingOmniboxTextProgrammatically = false;
+                    // Si el usuario ya está escribiendo en el Omnibox en una nueva pestaña, no sobreescribir su texto
+                    bool isUserTypingInNewTab = tab.IsNewTab && win.TxtUrl.IsKeyboardFocusWithin && !string.IsNullOrEmpty(win.TxtUrl.Text);
+                    if (!isUserTypingInNewTab)
+                    {
+                        win._isUpdatingOmniboxTextProgrammatically = true;
+                        win.TxtUrl.Text = tab.IsNewTab ? "" : tab.Url;
+                        win._isUpdatingOmniboxTextProgrammatically = false;
+                    }
                     win.PopupOmniboxSuggestions.IsOpen = false;
                     win.UpdateSecurityIndicatorUI();
                     win.UpdateCurrentTabBookmarkUI();
@@ -2141,9 +2155,13 @@ public partial class MainWindow : Window
 
             if (tab != null)
             {
-                _isUpdatingOmniboxTextProgrammatically = true;
-                TxtUrl.Text = tab.IsNewTab ? "" : tab.Url;
-                _isUpdatingOmniboxTextProgrammatically = false;
+                bool isUserTypingInCurrentNewTab = tab.IsNewTab && _activeTab == tab && TxtUrl.IsKeyboardFocusWithin && !string.IsNullOrEmpty(TxtUrl.Text);
+                if (!isUserTypingInCurrentNewTab)
+                {
+                    _isUpdatingOmniboxTextProgrammatically = true;
+                    TxtUrl.Text = tab.IsNewTab ? "" : tab.Url;
+                    _isUpdatingOmniboxTextProgrammatically = false;
+                }
                 PopupOmniboxSuggestions.IsOpen = false;
                 UpdateShieldBadgeText();
                 LoadingProgressBar.Visibility = tab.IsLoading ? Visibility.Visible : Visibility.Collapsed;
@@ -2167,14 +2185,14 @@ public partial class MainWindow : Window
     private void FocusOmniboxIfNewTab(BrowserTab? tab)
     {
         if (tab == null || tab.IsDisposed || !tab.IsNewTab || _activeTab != tab) return;
-        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
-        {
-            if (tab.IsDisposed || _activeTab != tab || !tab.IsNewTab) return;
-            TxtUrl.Focus();
-            Keyboard.Focus(TxtUrl);
-            TxtUrl.CaretIndex = TxtUrl.Text.Length;
-            TxtUrl.SelectAll();
-        });
+
+        // Si el usuario ya está escribiendo activamente, NUNCA sobreescribir ni seleccionar todo
+        if (TxtUrl.IsKeyboardFocusWithin && !string.IsNullOrEmpty(TxtUrl.Text)) return;
+
+        // Foco inmediato y síncrono: sin retraso de ApplicationIdle ni esperar a que el WebView2 termine de cargar
+        TxtUrl.Focus();
+        Keyboard.Focus(TxtUrl);
+        TxtUrl.CaretIndex = TxtUrl.Text.Length;
     }
 
     private void InitializeTranslateLanguageList()

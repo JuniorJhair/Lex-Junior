@@ -58,12 +58,29 @@ public static class WebShield
     // YouTube cuenta con su propio optimizador aislado y no debe ser intervenido por este escudo genérico
     if (isYouTube) return;
 
-    const isTrustedSite = hostname.endsWith('dailymotion.com') ||
+    const isGoogle = hostname === 'google.com' ||
+                     hostname === 'www.google.com' ||
+                     hostname.endsWith('.google.com') ||
+                     hostname.includes('.google.') ||
+                     hostname.startsWith('google.');
+
+    const isBing = hostname === 'bing.com' ||
+                   hostname === 'www.bing.com' ||
+                   hostname.endsWith('.bing.com');
+
+    const isTrustedSite = isGoogle || isBing ||
+                          hostname.endsWith('dailymotion.com') ||
                           hostname.endsWith('youtube.com') ||
                           hostname.endsWith('twitch.tv') ||
-                          hostname.endsWith('vimeo.com');
+                          hostname.endsWith('vimeo.com') ||
+                          hostname.endsWith('duckduckgo.com') ||
+                          hostname.endsWith('github.com') ||
+                          hostname.endsWith('wikipedia.org') ||
+                          hostname.endsWith('openai.com') ||
+                          hostname.endsWith('chatgpt.com') ||
+                          hostname.endsWith('claude.ai');
 
-    // Sitios dedicados con optimizador propio (YouTube, Dailymotion, Twitch, Vimeo)
+    // Sitios dedicados, motores de búsqueda y plataformas legítimas (preservar respuestas IA, Gemini, widgets y controles nativos)
     if (isTrustedSite) return;
 
     // ─────────────────────────────────────────────────────────────────
@@ -215,14 +232,6 @@ public static class WebShield
         } catch(_) {}
     } catch(e) {}
 
-    // Defusor de secuestro de notificaciones invasivas (Push Notification Spam)
-    try {
-        if (typeof window.Notification !== 'undefined') {
-            window.Notification.requestPermission = function() {
-                return Promise.resolve('denied');
-            };
-        }
-    } catch(e) {}
 
     // ─────────────────────────────────────────────────────────────────
     // 0.1 ESCUDO COSMÉTICO (Ocultamiento de banners, iframes y sliders publicitarios)
