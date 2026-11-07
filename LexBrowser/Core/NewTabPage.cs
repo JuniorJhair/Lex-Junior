@@ -43,15 +43,28 @@ public static class NewTabPage
         return "";
     }
 
-    public static string GetHtml(bool incognito = false)
+    public static string GetHtml(bool incognito = false, bool isGuest = false)
     {
-        string bg = incognito ? "#0A0010" : "#0F0F12";
-        string glow = incognito ? "rgba(139,92,246,0.12)" : "rgba(99,102,241,0.09)";
-        string badgeDisplay = incognito ? "flex" : "none";
-        string accent = incognito ? "#8B5CF6" : "#6366F1";
-        string accentBtn = incognito ? "#7C3AED" : "#6366F1";
-        string focusGlow = incognito ? "rgba(139,92,246,0.14)" : "rgba(99,102,241,0.14)";
-        string hoverBorder = incognito ? "rgba(139,92,246,0.4)" : "rgba(99,102,241,0.35)";
+        string bg = isGuest ? "#070D18" : (incognito ? "#0A0010" : "#0F0F12");
+        string glow = isGuest ? "rgba(56,189,248,0.12)" : (incognito ? "rgba(139,92,246,0.12)" : "rgba(99,102,241,0.09)");
+        string badgeDisplay = (incognito || isGuest) ? "flex" : "none";
+        string accent = isGuest ? "#38BDF8" : (incognito ? "#8B5CF6" : "#6366F1");
+        string accentBtn = isGuest ? "#0284C7" : (incognito ? "#7C3AED" : "#6366F1");
+        string focusGlow = isGuest ? "rgba(56,189,248,0.18)" : (incognito ? "rgba(139,92,246,0.14)" : "rgba(99,102,241,0.14)");
+        string hoverBorder = isGuest ? "rgba(56,189,248,0.45)" : (incognito ? "rgba(139,92,246,0.4)" : "rgba(99,102,241,0.35)");
+
+        string badgeText = isGuest
+            ? "👤 Modo Invitado — Sesión limpia y aislada"
+            : "🕵️ Modo incógnito activo — Privacidad total";
+        string badgeBg = isGuest ? "rgba(56,189,248,0.12)" : "rgba(139,92,246,0.12)";
+        string badgeBorder = isGuest ? "rgba(56,189,248,0.30)" : "rgba(139,92,246,0.25)";
+        string badgeColor = isGuest ? "#38BDF8" : "#A78BFA";
+
+        string brandTitleGradient = isGuest
+            ? "linear-gradient(135deg, #38BDF8 0%, #60A5FA 100%)"
+            : (incognito
+                ? "linear-gradient(135deg, #A855F7 0%, #C084FC 100%)"
+                : "linear-gradient(135deg, #60A5FA 0%, #A855F7 100%)");
 
         string logoBase64 = GetLogoBase64();
         string logoHtml = !string.IsNullOrEmpty(logoBase64)
@@ -128,17 +141,17 @@ public static class NewTabPage
 
     .brand-title {
       font-size: clamp(20px, 3.2vh, 26px); font-weight: 800; letter-spacing: 1px;
-      background: linear-gradient(135deg, #60A5FA 0%, #A855F7 100%);
+      background: " + brandTitleGradient + @";
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
 
     .incognito-badge {
       display: " + badgeDisplay + @";
       align-items: center; gap: 8px;
-      background: rgba(139,92,246,0.12);
-      border: 1px solid rgba(139,92,246,0.25);
+      background: " + badgeBg + @";
+      border: 1px solid " + badgeBorder + @";
       border-radius: 20px; padding: 6px 16px;
-      color: #A78BFA; font-size: 12px; font-weight: 600;
+      color: " + badgeColor + @"; font-size: 12px; font-weight: 600;
       margin-bottom: clamp(10px, 2vh, 20px); letter-spacing: 0.5px;
     }
 

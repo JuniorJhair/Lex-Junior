@@ -39,7 +39,8 @@
             <Setter Property="Foreground" Value="#9CA3AF"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Width" Value="46"/>
-            <Setter Property="Height" Value="40"/>
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="Template">
@@ -254,8 +255,9 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border x:Name="TabBorder" Margin="2,0,2,0" VerticalAlignment="Stretch" CornerRadius="8,8,0,0" Padding="10,0,8,0" Cursor="Hand"
+                                    <Border x:Name="TabBorder" Margin="2,0,2,0" VerticalAlignment="Stretch" CornerRadius="6,6,0,0" Padding="10,0,8,0" Cursor="Hand"
                                             Background="#16161B"
+                                            WindowChrome.IsHitTestVisibleInChrome="True"
                                             PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
                                             PreviewMouseMove="Tab_PreviewMouseMove"
                                             PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp">
@@ -352,15 +354,35 @@
                                         </Grid>
                                     </Border>
                                     <DataTemplate.Triggers>
+                                        <!-- Efecto Hover cuando el puntero pasa encima de una pestaña (sombreado elegante) -->
+                                        <Trigger SourceName="TabBorder" Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="TabBorder" Property="Background" Value="#252535"/>
+                                        </Trigger>
+                                        <!-- Pestaña seleccionada normal -->
                                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                             <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource SurfaceDark}"/>
                                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AccentColor}"/>
                                             <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
                                         </DataTrigger>
-                                        <DataTrigger Binding="{Binding IsIncognito}" Value="True">
+                                        <!-- Pestaña incógnito seleccionada -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsSelected}" Value="True"/>
+                                                <Condition Binding="{Binding IsIncognito}" Value="True"/>
+                                                <Condition Binding="{Binding IsGuest}" Value="False"/>
+                                            </MultiDataTrigger.Conditions>
                                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="#8B5CF6"/>
                                             <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
-                                        </DataTrigger>
+                                        </MultiDataTrigger>
+                                        <!-- Pestaña modo invitado seleccionada (azul cielo elegante) -->
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsSelected}" Value="True"/>
+                                                <Condition Binding="{Binding IsGuest}" Value="True"/>
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="#38BDF8"/>
+                                            <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
+                                        </MultiDataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -1427,20 +1449,20 @@
                 </Button>
             </StackPanel>
 
-            <!-- Banner de Modo Invitado (Cubre la barra de marcadores personales cuando alguien entra como Invitado) -->
-            <Border x:Name="BorderGuestSessionBanner" Grid.Column="0" Grid.ColumnSpan="4" Background="#171726" BorderBrush="#6366F1" BorderThickness="0,0,0,1" Visibility="Collapsed" Panel.ZIndex="10">
+            <!-- Banner de Modo Invitado (Cubre la barra de marcadores personales cuando alguien entra como Invitado con tono azulado exclusivo) -->
+            <Border x:Name="BorderGuestSessionBanner" Grid.Column="0" Grid.ColumnSpan="4" Background="#0C1524" BorderBrush="#0284C7" BorderThickness="0,0,0,1" Visibility="Collapsed" Panel.ZIndex="10">
                 <Grid Margin="14,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <DockPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="👤 Modo Invitado Activo: " FontWeight="Bold" FontSize="11.5" Foreground="#A5B4FC" VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                        <TextBlock Text="👤 Modo Invitado Activo: " FontWeight="Bold" FontSize="11.5" Foreground="#38BDF8" VerticalAlignment="Center" DockPanel.Dock="Left"/>
                         <TextBlock Text="Tus marcadores personales, historial y contraseñas guardadas están ocultos. Al cerrar la ventana se borrará la sesión de invitado."
-                                   FontSize="11" Foreground="#D4D4D8" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                   FontSize="11" Foreground="#E2E8F0" VerticalAlignment="Center" TextWrapping="Wrap"/>
                     </DockPanel>
                     <Button Grid.Column="1" Content="🔑 Desbloquear mi cuenta con PIN" Click="BtnUnlockFromGuest_Click"
-                            VerticalAlignment="Center" Background="#6366F1" Foreground="#FFFFFF"
+                            VerticalAlignment="Center" Background="#0284C7" Foreground="#FFFFFF"
                             FontSize="11" FontWeight="Bold" Padding="12,5" MinHeight="28" BorderThickness="0" Cursor="Hand"
                             FocusVisualStyle="{StaticResource LexFocusVisual}" SnapsToDevicePixels="True">
                         <Button.Style>
@@ -1453,7 +1475,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="b" Property="Background" Value="#4F46E5"/>
+                                                    <Setter TargetName="b" Property="Background" Value="#0369A1"/>
                                                 </Trigger>
                                                 <Trigger Property="IsEnabled" Value="False">
                                                     <Setter Property="Opacity" Value="0.4"/>

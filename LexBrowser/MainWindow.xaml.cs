@@ -889,6 +889,20 @@ public partial class MainWindow : Window
         {
             BorderGuestSessionBanner.Visibility = _isGuestSession ? Visibility.Visible : Visibility.Collapsed;
         }
+
+        if (TxtBrandTitle != null)
+        {
+            if (_isGuestSession)
+            {
+                TxtBrandTitle.Text = "LEX JUNIOR · INVITADO";
+                TxtBrandTitle.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#38BDF8"));
+            }
+            else
+            {
+                TxtBrandTitle.Text = "LEX JUNIOR";
+                TxtBrandTitle.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#818CF8"));
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -929,12 +943,14 @@ public partial class MainWindow : Window
         };
 
         bool isNewTabDefault = string.IsNullOrWhiteSpace(initialUrl) && !skipInitialNavigate;
+        string tabDefaultTitle = _isGuestSession ? "Modo Invitado" : (isIncognito ? "Incógnito" : "Nueva pestaña");
 
         var tab = new BrowserTab(webView)
         {
             Url = isNewTabDefault ? "" : (initialUrl ?? ""),
-            Title = isNewTabDefault ? (isIncognito ? "Incógnito" : "Nueva pestaña") : "Cargando...",
+            Title = isNewTabDefault ? tabDefaultTitle : "Cargando...",
             IsIncognito = isIncognito,
+            IsGuest = _isGuestSession,
             IsNewTab = isNewTabDefault,
             OwnerWindow = this
         };
@@ -987,7 +1003,7 @@ public partial class MainWindow : Window
             {
                 if (isNewTabDefault)
                 {
-                    webView.NavigateToString(NewTabPage.GetHtml(isIncognito));
+                    webView.NavigateToString(NewTabPage.GetHtml(isIncognito, isGuest: _isGuestSession));
                 }
                 else if (!string.IsNullOrWhiteSpace(initialUrl))
                 {
@@ -2070,7 +2086,7 @@ public partial class MainWindow : Window
                 if (tab.IsDisposed) return;
                 if (tab.IsNewTab)
                 {
-                    tab.Title = tab.IsIncognito ? "Incógnito" : "Nueva pestaña";
+                    tab.Title = tab.IsGuest ? "Modo Invitado" : (tab.IsIncognito ? "Incógnito" : "Nueva pestaña");
                 }
                 else
                 {
@@ -4361,6 +4377,11 @@ public partial class MainWindow : Window
         if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.N)
         {
             e.Handled = true;
+            if (_isGuestSession)
+            {
+                if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
+                    return;
+            }
             await AddNewTabAsync(null, isIncognito: true);
             return;
         }
@@ -4482,6 +4503,11 @@ public partial class MainWindow : Window
 
     private async void BtnNewIncognitoTab_Click(object sender, RoutedEventArgs e)
     {
+        if (_isGuestSession)
+        {
+            if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
+                return;
+        }
         await AddNewTabAsync(null, isIncognito: true);
     }
 
@@ -4704,9 +4730,9 @@ public partial class MainWindow : Window
         {
             _activeTab.IsNewTab = true;
             _activeTab.Url = "";
-            _activeTab.Title = _activeTab.IsIncognito ? "Nueva pestaña incógnito" : "Nueva pestaña";
+            _activeTab.Title = _activeTab.IsGuest ? "Modo Invitado" : (_activeTab.IsIncognito ? "Nueva pestaña incógnito" : "Nueva pestaña");
             TxtUrl.Text = "";
-            _activeTab.WebView.NavigateToString(NewTabPage.GetHtml(_activeTab.IsIncognito));
+            _activeTab.WebView.NavigateToString(NewTabPage.GetHtml(_activeTab.IsIncognito, isGuest: _activeTab.IsGuest));
             UpdateNavigationButtons();
         }
     }
@@ -4956,45 +4982,28 @@ public partial class MainWindow : Window
         bool isFullscreen = _activeTab?.WebView?.CoreWebView2?.ContainsFullScreenElement ?? false;
         if (WindowState == WindowState.Maximized && !isFullscreen && WindowChrome.GetWindowChrome(this) != null)
         {
-            // En WindowStyle="None" con WindowChrome, Win32 expande la ventana 8px fuera de la pantalla.
-            // Calculamos exactamente la conversión de 8 píxeles físicos a DIPs según el DPI del monitor actual
-            // (ej. 8.0 DIPs al 100%, 6.4 DIPs al 125%, 5.3 DIPs al 150%) para que todos los bordes, scrollbars,
-            // pestañas y la barra de reproducción/progreso de YouTube queden 100% dentro del monitor.
-            double marginDips = 6.4;
-            try
-            {
-                var source = PresentationSource.FromVisual(this);
-                if (source?.CompositionTarget != null)
-                {
-                    double dpiScale = source.CompositionTarget.TransformToDevice.M11;
-                    if (dpiScale > 0)
-                    {
-                        marginDips = Math.Round(8.0 / dpiScale, 1);
-                    }
-                }
-                else
-                {
-                    var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-                    if (hwnd != IntPtr.Zero)
-                    {
-                        uint dpi = NativeMethods.GetDpiForWindow(hwnd);
-                        if (dpi > 0)
-                        {
-                            marginDips = Math.Round(8.0 / (dpi / 96.0), 1);
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                marginDips = 7.0;
-            }
+            // Con WorkAreaHook manejando WM_GETMINMAXINFO, la ventana maximizada se posiciona
+            // exactamente en los límites del área de trabajo (rcWork) de Windows (0, 0, width, height).
+            // RootWindowGrid.Margin debe ser exactamente 0 para que:
+            // 1) Las pestañas toquen el borde físico superior de la pantalla (y = 0) cumpliendo la Ley de Fitts.
+            // 2) La ventana cubra el 100% del área de trabajo disponible sin franjas muertas ni espacios vacíos.
+            RootWindowGrid.Margin = new Thickness(0);
 
-            RootWindowGrid.Margin = new Thickness(marginDips);
+            if (AppWindowChrome != null)
+            {
+                // En maximizado deshabilitamos el borde de resize para que los clics en y = 0 vayan directo a las pestañas
+                AppWindowChrome.ResizeBorderThickness = new Thickness(0);
+            }
         }
         else
         {
             RootWindowGrid.Margin = new Thickness(0);
+
+            if (AppWindowChrome != null)
+            {
+                // En modo restaurado (Normal), restauramos el borde de 6px para poder redimensionar la ventana
+                AppWindowChrome.ResizeBorderThickness = new Thickness(6);
+            }
         }
 
         if (BrowserContainer != null)
@@ -6399,6 +6408,7 @@ public partial class MainWindow : Window
         if (pinDialog.ShowDialog() == true)
         {
             _isGuestSession = false;
+            PasswordManager.MarkSessionUnlocked();
             ApplySettings();
             ShowToast("🔓 Sesión de propietario desbloqueada: tus marcadores, historial y bóveda están disponibles.");
             return true;

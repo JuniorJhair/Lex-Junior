@@ -57,6 +57,7 @@ public class BrowserTab : INotifyPropertyChanged
     private TabPinMode _pinMode = TabPinMode.None;
     private bool _isMuted = false;
     private bool _isIncognito = false;
+    private bool _isGuest = false;
     private bool _isNewTab = true;
     private int _volumeBoostPercent = 100;
     private bool _isMediaSnifferActive = false;
@@ -281,6 +282,7 @@ public class BrowserTab : INotifyPropertyChanged
     {
         get
         {
+            if (IsGuest) return "👤";
             if (IsIncognito) return "🕵️";
             if (IsNewTab || string.IsNullOrWhiteSpace(Url)) return "⚡";
 
@@ -320,6 +322,19 @@ public class BrowserTab : INotifyPropertyChanged
         set
         {
             if (SetField(ref _isIncognito, value))
+            {
+                OnPropertyChanged(nameof(FaviconIcon));
+            }
+        }
+    }
+
+    /// <summary>Pestaña creada en modo invitado.</summary>
+    public bool IsGuest
+    {
+        get => _isGuest;
+        set
+        {
+            if (SetField(ref _isGuest, value))
             {
                 OnPropertyChanged(nameof(FaviconIcon));
             }
