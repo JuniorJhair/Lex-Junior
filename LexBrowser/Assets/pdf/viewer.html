@@ -159,33 +159,44 @@
       text-transform: uppercase;
     }
 
-    /* GROSOR */
+    /* GROSOR Y TAMAÑOS DE TRAZO */
     .stroke-sizes {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
       margin-bottom: 14px;
       background: #0E0E17;
-      padding: 6px 8px;
+      padding: 8px;
       border-radius: 8px;
     }
     .stroke-size-btn {
-      width: 44px;
-      height: 30px;
+      height: 38px;
       border-radius: 6px;
       border: 1px solid transparent;
       background: transparent;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
+      gap: 3px;
       cursor: pointer;
+      transition: all 0.15s ease;
     }
     .stroke-size-btn:hover {
-      background: rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.08);
     }
     .stroke-size-btn.active {
       background: #252538;
       border-color: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .stroke-size-btn .size-text {
+      font-size: 9px;
+      font-weight: 700;
+      color: #9CA3AF;
+    }
+    .stroke-size-btn.active .size-text {
+      color: #A5B4FC;
     }
     .stroke-indicator {
       background: #E4E4E7;
@@ -321,43 +332,70 @@
     }
 
     /* ANOTACIONES DE TEXTO */
-    .editable-text-box {
+    .editable-text-wrapper {
       position: absolute;
-      background: rgba(255, 255, 255, 0.95);
-      color: #111827;
       border: 1.5px dashed var(--accent);
+      background: rgba(255, 255, 255, 0.95);
       border-radius: 4px;
-      padding: 4px 8px;
-      min-width: 80px;
+      padding: 3px 6px;
+      min-width: 90px;
       min-height: 28px;
-      outline: none;
       pointer-events: auto;
-      font-size: 14px;
       cursor: move;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.22);
+      display: inline-flex;
+      align-items: center;
+      user-select: none;
+      z-index: 50;
     }
-    .editable-text-box:focus {
+    .editable-text-wrapper:hover,
+    .editable-text-wrapper:focus-within {
       border-style: solid;
       background: #FFFFFF;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .editable-text-input {
+      outline: none;
+      border: none;
+      background: transparent;
+      color: #111827;
+      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      cursor: text;
+      min-width: 60px;
+      min-height: 20px;
+      user-select: text;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    /* Placeholder virtual moderno: sólo visible si el input está vacío */
+    .editable-text-input[data-placeholder]:empty::before {
+      content: attr(data-placeholder);
+      color: #9CA3AF;
+      font-style: italic;
+      pointer-events: none;
+      display: inline-block;
     }
     .editable-text-delete {
       position: absolute;
-      top: -10px;
-      right: -10px;
+      top: -9px;
+      right: -9px;
       background: #EF4444;
       color: white;
       border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      font-size: 11px;
-      display: flex;
+      width: 18px;
+      height: 18px;
+      font-size: 10px;
+      font-weight: 700;
+      display: none;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      display: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+      z-index: 60;
     }
-    .editable-text-box:hover .editable-text-delete,
-    .editable-text-box:focus .editable-text-delete {
+    .editable-text-wrapper:hover .editable-text-delete,
+    .editable-text-wrapper:focus-within .editable-text-delete {
       display: flex;
     }
 
@@ -470,6 +508,136 @@
     #toast-banner.show {
       transform: translateX(-50%) translateY(0);
     }
+
+    /* ═════════════════════════════════════════════════════════════════ */
+    /* REGLAS DE IMPRESIÓN PROFESIONAL HOJA POR HOJA (LIMPIEZA TOTAL) */
+    /* ═════════════════════════════════════════════════════════════════ */
+    @media print {
+      @page {
+        margin: 0 !important;
+        size: auto !important;
+      }
+
+      html, body {
+        background: #FFFFFF !important;
+        color: #000000 !important;
+        height: auto !important;
+        min-height: 100% !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+        position: static !important;
+      }
+
+      header.toolbar,
+      #sidebar-thumbnails,
+      #sidebar-properties,
+      #modal-signature,
+      #toast-banner,
+      .editable-text-delete,
+      .stamp-resize-handle,
+      .stamp-delete-btn,
+      .v-divider {
+        display: none !important;
+      }
+
+      main.main-viewport {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #FFFFFF !important;
+        position: static !important;
+      }
+
+      #pdf-scroll-container {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #FFFFFF !important;
+        position: static !important;
+      }
+
+      /* Cada página del PDF es una hoja completa independiente */
+      .pdf-page-wrapper {
+        page-break-before: auto !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+        position: relative !important;
+        display: block !important;
+        background: #FFFFFF !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+      }
+
+      .pdf-page-wrapper:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+
+      /* El canvas del PDF ocupa toda la anchura de la hoja */
+      .pdf-render-canvas {
+        width: 100% !important;
+        height: auto !important;
+        display: block !important;
+        filter: none !important; /* Desactivar Modo Noche y Modo Sepia al imprimir */
+      }
+
+      .pdf-annotation-canvas {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        display: block !important;
+      }
+
+      .pdf-text-layer {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      /* Limpieza de cuadros de texto: sin bordes punteados ni fondo blanco opaco */
+      .editable-text-wrapper {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+      }
+
+      .editable-text-input {
+        color: #000000 !important;
+      }
+
+      /* Ocultar cualquier texto que haya quedado vacío o el placeholder */
+      .editable-text-input:empty,
+      .editable-text-input[data-placeholder]:empty::before,
+      .editable-text-wrapper:has(.editable-text-input:empty) {
+        display: none !important;
+      }
+
+      /* Estampas sin bordes */
+      .stamp-element {
+        border: none !important;
+        box-shadow: none !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -565,10 +733,38 @@
   <aside id="sidebar-properties">
     <div class="sidebar-section-title">Tamaño del trazo</div>
     <div class="stroke-sizes">
-      <button class="stroke-size-btn" data-size="2" title="Fino (2px)"><div class="stroke-indicator" style="width:3px; height:3px;"></div></button>
-      <button class="stroke-size-btn active" data-size="4" title="Medio (4px)"><div class="stroke-indicator" style="width:6px; height:6px;"></div></button>
-      <button class="stroke-size-btn" data-size="8" title="Grueso (8px)"><div class="stroke-indicator" style="width:10px; height:10px;"></div></button>
-      <button class="stroke-size-btn" data-size="16" title="Muy grueso (16px)"><div class="stroke-indicator" style="width:16px; height:16px;"></div></button>
+      <button class="stroke-size-btn" data-size="1" title="Ultra Fino (1px)">
+        <div class="stroke-indicator" style="width:2px; height:2px;"></div>
+        <span class="size-text">1px</span>
+      </button>
+      <button class="stroke-size-btn" data-size="2" title="Fino (2px)">
+        <div class="stroke-indicator" style="width:4px; height:4px;"></div>
+        <span class="size-text">2px</span>
+      </button>
+      <button class="stroke-size-btn active" data-size="4" title="Normal (4px)">
+        <div class="stroke-indicator" style="width:6px; height:6px;"></div>
+        <span class="size-text">4px</span>
+      </button>
+      <button class="stroke-size-btn" data-size="6" title="Medio (6px)">
+        <div class="stroke-indicator" style="width:8px; height:8px;"></div>
+        <span class="size-text">6px</span>
+      </button>
+      <button class="stroke-size-btn" data-size="8" title="Grueso (8px)">
+        <div class="stroke-indicator" style="width:10px; height:10px;"></div>
+        <span class="size-text">8px</span>
+      </button>
+      <button class="stroke-size-btn" data-size="12" title="Muy Grueso (12px)">
+        <div class="stroke-indicator" style="width:12px; height:12px;"></div>
+        <span class="size-text">12px</span>
+      </button>
+      <button class="stroke-size-btn" data-size="18" title="Marcador (18px)">
+        <div class="stroke-indicator" style="width:15px; height:15px;"></div>
+        <span class="size-text">18px</span>
+      </button>
+      <button class="stroke-size-btn" data-size="28" title="Brocha Ancha (28px)">
+        <div class="stroke-indicator" style="width:18px; height:18px;"></div>
+        <span class="size-text">28px</span>
+      </button>
     </div>
 
     <div class="sidebar-section-title">Paleta de Colores</div>
@@ -915,50 +1111,78 @@
         const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
 
-        spawnTextBox(pageData, clickX, clickY, 'Escribe aquí...');
+        spawnTextBox(pageData, clickX, clickY);
       });
     }
 
     function spawnTextBox(pageData, x, y, initialText = '') {
-      const box = document.createElement('div');
-      box.className = 'editable-text-box';
-      box.contentEditable = true;
-      box.style.left = x + 'px';
-      box.style.top = y + 'px';
-      box.style.color = AppState.currentColor;
-      box.textContent = initialText;
+      const wrap = document.createElement('div');
+      wrap.className = 'editable-text-wrapper';
+
+      const canvasW = pageData.annotCanvas.offsetWidth || pageData.annotCanvas.width;
+      const canvasH = pageData.annotCanvas.offsetHeight || pageData.annotCanvas.height;
+      const pctX = ((x / canvasW) * 100).toFixed(2);
+      const pctY = ((y / canvasH) * 100).toFixed(2);
+      wrap.style.left = pctX + '%';
+      wrap.style.top = pctY + '%';
+
+      const input = document.createElement('div');
+      input.className = 'editable-text-input';
+      input.contentEditable = true;
+      input.style.color = AppState.currentColor;
+      input.setAttribute('data-placeholder', 'Escribe aquí...');
+      if (initialText) {
+        input.textContent = initialText;
+      }
 
       const del = document.createElement('div');
       del.className = 'editable-text-delete';
       del.textContent = '✕';
-      del.contentEditable = false;
+      del.title = 'Eliminar anotación';
       del.onclick = (ev) => {
         ev.stopPropagation();
-        box.remove();
-        pageData.textAnnotations = pageData.textAnnotations.filter(t => t.element !== box);
+        wrap.remove();
+        pageData.textAnnotations = pageData.textAnnotations.filter(t => t.element !== wrap);
       };
-      box.appendChild(del);
 
-      // Arrastrar cuadro de texto
+      wrap.appendChild(input);
+      wrap.appendChild(del);
+
+      // Si el usuario sale del foco y no escribió nada, limpiar el cuadro automáticamente
+      input.addEventListener('blur', () => {
+        if (!input.innerText.trim()) {
+          wrap.remove();
+          pageData.textAnnotations = pageData.textAnnotations.filter(t => t.element !== wrap);
+        }
+      });
+
+      // Arrastrar cuadro de texto desde el wrapper
       let isDragging = false, startX, startY;
-      box.addEventListener('mousedown', (e) => {
-        if (e.target === del) return;
-        if (e.detail > 1) return; // Doble clic para editar
+      wrap.addEventListener('mousedown', (e) => {
+        if (e.target === del || e.target === input) return;
         isDragging = true;
-        startX = e.clientX - box.offsetLeft;
-        startY = e.clientY - box.offsetTop;
+        startX = e.clientX - wrap.offsetLeft;
+        startY = e.clientY - wrap.offsetTop;
       });
       window.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
-        box.style.left = (e.clientX - startX) + 'px';
-        box.style.top = (e.clientY - startY) + 'px';
+        const curCanvasW = pageData.annotCanvas.offsetWidth || pageData.annotCanvas.width;
+        const curCanvasH = pageData.annotCanvas.offsetHeight || pageData.annotCanvas.height;
+        const newX = e.clientX - startX;
+        const newY = e.clientY - startY;
+        wrap.style.left = ((newX / curCanvasW) * 100).toFixed(2) + '%';
+        wrap.style.top = ((newY / curCanvasH) * 100).toFixed(2) + '%';
       });
       window.addEventListener('mouseup', () => { isDragging = false; });
 
-      pageData.textLayer.appendChild(box);
-      box.focus();
+      pageData.textLayer.appendChild(wrap);
 
-      const item = { element: box, x, y, pageNum: pageData.pageNum };
+      // Enfocar el cursor directamente dentro del campo de texto
+      setTimeout(() => {
+        input.focus();
+      }, 20);
+
+      const item = { element: wrap, inputElement: input, x, y, pageNum: pageData.pageNum };
       pageData.textAnnotations.push(item);
     }
 
@@ -1010,12 +1234,15 @@
       const pageData = AppState.pages[AppState.currentPage - 1] || AppState.pages[0];
       if (!pageData) return;
 
+      const canvasW = pageData.annotCanvas.offsetWidth || pageData.annotCanvas.width;
+      const canvasH = pageData.annotCanvas.offsetHeight || pageData.annotCanvas.height;
+
       const stamp = document.createElement('div');
       stamp.className = 'stamp-element selected';
-      stamp.style.left = '80px';
-      stamp.style.top = '120px';
-      stamp.style.width = defaultWidth + 'px';
-      stamp.style.height = defaultHeight + 'px';
+      stamp.style.left = ((80 / canvasW) * 100).toFixed(2) + '%';
+      stamp.style.top = ((120 / canvasH) * 100).toFixed(2) + '%';
+      stamp.style.width = ((defaultWidth / canvasW) * 100).toFixed(2) + '%';
+      stamp.style.height = ((defaultHeight / canvasH) * 100).toFixed(2) + '%';
 
       const img = document.createElement('img');
       img.className = 'stamp-img';
@@ -1046,12 +1273,6 @@
         document.querySelectorAll('.stamp-element').forEach(s => s.classList.remove('selected'));
         stamp.classList.add('selected');
       });
-      window.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        stamp.style.left = (e.clientX - startX) + 'px';
-        stamp.style.top = (e.clientY - startY) + 'px';
-      });
-      window.addEventListener('mouseup', () => { isDragging = false; });
 
       // Redimensionar
       let isResizing = false, initW, initH, initMouseX, initMouseY;
@@ -1063,14 +1284,26 @@
         initMouseX = e.clientX;
         initMouseY = e.clientY;
       });
+
       window.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-        const newW = Math.max(40, initW + (e.clientX - initMouseX));
-        const newH = Math.max(20, initH + (e.clientY - initMouseY));
-        stamp.style.width = newW + 'px';
-        stamp.style.height = newH + 'px';
+        const curCanvasW = pageData.annotCanvas.offsetWidth || pageData.annotCanvas.width;
+        const curCanvasH = pageData.annotCanvas.offsetHeight || pageData.annotCanvas.height;
+        if (isDragging) {
+          const newX = e.clientX - startX;
+          const newY = e.clientY - startY;
+          stamp.style.left = ((newX / curCanvasW) * 100).toFixed(2) + '%';
+          stamp.style.top = ((newY / curCanvasH) * 100).toFixed(2) + '%';
+        } else if (isResizing) {
+          const newW = Math.max(40, initW + (e.clientX - initMouseX));
+          const newH = Math.max(20, initH + (e.clientY - initMouseY));
+          stamp.style.width = ((newW / curCanvasW) * 100).toFixed(2) + '%';
+          stamp.style.height = ((newH / curCanvasH) * 100).toFixed(2) + '%';
+        }
       });
-      window.addEventListener('mouseup', () => { isResizing = false; });
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+        isResizing = false;
+      });
 
       pageData.textLayer.appendChild(stamp);
       pageData.stamps.push({ element: stamp, imgSrc: imgSrc, pageNum: pageData.pageNum });
@@ -1131,15 +1364,28 @@
             }
           }
 
-          // Incrustar textos
+          // Incrustar textos (omitiendo cajas vacías o con placeholder)
           for (const t of p.textAnnotations) {
-            const rawText = t.element.innerText.replace('✕', '').trim();
+            const inp = t.inputElement || t.element;
+            const rawText = inp.innerText.replace('✕', '').trim();
             if (!rawText) continue;
-            const left = parseFloat(t.element.style.left) || 0;
-            const top = parseFloat(t.element.style.top) || 0;
+
+            let targetX, targetY;
+            if (t.element.style.left && t.element.style.left.includes('%')) {
+              const leftPct = parseFloat(t.element.style.left) || 0;
+              const topPct = parseFloat(t.element.style.top) || 0;
+              targetX = (leftPct / 100) * width;
+              targetY = height - (((topPct / 100) * height) + (14 * scaleY));
+            } else {
+              const left = parseFloat(t.element.style.left) || 0;
+              const top = parseFloat(t.element.style.top) || 0;
+              targetX = left * scaleX;
+              targetY = height - ((top + 16) * scaleY);
+            }
+
             targetPage.drawText(rawText, {
-              x: left * scaleX,
-              y: height - ((top + 16) * scaleY),
+              x: targetX,
+              y: targetY,
               size: 13 * scaleX,
               color: PDFLib.rgb(0.1, 0.1, 0.1)
             });
@@ -1148,10 +1394,24 @@
           // Incrustar estampas de firma e imágenes
           for (const s of p.stamps) {
             try {
-              const left = parseFloat(s.element.style.left) || 0;
-              const top = parseFloat(s.element.style.top) || 0;
-              const w = parseFloat(s.element.style.width) || 120;
-              const h = parseFloat(s.element.style.height) || 50;
+              let targetX, targetY, targetW, targetH;
+              if (s.element.style.left && s.element.style.left.includes('%')) {
+                const leftPct = parseFloat(s.element.style.left) || 0;
+                const topPct = parseFloat(s.element.style.top) || 0;
+                const wPct = parseFloat(s.element.style.width) || 20;
+                const hPct = parseFloat(s.element.style.height) || 10;
+                targetX = (leftPct / 100) * width;
+                targetW = (wPct / 100) * width;
+                targetH = (hPct / 100) * height;
+                targetY = height - (((topPct / 100) * height) + targetH);
+              } else {
+                const left = parseFloat(s.element.style.left) || 0;
+                const top = parseFloat(s.element.style.top) || 0;
+                targetW = (parseFloat(s.element.style.width) || 120) * scaleX;
+                targetH = (parseFloat(s.element.style.height) || 50) * scaleY;
+                targetX = left * scaleX;
+                targetY = height - ((top * scaleY) + targetH);
+              }
 
               let embeddedImg;
               if (s.imgSrc.includes('image/png')) {
@@ -1161,10 +1421,10 @@
               }
 
               targetPage.drawImage(embeddedImg, {
-                x: left * scaleX,
-                y: height - ((top + h) * scaleY),
-                width: w * scaleX,
-                height: h * scaleY
+                x: targetX,
+                y: targetY,
+                width: targetW,
+                height: targetH
               });
             } catch (imgErr) {
               console.warn('Error al incrustar estampa:', imgErr);
@@ -1307,8 +1567,29 @@
       }
     };
 
-    // IMPRIMIR
+    // PREPARACIÓN DE IMPRESIÓN LIMPIA (Desenfocar y limpiar vacíos)
+    function prepareForCleanPrint() {
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      AppState.pages.forEach(p => {
+        p.textAnnotations = p.textAnnotations.filter(t => {
+          const inp = t.inputElement || t.element;
+          if (!inp.innerText.trim()) {
+            t.element.remove();
+            return false;
+          }
+          return true;
+        });
+      });
+      document.querySelectorAll('.stamp-element').forEach(s => s.classList.remove('selected'));
+    }
+
+    window.addEventListener('beforeprint', prepareForCleanPrint);
+
+    // IMPRIMIR HOJA POR HOJA LIMPIA
     document.getElementById('btn-print').onclick = () => {
+      prepareForCleanPrint();
       window.print();
     };
 

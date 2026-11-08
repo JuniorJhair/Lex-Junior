@@ -1182,6 +1182,143 @@ section {
   color: var(--text-secondary);
 }
 
+/* Vista 6: Lex PDF Studio */
+.pdf-mockup-wrapper {
+  display: flex;
+  flex-direction: column;
+  background: #0D0D14;
+  border-radius: 10px;
+  overflow: hidden;
+  height: 100%;
+  border: 1px solid #232338;
+}
+
+.pdf-mockup-toolbar {
+  height: 44px;
+  background: #161622;
+  border-bottom: 1px solid #28283E;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  gap: 8px;
+  font-size: 0.78rem;
+  overflow-x: auto;
+}
+
+.pdf-mock-left, .pdf-mock-tools, .pdf-mock-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pdf-badge {
+  background: #1E1B4B;
+  color: #C7D2FE;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  border: 1px solid #3730A3;
+  white-space: nowrap;
+}
+
+.pdf-pages {
+  color: #9CA3AF;
+  font-size: 0.75rem;
+}
+
+.pdf-btn {
+  background: transparent;
+  color: #A1A1AA;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.pdf-btn.active {
+  background: #252538;
+  color: #818CF8;
+  border-color: #6366F1;
+}
+
+.pdf-btn-save {
+  background: #4F46E5 !important;
+  color: #FFFFFF !important;
+  font-weight: 700;
+}
+
+.pdf-mock-sheet {
+  background: #FDFDFD;
+  color: #111827;
+  margin: 16px auto;
+  padding: 24px 30px;
+  width: 90%;
+  max-width: 580px;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  font-family: Georgia, serif;
+}
+
+.pdf-sheet-header h4 {
+  font-size: 1rem;
+  letter-spacing: 1px;
+  color: #1E293B;
+  margin-bottom: 4px;
+  font-weight: 800;
+}
+
+.pdf-sheet-date {
+  font-size: 0.75rem;
+  color: #64748B;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #E2E8F0;
+  padding-bottom: 6px;
+}
+
+.pdf-sheet-body p {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #334155;
+  margin-bottom: 12px;
+}
+
+.pdf-mock-highlight {
+  background: rgba(254, 240, 138, 0.7);
+  padding: 4px 8px;
+  border-left: 3px solid #EAB308;
+  font-size: 0.82rem;
+  margin-bottom: 16px;
+  color: #713F12;
+}
+
+.pdf-signature-stamp {
+  border: 1.5px dashed #6366F1;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 6px;
+  padding: 8px 14px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  float: right;
+}
+
+.pdf-sig-draw {
+  font-family: "Brush Script MT", cursive, sans-serif;
+  font-size: 1.4rem;
+  color: #1E1B4B;
+  transform: rotate(-3deg);
+}
+
+.pdf-sig-label {
+  font-family: -apple-system, sans-serif;
+  font-size: 0.68rem;
+  color: #4F46E5;
+  font-weight: 700;
+}
+
 /* ─── Bento Grid de Características ─── */
 .bento-grid {
   display: grid;

@@ -68,6 +68,12 @@ document.addEventListener('DOMContentLoaded', () => {
       url: 'https://twitch.tv/lexjunior_live',
       ads: '18 bloqueados'
     },
+    'view-pdf': {
+      icon: '📑',
+      title: 'Contrato_Acuerdo_Servicios.pdf — Lex PDF Studio',
+      url: 'file:///C:/Users/Documentos/Contrato_Acuerdo_Servicios.pdf',
+      ads: '0% CPU · 100% Offline'
+    },
     'view-incognito': {
       icon: '🕵️',
       title: 'Pestaña Privada (Incógnito)',
