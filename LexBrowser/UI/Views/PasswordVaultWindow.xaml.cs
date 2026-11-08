@@ -407,31 +407,98 @@ public partial class PasswordVaultWindow : Window
     private void LockModeRadio_Changed(object sender, RoutedEventArgs e)
     {
         if (_isInitializing) return;
-        UpdatePinConfigPanelVisibility();
 
-        if (RbLockNone.IsChecked == true && PasswordManager.HasMasterPasswordConfigured())
+        // Determinar qué opción fue seleccionada
+        string newMode = "SmartSession";
+        if (RbLockAlways.IsChecked == true) newMode = "AlwaysOnStartup";
+        else if (RbLockVaultOnly.IsChecked == true) newMode = "VaultOnly";
+        else if (RbLockNone.IsChecked == true) newMode = "None";
+
+        string currentMode = SettingsManager.Current.BrowserLockMode;
+
+        // Si ya está en ese modo, solo actualizar la visibilidad y salir
+        if (newMode == currentMode)
         {
-            var pinDialog = new PinPromptDialog("Confirma tu PIN actual para desactivar el uso de contraseña en el navegador")
+            UpdatePinConfigPanelVisibility();
+            return;
+        }
+
+        bool hasPin = PasswordManager.HasMasterPasswordConfigured();
+
+        // CASO 1: El usuario ya tiene una contraseña configurada
+        if (hasPin)
+        {
+            if (newMode == "None")
             {
-                Owner = this
-            };
-            if (pinDialog.ShowDialog() == true)
-            {
-                PasswordManager.DisableMasterPassword();
-                BorderRecoveryCodeDisplay.Visibility = Visibility.Collapsed;
-                UpdatePinConfigPanelVisibility();
-                MessageBox.Show(
-                    "Has elegido 'No me gustaría usar contraseña'.\n\n" +
-                    "El navegador y la bóveda abrirán directamente sin pedir PIN.",
-                    "Sin Contraseña Activo — Lex Junior",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                // Quiere desactivar la contraseña
+                var pinDialog = new PinPromptDialog("Confirma tu PIN actual para desactivar el uso de contraseña en el navegador")
+                {
+                    Owner = this
+                };
+                if (pinDialog.ShowDialog() == true)
+                {
+                    PasswordManager.DisableMasterPassword();
+                    BorderRecoveryCodeDisplay.Visibility = Visibility.Collapsed;
+                    UpdatePinConfigPanelVisibility();
+                    MessageBox.Show(
+                        "Has elegido 'No me gustaría usar contraseña'.\n\n" +
+                        "El navegador y la bóveda abrirán directamente sin pedir PIN.",
+                        "Sin Contraseña Activo — Lex Junior",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+                else
+                {
+                    // Canceló o falló: restaurar selección previa
+                    _isInitializing = true;
+                    LoadStateIntoUI();
+                    _isInitializing = false;
+                }
             }
             else
             {
-                _isInitializing = true;
-                LoadStateIntoUI();
-                _isInitializing = false;
+                // Cambiar entre opciones con PIN (1: Modo Inteligente, 2: Siempre, 3: Solo Bóveda)
+                string modeTitle = newMode switch
+                {
+                    "SmartSession" => "Modo Inteligente",
+                    "AlwaysOnStartup" => "Siempre que se abra el navegador",
+                    "VaultOnly" => "Solo para ver contraseñas guardadas",
+                    _ => "nuevo modo"
+                };
+
+                var pinDialog = new PinPromptDialog($"Confirma tu PIN actual para cambiar al modo: {modeTitle}")
+                {
+                    Owner = this
+                };
+
+                if (pinDialog.ShowDialog() == true)
+                {
+                    SettingsManager.Current.BrowserLockMode = newMode;
+                    if (newMode == "SmartSession")
+                    {
+                        SettingsManager.Current.LastUnlockedBootId = PasswordManager.GetCurrentWindowsBootId();
+                    }
+                    SettingsManager.Save();
+                    UpdatePinConfigPanelVisibility();
+                    ShowInternalBanner($"✅ Modo de protección actualizado a: {modeTitle}.");
+                }
+                else
+                {
+                    // Canceló o falló: restaurar selección previa
+                    _isInitializing = true;
+                    LoadStateIntoUI();
+                    _isInitializing = false;
+                }
+            }
+        }
+        else
+        {
+            // CASO 2: No tiene contraseña configurada todavía (estaba en None)
+            // Al hacer clic en 1, 2 o 3, se muestra el formulario para configurar su nuevo PIN
+            UpdatePinConfigPanelVisibility();
+            if (newMode != "None" && BorderPinForm != null)
+            {
+                PwdMasterPin.Focus();
             }
         }
     }
