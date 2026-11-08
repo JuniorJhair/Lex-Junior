@@ -128,6 +128,22 @@ public partial class App : Application
             startInGuest: isGuestLaunch);
         MainWindow = browserWindow;
 
+        // Avisar si la bóveda no pudo leerse o cifrarse (nunca se degrada a texto plano)
+        try
+        {
+            var vault = PasswordManager.Store;
+            vault.VaultError += msg => Dispatcher.BeginInvoke(() =>
+                MessageBox.Show(msg, "Bóveda de contraseñas — Lex Junior", MessageBoxButton.OK, MessageBoxImage.Warning));
+
+            if (!string.IsNullOrEmpty(vault.LastError))
+            {
+                string startupError = vault.LastError!;
+                Dispatcher.BeginInvoke(() =>
+                    MessageBox.Show(startupError, "Bóveda de contraseñas — Lex Junior", MessageBoxButton.OK, MessageBoxImage.Warning));
+            }
+        }
+        catch { }
+
         // Iniciar el servidor de escucha IPC para enlaces externos entrantes mientras el navegador esté abierto
         SingleInstanceIpc.StartIpcServer(payload =>
         {

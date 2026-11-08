@@ -48,7 +48,8 @@ public sealed class VaultFileModel
 
 /// <summary>
 /// Motor criptográfico y almacén en memoria O(1) para la Bóveda de Contraseñas de Lex Junior.
-/// Cifrado nativo con Windows DPAPI (ProtectedData) + SHA-256 con sal, 0% consumo de CPU en reposo.
+/// Cifrado nativo con Windows DPAPI (ProtectedData), 0% consumo de CPU en reposo.
+/// Regla de oro: si el cifrado falla, NO se escribe nada en disco y se avisa (nunca se degrada a texto plano).
 /// </summary>
 public sealed class PasswordVaultStore
 {
@@ -66,6 +67,15 @@ public sealed class PasswordVaultStore
     };
 
     public event Action? VaultChanged;
+
+    /// <summary>
+    /// Se dispara cuando la bóveda no pudo leerse o guardarse de forma segura (p. ej. DPAPI falló).
+    /// La bóveda nunca degrada a texto plano: ante un error, no escribe nada y avisa.
+    /// </summary>
+    public event Action<string>? VaultError;
+
+    /// <summary>Último error de lectura/escritura de la bóveda (null si todo está bien).</summary>
+    public string? LastError { get; private set; }
 
     public PasswordVaultStore(string vaultFilePath)
     {
@@ -360,14 +370,25 @@ public sealed class PasswordVaultStore
                 if (encrypted.Length == 0) return;
 
                 byte[] plainBytes;
+                bool migrateFromPlainText = false;
                 try
                 {
                     plainBytes = ProtectedData.Unprotect(encrypted, VaultEntropy, DataProtectionScope.CurrentUser);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Fallback si el archivo fue escrito sin DPAPI en un entorno de prueba
-                    plainBytes = encrypted;
+                    // Migración única: versiones anteriores podían dejar vault.dat en texto plano si DPAPI fallaba.
+                    // Solo se acepta si es un JSON de bóveda válido, y se re-cifra de inmediato.
+                    if (TryReadLegacyPlainTextVault(encrypted))
+                    {
+                        plainBytes = encrypted;
+                        migrateFromPlainText = true;
+                    }
+                    else
+                    {
+                        QuarantineVaultFile("No se pudo descifrar vault.dat con Windows (DPAPI): puede pertenecer a otro usuario de Windows o estar dañado.", ex);
+                        return;
+                    }
                 }
 
                 string json = Encoding.UTF8.GetString(plainBytes);
@@ -391,12 +412,85 @@ public sealed class PasswordVaultStore
                         }
                     }
                 }
+
+                // Si venía en texto plano, re-cifrar ya. Si el cifrado falla, SaveInternal no escribe nada y avisa.
+                if (migrateFromPlainText)
+                    SaveInternal();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                QuarantineVaultFile("vault.dat no se pudo leer.", ex);
+            }
         }
     }
 
-    private void SaveInternal()
+    private static bool TryReadLegacyPlainTextVault(byte[] data)
+    {
+        try
+        {
+            string text = Encoding.UTF8.GetString(data).TrimStart('\uFEFF', ' ', '\r', '\n', '\t');
+            if (!text.StartsWith("{", StringComparison.Ordinal)) return false;
+            return JsonSerializer.Deserialize<VaultFileModel>(text) != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Conserva una copia del archivo ilegible (para no perder datos si luego se guarda una bóveda nueva) y avisa.
+    /// No duplica la copia si ya existe una idéntica (evita acumular respaldos en cada arranque).
+    /// </summary>
+    private void QuarantineVaultFile(string reason, Exception? ex)
+    {
+        string message = reason;
+        try
+        {
+            string? dirName = Path.GetDirectoryName(_vaultFilePath);
+            string dir = string.IsNullOrEmpty(dirName) ? "." : dirName;
+            string name = Path.GetFileName(_vaultFilePath);
+            byte[] current = File.ReadAllBytes(_vaultFilePath);
+
+            string? existing = null;
+            foreach (string candidate in Directory.GetFiles(dir, name + ".unreadable-*"))
+            {
+                try
+                {
+                    if (File.ReadAllBytes(candidate).AsSpan().SequenceEqual(current))
+                    {
+                        existing = candidate;
+                        break;
+                    }
+                }
+                catch { }
+            }
+
+            string backup = existing ?? $"{_vaultFilePath}.unreadable-{DateTime.UtcNow:yyyyMMddHHmmss}";
+            if (existing == null)
+                File.WriteAllBytes(backup, current);
+
+            message = $"{reason} Se conservó una copia en: {backup}";
+        }
+        catch { }
+
+        ReportVaultError(message, ex);
+    }
+
+    private void ReportVaultError(string message, Exception? ex)
+    {
+        LastError = message;
+        try
+        {
+            File.AppendAllText(
+                _vaultFilePath + ".log",
+                $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}] {message} ({ex?.GetType().Name}: {ex?.Message}){Environment.NewLine}");
+        }
+        catch { }
+        try { VaultError?.Invoke(message); } catch { }
+    }
+
+    private bool SaveInternal()
     {
         try
         {
@@ -419,16 +513,24 @@ public sealed class PasswordVaultStore
             {
                 encryptedBytes = ProtectedData.Protect(plainBytes, VaultEntropy, DataProtectionScope.CurrentUser);
             }
-            catch
+            catch (Exception ex)
             {
-                encryptedBytes = plainBytes;
+                // Regla de oro: si el cifrado falla, NO se escribe nada en disco y se avisa.
+                ReportVaultError("No se pudo cifrar la bóveda con Windows (DPAPI). Los cambios NO se guardaron en disco.", ex);
+                return false;
             }
 
             string tmpPath = _vaultFilePath + ".tmp";
             File.WriteAllBytes(tmpPath, encryptedBytes);
             File.Move(tmpPath, _vaultFilePath, overwrite: true);
+            LastError = null;
+            return true;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            ReportVaultError("No se pudo guardar la bóveda en disco.", ex);
+            return false;
+        }
     }
 
     private static SavedCredential CloneCredential(SavedCredential src) => new()
@@ -566,11 +668,132 @@ public static class PasswordManager
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    //  HASHES DEL PIN Y DE LA RECUPERACIÓN
+    //  Formato nuevo (autodescriptivo):  v2$<iteraciones>$<sal base64>$<hash base64>   (PBKDF2-HMAC-SHA256)
+    //  Formato antiguo:                  64 caracteres hex (SHA-256 con la sal MasterPasswordSalt)
+    //  El formato antiguo se sigue aceptando y se migra al nuevo tras un acierto.
+    // ─────────────────────────────────────────────────────────────────
+    private const string Pbkdf2Prefix = "v2$";
+    private const int Pbkdf2Iterations = 210_000;
+    private const int Pbkdf2MaxIterations = 5_000_000; // tope por si settings.json fuera manipulado
+    private const int Pbkdf2SaltBytes = 16;
+    private const int Pbkdf2HashBytes = 32;
+
+    /// <summary>Hash antiguo (SHA-256 con sal). Solo se conserva para verificar y migrar datos existentes.</summary>
     public static string ComputeSaltedHash(string input, string salt)
     {
         byte[] bytes = Encoding.UTF8.GetBytes($"{salt}::LexJunior::{input}");
         byte[] hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash);
+    }
+
+    /// <summary>Hash nuevo: PBKDF2-HMAC-SHA256 con sal aleatoria propia. Devuelve "v2$iter$sal$hash".</summary>
+    public static string ComputePbkdf2Hash(string input, int iterations = Pbkdf2Iterations)
+    {
+        byte[] salt = RandomNumberGenerator.GetBytes(Pbkdf2SaltBytes);
+        byte[] hash = Rfc2898DeriveBytes.Pbkdf2(input, salt, iterations, HashAlgorithmName.SHA256, Pbkdf2HashBytes);
+        return $"{Pbkdf2Prefix}{iterations}${Convert.ToBase64String(salt)}${Convert.ToBase64String(hash)}";
+    }
+
+    public static bool IsPbkdf2Hash(string? stored)
+        => stored != null && stored.StartsWith(Pbkdf2Prefix, StringComparison.Ordinal);
+
+    private static bool VerifyPbkdf2Hash(string input, string stored)
+    {
+        string[] parts = stored.Split('$');
+        if (parts.Length != 4) return false;
+        if (!int.TryParse(parts[1], out int iterations) || iterations < 1 || iterations > Pbkdf2MaxIterations) return false;
+
+        try
+        {
+            byte[] salt = Convert.FromBase64String(parts[2]);
+            byte[] expected = Convert.FromBase64String(parts[3]);
+            if (expected.Length == 0) return false;
+            byte[] actual = Rfc2898DeriveBytes.Pbkdf2(input, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
+            return CryptographicOperations.FixedTimeEquals(actual, expected);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Compara un texto contra un hash guardado (nuevo o antiguo). wasLegacy indica que coincidió con el formato antiguo.</summary>
+    private static bool MatchesStoredHash(string input, string? stored, string legacySalt, out bool wasLegacy)
+    {
+        wasLegacy = false;
+        if (string.IsNullOrWhiteSpace(stored)) return false;
+
+        if (IsPbkdf2Hash(stored))
+            return VerifyPbkdf2Hash(input, stored);
+
+        wasLegacy = true;
+        if (string.IsNullOrWhiteSpace(legacySalt)) return false;
+        string candidate = ComputeSaltedHash(input, legacySalt);
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(candidate),
+            Encoding.ASCII.GetBytes(stored));
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  LÍMITE DE INTENTOS (persistente en settings.json: cerrar y abrir el navegador no lo reinicia)
+    //  1–2 fallos: sin espera · 3: 5 s · 4: 15 s · 5: 30 s · 6: 60 s · 7 o más: 5 min
+    //  Un acierto reinicia el contador. Aplica al PIN y a la recuperación (comparten contador).
+    // ─────────────────────────────────────────────────────────────────
+    private static readonly object LockoutSync = new();
+    private static readonly TimeSpan MaxLockout = TimeSpan.FromMinutes(5);
+
+    public static TimeSpan GetLockoutDelayForAttempts(int failedAttempts) => failedAttempts switch
+    {
+        < 3 => TimeSpan.Zero,
+        3 => TimeSpan.FromSeconds(5),
+        4 => TimeSpan.FromSeconds(15),
+        5 => TimeSpan.FromSeconds(30),
+        6 => TimeSpan.FromSeconds(60),
+        _ => MaxLockout
+    };
+
+    /// <summary>Tiempo que falta para poder volver a intentar el PIN (TimeSpan.Zero si no hay bloqueo).</summary>
+    public static TimeSpan GetPinLockoutRemaining()
+    {
+        long ticks = SettingsManager.Current.PinLockoutUntilUtcTicks;
+        if (ticks <= DateTime.MinValue.Ticks || ticks > DateTime.MaxValue.Ticks)
+            return TimeSpan.Zero;
+
+        TimeSpan remaining = new DateTime(ticks, DateTimeKind.Utc) - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero) return TimeSpan.Zero;
+
+        // Tope: si alguien adelanta el reloj o altera el valor, nunca se espera más del máximo.
+        return remaining > MaxLockout ? MaxLockout : remaining;
+    }
+
+    public static bool IsPinLockedOut => GetPinLockoutRemaining() > TimeSpan.Zero;
+
+    private static void RegisterPinFailure()
+    {
+        lock (LockoutSync)
+        {
+            var s = SettingsManager.Current;
+            if (s.PinFailedAttempts < int.MaxValue) s.PinFailedAttempts++;
+
+            TimeSpan delay = GetLockoutDelayForAttempts(s.PinFailedAttempts);
+            s.PinLockoutUntilUtcTicks = delay > TimeSpan.Zero ? (DateTime.UtcNow + delay).Ticks : 0;
+            SettingsManager.Save(notify: false);
+        }
+    }
+
+    private static void RegisterPinSuccess()
+    {
+        lock (LockoutSync)
+        {
+            var s = SettingsManager.Current;
+            if (s.PinFailedAttempts == 0 && s.PinLockoutUntilUtcTicks == 0) return;
+
+            s.PinFailedAttempts = 0;
+            s.PinLockoutUntilUtcTicks = 0;
+            SettingsManager.Save(notify: false);
+        }
     }
 
     public static string NormalizeRecoveryText(string? input)
@@ -588,6 +811,7 @@ public static class PasswordManager
     /// <summary>
     /// Configura el PIN/contraseña maestra, el modo de bloqueo, la pregunta secreta y genera un código de recuperación.
     /// Sin reglas molestas: acepta PIN de 6 dígitos, números o letras de cualquier longitud.
+    /// Todos los hashes se guardan con PBKDF2.
     /// </summary>
     public static string ConfigureMasterPassword(
         string plainPassword,
@@ -598,19 +822,21 @@ public static class PasswordManager
         if (string.IsNullOrEmpty(plainPassword))
             throw new ArgumentException("La contraseña o PIN no puede estar vacío.");
 
+        // La sal global se conserva (HasMasterPasswordConfigured la exige y los hashes antiguos de
+        // recuperación dependen de ella); los hashes nuevos llevan su propia sal dentro del texto.
         string salt = Guid.NewGuid().ToString("N");
         string recoveryCode = GenerateRecoveryCode();
 
         var s = SettingsManager.Current;
         s.MasterPasswordSalt = salt;
-        s.MasterPasswordHash = ComputeSaltedHash(plainPassword, salt);
+        s.MasterPasswordHash = ComputePbkdf2Hash(plainPassword);
         s.MasterPasswordLength = plainPassword.Length;
         s.BrowserLockMode = string.IsNullOrWhiteSpace(lockMode) || lockMode == "None" ? "SmartSession" : lockMode;
 
         if (!string.IsNullOrWhiteSpace(securityQuestion) && !string.IsNullOrWhiteSpace(securityAnswer))
         {
             s.SecurityQuestion = securityQuestion.Trim();
-            s.SecurityAnswerHash = ComputeSaltedHash(NormalizeRecoveryText(securityAnswer), salt);
+            s.SecurityAnswerHash = ComputePbkdf2Hash(NormalizeRecoveryText(securityAnswer));
         }
         else
         {
@@ -618,10 +844,12 @@ public static class PasswordManager
             s.SecurityAnswerHash = string.Empty;
         }
 
-        s.RecoveryCodeHash = ComputeSaltedHash(NormalizeRecoveryText(recoveryCode), salt);
+        s.RecoveryCodeHash = ComputePbkdf2Hash(NormalizeRecoveryText(recoveryCode));
         s.RecoveryCodeHint = $"LEX-****-{recoveryCode[^4..]}";
         s.LastUnlockedBootId = GetCurrentWindowsBootId();
         s.HasCompletedInitialSecuritySetup = true;
+        s.PinFailedAttempts = 0;
+        s.PinLockoutUntilUtcTicks = 0;
         IsUnlockedInCurrentProcess = true;
 
         SettingsManager.Save();
@@ -641,10 +869,16 @@ public static class PasswordManager
         s.RecoveryCodeHint = string.Empty;
         s.LastUnlockedBootId = 0;
         s.HasCompletedInitialSecuritySetup = true;
+        s.PinFailedAttempts = 0;
+        s.PinLockoutUntilUtcTicks = 0;
         IsUnlockedInCurrentProcess = false;
         SettingsManager.Save();
     }
 
+    /// <summary>
+    /// Verifica el PIN. Mientras haya un bloqueo por intentos fallidos devuelve false sin comprobar nada
+    /// (ni siquiera con el PIN correcto) y sin sumar intentos; la interfaz debe consultar GetPinLockoutRemaining().
+    /// </summary>
     public static bool VerifyMasterPassword(string? candidatePassword)
     {
         if (string.IsNullOrEmpty(candidatePassword)) return false;
@@ -652,10 +886,25 @@ public static class PasswordManager
         if (string.IsNullOrWhiteSpace(s.MasterPasswordHash) || string.IsNullOrWhiteSpace(s.MasterPasswordSalt))
             return false;
 
-        string candidateHash = ComputeSaltedHash(candidatePassword, s.MasterPasswordSalt);
-        return CryptographicOperations.FixedTimeEquals(
-            Encoding.ASCII.GetBytes(candidateHash),
-            Encoding.ASCII.GetBytes(s.MasterPasswordHash));
+        if (IsPinLockedOut) return false;
+
+        if (!MatchesStoredHash(candidatePassword, s.MasterPasswordHash, s.MasterPasswordSalt, out bool wasLegacy))
+        {
+            RegisterPinFailure();
+            return false;
+        }
+
+        RegisterPinSuccess();
+
+        if (wasLegacy)
+        {
+            // Migración transparente: al primer acierto con el SHA-256 antiguo se guarda con PBKDF2.
+            // MasterPasswordSalt NO se toca: los hashes antiguos de recuperación todavía dependen de ella.
+            s.MasterPasswordHash = ComputePbkdf2Hash(candidatePassword);
+            SettingsManager.Save(notify: false);
+        }
+
+        return true;
     }
 
     public static bool VerifyRecoveryAnswerOrCode(string? answerOrCode)
@@ -664,26 +913,37 @@ public static class PasswordManager
         var s = SettingsManager.Current;
         if (string.IsNullOrWhiteSpace(s.MasterPasswordSalt)) return false;
 
+        if (IsPinLockedOut) return false;
+
         string normalized = NormalizeRecoveryText(answerOrCode);
-        string candidateHash = ComputeSaltedHash(normalized, s.MasterPasswordSalt);
 
-        if (!string.IsNullOrWhiteSpace(s.SecurityAnswerHash) &&
-            CryptographicOperations.FixedTimeEquals(
-                Encoding.ASCII.GetBytes(candidateHash),
-                Encoding.ASCII.GetBytes(s.SecurityAnswerHash)))
+        bool matchedAnswer = MatchesStoredHash(normalized, s.SecurityAnswerHash, s.MasterPasswordSalt, out bool answerWasLegacy);
+        bool matchedCode = false;
+        bool codeWasLegacy = false;
+        if (!matchedAnswer)
+            matchedCode = MatchesStoredHash(normalized, s.RecoveryCodeHash, s.MasterPasswordSalt, out codeWasLegacy);
+
+        if (!matchedAnswer && !matchedCode)
         {
-            return true;
+            RegisterPinFailure();
+            return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(s.RecoveryCodeHash) &&
-            CryptographicOperations.FixedTimeEquals(
-                Encoding.ASCII.GetBytes(candidateHash),
-                Encoding.ASCII.GetBytes(s.RecoveryCodeHash)))
+        RegisterPinSuccess();
+
+        // Migrar a PBKDF2 solo el hash que acaba de coincidir (de los demás no se conoce el texto original).
+        if (matchedAnswer && answerWasLegacy)
         {
-            return true;
+            s.SecurityAnswerHash = ComputePbkdf2Hash(normalized);
+            SettingsManager.Save(notify: false);
+        }
+        else if (matchedCode && codeWasLegacy)
+        {
+            s.RecoveryCodeHash = ComputePbkdf2Hash(normalized);
+            SettingsManager.Save(notify: false);
         }
 
-        return false;
+        return true;
     }
 
     /// <summary>
@@ -834,4 +1094,3 @@ public static class PasswordManager
 })();
 ";
 }
-

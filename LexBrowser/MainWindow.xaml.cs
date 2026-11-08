@@ -6463,6 +6463,26 @@ public partial class MainWindow : Window
         ShowToast("🔓 Configurado sin contraseña al abrir. Puedes activarla cuando quieras desde el botón 🔑.");
     }
 
+    private string? _lastRejectedOverlayCandidate;
+
+    private static string FormatLockoutWait(TimeSpan wait)
+    {
+        if (wait.TotalSeconds >= 60)
+            return $"{(int)Math.Ceiling(wait.TotalMinutes)} min";
+        return $"{(int)Math.Ceiling(wait.TotalSeconds)} s";
+    }
+
+    private void ShowOverlayPinFailure()
+    {
+        TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
+        TxtOverlayPinError.Text = wait > TimeSpan.Zero
+            ? $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar."
+            : "❌ PIN o contraseña incorrecta. Inténtalo de nuevo o entra como Invitado.";
+        TxtOverlayPinError.Visibility = Visibility.Visible;
+        PwdOverlayPinInput.SelectAll();
+        PwdOverlayPinInput.Focus();
+    }
+
     private void ShowBrowserLockOverlay()
     {
         var s = SettingsManager.Current;
@@ -6475,13 +6495,20 @@ public partial class MainWindow : Window
         LockOverlayPinPanel.Visibility = Visibility.Visible;
         TxtOverlayPinError.Visibility = Visibility.Collapsed;
         PwdOverlayPinInput.Password = string.Empty;
+        _lastRejectedOverlayCandidate = null;
         BrowserLockOverlay.Visibility = Visibility.Visible;
+
+        if (PasswordManager.IsPinLockedOut)
+        {
+            ShowOverlayPinFailure();
+        }
 
         Dispatcher.BeginInvoke(DispatcherPriority.Input, () => PwdOverlayPinInput.Focus());
     }
 
     private async void CompleteOverlayUnlock()
     {
+        _lastRejectedOverlayCandidate = null;
         PasswordManager.MarkSessionUnlocked();
         _isGuestSession = false;
         BrowserLockOverlay.Visibility = Visibility.Collapsed;
@@ -6506,9 +6533,26 @@ public partial class MainWindow : Window
         string current = PwdOverlayPinInput.Password;
         int expectedLen = SettingsManager.Current.MasterPasswordLength;
 
-        if (expectedLen > 0 && current.Length == expectedLen && PasswordManager.VerifyMasterPassword(current))
+        if (expectedLen > 0 && current.Length == expectedLen)
         {
-            CompleteOverlayUnlock();
+            if (PasswordManager.IsPinLockedOut)
+            {
+                ShowOverlayPinFailure();
+                return;
+            }
+
+            if (current == _lastRejectedOverlayCandidate)
+                return;
+
+            if (PasswordManager.VerifyMasterPassword(current))
+            {
+                CompleteOverlayUnlock();
+            }
+            else
+            {
+                _lastRejectedOverlayCandidate = current;
+                ShowOverlayPinFailure();
+            }
         }
     }
 
@@ -6522,16 +6566,28 @@ public partial class MainWindow : Window
 
     private void BtnOverlayUnlock_Click(object sender, RoutedEventArgs e)
     {
-        if (PasswordManager.VerifyMasterPassword(PwdOverlayPinInput.Password))
+        string candidate = PwdOverlayPinInput.Password;
+
+        if (PasswordManager.IsPinLockedOut)
+        {
+            ShowOverlayPinFailure();
+            return;
+        }
+
+        if (candidate == _lastRejectedOverlayCandidate)
+        {
+            ShowOverlayPinFailure();
+            return;
+        }
+
+        if (PasswordManager.VerifyMasterPassword(candidate))
         {
             CompleteOverlayUnlock();
         }
         else
         {
-            TxtOverlayPinError.Text = "❌ PIN o contraseña incorrecta. Inténtalo de nuevo o entra como Invitado.";
-            TxtOverlayPinError.Visibility = Visibility.Visible;
-            PwdOverlayPinInput.SelectAll();
-            PwdOverlayPinInput.Focus();
+            _lastRejectedOverlayCandidate = candidate;
+            ShowOverlayPinFailure();
         }
     }
 
@@ -6635,9 +6691,20 @@ public partial class MainWindow : Window
         string answer = TxtOverlayRecoveryAnswer.Text;
         string newPin = PwdOverlayNewPin.Password;
 
+        TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
+        if (wait > TimeSpan.Zero)
+        {
+            TxtOverlayRecoveryError.Text = $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar.";
+            TxtOverlayRecoveryError.Visibility = Visibility.Visible;
+            return;
+        }
+
         if (!PasswordManager.VerifyRecoveryAnswerOrCode(answer))
         {
-            TxtOverlayRecoveryError.Text = "❌ La respuesta secreta o el código de recuperación no coinciden.";
+            wait = PasswordManager.GetPinLockoutRemaining();
+            TxtOverlayRecoveryError.Text = wait > TimeSpan.Zero
+                ? $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar."
+                : "❌ La respuesta secreta o el código de recuperación no coinciden.";
             TxtOverlayRecoveryError.Visibility = Visibility.Visible;
             return;
         }
@@ -6651,6 +6718,7 @@ public partial class MainWindow : Window
 
         var s = SettingsManager.Current;
         PasswordManager.ConfigureMasterPassword(newPin, s.BrowserLockMode, s.SecurityQuestion, answer);
+        _lastRejectedOverlayCandidate = null;
         CompleteOverlayUnlock();
         ShowToast("✅ ¡PIN actualizado con éxito! Todas tus contraseñas guardadas siguen intactas.");
     }

@@ -245,6 +245,28 @@ public static class WebShield
                 if (!target) return;
                 const style = document.createElement('style');
                 style.id = '__lex_cosmetic_shield';
+
+                // Selectores de anuncios por 'palabra': el token debe empezar la clase o ir tras espacio, '-' o '_'.
+                // Así 'ad-box' coincide con 'ad-box' y 'top-ad-box', pero NO con 'download-box' ni 'upload-zone'.
+                const PLAYER_SAFE = `:not(:has(video)):not([class*='player']):not([id*='player'])`;
+                const PLAYER_SAFE_LOOSE = `:not(:has(video)):not([class*='player'])`;
+                const adWord = (token, suffix) => {
+                    const out = [];
+                    for (const attr of ['class', 'id']) {
+                        out.push(`div[${attr}^='${token}']${suffix}`);
+                        for (const sep of [' ', '-', '_']) {
+                            out.push(`div[${attr}*='${sep}${token}']${suffix}`);
+                        }
+                    }
+                    return out.join(',\n');
+                };
+                const generatedAdSelectors = [
+                    ['ad-slot', ''], ['ad-zone', ''], ['ad-box', ''], ['ad_box', ''],
+                    ['ads-holder', ''], ['ad-block', ''], ['ad-placement', ''],
+                    ['ad-banner', PLAYER_SAFE_LOOSE], ['ad_banner', PLAYER_SAFE_LOOSE],
+                    ['ads-', PLAYER_SAFE], ['ad-', PLAYER_SAFE], ['adv-', PLAYER_SAFE]
+                ].map(function(p) { return adWord(p[0], p[1]); }).join(',\n');
+
                 style.textContent = `
                     iframe[src*='magsrv.com'],
                     iframe[src*='realsrv.com'],
@@ -273,21 +295,7 @@ public static class WebShield
                     .banner-wrapper,
                     div[class*='banner-container'],
                     div[class*='banner-wrapper'],
-                    div[class*='ad-slot'],
-                    div[id*='ad-slot'],
-                    div[class*='ad-zone'],
-                    div[id*='ad-zone'],
-                    div[class*='ad-box'],
-                    div[id*='ad-box'],
-                    div[class*='ad_box'],
-                    div[id*='ad_box'],
-                    div[class*='ads-holder'],
-                    div[class*='ad-block'],
-                    div[id*='ad-block'],
-                    div[class*='ad-banner']:not(:has(video)):not([class*='player']),
-                    div[class*='ad_banner']:not(:has(video)):not([class*='player']),
-                    div[id*='ad-banner']:not(:has(video)):not([class*='player']),
-                    div[class*='ad-placement'],
+                    ${generatedAdSelectors},
                     div[class*='exo-slider'],
                     div[id*='exo-slider'],
                     div[class*='pr_advertising_'],
@@ -297,12 +305,6 @@ public static class WebShield
                     .adsbyjuicyads,
                     div[class*='banner']:not(:has(video)):not([class*='player']):not([id*='player']),
                     div[id*='banner']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    div[class*='ads-']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    div[id*='ads-']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    div[class*='ad-']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    div[id*='ad-']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    div[class*='adv-']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    div[id*='adv-']:not(:has(video)):not([class*='player']):not([id*='player']),
                     [data-zone-id]:not([class*='player']),
                     .ad-container:not(#player):not([class*='player']):not(:has(video)) {
                         display: none !important;
@@ -583,19 +585,19 @@ public static class WebShield
         }
     };
 
-    const isTrustedSite = hostname.endsWith('dailymotion.com') ||
-                          hostname.endsWith('youtube.com') ||
-                          hostname.endsWith('twitch.tv') ||
-                          hostname.endsWith('vimeo.com');
+    const isKnownMediaSite = hostname.endsWith('dailymotion.com') ||
+                             hostname.endsWith('youtube.com') ||
+                             hostname.endsWith('twitch.tv') ||
+                             hostname.endsWith('vimeo.com');
 
-    if (!isTrustedSite) {
+    if (!isKnownMediaSite) {
         window.addEventListener('click', handleCaptureClick, true);
         window.addEventListener('pointerdown', handleCaptureClick, true);
     }
 
     // 1.6 Limpieza proactiva de capas trampas en el DOM (restringido estrictamente a ads explícitos, anchors fantasma y hermanos sobre videos)
     const clearClickjackOverlays = () => {
-        if (isTrustedSite) return;
+        if (isKnownMediaSite) return;
         try {
             // 1. Elementos con nombres explícitos de anuncio
             const explicitAds = document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads], [id*=popunder], [class*=popunder]');

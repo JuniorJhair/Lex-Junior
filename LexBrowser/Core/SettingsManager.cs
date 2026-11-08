@@ -44,6 +44,9 @@ public class BrowserSettings
     public string RecoveryCodeHint { get; set; } = "";
     public long LastUnlockedBootId { get; set; } = 0;
     public bool HasCompletedInitialSecuritySetup { get; set; } = false;
+    // Límite de intentos del PIN (persistente: cerrar y abrir el navegador no lo reinicia)
+    public int PinFailedAttempts { get; set; } = 0;
+    public long PinLockoutUntilUtcTicks { get; set; } = 0;
     public bool UserDecidedDefaultBrowser { get; set; } = false;
     public bool WasPreviouslyDefaultBrowser { get; set; } = false;
 
@@ -73,6 +76,12 @@ public static class SettingsManager
         "LexBrowser",
         "settings.log"
     );
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
+    };
 
     public static string? CustomSettingsPath { get; set; }
     public static string SettingsPath => CustomSettingsPath ?? DefaultSettingsPath;
@@ -166,7 +175,7 @@ public static class SettingsManager
                 string json = File.ReadAllText(filePath);
                 if (!string.IsNullOrWhiteSpace(json))
                 {
-                    var loaded = JsonSerializer.Deserialize<BrowserSettings>(json);
+                    var loaded = JsonSerializer.Deserialize<BrowserSettings>(json, JsonOptions);
                     if (loaded != null)
                     {
                         result = loaded;
@@ -207,7 +216,7 @@ public static class SettingsManager
                     catch { }
                 }
 
-                string json = JsonSerializer.Serialize(Current, new JsonSerializerOptions { WriteIndented = true });
+                string json = JsonSerializer.Serialize(Current, JsonOptions);
 
                 // Escritura resistente a bloqueos en Windows: escribir primero en .tmp y copiar sobrescribiendo
                 bool saved = false;
