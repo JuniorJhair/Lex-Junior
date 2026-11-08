@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,8 +20,15 @@ public enum OmniboxSuggestionKind
     BookmarkPage
 }
 
-public sealed class OmniboxSuggestionItem
+public sealed class OmniboxSuggestionItem : INotifyPropertyChanged
 {
+    private bool _isSelected;
+    private System.Windows.Media.ImageSource? _faviconImage;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
     public OmniboxSuggestionKind Kind { get; init; }
     public string PrimaryText { get; init; } = string.Empty;
     public string SecondaryText { get; init; } = string.Empty;
@@ -30,24 +39,48 @@ public sealed class OmniboxSuggestionItem
     public string? HistoryEntryId { get; init; }
     public bool CanDelete => !string.IsNullOrEmpty(HistoryEntryId);
     public bool HasSecondaryText => !string.IsNullOrWhiteSpace(SecondaryText);
-    public bool IsSelected { get; set; }
 
-    public System.Windows.Media.ImageSource? FaviconImage { get; init; }
-    public bool HasFaviconImage => FaviconImage != null;
-    public bool HasNoFaviconImage => FaviconImage == null;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            _isSelected = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public System.Windows.Media.ImageSource? FaviconImage
+    {
+        get => _faviconImage;
+        set
+        {
+            if (ReferenceEquals(_faviconImage, value)) return;
+            _faviconImage = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasFaviconImage));
+            OnPropertyChanged(nameof(HasNoFaviconImage));
+        }
+    }
+
+    public bool HasFaviconImage => _faviconImage != null;
+    public bool HasNoFaviconImage => _faviconImage == null;
 }
 
 /// <summary>
-/// Motor ultraligero de sugerencias para la barra de direcciones (Omnibox).
-/// Combina en < 0.5 ms:
-///  1. Búsqueda directa en el motor activo (Google, etc.)
+/// Motor de sugerencias para la barra de direcciones (Omnibox).
+/// Combina de forma asíncrona y sin bloquear el hilo de interfaz:
+///  1. Búsqueda directa en el motor activo o navegación a URL
 ///  2. Búsquedas recientes realizadas por el usuario (extraídas del historial con icono 🕒)
-///  3. Autocompletado predictivo en vivo de Google (con caché LRU en RAM y cancelación inmediata)
-///  4. Páginas y videos ya navegados con anterioridad (con icono de YouTube ▶ / Web 🌐 y URL en azul)
-/// 0% consumo de CPU o red cuando el usuario no está escribiendo en la barra.
+///  3. Autocompletado predictivo en vivo del buscador seleccionado (con caché LRU en RAM y cancelación inmediata)
+///  4. Páginas y videos ya navegados con anterioridad (con icono y URL formateada)
+/// Sin consumo de CPU o red cuando el usuario no está escribiendo en la barra.
 /// </summary>
 public static class OmniboxSuggestionService
 {
+    public const int MaxHistoryScanEntries = 2500;
+
     private static readonly HttpClient _suggestClient = new()
     {
         Timeout = TimeSpan.FromMilliseconds(1600)
@@ -132,8 +165,45 @@ public static class OmniboxSuggestionService
         return clean;
     }
 
+    public static bool LooksLikeUrlOrDomain(string? query)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return false;
+        string q = query.Trim();
+        if (q.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            q.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            q.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
+            q.StartsWith("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return q.Contains('.') && !q.Contains(' ');
+    }
+
+    private static void AttachFaviconInBackground(OmniboxSuggestionItem item, string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var img = await Engine.FaviconService.ResolveFaviconAsync(url).ConfigureAwait(false);
+                if (img != null)
+                {
+                    var disp = System.Windows.Application.Current?.Dispatcher;
+                    if (disp != null)
+                        _ = disp.BeginInvoke(() => item.FaviconImage = img);
+                    else
+                        item.FaviconImage = img;
+                }
+            }
+            catch { }
+        });
+    }
+
     /// <summary>
-    /// Construye la lista combinada de sugerencias locales (instantáneas en < 0.5 ms) + sugerencias en vivo de Google.
+    /// Construye la lista combinada de sugerencias locales + sugerencias en vivo del motor activo.
+    /// Usa los campos precalculados de HistoryEntry y acota el recorrido a las últimas 2500 entradas.
     /// </summary>
     public static List<OmniboxSuggestionItem> BuildSuggestions(
         string? rawInput,
@@ -148,18 +218,17 @@ public static class OmniboxSuggestionService
         if (string.IsNullOrEmpty(query))
             return results;
 
-        bool looksLikeUrl = query.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-                            query.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
-                            (query.Contains('.') && !query.Contains(' '));
+        bool looksLikeUrl = LooksLikeUrlOrDomain(query);
+        string qLower = query.ToLowerInvariant();
 
-        // 1. Primera fila: Búsqueda directa en Google (o ir a la URL si escribió un dominio)
+        // 1. Primera fila: Búsqueda directa en el motor activo (o ir a la URL si escribió un dominio)
         string? primaryFavDomain = looksLikeUrl ? Engine.FaviconService.ExtractDomain(query) : null;
         var primaryFav = !string.IsNullOrEmpty(primaryFavDomain) ? Engine.FaviconService.GetCachedFavicon(primaryFavDomain) : null;
         results.Add(new OmniboxSuggestionItem
         {
             Kind = OmniboxSuggestionKind.PrimarySearchOrUrl,
             PrimaryText = query,
-            SecondaryText = looksLikeUrl ? " - Abrir dirección web" : $" - Búsqueda de {searchEngineName}",
+            SecondaryText = looksLikeUrl ? " — Abrir dirección web" : $" - Búsqueda de {searchEngineName}",
             TargetInputOrUrl = query,
             IconText = looksLikeUrl ? "🌐" : "🔍",
             IconBgHex = "#252538",
@@ -171,27 +240,24 @@ public static class OmniboxSuggestionService
         var seenSearchTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { query };
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 2. Páginas y videos ya navegados con anterioridad en el historial (ej. YouTube, Instagram, etc.)
-        // Se muestran PRIMERO con prioridad para autocompletar sitios frecuentes al escribir (igual a Chrome/Brave)
-        if (historyEntries != null)
+        // 2. Páginas y videos ya navegados con anterioridad en el historial
+        if (historyEntries != null && historyEntries.Count > 0)
         {
-            string[] words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            string[] wordsLower = qLower.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var matchingHistory = new List<(HistoryEntry entry, int score)>();
+            int scanLimit = Math.Min(historyEntries.Count, MaxHistoryScanEntries);
 
-            foreach (var entry in historyEntries)
+            for (int i = 0; i < scanLimit; i++)
             {
-                if (string.IsNullOrWhiteSpace(entry.Url)) continue;
-                if (TryExtractSearchQueryFromUrl(entry.Url) != null) continue;
+                var entry = historyEntries[i];
+                if (entry == null || string.IsNullOrWhiteSpace(entry.Url)) continue;
+                if (entry.ExtractedSearchQuery != null) continue;
 
-                string urlClean = FormatCleanDisplayUrl(entry.Url).ToLowerInvariant();
-                string titleLower = (entry.Title ?? "").ToLowerInvariant();
-                string qLower = query.ToLowerInvariant();
-
+                string searchKey = entry.SearchKey;
                 bool matchesAllWords = true;
-                foreach (string w in words)
+                for (int wIdx = 0; wIdx < wordsLower.Length; wIdx++)
                 {
-                    if (!titleLower.Contains(w, StringComparison.OrdinalIgnoreCase) &&
-                        !entry.Url.Contains(w, StringComparison.OrdinalIgnoreCase))
+                    if (!searchKey.Contains(wordsLower[wIdx], StringComparison.Ordinal))
                     {
                         matchesAllWords = false;
                         break;
@@ -199,11 +265,14 @@ public static class OmniboxSuggestionService
                 }
                 if (!matchesAllWords) continue;
 
+                string urlCleanLower = entry.CleanDisplayUrlLower;
+                string titleLower = entry.TitleLower;
+
                 int score = 0;
-                if (urlClean.StartsWith(qLower, StringComparison.OrdinalIgnoreCase)) score += 100;
-                else if (urlClean.Contains(qLower, StringComparison.OrdinalIgnoreCase)) score += 50;
-                if (titleLower.StartsWith(qLower, StringComparison.OrdinalIgnoreCase)) score += 40;
-                else if (titleLower.Contains(qLower, StringComparison.OrdinalIgnoreCase)) score += 20;
+                if (urlCleanLower.StartsWith(qLower, StringComparison.Ordinal)) score += 100;
+                else if (urlCleanLower.Contains(qLower, StringComparison.Ordinal)) score += 50;
+                if (titleLower.StartsWith(qLower, StringComparison.Ordinal)) score += 40;
+                else if (titleLower.Contains(qLower, StringComparison.Ordinal)) score += 20;
 
                 matchingHistory.Add((entry, score));
             }
@@ -215,7 +284,8 @@ public static class OmniboxSuggestionService
                 if (!seenUrls.Add(entry.Url)) continue;
 
                 var (icon, bg, fg) = GetSiteBadgeStyle(entry.Url, isBookmark: false);
-                string title = string.IsNullOrWhiteSpace(entry.Title) ? FormatCleanDisplayUrl(entry.Url) : entry.Title;
+                string cleanDisplay = entry.CleanDisplayUrl;
+                string title = string.IsNullOrWhiteSpace(entry.Title) ? cleanDisplay : entry.Title;
                 if (entry.Url.Contains("lexjunior.pages.dev", StringComparison.OrdinalIgnoreCase) ||
                     title.StartsWith("Lex Junior Browser", StringComparison.OrdinalIgnoreCase) ||
                     title.Contains("Ultra-Ligero", StringComparison.OrdinalIgnoreCase))
@@ -227,22 +297,25 @@ public static class OmniboxSuggestionService
                     title = title.Substring(0, 65) + "...";
                 }
 
-                string domain = Engine.FaviconService.ExtractDomain(entry.Url);
-                var fav = Engine.FaviconService.GetCachedFavicon(domain) ?? entry.FaviconImage;
-                if (fav == null) _ = Engine.FaviconService.ResolveFaviconAsync(entry.Url);
+                string domain = !string.IsNullOrWhiteSpace(entry.Domain) ? entry.Domain : Engine.FaviconService.ExtractDomain(entry.Url);
+                var fav = Engine.FaviconService.GetCachedFavicon(domain);
 
-                results.Add(new OmniboxSuggestionItem
+                var item = new OmniboxSuggestionItem
                 {
                     Kind = OmniboxSuggestionKind.VisitedPage,
                     PrimaryText = title,
-                    SecondaryText = $" - {FormatCleanDisplayUrl(entry.Url)}",
+                    SecondaryText = $" — {cleanDisplay}",
                     TargetInputOrUrl = entry.Url,
                     IconText = icon,
                     IconBgHex = bg,
                     IconFgHex = fg,
                     FaviconImage = fav,
                     HistoryEntryId = entry.Id
-                });
+                };
+
+                if (fav == null) AttachFaviconInBackground(item, entry.Url);
+
+                results.Add(item);
                 visitedCount++;
             }
         }
@@ -253,7 +326,7 @@ public static class OmniboxSuggestionService
             foreach (var bk in bookmarks)
             {
                 if (results.Count >= maxTotalItems) break;
-                if (string.IsNullOrWhiteSpace(bk.Url)) continue;
+                if (bk == null || string.IsNullOrWhiteSpace(bk.Url)) continue;
 
                 if (bk.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                     bk.Url.Contains(query, StringComparison.OrdinalIgnoreCase))
@@ -262,8 +335,7 @@ public static class OmniboxSuggestionService
                     var (icon, bg, fg) = GetSiteBadgeStyle(bk.Url, isBookmark: true);
 
                     string bdomain = Engine.FaviconService.ExtractDomain(bk.Url);
-                    var bfav = bk.FaviconImage ?? Engine.FaviconService.GetCachedFavicon(bdomain);
-                    if (bfav == null) _ = Engine.FaviconService.ResolveFaviconAsync(bk.Url);
+                    var bfav = Engine.FaviconService.GetCachedFavicon(bdomain);
 
                     string bTitle = string.IsNullOrWhiteSpace(bk.Title) ? FormatCleanDisplayUrl(bk.Url) : bk.Title;
                     if (bk.Url.Contains("lexjunior.pages.dev", StringComparison.OrdinalIgnoreCase) ||
@@ -273,29 +345,36 @@ public static class OmniboxSuggestionService
                         bTitle = "Lex Junior Browser";
                     }
 
-                    results.Add(new OmniboxSuggestionItem
+                    var item = new OmniboxSuggestionItem
                     {
                         Kind = OmniboxSuggestionKind.BookmarkPage,
                         PrimaryText = bTitle,
-                        SecondaryText = $" - {FormatCleanDisplayUrl(bk.Url)}",
+                        SecondaryText = $" — {FormatCleanDisplayUrl(bk.Url)}",
                         TargetInputOrUrl = bk.Url,
                         IconText = icon,
                         IconBgHex = bg,
                         IconFgHex = fg,
                         FaviconImage = bfav
-                    });
+                    };
+
+                    if (bfav == null) AttachFaviconInBackground(item, bk.Url);
+
+                    results.Add(item);
                 }
             }
         }
 
         // 4. Búsquedas recientes del usuario en el historial (con icono de reloj 🕒)
-        if (historyEntries != null)
+        if (historyEntries != null && historyEntries.Count > 0)
         {
             int recentSearchCount = 0;
-            foreach (var entry in historyEntries)
+            int scanLimit = Math.Min(historyEntries.Count, MaxHistoryScanEntries);
+            for (int i = 0; i < scanLimit; i++)
             {
                 if (recentSearchCount >= 2 || results.Count >= maxTotalItems - 2) break;
-                string? pastQuery = TryExtractSearchQueryFromUrl(entry.Url);
+                var entry = historyEntries[i];
+                if (entry == null) continue;
+                string? pastQuery = entry.ExtractedSearchQuery;
                 if (string.IsNullOrWhiteSpace(pastQuery)) continue;
 
                 if (pastQuery.Contains(query, StringComparison.OrdinalIgnoreCase) && seenSearchTerms.Add(pastQuery))
@@ -316,7 +395,7 @@ public static class OmniboxSuggestionService
             }
         }
 
-        // 5. Sugerencias predictivas de Google en vivo (🔍)
+        // 5. Sugerencias predictivas en vivo (🔍)
         if (liveGoogleSuggestions != null && !looksLikeUrl)
         {
             int liveCount = 0;
@@ -370,15 +449,49 @@ public static class OmniboxSuggestionService
         return ("🌐", "#232332", "#93C5FD");
     }
 
-    public static async Task<IReadOnlyList<string>> FetchGoogleAutocompleteAsync(string query, CancellationToken cancellationToken)
+    public static string? BuildAutocompleteEndpointUrl(string query, string? searchEngine)
     {
+        string encoded = Uri.EscapeDataString(query);
+        string engine = string.IsNullOrWhiteSpace(searchEngine) ? "Google" : searchEngine.Trim();
+
+        return engine switch
+        {
+            "DuckDuckGo" => $"https://duckduckgo.com/ac/?q={encoded}&type=list",
+            "Bing" => $"https://api.bing.com/osjson.aspx?query={encoded}",
+            "Brave" => $"https://search.brave.com/api/suggest?q={encoded}",
+            "Google" => $"https://suggestqueries.google.com/complete/search?client=firefox&hl=es&q={encoded}",
+            _ => null
+        };
+    }
+
+    public static Task<IReadOnlyList<string>> FetchGoogleAutocompleteAsync(string query, CancellationToken cancellationToken)
+        => FetchSearchSuggestionsAsync(query, SettingsManager.Current.DefaultSearchEngine, cancellationToken);
+
+    public static async Task<IReadOnlyList<string>> FetchSearchSuggestionsAsync(
+        string query,
+        string? searchEngine,
+        CancellationToken cancellationToken)
+    {
+        if (!SettingsManager.Current.EnableSearchSuggestions)
+            return Array.Empty<string>();
+
         string clean = (query ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(clean) || clean.Length < 1 || clean.Length > 100)
             return Array.Empty<string>();
 
+        // D3: Si el usuario está escribiendo una dirección web o dominio, no enviar la consulta al buscador
+        if (LooksLikeUrlOrDomain(clean))
+            return Array.Empty<string>();
+
+        string engineKey = string.IsNullOrWhiteSpace(searchEngine) ? "Google" : searchEngine.Trim();
+        string? endpointUrl = BuildAutocompleteEndpointUrl(clean, engineKey);
+        if (string.IsNullOrEmpty(endpointUrl))
+            return Array.Empty<string>();
+
+        string cacheKey = $"{engineKey}::{clean}";
         lock (_cacheLock)
         {
-            if (_liveSuggestCache.TryGetValue(clean, out var cached))
+            if (_liveSuggestCache.TryGetValue(cacheKey, out var cached))
             {
                 return cached;
             }
@@ -386,8 +499,7 @@ public static class OmniboxSuggestionService
 
         try
         {
-            string url = $"https://suggestqueries.google.com/complete/search?client=firefox&hl=es&q={Uri.EscapeDataString(clean)}";
-            using var response = await _suggestClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            using var response = await _suggestClient.GetAsync(endpointUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 return Array.Empty<string>();
 
@@ -403,29 +515,35 @@ public static class OmniboxSuggestionService
             var list = new List<string>();
             foreach (var item in suggestionsArray.EnumerateArray())
             {
+                string? s = null;
                 if (item.ValueKind == JsonValueKind.String)
                 {
-                    string? s = item.GetString();
-                    if (!string.IsNullOrWhiteSpace(s))
-                    {
-                        list.Add(s);
-                        if (list.Count >= 6) break;
-                    }
+                    s = item.GetString();
+                }
+                else if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("phrase", out var phraseProp))
+                {
+                    s = phraseProp.GetString();
+                }
+
+                if (!string.IsNullOrWhiteSpace(s))
+                {
+                    list.Add(s);
+                    if (list.Count >= 6) break;
                 }
             }
 
             lock (_cacheLock)
             {
-                if (!_liveSuggestCache.ContainsKey(clean))
+                if (!_liveSuggestCache.ContainsKey(cacheKey))
                 {
                     if (_cacheLruOrder.Count >= MaxCacheEntries && _cacheLruOrder.First != null)
                     {
                         _liveSuggestCache.Remove(_cacheLruOrder.First.Value);
                         _cacheLruOrder.RemoveFirst();
                     }
-                    _cacheLruOrder.AddLast(clean);
+                    _cacheLruOrder.AddLast(cacheKey);
                 }
-                _liveSuggestCache[clean] = list;
+                _liveSuggestCache[cacheKey] = list;
             }
 
             return list;
@@ -447,10 +565,7 @@ public static class OmniboxSuggestionService
 
     /// <summary>
     /// Devuelve la mejor coincidencia para autocompletado predictivo en línea en el Omnibox.
-    /// Prioriza:
-    /// 1. Marcadores guardados por el usuario
-    /// 2. Páginas y búsquedas frecuentes del historial
-    /// 3. Dominios populares globales
+    /// Usa las propiedades precalculadas de HistoryEntry y acota el recorrido a 2500 entradas.
     /// </summary>
     public static string? GetInlineAutocompleteMatch(
         string? rawInput,
@@ -459,7 +574,7 @@ public static class OmniboxSuggestionService
     {
         if (string.IsNullOrWhiteSpace(rawInput)) return null;
         string query = rawInput.TrimStart();
-        if (query.Length < 1 || query.EndsWith(" ")) return null;
+        if (query.Length < 1 || query.EndsWith(' ')) return null;
 
         string qLower = query.ToLowerInvariant();
 
@@ -468,11 +583,10 @@ public static class OmniboxSuggestionService
         {
             foreach (var b in bookmarks)
             {
-                if (string.IsNullOrWhiteSpace(b.Url)) continue;
+                if (b == null || string.IsNullOrWhiteSpace(b.Url)) continue;
                 string clean = FormatCleanDisplayUrl(b.Url);
                 if (clean.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) && clean.Length > query.Length)
                 {
-                    // Si el clean tiene subrutas largas, sugerir el dominio base primero si coincide
                     int slashIdx = clean.IndexOf('/');
                     if (slashIdx > 0)
                     {
@@ -485,15 +599,18 @@ public static class OmniboxSuggestionService
             }
         }
 
-        // 2. Coincidencia en Historial de navegación
-        if (historyEntries != null)
+        // 2. Coincidencia en Historial de navegación (acotado y usando valores precalculados)
+        if (historyEntries != null && historyEntries.Count > 0)
         {
+            int scanLimit = Math.Min(historyEntries.Count, MaxHistoryScanEntries);
+
             // Primero buscar coincidencia en dominios/URLs del historial
-            foreach (var h in historyEntries)
+            for (int i = 0; i < scanLimit; i++)
             {
-                if (string.IsNullOrWhiteSpace(h.Url)) continue;
-                string clean = FormatCleanDisplayUrl(h.Url);
-                if (clean.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) && clean.Length > query.Length)
+                var h = historyEntries[i];
+                if (h == null || string.IsNullOrWhiteSpace(h.Url)) continue;
+                string clean = h.CleanDisplayUrl;
+                if (h.CleanDisplayUrlLower.StartsWith(qLower, StringComparison.Ordinal) && clean.Length > query.Length)
                 {
                     int slashIdx = clean.IndexOf('/');
                     if (slashIdx > 0)
@@ -507,9 +624,11 @@ public static class OmniboxSuggestionService
             }
 
             // Segundo buscar en búsquedas previas del historial
-            foreach (var h in historyEntries)
+            for (int i = 0; i < scanLimit; i++)
             {
-                string? prevSearch = TryExtractSearchQueryFromUrl(h.Url);
+                var h = historyEntries[i];
+                if (h == null) continue;
+                string? prevSearch = h.ExtractedSearchQuery;
                 if (!string.IsNullOrWhiteSpace(prevSearch) &&
                     prevSearch.StartsWith(qLower, StringComparison.OrdinalIgnoreCase) &&
                     prevSearch.Length > query.Length)

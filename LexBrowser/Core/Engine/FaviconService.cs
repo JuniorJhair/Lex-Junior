@@ -15,7 +15,14 @@ namespace LexBrowser.Core.Engine;
 /// </summary>
 public static class FaviconService
 {
+    private const int MaxCacheEntries = 500;
+    private static readonly TimeSpan NegativeCacheTtl = TimeSpan.FromHours(24);
+
     private static readonly ConcurrentDictionary<string, ImageSource> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, Task<ImageSource?>> _inFlight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<string, DateTime> _failedUntilUtc = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentQueue<string> _cacheOrder = new();
+
     private static readonly HttpClient _httpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(3)
@@ -32,9 +39,31 @@ public static class FaviconService
     }
 
     /// <summary>
-    /// Limpia la caché en memoria de favicons.
+    /// Limpia la caché en memoria de favicons y fallos recientes.
     /// </summary>
-    public static void ClearCache() => _cache.Clear();
+    public static void ClearCache()
+    {
+        _cache.Clear();
+        _failedUntilUtc.Clear();
+        while (_cacheOrder.TryDequeue(out _)) { }
+    }
+
+    private static void StoreInCache(string domain, ImageSource icon)
+    {
+        if (_cache.TryAdd(domain, icon))
+        {
+            _cacheOrder.Enqueue(domain);
+            while (_cache.Count > MaxCacheEntries && _cacheOrder.TryDequeue(out string? oldest))
+            {
+                _cache.TryRemove(oldest, out _);
+            }
+        }
+        else
+        {
+            _cache[domain] = icon;
+        }
+        _failedUntilUtc.TryRemove(domain, out _);
+    }
 
     /// <summary>
     /// Obtiene de forma síncrona el icono si ya está en caché, o null si aún no se ha descargado.
@@ -47,10 +76,8 @@ public static class FaviconService
     }
 
     /// <summary>
-    /// Resuelve el favicon oficial de una página web usando primero la FaviconUri informada por la web,
-    /// el stream decodificado de WebView2 (descartando el globo genérico de Chromium),
-    /// el favicon.ico directo y finalmente el servicio universal de iconos de alta resolución.
-    /// En modo incógnito no almacena en la caché compartida ni realiza peticiones a servicios de terceros.
+    /// Resuelve el favicon oficial de una página web con deduplicación de peticiones en vuelo,
+    /// caché negativa de 24h y respeto por la configuración de privacidad de servicios externos.
     /// </summary>
     public static async Task<ImageSource?> ResolveFaviconAsync(string pageUrl, Stream? webViewStream = null, string? faviconUri = null, bool isIncognito = false)
     {
@@ -65,6 +92,41 @@ public static class FaviconService
             return cached;
         }
 
+        bool hasExplicitTabIcon = webViewStream != null || !string.IsNullOrWhiteSpace(faviconUri);
+
+        // Si ya falló recientemente y no trae un stream/URI explícito nuevo, evitar tormenta de red
+        if (!isIncognito && !hasExplicitTabIcon &&
+            _failedUntilUtc.TryGetValue(domain, out DateTime retryAfterUtc) &&
+            DateTime.UtcNow < retryAfterUtc)
+        {
+            return null;
+        }
+
+        // En modo normal sin stream propio, deduplicar todas las solicitudes concurrentes al mismo dominio
+        if (!isIncognito && webViewStream == null)
+        {
+            string flightKey = string.IsNullOrWhiteSpace(faviconUri) ? domain : $"{domain}|{faviconUri}";
+            var task = _inFlight.GetOrAdd(flightKey, _ => ResolveFaviconCoreAsync(pageUrl, domain, null, faviconUri, isIncognito: false));
+            try
+            {
+                return await task.ConfigureAwait(false);
+            }
+            finally
+            {
+                _inFlight.TryRemove(flightKey, out _);
+            }
+        }
+
+        return await ResolveFaviconCoreAsync(pageUrl, domain, webViewStream, faviconUri, isIncognito).ConfigureAwait(false);
+    }
+
+    private static async Task<ImageSource?> ResolveFaviconCoreAsync(
+        string pageUrl,
+        string domain,
+        Stream? webViewStream,
+        string? faviconUri,
+        bool isIncognito)
+    {
         BitmapImage? candidate = null;
 
         // Resolver faviconUri relativo contra la URL base de la página si es necesario
@@ -85,7 +147,7 @@ public static class FaviconService
         {
             try
             {
-                candidate = await DownloadAndCreateBitmapAsync(resolvedFaviconUri);
+                candidate = await DownloadAndCreateBitmapAsync(resolvedFaviconUri).ConfigureAwait(false);
             }
             catch { }
         }
@@ -96,14 +158,14 @@ public static class FaviconService
             if (candidate != null) return candidate;
             if (!string.IsNullOrWhiteSpace(resolvedFaviconUri) && resolvedFaviconUri.StartsWith("data:image", StringComparison.OrdinalIgnoreCase))
             {
-                try { return await DownloadAndCreateBitmapAsync(resolvedFaviconUri); } catch { }
+                try { return await DownloadAndCreateBitmapAsync(resolvedFaviconUri).ConfigureAwait(false); } catch { }
             }
             if (webViewStream != null)
             {
                 try
                 {
                     using var ms = new MemoryStream();
-                    await webViewStream.CopyToAsync(ms);
+                    await webViewStream.CopyToAsync(ms).ConfigureAwait(false);
                     if (ms.Length > 0)
                     {
                         ms.Position = 0;
@@ -115,25 +177,26 @@ public static class FaviconService
             return null;
         }
 
-        // 3. Servicio oficial de iconos de alta resolución de Google S2 (resuelve de forma inmediata el logo oficial
-        // de ChatGPT, Instagram, YouTube, BBC, Twitch, Netflix, etc. con fondo transparente a 32x32)
-        if (candidate == null)
+        // 3. Servicio externo de iconos de alta resolución (solo si está habilitado en ajustes y no es un host local/privado)
+        if (candidate == null &&
+            SettingsManager.Current.EnableExternalFaviconService &&
+            !OmniboxInputResolver.IsLocalOrPrivateHost(domain))
         {
             try
             {
-                string googleFaviconUrl = $"https://www.google.com/s2/favicons?domain={domain}&sz=32";
-                candidate = await DownloadAndCreateBitmapAsync(googleFaviconUrl);
+                string googleFaviconUrl = $"https://www.google.com/s2/favicons?domain={Uri.EscapeDataString(domain)}&sz=32";
+                candidate = await DownloadAndCreateBitmapAsync(googleFaviconUrl).ConfigureAwait(false);
             }
             catch { }
         }
 
         // 4. Fallback directo al propio servidor de origen (https://domain/favicon.ico)
-        if (candidate == null)
+        if (candidate == null && !OmniboxInputResolver.IsLocalOrPrivateHost(domain))
         {
             try
             {
                 string directIconUrl = $"https://{domain}/favicon.ico";
-                candidate = await DownloadAndCreateBitmapAsync(directIconUrl);
+                candidate = await DownloadAndCreateBitmapAsync(directIconUrl).ConfigureAwait(false);
             }
             catch { }
         }
@@ -144,7 +207,7 @@ public static class FaviconService
             try
             {
                 using var ms = new MemoryStream();
-                await webViewStream.CopyToAsync(ms);
+                await webViewStream.CopyToAsync(ms).ConfigureAwait(false);
                 if (ms.Length > 0)
                 {
                     ms.Position = 0;
@@ -156,7 +219,11 @@ public static class FaviconService
 
         if (candidate != null)
         {
-            _cache[domain] = candidate;
+            StoreInCache(domain, candidate);
+        }
+        else
+        {
+            _failedUntilUtc[domain] = DateTime.UtcNow.Add(NegativeCacheTtl);
         }
 
         return candidate;

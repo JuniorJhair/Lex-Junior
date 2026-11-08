@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using System.Web;
@@ -16,8 +17,144 @@ public static class PdfStudioService
 {
     public const string HostName = "pdf.lex.local";
     public const string VirtualOrigin = "https://pdf.lex.local/";
+    private const string AllowedCorsOrigin = "https://pdf.lex.local";
 
     private static string? _cachedPdfFolder;
+
+    // Registro en memoria de archivos PDF locales explícitamente abiertos por el usuario en la sesión.
+    // Impide que sitios web externos lean archivos arbitrarios del disco mediante api/load-local-pdf.
+    private static readonly ConcurrentDictionary<string, byte> _authorizedLocalFiles =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Autoriza explícitamente la lectura de un archivo PDF local en el visor interno.
+    /// Solo acepta rutas válidas con extensión .pdf.
+    /// </summary>
+    public static bool AuthorizeLocalFile(string? localFilePath)
+    {
+        if (!TryNormalizeLocalPdfPath(localFilePath, out string normalizedPath))
+            return false;
+
+        _authorizedLocalFiles[normalizedPath] = 1;
+        return true;
+    }
+
+    /// <summary>
+    /// Verifica si un archivo PDF local fue autorizado explícitamente por el usuario.
+    /// </summary>
+    public static bool IsLocalFileAuthorized(string? localFilePath)
+    {
+        if (!TryNormalizeLocalPdfPath(localFilePath, out string normalizedPath))
+            return false;
+
+        return _authorizedLocalFiles.ContainsKey(normalizedPath);
+    }
+
+    public static void ClearAuthorizedFiles()
+    {
+        _authorizedLocalFiles.Clear();
+    }
+
+    private static bool TryNormalizeLocalPdfPath(string? rawPath, out string normalizedPath)
+    {
+        normalizedPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(rawPath))
+            return false;
+
+        try
+        {
+            string full = Path.GetFullPath(rawPath.Trim());
+            if (!full.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            normalizedPath = full;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Verifica que los encabezados Origin / Referer de una petición a api/load-local-pdf
+    /// provengan exclusivamente del visor interno https://pdf.lex.local y no de una web externa.
+    /// </summary>
+    public static bool IsValidPdfOriginOrReferer(string? originHeader, string? refererHeader)
+    {
+        bool hasOrigin = !string.IsNullOrWhiteSpace(originHeader);
+        bool hasReferer = !string.IsNullOrWhiteSpace(refererHeader);
+
+        // Debe existir al menos uno de los dos encabezados apuntando al visor interno
+        if (!hasOrigin && !hasReferer)
+            return false;
+
+        if (hasOrigin)
+        {
+            string cleanOrigin = originHeader!.Trim().TrimEnd('/');
+            if (!cleanOrigin.Equals(AllowedCorsOrigin, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        if (hasReferer)
+        {
+            string cleanReferer = refererHeader!.Trim();
+            if (!cleanReferer.StartsWith(VirtualOrigin, StringComparison.OrdinalIgnoreCase) &&
+                !cleanReferer.Equals(AllowedCorsOrigin, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Si la URL pertenece al visor interno (https://pdf.lex.local/...), intenta extraer la URL web original del PDF.
+    /// Devuelve true si es una URL interna de pdf.lex.local (y asigna unlockedWebUrl si el PDF original era http/https).
+    /// </summary>
+    public static bool TryUnwrapInternalViewerUrl(string? url, out string? externalPdfWebUrl)
+    {
+        externalPdfWebUrl = null;
+        if (string.IsNullOrWhiteSpace(url))
+            return false;
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) ||
+            !uri.Host.Equals(HostName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        try
+        {
+            var query = HttpUtility.ParseQueryString(uri.Query);
+            string? fileParam = query["file"];
+            if (!string.IsNullOrWhiteSpace(fileParam))
+            {
+                if (Uri.TryCreate(fileParam.Trim(), UriKind.Absolute, out var innerUri))
+                {
+                    if ((innerUri.Scheme == Uri.UriSchemeHttp || innerUri.Scheme == Uri.UriSchemeHttps) &&
+                        !innerUri.Host.Equals(HostName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        externalPdfWebUrl = innerUri.AbsoluteUri;
+                    }
+                    else if (innerUri.Host.Equals(HostName, StringComparison.OrdinalIgnoreCase) &&
+                             innerUri.AbsolutePath.Equals("/api/load-local-pdf", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var innerQuery = HttpUtility.ParseQueryString(innerUri.Query);
+                        string? localPath = innerQuery["path"];
+                        if (!string.IsNullOrWhiteSpace(localPath))
+                        {
+                            externalPdfWebUrl = localPath;
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return true;
+    }
 
     /// <summary>
     /// Localiza la carpeta que contiene viewer.html y las bibliotecas locales de PDF.js y pdf-lib.
@@ -62,6 +199,7 @@ public static class PdfStudioService
 
     /// <summary>
     /// Transforma cualquier ruta de archivo local o URL web de un PDF a la dirección de Lex PDF Studio.
+    /// Registra automáticamente los archivos locales en la lista blanca de la sesión.
     /// </summary>
     public static string GetViewerUrl(string pdfPathOrUrl)
     {
@@ -76,6 +214,7 @@ public static class PdfStudioService
             {
                 var uri = new Uri(pdfPathOrUrl);
                 string localPath = uri.LocalPath;
+                AuthorizeLocalFile(localPath);
                 effectiveUrl = $"{VirtualOrigin}api/load-local-pdf?path={Uri.EscapeDataString(localPath)}";
             }
             catch
@@ -86,6 +225,7 @@ public static class PdfStudioService
         else if ((pdfPathOrUrl.Length >= 2 && char.IsLetter(pdfPathOrUrl[0]) && pdfPathOrUrl[1] == ':') ||
                  pdfPathOrUrl.StartsWith(@"\\"))
         {
+            AuthorizeLocalFile(pdfPathOrUrl);
             effectiveUrl = $"{VirtualOrigin}api/load-local-pdf?path={Uri.EscapeDataString(pdfPathOrUrl)}";
         }
         else
@@ -107,32 +247,60 @@ public static class PdfStudioService
         string path = uri.AbsolutePath.TrimStart('/');
         string folder = GetPdfAssetsFolder();
 
-        // 1. Cargar archivo local mediante API
+        // 1. Cargar archivo local mediante API (protegido contra lectura arbitraria desde orígenes externos)
         if (path.Equals("api/load-local-pdf", StringComparison.OrdinalIgnoreCase))
         {
+            string? originHeader = null;
+            string? refererHeader = null;
+            try
+            {
+                if (e.Request.Headers != null)
+                {
+                    if (e.Request.Headers.Contains("Origin"))
+                        originHeader = e.Request.Headers.GetHeader("Origin");
+                    if (e.Request.Headers.Contains("Referer"))
+                        refererHeader = e.Request.Headers.GetHeader("Referer");
+                }
+            }
+            catch { }
+
+            if (!IsValidPdfOriginOrReferer(originHeader, refererHeader))
+            {
+                byte[] forbiddenOriginBytes = Encoding.UTF8.GetBytes("Acceso denegado: origen no autorizado.");
+                e.Response = env.CreateWebResourceResponse(new MemoryStream(forbiddenOriginBytes), 403, "Forbidden", "Content-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff");
+                return true;
+            }
+
             var query = HttpUtility.ParseQueryString(uri.Query);
             string? localFilePath = query["path"];
 
-            if (!string.IsNullOrWhiteSpace(localFilePath) && File.Exists(localFilePath))
+            if (!IsLocalFileAuthorized(localFilePath) || !TryNormalizeLocalPdfPath(localFilePath, out string safeFullPath))
+            {
+                byte[] forbiddenFileBytes = Encoding.UTF8.GetBytes("Acceso denegado: el archivo PDF no ha sido autorizado por el usuario.");
+                e.Response = env.CreateWebResourceResponse(new MemoryStream(forbiddenFileBytes), 403, "Forbidden", "Content-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff");
+                return true;
+            }
+
+            if (File.Exists(safeFullPath))
             {
                 try
                 {
-                    byte[] fileBytes = File.ReadAllBytes(localFilePath);
-                    string headers = "Content-Type: application/pdf\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache";
+                    byte[] fileBytes = File.ReadAllBytes(safeFullPath);
+                    string headers = $"Content-Type: application/pdf\r\nAccess-Control-Allow-Origin: {AllowedCorsOrigin}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store";
                     e.Response = env.CreateWebResourceResponse(new MemoryStream(fileBytes, writable: false), 200, "OK", headers);
                     return true;
                 }
                 catch (Exception ex)
                 {
                     byte[] errBytes = Encoding.UTF8.GetBytes($"Error al leer PDF local: {ex.Message}");
-                    e.Response = env.CreateWebResourceResponse(new MemoryStream(errBytes), 500, "Read Error", "Content-Type: text/plain");
+                    e.Response = env.CreateWebResourceResponse(new MemoryStream(errBytes), 500, "Read Error", "Content-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff");
                     return true;
                 }
             }
             else
             {
                 byte[] notFoundBytes = Encoding.UTF8.GetBytes("Archivo local no encontrado.");
-                e.Response = env.CreateWebResourceResponse(new MemoryStream(notFoundBytes), 404, "Not Found", "Content-Type: text/plain");
+                e.Response = env.CreateWebResourceResponse(new MemoryStream(notFoundBytes), 404, "Not Found", "Content-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff");
                 return true;
             }
         }
@@ -140,13 +308,25 @@ public static class PdfStudioService
         // 2. Archivos estáticos del visor (viewer.html, pdf.min.js, pdf.worker.min.js, pdf-lib.min.js)
         if (string.IsNullOrEmpty(path)) path = "viewer.html";
 
-        byte[]? bytes = null;
-        string diskFile = Path.Combine(folder, path);
-
-        if (File.Exists(diskFile))
+        // Protección contra Path Traversal (..)
+        if (path.Contains("..", StringComparison.Ordinal) || path.Contains(':', StringComparison.Ordinal))
         {
-            try { bytes = File.ReadAllBytes(diskFile); } catch { }
+            byte[] badReq = Encoding.UTF8.GetBytes("Ruta inválida.");
+            e.Response = env.CreateWebResourceResponse(new MemoryStream(badReq), 400, "Bad Request", "Content-Type: text/plain; charset=utf-8");
+            return true;
         }
+
+        byte[]? bytes = null;
+        try
+        {
+            string fullFolder = Path.GetFullPath(folder);
+            string diskFile = Path.GetFullPath(Path.Combine(fullFolder, path));
+            if (diskFile.StartsWith(fullFolder, StringComparison.OrdinalIgnoreCase) && File.Exists(diskFile))
+            {
+                bytes = File.ReadAllBytes(diskFile);
+            }
+        }
+        catch { }
 
         // Respaldo de alta disponibilidad: Si no está en disco (ej. Single-file publish autónomo en otra máquina),
         // cargar directamente desde los recursos incrustados en el ensamblado binario.
@@ -171,7 +351,7 @@ public static class PdfStudioService
                                      path.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ? "text/css; charset=utf-8" :
                                      "application/octet-stream";
 
-                string headers = $"Content-Type: {contentType}\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: max-age=3600";
+                string headers = $"Content-Type: {contentType}\r\nAccess-Control-Allow-Origin: {AllowedCorsOrigin}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: max-age=3600";
                 e.Response = env.CreateWebResourceResponse(new MemoryStream(bytes, writable: false), 200, "OK", headers);
                 return true;
             }

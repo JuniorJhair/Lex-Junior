@@ -48,193 +48,19 @@
             </Setter>
         </Style>
 
-        <!-- Toggle Switch Moderno -->
-        <Style x:Key="ModernToggle" TargetType="CheckBox">
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Foreground" Value="#F4F4F5"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <Grid Margin="0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <ContentPresenter Grid.Column="0" VerticalAlignment="Center"/>
-                            <Border x:Name="track" Grid.Column="1" Width="44" Height="24" CornerRadius="12" Background="#2E2E3A" Margin="10,0,0,0">
-                                <Ellipse x:Name="thumb" Width="18" Height="18" Fill="#FFFFFF" HorizontalAlignment="Left" Margin="3,0,0,0">
-                                    <Ellipse.Effect>
-                                        <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.3"/>
-                                    </Ellipse.Effect>
-                                </Ellipse>
-                            </Border>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="track" Property="Background" Value="#6366F1"/>
-                                <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
-                                <Setter TargetName="thumb" Property="Margin" Value="0,0,3,0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Botón de Acción Estándar -->
-        <Style x:Key="ActionBtn" TargetType="Button">
-            <Setter Property="Background" Value="#22222E"/>
-            <Setter Property="Foreground" Value="#E4E4E7"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#2F2F40"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#2E2E40"/>
-                                <Setter TargetName="b" Property="BorderBrush" Value="#6366F1"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#1C1C28"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Botón Primario Peligro / Borrado -->
-        <Style x:Key="DangerBtn" TargetType="Button">
-            <Setter Property="Background" Value="#E11D48"/>
-            <Setter Property="Foreground" Value="#FFFFFF"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+        <!-- Aliases hacia los estilos unificados de Theme.xaml -->
+        <Style x:Key="ModernToggle" TargetType="CheckBox" BasedOn="{StaticResource LexModernToggle}"/>
+        <Style x:Key="ActionBtn" TargetType="Button" BasedOn="{StaticResource LexBaseButton}"/>
+        <Style x:Key="DangerBtn" TargetType="Button" BasedOn="{StaticResource LexDangerButton}">
             <Setter Property="Padding" Value="14,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#BE123C"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="b" Property="Background" Value="#9F1239"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Input Box Oscuro -->
-        <Style x:Key="DarkInput" TargetType="TextBox">
-            <Setter Property="Background" Value="#171720"/>
-            <Setter Property="Foreground" Value="#F4F4F5"/>
-            <Setter Property="BorderBrush" Value="#2E2E3E"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,6"/>
             <Setter Property="FontSize" Value="12"/>
-            <Setter Property="CaretBrush" Value="#818CF8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
-                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsFocused" Value="True">
-                                <Setter TargetName="b" Property="BorderBrush" Value="#6366F1"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
-
-        <!-- ScrollBar Oscura Moderna y Suave -->
-        <Style TargetType="ScrollBar">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="10"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollBar">
-                        <Grid Background="Transparent">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
-                                <Track.Thumb>
-                                    <Thumb>
-                                        <Thumb.Template>
-                                            <ControlTemplate TargetType="Thumb">
-                                                <Border x:Name="ThumbBorder" Background="#333348" CornerRadius="5" Margin="1,0"/>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#4F4F72"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsDragging" Value="True">
-                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#6366F1"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Thumb.Template>
-                                    </Thumb>
-                                </Track.Thumb>
-                            </Track>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- RadioButton Oscuro Moderno -->
-        <Style x:Key="DarkRadio" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="#F4F4F5"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="RadioButton">
-                        <Grid Margin="0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="22"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Border x:Name="OuterCircle" Width="18" Height="18" CornerRadius="9"
-                                    Background="#171720" BorderBrush="#3B3B4E" BorderThickness="1.5"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Ellipse x:Name="InnerDot" Width="8" Height="8" Fill="#6366F1" Visibility="Collapsed"/>
-                            </Border>
-                            <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="OuterCircle" Property="BorderBrush" Value="#818CF8"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="OuterCircle" Property="BorderBrush" Value="#6366F1"/>
-                                <Setter TargetName="OuterCircle" Property="Background" Value="#1E1E30"/>
-                                <Setter TargetName="InnerDot" Property="Visibility" Value="Visible"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <Style x:Key="DarkRadio" TargetType="RadioButton" BasedOn="{StaticResource LexRadioButton}"/>
+        <Style x:Key="DarkCombo" TargetType="ComboBox" BasedOn="{StaticResource LexComboBox}"/>
 
         <!-- CheckBox Selección Oscura -->
         <Style x:Key="DarkCheck" TargetType="CheckBox">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
             <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -260,8 +86,8 @@
                                 <Setter TargetName="Box" Property="BorderBrush" Value="#818CF8"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Box" Property="Background" Value="#6366F1"/>
-                                <Setter TargetName="Box" Property="BorderBrush" Value="#6366F1"/>
+                                <Setter TargetName="Box" Property="Background" Value="#4F46E5"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#4F46E5"/>
                                 <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -269,139 +95,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <!-- Estilo ComboBoxItem Oscuro -->
-        <Style x:Key="DarkComboItem" TargetType="ComboBoxItem">
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#F4F4F5"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Margin="2,1">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#252538"/>
-                                <Setter Property="Foreground" Value="#FFFFFF"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#4F46E5"/>
-                                <Setter Property="Foreground" Value="#FFFFFF"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource DarkComboItem}"/>
-
-        <!-- ToggleButton para ComboBox Oscuro -->
-        <ControlTemplate x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition/>
-                    <ColumnDefinition Width="28"/>
-                </Grid.ColumnDefinitions>
-                <Border x:Name="Border" Grid.ColumnSpan="2" CornerRadius="6"
-                        Background="#171720" BorderBrush="#2E2E3E" BorderThickness="1"/>
-                <Path x:Name="Arrow" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                      Data="M 0 0 L 4 4 L 8 0 Z" Fill="#A1A1AA"/>
-            </Grid>
-            <ControlTemplate.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="Border" Property="BorderBrush" Value="#6366F1"/>
-                    <Setter TargetName="Arrow" Property="Fill" Value="#FFFFFF"/>
-                </Trigger>
-                <Trigger Property="IsChecked" Value="True">
-                    <Setter TargetName="Border" Property="BorderBrush" Value="#6366F1"/>
-                    <Setter TargetName="Border" Property="Background" Value="#1C1C28"/>
-                    <Setter TargetName="Arrow" Property="Fill" Value="#6366F1"/>
-                </Trigger>
-            </ControlTemplate.Triggers>
-        </ControlTemplate>
-
-        <!-- Estilo ComboBox Oscuro Completo -->
-        <Style x:Key="DarkCombo" TargetType="ComboBox">
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="ScrollViewer.CanContentScroll" Value="False"/>
-            <Setter Property="Foreground" Value="#F4F4F5"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboItem}"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton x:Name="ToggleButton"
-                                          Template="{StaticResource DarkComboBoxToggleButton}"
-                                          Focusable="False"
-                                          IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                          ClickMode="Press"/>
-                            <ContentPresenter x:Name="ContentSite"
-                                              IsHitTestVisible="False"
-                                              Content="{TemplateBinding SelectionBoxItem}"
-                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                              Margin="12,7,28,7"
-                                              VerticalAlignment="Center"
-                                              HorizontalAlignment="Left">
-                                <TextBlock.Foreground>
-                                    <SolidColorBrush Color="#F4F4F5"/>
-                                </TextBlock.Foreground>
-                            </ContentPresenter>
-                            <Popup x:Name="Popup"
-                                   Placement="Bottom"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   AllowsTransparency="True"
-                                   Focusable="False"
-                                   PopupAnimation="Slide">
-                                <Grid x:Name="DropDown"
-                                      SnapsToDevicePixels="True"
-                                      MinWidth="{TemplateBinding ActualWidth}"
-                                      MaxHeight="260">
-                                    <Border x:Name="DropDownBorder"
-                                            Background="#14141E"
-                                            BorderBrush="#2E2E40"
-                                            BorderThickness="1"
-                                            CornerRadius="8"
-                                            Padding="4"
-                                            Margin="0,4,0,4">
-                                        <Border.Effect>
-                                            <DropShadowEffect BlurRadius="12" ShadowDepth="4" Direction="270" Opacity="0.5" Color="Black"/>
-                                        </Border.Effect>
-                                        <ScrollViewer x:Name="DropDownScrollViewer"
-                                                      CanContentScroll="False"
-                                                      HorizontalScrollBarVisibility="Disabled"
-                                                      VerticalScrollBarVisibility="Auto"
-                                                      Focusable="False"
-                                                      SnapsToDevicePixels="True">
-                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
-                                        </ScrollViewer>
-                                    </Border>
-                                </Grid>
-                            </Popup>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="HasItems" Value="False">
-                                <Setter TargetName="DropDownBorder" Property="MinHeight" Value="60"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.5"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="ComboBox" BasedOn="{StaticResource DarkCombo}"/>
     </Window.Resources>
 
     <Grid>
@@ -431,9 +124,10 @@
                 </StackPanel>
 
                 <!-- Pestañas de modo -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <RadioButton x:Name="TabExplore" Content="📚 Explorar Historial" Style="{StaticResource HeaderTabBtn}" IsChecked="True" Checked="ModeTab_Checked"/>
-                    <RadioButton x:Name="TabClearAdvanced" Content="🧹 Limpieza Avanzada de Datos" Style="{StaticResource HeaderTabBtn}" Checked="ModeTab_Checked"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
+                    <RadioButton x:Name="TabExplore" Content="📚 Explorar Historial" Style="{StaticResource HeaderTabBtn}" IsChecked="True" Checked="ModeTab_Checked" WindowChrome.IsHitTestVisibleInChrome="True"/>
+                    <RadioButton x:Name="TabClearAdvanced" Content="🧹 Limpieza Avanzada de Datos" Style="{StaticResource HeaderTabBtn}" Checked="ModeTab_Checked" WindowChrome.IsHitTestVisibleInChrome="True"/>
                 </StackPanel>
 
                 <!-- Botón cerrar -->
@@ -562,11 +256,15 @@
                 </Grid>
             </Border>
 
-            <!-- Lista / Tabla de Historial con Desplazamiento Suave en Píxeles (Sin saltos bruscos) -->
+            <!-- Lista / Tabla de Historial Virtualizada con Desplazamiento Suave en Píxeles -->
             <ListView x:Name="LstHistory" Grid.Row="1" Background="#0C0C10" BorderThickness="0" Foreground="#E4E4E7"
                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                       ScrollViewer.VerticalScrollBarVisibility="Auto"
-                      ScrollViewer.CanContentScroll="False"
+                      ScrollViewer.CanContentScroll="True"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.ScrollUnit="Pixel"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      KeyDown="LstHistory_KeyDown"
                       PreviewMouseWheel="LstHistory_PreviewMouseWheel">
                 <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
@@ -598,7 +296,7 @@
 
                 <ListView.ItemTemplate>
                     <DataTemplate>
-                        <Grid>
+                        <Grid ToolTip="Clic para seleccionar • Doble clic o Enter para abrir">
                             <Grid.ColumnDefinitions>
                                 <!-- Hora -->
                                 <ColumnDefinition Width="70"/>
@@ -614,7 +312,7 @@
                             <Border Grid.Column="0" Grid.ColumnSpan="3" Background="Transparent" Cursor="Hand" MouseLeftButtonDown="HistoryRow_Click"/>
 
                             <!-- Hora -->
-                            <TextBlock Grid.Column="0" Text="{Binding DisplayTime}" Foreground="#8B8B96" FontSize="11" VerticalAlignment="Center" FontFamily="Consolas, Segoe UI" IsHitTestVisible="False"/>
+                            <TextBlock Grid.Column="0" Text="{Binding DisplayTime}" Foreground="#A1A1AA" FontSize="11" VerticalAlignment="Center" FontFamily="Consolas, Segoe UI" IsHitTestVisible="False"/>
 
                             <!-- Favicon / Ícono Oficial -->
                             <Border Grid.Column="1" Width="20" Height="20" CornerRadius="4" Background="#1C1C26" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False">
@@ -627,21 +325,25 @@
                                 </Grid>
                             </Border>
 
-                            <!-- Contenido Principal -->
+                            <!-- Contenido Principal (Grid con columna * para recortar URLs largas con elipsis) -->
                             <StackPanel Grid.Column="2" Margin="6,0,16,0" VerticalAlignment="Center" IsHitTestVisible="False">
                                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5" TextTrimming="CharacterEllipsis"/>
-                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                    <Border Background="#20202F" CornerRadius="3" Padding="5,1" Margin="0,0,8,0">
-                                        <TextBlock Text="{Binding Domain}" FontSize="10.5" Foreground="#818CF8" FontWeight="SemiBold"/>
+                                <Grid Margin="0,2,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Background="#20202F" CornerRadius="3" Padding="5,1" Margin="0,0,8,0">
+                                        <TextBlock Text="{Binding Domain}" FontSize="11" Foreground="#818CF8" FontWeight="SemiBold"/>
                                     </Border>
-                                    <TextBlock Text="{Binding Url}" Foreground="#8B8B96" FontSize="11" TextTrimming="CharacterEllipsis"/>
-                                </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding Url}" Foreground="#A1A1AA" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                </Grid>
                             </StackPanel>
 
                             <!-- Botones de Acción por fila -->
                             <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Content="🌐 Limpiar este sitio" Style="{StaticResource ActionBtn}" Padding="8,4" Margin="0,0,6,0" ToolTip="Elimina cookies, caché y sesiones activas de este dominio" Click="BtnCleanSite_Click"/>
-                                <Button Content="✕" Style="{StaticResource ActionBtn}" Padding="8,4" Foreground="#F43F5E" ToolTip="Eliminar esta entrada del historial" Click="BtnDeleteSingle_Click"/>
+                                <Button Content="✕" Style="{StaticResource ActionBtn}" Padding="8,4" Foreground="#FB7185" ToolTip="Eliminar esta entrada del historial" Click="BtnDeleteSingle_Click"/>
                             </StackPanel>
                         </Grid>
                     </DataTemplate>
@@ -660,7 +362,7 @@
                     <!-- Lado Izquierdo: Contador y Selector por página -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtHistoryCount" Text="Cargando historial..." FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                        <TextBlock Text="Mostrar:" FontSize="11" Foreground="#8B8B96" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBlock Text="Mostrar:" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,4,0"/>
                         <ComboBox x:Name="CmbPageSize" Width="60" Height="24" Background="#1B1B26" Foreground="#FFFFFF" BorderBrush="#2B2B3C" BorderThickness="1"
                                   FontSize="11" VerticalContentAlignment="Center" SelectionChanged="CmbPageSize_SelectionChanged">
                             <ComboBoxItem Content="50" IsSelected="True"/>
@@ -679,7 +381,7 @@
                     <!-- Lado Derecho: Acciones de borrado -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <Button Content="🗑️ Eliminar día seleccionado" Style="{StaticResource ActionBtn}" Padding="10,4" Margin="0,0,8,0" Click="BtnDeleteDay_Click"/>
-                        <Button Content="Vaciar todo el historial" Style="{StaticResource ActionBtn}" Foreground="#F43F5E" Padding="10,4" Click="BtnClearAll_Click"/>
+                        <Button Content="Vaciar todo el historial" Style="{StaticResource ActionBtn}" Foreground="#FB7185" Padding="10,4" Click="BtnClearAll_Click"/>
                     </StackPanel>
                 </Grid>
             </Border>

@@ -47,6 +47,7 @@
         </Style>
 
         <Style x:Key="LexFilterPill" TargetType="RadioButton">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
             <Setter Property="Background" Value="#1C1C28"/>
             <Setter Property="Foreground" Value="#A1A1AA"/>
             <Setter Property="FontSize" Value="11"/>
@@ -66,7 +67,7 @@
                                 <Setter Property="Foreground" Value="#FFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="pillBorder" Property="Background" Value="#6366F1"/>
+                                <Setter TargetName="pillBorder" Property="Background" Value="#4F46E5"/>
                                 <Setter TargetName="pillBorder" Property="BorderBrush" Value="#818CF8"/>
                                 <Setter Property="Foreground" Value="#FFFFFF"/>
                             </Trigger>
@@ -76,72 +77,8 @@
             </Setter>
         </Style>
 
-        <!-- Estilo CheckBox Toggle moderno -->
-        <Style x:Key="ModernToggle" TargetType="CheckBox">
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Foreground" Value="#F4F4F5"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="CheckBox">
-                        <Grid Margin="0,6">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <ContentPresenter Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0"/>
-                            <Border x:Name="track" Grid.Column="1" Width="44" Height="24" CornerRadius="12" Background="#2E2E3A" Margin="0,0,0,0">
-                                <Ellipse x:Name="thumb" Width="18" Height="18" Fill="#FFFFFF" HorizontalAlignment="Left" Margin="3,0,0,0">
-                                    <Ellipse.Effect>
-                                        <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.3"/>
-                                    </Ellipse.Effect>
-                                </Ellipse>
-                            </Border>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="track" Property="Background" Value="#6366F1"/>
-                                <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
-                                <Setter TargetName="thumb" Property="Margin" Value="0,0,3,0"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- ScrollBar Oscura Moderna y Suave para Configuración -->
-        <Style TargetType="ScrollBar">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="8"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ScrollBar">
-                        <Grid Background="Transparent">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True">
-                                <Track.Thumb>
-                                    <Thumb>
-                                        <Thumb.Template>
-                                            <ControlTemplate TargetType="Thumb">
-                                                <Border x:Name="ThumbBorder" Background="#3E3E54" CornerRadius="4" Margin="1,0"/>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#6366F1"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsDragging" Value="True">
-                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#818CF8"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Thumb.Template>
-                                    </Thumb>
-                                </Track.Thumb>
-                            </Track>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <!-- Alias hacia el Toggle unificado en Theme.xaml -->
+        <Style x:Key="ModernToggle" TargetType="CheckBox" BasedOn="{StaticResource LexModernToggle}"/>
     </Window.Resources>
 
     <Grid>
@@ -206,20 +143,20 @@
             <!-- Menú lateral de navegación -->
             <Border Grid.Column="0" Background="#121217" BorderBrush="#242430" BorderThickness="0,0,1,0" Padding="12,16">
                 <StackPanel>
-                    <TextBlock Text="OPCIONES" FontSize="10.5" FontWeight="Bold" Foreground="#8B8B96" Margin="8,0,0,10"/>
+                    <TextBlock Text="OPCIONES" FontSize="11" FontWeight="Bold" Foreground="#A1A1AA" Margin="8,0,0,10"/>
                     
                     <RadioButton x:Name="TabGeneral" Content="🛠️ General" Style="{StaticResource SettingsTabBtn}" IsChecked="True" Checked="Tab_Checked"/>
                     <RadioButton x:Name="TabSearch" Content="🔍 Buscador" Style="{StaticResource SettingsTabBtn}" Checked="Tab_Checked"/>
                     <RadioButton x:Name="TabBookmarks" Content="⭐ Accesos Directos" Style="{StaticResource SettingsTabBtn}" Checked="Tab_Checked"/>
                     <RadioButton x:Name="TabNotifications" Content="🔔 Notificaciones" Style="{StaticResource SettingsTabBtn}" Checked="Tab_Checked"/>
-                    <RadioButton x:Name="TabTelemetry" Content="🛡️ 0 Telemetría" Style="{StaticResource SettingsTabBtn}" Checked="Tab_Checked"/>
+                    <RadioButton x:Name="TabTelemetry" Content="🛡️ Sin Telemetría" Style="{StaticResource SettingsTabBtn}" Checked="Tab_Checked"/>
 
                     <Border Height="1" Background="#242430" Margin="4,16"/>
 
                     <Border Background="#1A1A24" CornerRadius="8" Padding="10,12" Margin="0,8">
                         <StackPanel>
                             <TextBlock x:Name="TxtSettingsVersionBadge" Text="⚡ Lex Junior" FontWeight="Bold" FontSize="11" Foreground="#818CF8"/>
-                            <TextBlock Text="Navegador ultra-ligero y privado" FontSize="10.5" Foreground="#8B8B96" Margin="0,4,0,0"/>
+                            <TextBlock Text="Navegador ligero y privado" FontSize="11" Foreground="#A1A1AA" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -244,25 +181,11 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                                     <TextBlock Text="Navegador Web Predeterminado" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                    <TextBlock x:Name="TxtDefaultBrowserStatus" Text="Comprobando estado en Windows..." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="TxtDefaultBrowserStatus" Text="Comprobando estado en Windows..." FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                 </StackPanel>
-                                <Button x:Name="BtnSetDefaultBrowser" Grid.Column="1" Content="🌐 Establecer como predeterminado" Background="#6366F1" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="12" Padding="14,7" Cursor="Hand" Click="BtnSetDefaultBrowser_Click" VerticalAlignment="Center">
-                                    <Button.Resources>
-                                        <Style TargetType="Border">
-                                            <Setter Property="CornerRadius" Value="7"/>
-                                        </Style>
-                                    </Button.Resources>
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Style.Triggers>
-                                                <Trigger Property="IsEnabled" Value="False">
-                                                    <Setter Property="Opacity" Value="0.6"/>
-                                                    <Setter Property="Cursor" Value="Arrow"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                <Button x:Name="BtnSetDefaultBrowser" Grid.Column="1" Content="🌐 Establecer como predeterminado"
+                                        Style="{StaticResource LexPrimaryButton}" FontSize="12" Padding="14,7"
+                                        Click="BtnSetDefaultBrowser_Click" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
 
@@ -271,7 +194,7 @@
                                 <CheckBox x:Name="ChkRestoreSession" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Restaurar Pestañas de la Sesión Anterior" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Al abrir el navegador, recupera las pestañas abiertas la última vez con hibernación inteligente (0 MB de RAM hasta hacer clic)" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Al abrir el navegador, recupera las pestañas abiertas la última vez con hibernación inteligente (solo carga la pestaña activa hasta hacer clic en las demás)" FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
@@ -392,11 +315,11 @@
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="🔑 Bóveda de Contraseñas, Bloqueo por PIN y Modo Invitado" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                <TextBlock Text="Guarda tus contraseñas por dominio (.com, .pe, etc.) con 0% consumo de CPU, protege el navegador con PIN y activa el Modo Invitado."
-                                           FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,10"/>
+                                <TextBlock Text="Guarda tus contraseñas por dominio (.com, .pe, etc.) con cifrado DPAPI local, protege el navegador con PIN y activa el Modo Invitado."
+                                           FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,10"/>
                                 <Grid>
                                     <TextBlock x:Name="TxtSettingsVaultSummary" Text="Contraseñas guardadas: 0" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
-                                    <Button Content="🔑 Abrir Bóveda y Configurar PIN..." HorizontalAlignment="Right" Background="#312E81" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" Padding="12,6" BorderThickness="0" Cursor="Hand" Click="BtnOpenVaultFromSettings_Click"/>
+                                    <Button Content="🔑 Abrir Bóveda y Configurar PIN..." HorizontalAlignment="Right" Style="{StaticResource LexPrimaryButton}" FontSize="11" FontWeight="Bold" Padding="12,6" Click="BtnOpenVaultFromSettings_Click"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -405,42 +328,53 @@
                     <!-- SECCIÓN: BUSCADOR -->
                     <StackPanel x:Name="PanelSearch" Visibility="Collapsed">
                         <TextBlock Text="Motor de Búsqueda" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                        <TextBlock Text="Elige qué buscador usar al escribir consultas en la barra de direcciones" FontSize="12" Foreground="#8B8B96" Margin="0,0,0,24"/>
+                        <TextBlock Text="Elige qué buscador usar al escribir consultas en la barra de direcciones" FontSize="12" Foreground="#A1A1AA" Margin="0,0,0,24"/>
 
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,16">
                             <StackPanel>
-                                <RadioButton x:Name="RbGoogle" Content="Google (Recomendado - Predeterminado)" GroupName="SearchEngineGroup" Foreground="#F4F4F5" FontSize="13" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
-                                <RadioButton x:Name="RbDuckDuckGo" Content="DuckDuckGo (Búsqueda Privada)" GroupName="SearchEngineGroup" Foreground="#F4F4F5" FontSize="13" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
-                                <RadioButton x:Name="RbBrave" Content="Brave Search (Sin Rastreo)" GroupName="SearchEngineGroup" Foreground="#F4F4F5" FontSize="13" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
-                                <RadioButton x:Name="RbBing" Content="Microsoft Bing" GroupName="SearchEngineGroup" Foreground="#F4F4F5" FontSize="13" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
-                                <RadioButton x:Name="RbCustom" Content="Personalizado" GroupName="SearchEngineGroup" Foreground="#F4F4F5" FontSize="13" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
+                                <RadioButton x:Name="RbGoogle" Content="Google (Recomendado - Predeterminado)" Style="{StaticResource LexRadioButton}" GroupName="SearchEngineGroup" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
+                                <RadioButton x:Name="RbDuckDuckGo" Content="DuckDuckGo (Búsqueda Privada)" Style="{StaticResource LexRadioButton}" GroupName="SearchEngineGroup" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
+                                <RadioButton x:Name="RbBrave" Content="Brave Search (Sin Rastreo)" Style="{StaticResource LexRadioButton}" GroupName="SearchEngineGroup" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
+                                <RadioButton x:Name="RbBing" Content="Microsoft Bing" Style="{StaticResource LexRadioButton}" GroupName="SearchEngineGroup" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
+                                <RadioButton x:Name="RbCustom" Content="Personalizado" Style="{StaticResource LexRadioButton}" GroupName="SearchEngineGroup" FontWeight="SemiBold" Margin="0,6" Click="SaveSearch_Click"/>
                             </StackPanel>
                         </Border>
 
                         <TextBlock Text="URL de búsqueda personalizada (usa %s para el término):" FontSize="12" Foreground="#A1A1AA" Margin="0,0,0,6"/>
-                        <TextBox x:Name="TxtCustomSearchUrl" Background="#15151D" BorderBrush="#272736" BorderThickness="1" Foreground="#FFFFFF" FontSize="13" Padding="10,8" Margin="0,0,0,16" TextChanged="TxtCustomSearchUrl_TextChanged"/>
-                    </StackPanel>
-
-                    <!-- SECCIÓN: ACCESOS DIRECTOS -->
-                    <StackPanel x:Name="PanelBookmarks" Visibility="Collapsed">
-                        <TextBlock Text="Barra de Accesos Directos" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                        <TextBlock Text="Gestiona la barra rápida ubicada debajo de la URL" FontSize="12" Foreground="#8B8B96" Margin="0,0,0,24"/>
+                        <TextBox x:Name="TxtCustomSearchUrl" Style="{StaticResource DarkInput}" FontSize="13" Padding="10,8" Margin="0,0,0,16" TextChanged="TxtCustomSearchUrl_TextChanged"/>
 
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <StackPanel>
-                                <CheckBox x:Name="ChkBookmarksBar" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                <CheckBox x:Name="ChkEnableSearchSuggestions" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
-                                        <TextBlock Text="Mostrar Barra de Accesos Directos" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Atajo rápido de teclado: presiona Ctrl + Shift + B en cualquier momento para mostrarla u ocultarla" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Sugerencias de búsqueda en tiempo real" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Muestra sugerencias del motor de búsqueda seleccionado al escribir consultas en la barra de direcciones (no se envían URLs ni direcciones locales). Desactívalo para usar únicamente sugerencias de tu historial local." FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
                         </Border>
                     </StackPanel>
 
-                    <!-- SECCIÓN ESPECIAL: 0 TELEMETRÍA (EXPLICACIÓN A FONDO) -->
+                    <!-- SECCIÓN: ACCESOS DIRECTOS -->
+                    <StackPanel x:Name="PanelBookmarks" Visibility="Collapsed">
+                        <TextBlock Text="Barra de Accesos Directos" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
+                        <TextBlock Text="Gestiona la barra rápida ubicada debajo de la URL" FontSize="12" Foreground="#A1A1AA" Margin="0,0,0,24"/>
+
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <StackPanel>
+                                <CheckBox x:Name="ChkBookmarksBar" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="Mostrar Barra de Accesos Directos" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Atajo rápido de teclado: presiona Ctrl + Shift + B en cualquier momento para mostrarla u ocultarla" FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- SECCIÓN ESPECIAL: SIN TELEMETRÍA PROPIA (EXPLICACIÓN TRANSPARENTE) -->
                     <StackPanel x:Name="PanelTelemetry" Visibility="Collapsed">
-                        <Border BorderBrush="#6366F1" BorderThickness="1.5" CornerRadius="12" Padding="22,18" Margin="0,0,0,20">
+                        <Border BorderBrush="#4F46E5" BorderThickness="1.5" CornerRadius="12" Padding="22,18" Margin="0,0,0,20">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                     <GradientStop Color="#2C1B4D" Offset="0.0"/>
@@ -454,37 +388,48 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <Border Background="#206366F1" CornerRadius="6" Padding="8,3" HorizontalAlignment="Left" Margin="0,0,0,8">
-                                        <TextBlock Text="🛡️ MODO BLINDADO ACTIVO" Foreground="#A5B4FC" FontSize="10.5" FontWeight="Bold"/>
+                                        <TextBlock Text="🛡️ PRIVACIDAD Y CONTROL RED" Foreground="#A5B4FC" FontSize="11" FontWeight="Bold"/>
                                     </Border>
-                                    <TextBlock Text="¿Qué significa '0 Telemetría' en Lex Junior?" FontSize="18" FontWeight="Bold" Foreground="#FFFFFF"/>
-                                    <TextBlock Text="Tu navegador corre sin procesos espía corporativos ni fugas de información." FontSize="12" Foreground="#A1A1AA" Margin="0,4,0,0"/>
+                                    <TextBlock Text="¿Qué significa 'Sin Telemetría Propia' en Lex Junior?" FontSize="18" FontWeight="Bold" Foreground="#FFFFFF"/>
+                                    <TextBlock Text="El navegador no incluye analítica, rastreadores propios ni informes automáticos de uso." FontSize="12" Foreground="#A1A1AA" Margin="0,4,0,0"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="1" Text="🔒" FontSize="36" VerticalAlignment="Center" Margin="10,0"/>
                             </Grid>
                         </Border>
 
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,16">
+                            <StackPanel>
+                                <CheckBox x:Name="ChkEnableExternalFavicons" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="Cargar íconos faltantes de sitios web (Favicons)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Cuando un sitio de tus marcadores o sugerencias aún no tiene ícono en la caché local en disco, solicita su ícono por dominio público. Desactívalo para no realizar consultas externas de íconos." FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Text="¿Para qué sirve y cómo funciona?" FontSize="15" FontWeight="Bold" Foreground="#F4F4F5" Margin="0,0,0,8"/>
                         <TextBlock TextWrapping="Wrap" Foreground="#A1A1AA" FontSize="12" LineHeight="18" Margin="0,0,0,16">
-                            Los navegadores comerciales como Chrome, Edge u Opera tienen decenas de procesos ocultos en segundo plano que envían estadísticas continuas a sus servidores: a qué horas navegas, qué enlaces visitas, pings de latencia, informes de caídas (Breakpad) y telemetría de anuncios.
+                            Muchos navegadores comerciales mantienen servicios en segundo plano que envían métricas de uso, informes de fallos y perfiles publicitarios a sus servidores.
                             <LineBreak/><LineBreak/>
-                            En <Bold Foreground="#818CF8">Lex Junior</Bold>, desactivamos todos estos servicios directamente en el motor Chromium mediante flags nativos de bajo nivel.
+                            En <Bold Foreground="#818CF8">Lex Junior</Bold>, desactivamos estas funciones en el motor Chromium mediante flags nativos y te damos interruptores explícitos sobre las funciones opcionales de red (como sugerencias de búsqueda e íconos de sitios).
                         </TextBlock>
 
                         <TextBlock Text="🚀 Ventajas Clave:" FontSize="14" FontWeight="Bold" Foreground="#10B981" Margin="0,0,0,8"/>
                         <Border Background="#15151D" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,16">
                             <StackPanel>
-                                <TextBlock Text="✔ Privacidad 100% Local: Ningún dato tuyo sale a servidores de Google u otros." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
-                                <TextBlock Text="✔ Cero Consumo Silencioso: No hay tareas en segundo plano comiendo tu RAM y batería." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
-                                <TextBlock Text="✔ Mayor Velocidad: Tu internet se dedica exclusivamente a cargar tus páginas y videos." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
-                                <TextBlock Text="✔ Sin Perfiles de Rastreo: Flags como InterestCohort / Topics desactivados de raíz." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
+                                <TextBlock Text="✔ Almacenamiento Local: Historial, marcadores y bóveda viven únicamente en tu equipo." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
+                                <TextBlock Text="✔ Bajo Consumo en Reposo: Sin servicios propios de telemetría ejecutándose en segundo plano." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
+                                <TextBlock Text="✔ Control Transparente: Puedes desactivar sugerencias de búsqueda e íconos externos cuando quieras." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
+                                <TextBlock Text="✔ Sin Perfiles Publicitarios: APIs como InterestCohort / Topics y Privacy Sandbox desactivadas." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="⚖️ ¿Tiene alguna desventaja?" FontSize="14" FontWeight="Bold" Foreground="#F59E0B" Margin="0,0,0,8"/>
+                        <TextBlock Text="⚖️ Aspectos a tener en cuenta:" FontSize="14" FontWeight="Bold" Foreground="#F59E0B" Margin="0,0,0,8"/>
                         <Border Background="#15151D" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,20">
                             <StackPanel>
-                                <TextBlock Text="• No hay sincronización automática en la nube de Google (tus marcadores se guardan en tu propia laptop)." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
-                                <TextBlock Text="• Si ocurre un error, no se envían datos de diagnóstico a empresas externas." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
+                                <TextBlock Text="• No hay sincronización en la nube (tus marcadores y claves se guardan localmente en tu equipo)." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
+                                <TextBlock Text="• Si ocurre un error, no se envían reportes automáticos a servidores externos." FontSize="12" Foreground="#E4E4E7" Margin="0,3"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -492,20 +437,20 @@
                     <!-- SECCIÓN: NOTIFICACIONES WEB (Nivel Senior, sin solapamientos, cuotas y desbloqueo guiado) -->
                     <StackPanel x:Name="PanelNotifications" Visibility="Collapsed">
                         <TextBlock Text="Notificaciones Web y Permisos" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                        <TextBlock Text="Control granular de alertas por sitio, límites de volumen diario y protección contra saturación (0.0% CPU en reposo)" FontSize="12" Foreground="#8B8B96" Margin="0,0,0,18"/>
+                        <TextBlock Text="Control granular de alertas por sitio, límites de volumen diario y protección contra saturación" FontSize="12" Foreground="#A1A1AA" Margin="0,0,0,18"/>
 
                         <!-- Tarjeta 1: Política Global de Notificaciones -->
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="Política General de Notificaciones" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5" Margin="0,0,0,4"/>
-                                <TextBlock Text="Decide cómo debe actuar Lex Junior cuando un sitio web solicite enviarte alertas" FontSize="11" Foreground="#8B8B96" Margin="0,0,0,12"/>
+                                <TextBlock Text="Decide cómo debe actuar Lex Junior cuando un sitio web solicite enviarte alertas" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,12"/>
 
-                                <RadioButton x:Name="RbPolicyAsk" Content="Preguntar a los sitios (Predeterminado: chip discreto 🔔 en la barra)" 
-                                             Foreground="#E4E4E7" FontSize="12" Margin="0,0,0,8" Checked="PolicyRadio_Checked"/>
-                                <RadioButton x:Name="RbPolicyBlockAll" Content="Bloquear todas las solicitudes (Silencio absoluto: las páginas no pueden ni preguntar)" 
-                                             Foreground="#E4E4E7" FontSize="12" Margin="0,0,0,8" Checked="PolicyRadio_Checked"/>
-                                <RadioButton x:Name="RbPolicySilentAll" Content="Permitir solo en modo silencioso (Llegan al centro de avisos sin ventanas emergentes)" 
-                                             Foreground="#E4E4E7" FontSize="12" Margin="0,0,0,4" Checked="PolicyRadio_Checked"/>
+                                <RadioButton x:Name="RbPolicyAsk" Style="{StaticResource LexRadioButton}" Content="Preguntar a los sitios (Predeterminado: chip discreto 🔔 en la barra)" 
+                                             FontSize="12" Margin="0,0,0,8" Checked="PolicyRadio_Checked"/>
+                                <RadioButton x:Name="RbPolicyBlockAll" Style="{StaticResource LexRadioButton}" Content="Bloquear todas las solicitudes (Silencio absoluto: las páginas no pueden ni preguntar)" 
+                                             FontSize="12" Margin="0,0,0,8" Checked="PolicyRadio_Checked"/>
+                                <RadioButton x:Name="RbPolicySilentAll" Style="{StaticResource LexRadioButton}" Content="Permitir solo en modo silencioso (Llegan al centro de avisos sin ventanas emergentes)" 
+                                             FontSize="12" Margin="0,0,0,4" Checked="PolicyRadio_Checked"/>
                             </StackPanel>
                         </Border>
 
@@ -513,7 +458,7 @@
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="Límites Diarios y Cuotas Automáticas" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5" Margin="0,0,0,4"/>
-                                <TextBlock Text="Evita la saturación por páginas que envían demasiadas alertas al día. Las cuotas se evalúan al instante y descansan en 0% CPU" FontSize="11" Foreground="#8B8B96" Margin="0,0,0,14"/>
+                                <TextBlock Text="Evita la saturación por páginas que envían demasiadas alertas al día. Las cuotas se evalúan al instante cuando llega un aviso." FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,14"/>
 
                                 <!-- Límite Global Diario -->
                                 <Grid Margin="0,0,0,12">
@@ -523,7 +468,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                         <TextBlock Text="Límite diario acumulado (Todas las páginas combinadas)" FontSize="12" FontWeight="Medium" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Máximo total de alertas emergentes que recibirás al día" FontSize="10.5" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Máximo total de alertas emergentes que recibirás al día" FontSize="11" Foreground="#A1A1AA" Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <ComboBox x:Name="CmbGlobalDailyLimit" Grid.Column="1" Height="30" SelectionChanged="Limits_SelectionChanged" Style="{StaticResource LexComboBox}">
                                         <ComboBoxItem Content="Sin límite" Tag="0"/>
@@ -541,7 +486,7 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                                         <TextBlock Text="Límite predeterminado por sitio web" FontSize="12" FontWeight="Medium" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Tope diario para cualquier página que no tenga una regla personalizada" FontSize="10.5" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Tope diario para cualquier página que no tenga una regla personalizada" FontSize="11" Foreground="#A1A1AA" Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <ComboBox x:Name="CmbDefaultSiteLimit" Grid.Column="1" Height="30" SelectionChanged="Limits_SelectionChanged" Style="{StaticResource LexComboBox}">
                                         <ComboBoxItem Content="Sin límite" Tag="0"/>
@@ -556,14 +501,14 @@
                                 <CheckBox x:Name="ChkDiscardOlder24h" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click" Margin="0,0,0,10">
                                     <StackPanel>
                                         <TextBlock Text="Descartar notificaciones de más de 24 horas o días anteriores" FontWeight="Medium" FontSize="12" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Si una página envía una alerta desfasada o de una jornada previa, no te interrumpirá en pantalla" FontSize="10.5" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Si una página envía una alerta desfasada o de una jornada previa, no te interrumpirá en pantalla" FontSize="11" Foreground="#A1A1AA" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
 
                                 <CheckBox x:Name="ChkDndFullscreen" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
                                         <TextBlock Text="Modo No Molestar en Pantalla Completa o Juegos" FontWeight="Medium" FontSize="12" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Silencia automáticamente cualquier aviso si estás jugando, viendo películas o en presentación (Windows QUNS)" FontSize="10.5" Foreground="#71717A" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Silencia automáticamente cualquier aviso si estás jugando, viendo películas o en presentación (Windows QUNS)" FontSize="11" Foreground="#A1A1AA" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
@@ -575,7 +520,7 @@
                                 <Grid Margin="0,0,0,12">
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="Sitios Web y Permisos Guardados" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock x:Name="TxtNotificationSitesSummary" Text="Administra permisos, desbloquea páginas y personaliza reglas específicas" FontSize="11" Foreground="#8B8B96" Margin="0,2,0,0"/>
+                                        <TextBlock x:Name="TxtNotificationSitesSummary" Text="Administra permisos, desbloquea páginas y personaliza reglas específicas" FontSize="11" Foreground="#A1A1AA" Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <Button x:Name="BtnResetAllSites" Content="Restablecer todos" Style="{StaticResource LexGhostButton}"
                                             FontSize="11" Padding="8,4" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -598,8 +543,7 @@
                                     </StackPanel>
 
                                     <!-- Buscador de Dominio -->
-                                    <TextBox x:Name="TxtSearchSite" Grid.Column="1" Height="28" Margin="10,0,0,0" Padding="8,4"
-                                             Background="#121218" Foreground="#FFFFFF" BorderBrush="#2E2E3E"
+                                    <TextBox x:Name="TxtSearchSite" Grid.Column="1" Style="{StaticResource DarkInput}" Height="30" Margin="10,0,0,0" Padding="8,4"
                                              FontSize="11.5" VerticalAlignment="Center" TextChanged="TxtSearchSite_TextChanged"
                                              ToolTip="Filtrar por dominio o nombre de página"/>
                                 </Grid>
@@ -610,7 +554,7 @@
                                         <StackPanel>
                                             <StackPanel x:Name="PanelSitesContainer"/>
                                             <TextBlock x:Name="TxtNoSitesMessage" Text="No hay sitios web configurados en esta categoría."
-                                                       Foreground="#71717A" FontSize="11.5" HorizontalAlignment="Center" Margin="0,40" Visibility="Collapsed"/>
+                                                       Foreground="#A1A1AA" FontSize="11.5" HorizontalAlignment="Center" Margin="0,40" Visibility="Collapsed"/>
                                         </StackPanel>
                                     </ScrollViewer>
                                 </Border>

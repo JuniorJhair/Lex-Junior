@@ -2,26 +2,50 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using LexBrowser.Core;
+using LexBrowser.Core.Engine;
 
 namespace LexBrowser.UI.Views;
 
 public sealed class CredentialViewModel : INotifyPropertyChanged
 {
+    private static readonly SolidColorBrush BrushPasswordRevealed = CreateFrozenBrush(0x34, 0xD3, 0x99);
+    private static readonly SolidColorBrush BrushPasswordHidden = CreateFrozenBrush(0xA1, 0xA1, 0xAA);
+
+    private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
     public SavedCredential Model { get; }
     private bool _isRevealed;
+    private string? _revealedPassword;
     private int _secondsRemaining;
+    private ImageSource? _faviconImage;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public CredentialViewModel(SavedCredential model)
     {
-        Model = model;
+        // No conservar la contraseña en texto plano dentro del ViewModel mientras esté oculta (Auditoría C7)
+        Model = new SavedCredential
+        {
+            Id = model.Id,
+            OriginHost = model.OriginHost,
+            Domain = model.Domain,
+            Username = model.Username,
+            Password = string.Empty,
+            UpdatedAtUtc = model.UpdatedAtUtc
+        };
+        _faviconImage = FaviconService.GetCachedFavicon(model.Domain);
     }
 
     public string Id => Model.Id;
@@ -30,12 +54,31 @@ public sealed class CredentialViewModel : INotifyPropertyChanged
     public string UpdatedDisplay => Model.UpdatedDisplay;
     public string UsernameDisplay => string.IsNullOrWhiteSpace(Model.Username) ? "(Sin usuario especificado)" : Model.Username;
 
+    public ImageSource? FaviconImage
+    {
+        get => _faviconImage;
+        set
+        {
+            if (!ReferenceEquals(_faviconImage, value))
+            {
+                _faviconImage = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FaviconImage)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasFaviconImage)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasNoFaviconImage)));
+            }
+        }
+    }
+
+    public bool HasFaviconImage => _faviconImage != null;
+    public bool HasNoFaviconImage => _faviconImage == null;
+
     public bool IsRevealed
     {
         get => _isRevealed;
         set
         {
             _isRevealed = value;
+            _revealedPassword = value ? PasswordManager.Store.GetPasswordById(Id) : null;
             NotifyAll();
         }
     }
@@ -50,12 +93,12 @@ public sealed class CredentialViewModel : INotifyPropertyChanged
         }
     }
 
-    public string PasswordDisplay => _isRevealed ? Model.Password : "••••••••••••";
+    public string PasswordDisplay => _isRevealed && !string.IsNullOrEmpty(_revealedPassword)
+        ? _revealedPassword
+        : "••••••••••••";
     public string PeekButtonText => _isRevealed ? "🙈 Ocultar" : "👁️ Ver (5s)";
-    public string PeekStatusBadge => _isRevealed ? $"👁️ Visible por {_secondsRemaining}s (se ocultará sola)" : string.Empty;
-    public Brush PasswordBrush => _isRevealed
-        ? new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99))
-        : new SolidColorBrush(Color.FromRgb(0xA1, 0xA1, 0xAA));
+    public string PeekStatusBadge => _isRevealed ? $"👁️ {_secondsRemaining}s" : string.Empty;
+    public Brush PasswordBrush => _isRevealed ? BrushPasswordRevealed : BrushPasswordHidden;
 
     private void NotifyAll()
     {
@@ -137,10 +180,20 @@ public partial class PasswordVaultWindow : Window
             TxtSearchPlaceholder.Visibility = string.IsNullOrEmpty(filter) ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        foreach (var prev in _currentItems)
+        {
+            prev.IsRevealed = false;
+        }
         _currentItems.Clear();
+
         foreach (var cred in PasswordManager.Store.GetAllCredentials(filter))
         {
-            _currentItems.Add(new CredentialViewModel(cred));
+            var vm = new CredentialViewModel(cred);
+            _currentItems.Add(vm);
+            if (vm.FaviconImage == null && !string.IsNullOrWhiteSpace(vm.Domain))
+            {
+                _ = LoadFaviconForCredentialAsync(vm);
+            }
         }
 
         ItemsVaultCredentials.ItemsSource = null;
@@ -157,6 +210,22 @@ public partial class PasswordVaultWindow : Window
             ItemsExcludedDomains.ItemsSource = excluded;
             BorderExcludedDomainsSection.Visibility = excluded.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
+    }
+
+    private async Task LoadFaviconForCredentialAsync(CredentialViewModel vm)
+    {
+        try
+        {
+            var icon = await FaviconService.ResolveFaviconAsync("https://" + vm.Domain).ConfigureAwait(false);
+            if (icon != null)
+            {
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    vm.FaviconImage = icon;
+                }));
+            }
+        }
+        catch { }
     }
 
     private void ShowInternalBanner(string message)
@@ -183,7 +252,6 @@ public partial class PasswordVaultWindow : Window
         bool wantsEnabled = ChkEnablePasswordManager.IsChecked == true;
         var s = SettingsManager.Current;
 
-        // Si tiene PIN/contraseña configurado, pedir confirmación al activar o desactivar
         if (PasswordManager.HasMasterPasswordConfigured())
         {
             string actionDesc = wantsEnabled
@@ -371,7 +439,14 @@ public partial class PasswordVaultWindow : Window
         if (!EnsureAuthorizedForSensitiveAction($"Confirma tu PIN para copiar la contraseña de {vm.Domain}"))
             return;
 
-        ClipboardShieldActivated?.Invoke(vm.Model.Password);
+        string? secret = PasswordManager.Store.GetPasswordById(vm.Id);
+        if (string.IsNullOrEmpty(secret))
+        {
+            ShowInternalBanner("⚠️ No se pudo recuperar la contraseña solicitada.");
+            return;
+        }
+
+        ClipboardShieldActivated?.Invoke(secret);
         ShowInternalBanner($"📋 Contraseña de {vm.Domain} copiada — 🛡️ Escudo de Portapapeles activo: se borrará sola del portapapeles en 20 segundos.");
     }
 
@@ -382,6 +457,7 @@ public partial class PasswordVaultWindow : Window
         if (!EnsureAuthorizedForSensitiveAction($"Confirma tu PIN para eliminar la contraseña de {vm.Domain}"))
             return;
 
+        vm.IsRevealed = false;
         PasswordManager.Store.DeleteCredential(vm.Id);
         RefreshCredentialsList();
         ShowInternalBanner($"🗑️ Contraseña de {vm.Domain} eliminada.");
@@ -408,7 +484,6 @@ public partial class PasswordVaultWindow : Window
     {
         if (_isInitializing) return;
 
-        // Determinar qué opción fue seleccionada
         string newMode = "SmartSession";
         if (RbLockAlways.IsChecked == true) newMode = "AlwaysOnStartup";
         else if (RbLockVaultOnly.IsChecked == true) newMode = "VaultOnly";
@@ -416,7 +491,6 @@ public partial class PasswordVaultWindow : Window
 
         string currentMode = SettingsManager.Current.BrowserLockMode;
 
-        // Si ya está en ese modo, solo actualizar la visibilidad y salir
         if (newMode == currentMode)
         {
             UpdatePinConfigPanelVisibility();
@@ -425,12 +499,10 @@ public partial class PasswordVaultWindow : Window
 
         bool hasPin = PasswordManager.HasMasterPasswordConfigured();
 
-        // CASO 1: El usuario ya tiene una contraseña configurada
         if (hasPin)
         {
             if (newMode == "None")
             {
-                // Quiere desactivar la contraseña
                 var pinDialog = new PinPromptDialog("Confirma tu PIN actual para desactivar el uso de contraseña en el navegador")
                 {
                     Owner = this
@@ -449,7 +521,6 @@ public partial class PasswordVaultWindow : Window
                 }
                 else
                 {
-                    // Canceló o falló: restaurar selección previa
                     _isInitializing = true;
                     LoadStateIntoUI();
                     _isInitializing = false;
@@ -457,7 +528,6 @@ public partial class PasswordVaultWindow : Window
             }
             else
             {
-                // Cambiar entre opciones con PIN (1: Modo Inteligente, 2: Siempre, 3: Solo Bóveda)
                 string modeTitle = newMode switch
                 {
                     "SmartSession" => "Modo Inteligente",
@@ -484,7 +554,6 @@ public partial class PasswordVaultWindow : Window
                 }
                 else
                 {
-                    // Canceló o falló: restaurar selección previa
                     _isInitializing = true;
                     LoadStateIntoUI();
                     _isInitializing = false;
@@ -493,8 +562,6 @@ public partial class PasswordVaultWindow : Window
         }
         else
         {
-            // CASO 2: No tiene contraseña configurada todavía (estaba en None)
-            // Al hacer clic en 1, 2 o 3, se muestra el formulario para configurar su nuevo PIN
             UpdatePinConfigPanelVisibility();
             if (newMode != "None" && BorderPinForm != null)
             {
@@ -578,7 +645,6 @@ public partial class PasswordVaultWindow : Window
             return;
         }
 
-        // Si ya tenía una contraseña configurada, verificarla antes de cambiarla
         if (PasswordManager.HasMasterPasswordConfigured() && !EnsureAuthorizedForSensitiveAction("Confirma tu PIN actual para modificar la configuración de bloqueo"))
         {
             return;
@@ -587,7 +653,6 @@ public partial class PasswordVaultWindow : Window
         string pin1 = PwdMasterPin.Password;
         string pin2 = PwdMasterPinConfirm.Password;
 
-        // Si dejó los campos en blanco pero ya tenía contraseña configurada, solo actualizar el modo de bloqueo
         if (string.IsNullOrEmpty(pin1) && string.IsNullOrEmpty(pin2) && PasswordManager.HasMasterPasswordConfigured())
         {
             SettingsManager.Current.BrowserLockMode = selectedMode;
@@ -596,6 +661,7 @@ public partial class PasswordVaultWindow : Window
                 SettingsManager.Current.LastUnlockedBootId = PasswordManager.GetCurrentWindowsBootId();
             }
             SettingsManager.Save();
+            UpdatePinConfigPanelVisibility();
             MessageBox.Show(
                 "El modo de bloqueo del navegador se actualizó correctamente conservando tu PIN actual.",
                 "Modo Actualizado — Lex Junior",
@@ -638,6 +704,7 @@ public partial class PasswordVaultWindow : Window
 
         PwdMasterPin.Password = string.Empty;
         PwdMasterPinConfirm.Password = string.Empty;
+        UpdatePinConfigPanelVisibility();
     }
 
     private void BtnCopyRecoveryCode_Click(object sender, RoutedEventArgs e)
@@ -667,6 +734,10 @@ public partial class PasswordVaultWindow : Window
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
+        foreach (var item in _currentItems)
+        {
+            item.IsRevealed = false;
+        }
         _peekCountdownTimer.Stop();
         _bannerTimer.Stop();
         Close();
@@ -674,22 +745,6 @@ public partial class PasswordVaultWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // 1. Si el evento proviene de un ComboBox abierto con scroll interno, desplazar el combo suavemente a 28 px
-        if (GlobalScrollBehavior.TryScrollOpenComboBox(e.OriginalSource as DependencyObject, e.Delta))
-        {
-            e.Handled = true;
-            return;
-        }
-
-        // 2. Si el puntero está fuera, o el combo no tiene scroll interno: desplazar la ventana principal suavemente a 28 px
-        e.Handled = true;
-        if (sender is ScrollViewer scrollViewer)
-        {
-            double deltaUnits = e.Delta / 120.0;
-            double scrollPixels = deltaUnits * 28.0;
-            double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
-            scrollViewer.ScrollToVerticalOffset(newOffset);
-        }
+        GlobalScrollBehavior.HandleSmoothScrollViewerMouseWheel(sender, e, 28.0);
     }
 }
-

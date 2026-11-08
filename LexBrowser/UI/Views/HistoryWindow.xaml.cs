@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,8 +14,21 @@ namespace LexBrowser.UI.Views;
 
 public partial class HistoryWindow : Window
 {
+    private static readonly SolidColorBrush BrushStatusActiveBg = CreateFrozenBrush(30, 58, 138);
+    private static readonly SolidColorBrush BrushStatusActiveFg = CreateFrozenBrush(147, 197, 253);
+    private static readonly SolidColorBrush BrushStatusDisabledBg = CreateFrozenBrush(76, 29, 39);
+    private static readonly SolidColorBrush BrushStatusDisabledFg = CreateFrozenBrush(253, 164, 175);
+
+    private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
     private readonly CoreWebView2? _core;
     private bool _isInitialized = false;
+    private bool _suppressFilterEvents = false;
     private string? _currentDomainFilter = null;
     private DateTime? _fromDateFilter = null;
     private DateTime? _toDateFilter = null;
@@ -22,6 +36,9 @@ public partial class HistoryWindow : Window
     private int _pageSize = 50;
     private int _totalPages = 1;
     private List<HistoryEntry> _allFilteredEntries = new();
+
+    private CancellationTokenSource? _searchDebounceCts;
+    private int _refreshVersion = 0;
 
     public event Action<string>? UrlSelected;
 
@@ -32,13 +49,18 @@ public partial class HistoryWindow : Window
         _core = core;
         _isInitialized = true;
         Loaded += HistoryWindow_Loaded;
+        Closed += (_, _) =>
+        {
+            _searchDebounceCts?.Cancel();
+            _searchDebounceCts?.Dispose();
+        };
     }
 
-    private void HistoryWindow_Loaded(object sender, RoutedEventArgs e)
+    private async void HistoryWindow_Loaded(object sender, RoutedEventArgs e)
     {
         UpdateHistoryMasterStatusUI();
         LoadDomainFilters();
-        RefreshHistoryList();
+        await RefreshHistoryListAsync();
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -70,27 +92,26 @@ public partial class HistoryWindow : Window
 
         if (isEnabled)
         {
-            BadgeHistoryStatus.Background = new SolidColorBrush(Color.FromRgb(30, 58, 138)); // Blue
+            BadgeHistoryStatus.Background = BrushStatusActiveBg;
             TxtHistoryStatus.Text = "ACTIVO";
-            TxtHistoryStatus.Foreground = new SolidColorBrush(Color.FromRgb(147, 197, 253));
+            TxtHistoryStatus.Foreground = BrushStatusActiveFg;
         }
         else
         {
-            BadgeHistoryStatus.Background = new SolidColorBrush(Color.FromRgb(76, 29, 39)); // Rose/Dark red
+            BadgeHistoryStatus.Background = BrushStatusDisabledBg;
             TxtHistoryStatus.Text = "DESACTIVADO (0 ESPACIO)";
-            TxtHistoryStatus.Foreground = new SolidColorBrush(Color.FromRgb(253, 164, 175));
+            TxtHistoryStatus.Foreground = BrushStatusDisabledFg;
         }
 
         TxtStorageInfo.Text = $"Espacio en disco: {HistoryManager.GetHistoryFileSizeFormatted()} ({HistoryManager.GetTotalCount()} visitas)";
     }
 
-    private void ToggleHistoryActive_Click(object sender, RoutedEventArgs e)
+    private async void ToggleHistoryActive_Click(object sender, RoutedEventArgs e)
     {
         bool requestingActive = ToggleHistoryActive.IsChecked ?? true;
 
         if (!requestingActive)
         {
-            // El usuario desea desactivar el historial
             int total = HistoryManager.GetTotalCount();
             if (total > 0)
             {
@@ -105,7 +126,7 @@ public partial class HistoryWindow : Window
                         SettingsManager.Current.EnableHistory = false;
                         SettingsManager.Save();
                         LoadDomainFilters();
-                        RefreshHistoryList();
+                        await RefreshHistoryListAsync();
                     }
                     else if (dialog.Result == HistoryDisableChoice.KeepAndDisable)
                     {
@@ -115,7 +136,6 @@ public partial class HistoryWindow : Window
                 }
                 else
                 {
-                    // Canceló: revertir el estado del interruptor
                     ToggleHistoryActive.IsChecked = true;
                     return;
                 }
@@ -138,7 +158,7 @@ public partial class HistoryWindow : Window
     // ─────────────────────────────────────────────────────────────────
     // PESTAÑAS DE MODO (EXPLORADOR vs LIMPIEZA AVANZADA)
     // ─────────────────────────────────────────────────────────────────
-    private void ModeTab_Checked(object sender, RoutedEventArgs e)
+    private async void ModeTab_Checked(object sender, RoutedEventArgs e)
     {
         if (!_isInitialized || ViewExplorer == null || ViewClearAdvanced == null) return;
 
@@ -146,7 +166,7 @@ public partial class HistoryWindow : Window
         {
             ViewExplorer.Visibility = Visibility.Visible;
             ViewClearAdvanced.Visibility = Visibility.Collapsed;
-            RefreshHistoryList();
+            await RefreshHistoryListAsync();
         }
         else if (TabClearAdvanced.IsChecked == true)
         {
@@ -163,45 +183,63 @@ public partial class HistoryWindow : Window
     {
         if (!_isInitialized || CboDomainFilter == null || CboScopeTargetDomain == null || DomainChipsPanel == null) return;
 
-        var domains = HistoryManager.GetDistinctDomains();
+        _suppressFilterEvents = true;
+        try
+        {
+            var domains = HistoryManager.GetDistinctDomains();
+            string? previousDomain = _currentDomainFilter;
 
-        // Combo en el explorador
-        CboDomainFilter.Items.Clear();
-        CboDomainFilter.Items.Add("Todos los dominios");
-        foreach (var d in domains)
-        {
-            CboDomainFilter.Items.Add(d.DisplayText);
-        }
-        CboDomainFilter.SelectedIndex = 0;
-
-        // Combo en la limpieza avanzada
-        CboScopeTargetDomain.Items.Clear();
-        foreach (var d in domains)
-        {
-            CboScopeTargetDomain.Items.Add(d.Domain);
-        }
-        if (CboScopeTargetDomain.Items.Count > 0)
-        {
-            CboScopeTargetDomain.SelectedIndex = 0;
-        }
-
-        // Chips rápidos
-        DomainChipsPanel.Children.Clear();
-        foreach (var d in domains.Take(6))
-        {
-            var btn = new Button
+            // Combo en el explorador
+            CboDomainFilter.Items.Clear();
+            CboDomainFilter.Items.Add("Todos los dominios");
+            int selectedIndex = 0;
+            int idx = 1;
+            foreach (var d in domains)
             {
-                Content = $"{d.Domain} ({d.Count})",
-                Style = (Style)FindResource("ActionBtn"),
-                Padding = new Thickness(8, 2, 8, 2),
-                Margin = new Thickness(0, 0, 6, 0),
-                Tag = d.Domain
-            };
-            btn.Click += (s, args) =>
+                CboDomainFilter.Items.Add(d.DisplayText);
+                if (!string.IsNullOrEmpty(previousDomain) &&
+                    d.Domain.Equals(previousDomain, StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedIndex = idx;
+                }
+                idx++;
+            }
+            CboDomainFilter.SelectedIndex = selectedIndex;
+            if (selectedIndex == 0) _currentDomainFilter = null;
+
+            // Combo en la limpieza avanzada
+            CboScopeTargetDomain.Items.Clear();
+            foreach (var d in domains)
             {
-                SelectDomainInFilter(d.Domain);
-            };
-            DomainChipsPanel.Children.Add(btn);
+                CboScopeTargetDomain.Items.Add(d.Domain);
+            }
+            if (CboScopeTargetDomain.Items.Count > 0)
+            {
+                CboScopeTargetDomain.SelectedIndex = 0;
+            }
+
+            // Chips rápidos
+            DomainChipsPanel.Children.Clear();
+            foreach (var d in domains.Take(6))
+            {
+                var btn = new Button
+                {
+                    Content = $"{d.Domain} ({d.Count})",
+                    Style = (Style)FindResource("ActionBtn"),
+                    Padding = new Thickness(8, 2, 8, 2),
+                    Margin = new Thickness(0, 0, 6, 0),
+                    Tag = d.Domain
+                };
+                btn.Click += (s, args) =>
+                {
+                    SelectDomainInFilter(d.Domain);
+                };
+                DomainChipsPanel.Children.Add(btn);
+            }
+        }
+        finally
+        {
+            _suppressFilterEvents = false;
         }
     }
 
@@ -220,16 +258,30 @@ public partial class HistoryWindow : Window
         }
     }
 
-    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+    private async void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (!_isInitialized) return;
-        _currentPage = 1;
-        RefreshHistoryList();
+
+        _searchDebounceCts?.Cancel();
+        _searchDebounceCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _searchDebounceCts = cts;
+
+        try
+        {
+            await Task.Delay(180, cts.Token);
+            if (cts.IsCancellationRequested) return;
+            _currentPage = 1;
+            await RefreshHistoryListAsync(cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
-    private void CboDomainFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void CboDomainFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_isInitialized || CboDomainFilter == null || CboDomainFilter.SelectedItem == null) return;
+        if (!_isInitialized || _suppressFilterEvents || CboDomainFilter == null || CboDomainFilter.SelectedItem == null) return;
         string sel = CboDomainFilter.SelectedItem.ToString() ?? "";
         if (sel == "Todos los dominios" || string.IsNullOrWhiteSpace(sel))
         {
@@ -237,17 +289,16 @@ public partial class HistoryWindow : Window
         }
         else
         {
-            // Extraer dominio antes del paréntesis (ej. "youtube.com (15)")
             int idx = sel.IndexOf('(');
             _currentDomainFilter = (idx > 0 ? sel.Substring(0, idx) : sel).Trim();
         }
         _currentPage = 1;
-        RefreshHistoryList();
+        await RefreshHistoryListAsync();
     }
 
-    private void CboDateFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void CboDateFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_isInitialized || CboDateFilter == null) return;
+        if (!_isInitialized || _suppressFilterEvents || CboDateFilter == null) return;
 
         if (CboDateFilter.SelectedItem is ComboBoxItem item)
         {
@@ -278,22 +329,33 @@ public partial class HistoryWindow : Window
                     break;
             }
             _currentPage = 1;
-            RefreshHistoryList();
+            await RefreshHistoryListAsync();
         }
     }
 
-    private void RefreshHistoryList()
+    private async Task RefreshHistoryListAsync(CancellationToken ct = default)
     {
         if (!_isInitialized || LstHistory == null || TxtHistoryCount == null) return;
 
+        int myVersion = Interlocked.Increment(ref _refreshVersion);
         string? searchText = string.IsNullOrWhiteSpace(TxtSearch?.Text) ? null : TxtSearch.Text;
-        _allFilteredEntries = HistoryManager.GetEntries(searchText, _currentDomainFilter, _fromDateFilter, _toDateFilter);
+        string? domainFilter = _currentDomainFilter;
+        DateTime? fromDate = _fromDateFilter;
+        DateTime? toDate = _toDateFilter;
+        int pageSize = _pageSize;
 
-        _totalPages = Math.Max(1, (int)Math.Ceiling(_allFilteredEntries.Count / (double)_pageSize));
+        var filtered = await Task.Run(
+            () => HistoryManager.GetEntries(searchText, domainFilter, fromDate, toDate),
+            ct);
+
+        if (ct.IsCancellationRequested || myVersion != _refreshVersion) return;
+
+        _allFilteredEntries = filtered;
+        _totalPages = Math.Max(1, (int)Math.Ceiling(_allFilteredEntries.Count / (double)pageSize));
         if (_currentPage > _totalPages) _currentPage = _totalPages;
         if (_currentPage < 1) _currentPage = 1;
 
-        var pageEntries = _allFilteredEntries.Skip((_currentPage - 1) * _pageSize).Take(_pageSize).ToList();
+        var pageEntries = _allFilteredEntries.Skip((_currentPage - 1) * pageSize).Take(pageSize).ToList();
         LstHistory.ItemsSource = pageEntries;
 
         int totalCount = HistoryManager.GetTotalCount();
@@ -305,36 +367,34 @@ public partial class HistoryWindow : Window
         }
         if (BtnPrevPage != null) BtnPrevPage.IsEnabled = _currentPage > 1;
         if (BtnNextPage != null) BtnNextPage.IsEnabled = _currentPage < _totalPages;
-
-        UpdateHistoryMasterStatusUI();
     }
 
-    private void BtnPrevPage_Click(object sender, RoutedEventArgs e)
+    private async void BtnPrevPage_Click(object sender, RoutedEventArgs e)
     {
         if (_currentPage > 1)
         {
             _currentPage--;
-            RefreshHistoryList();
+            await RefreshHistoryListAsync();
         }
     }
 
-    private void BtnNextPage_Click(object sender, RoutedEventArgs e)
+    private async void BtnNextPage_Click(object sender, RoutedEventArgs e)
     {
         if (_currentPage < _totalPages)
         {
             _currentPage++;
-            RefreshHistoryList();
+            await RefreshHistoryListAsync();
         }
     }
 
-    private void CmbPageSize_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void CmbPageSize_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_isInitialized || CmbPageSize == null) return;
         if (CmbPageSize.SelectedItem is ComboBoxItem item && int.TryParse(item.Content?.ToString(), out int size))
         {
             _pageSize = size;
             _currentPage = 1;
-            RefreshHistoryList();
+            await RefreshHistoryListAsync();
         }
     }
 
@@ -343,8 +403,25 @@ public partial class HistoryWindow : Window
     // ─────────────────────────────────────────────────────────────────
     private void HistoryRow_Click(object sender, MouseButtonEventArgs e)
     {
-        if (sender is FrameworkElement fe && fe.DataContext is HistoryEntry entry && !string.IsNullOrWhiteSpace(entry.Url))
+        if (sender is FrameworkElement fe && fe.DataContext is HistoryEntry entry)
         {
+            LstHistory.SelectedItem = entry;
+
+            // Un clic selecciona la fila (para usar "Eliminar día seleccionado"); doble clic navega y cierra
+            if (e.ClickCount == 2 && !string.IsNullOrWhiteSpace(entry.Url))
+            {
+                e.Handled = true;
+                UrlSelected?.Invoke(entry.Url);
+                Close();
+            }
+        }
+    }
+
+    private void LstHistory_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && LstHistory.SelectedItem is HistoryEntry entry && !string.IsNullOrWhiteSpace(entry.Url))
+        {
+            e.Handled = true;
             UrlSelected?.Invoke(entry.Url);
             Close();
         }
@@ -352,20 +429,21 @@ public partial class HistoryWindow : Window
 
     private void HistoryTitle_Click(object sender, MouseButtonEventArgs e)
     {
-        if (sender is TextBlock tb && tb.DataContext is HistoryEntry entry)
+        if (sender is TextBlock tb && tb.DataContext is HistoryEntry entry && !string.IsNullOrWhiteSpace(entry.Url))
         {
             UrlSelected?.Invoke(entry.Url);
             Close();
         }
     }
 
-    private void BtnDeleteSingle_Click(object sender, RoutedEventArgs e)
+    private async void BtnDeleteSingle_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
         if (sender is Button btn && btn.DataContext is HistoryEntry entry)
         {
             HistoryManager.DeleteEntry(entry.Id);
-            RefreshHistoryList();
+            UpdateHistoryMasterStatusUI();
+            await RefreshHistoryListAsync();
         }
     }
 
@@ -384,16 +462,29 @@ public partial class HistoryWindow : Window
 
             if (result == MessageBoxResult.Yes)
             {
-                await CleanSpecificWebsiteDataAsync(domain);
+                var (fullSuccess, errorDetail) = await CleanSpecificWebsiteDataAsync(domain);
                 HistoryManager.DeleteByDomain(domain);
+                UpdateHistoryMasterStatusUI();
                 LoadDomainFilters();
-                RefreshHistoryList();
-                MessageBox.Show($"Se han eliminado todos los datos de '{domain}'.", "Sitio Limpiado", MessageBoxButton.OK, MessageBoxImage.Information);
+                await RefreshHistoryListAsync();
+
+                if (fullSuccess)
+                {
+                    MessageBox.Show($"Se han eliminado todos los datos de '{domain}'.", "Sitio Limpiado", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"Se eliminó el historial de '{domain}', pero la limpieza de sesiones/caché del motor fue parcial:\n{errorDetail}",
+                        "Limpieza Parcial",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
             }
         }
     }
 
-    private void BtnDeleteDay_Click(object sender, RoutedEventArgs e)
+    private async void BtnDeleteDay_Click(object sender, RoutedEventArgs e)
     {
         if (LstHistory.SelectedItem is HistoryEntry selected)
         {
@@ -407,17 +498,18 @@ public partial class HistoryWindow : Window
             if (result == MessageBoxResult.Yes)
             {
                 HistoryManager.DeleteByDay(day);
+                UpdateHistoryMasterStatusUI();
                 LoadDomainFilters();
-                RefreshHistoryList();
+                await RefreshHistoryListAsync();
             }
         }
         else
         {
-            MessageBox.Show("Por favor selecciona una entrada en la lista para identificar el día que deseas borrar.", "Selección Requerida", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Por favor haz clic sobre una entrada en la lista para seleccionar el día que deseas borrar.", "Selección Requerida", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 
-    private void BtnClearAll_Click(object sender, RoutedEventArgs e)
+    private async void BtnClearAll_Click(object sender, RoutedEventArgs e)
     {
         var result = MessageBox.Show(
             "¿Estás seguro de que deseas vaciar TODO el historial de navegación?\nEsta acción no se puede deshacer.",
@@ -428,8 +520,9 @@ public partial class HistoryWindow : Window
         if (result == MessageBoxResult.Yes)
         {
             HistoryManager.ClearAll();
+            UpdateHistoryMasterStatusUI();
             LoadDomainFilters();
-            RefreshHistoryList();
+            await RefreshHistoryListAsync();
         }
     }
 
@@ -500,18 +593,19 @@ public partial class HistoryWindow : Window
                 }
             }
 
+            string? partialWarning = null;
+
             // 2. Limpieza en CoreWebView2 Profile
             if (_core != null)
             {
                 if (!string.IsNullOrWhiteSpace(targetDomain))
                 {
-                    // Limpieza específica para el sitio web
-                    await CleanSpecificWebsiteDataAsync(targetDomain, clearCookies, clearCache, clearLocalStorage);
+                    var (ok, err) = await CleanSpecificWebsiteDataAsync(targetDomain, clearCookies, clearCache, clearLocalStorage);
+                    if (!ok) partialWarning = err;
                 }
                 else
                 {
-                    // Limpieza global según los tipos seleccionados
-                    var kinds = CoreWebView2BrowsingDataKinds.FileSystems; // base flag
+                    var kinds = CoreWebView2BrowsingDataKinds.FileSystems;
 
                     if (clearCookies) kinds |= CoreWebView2BrowsingDataKinds.Cookies;
                     if (clearCache) kinds |= CoreWebView2BrowsingDataKinds.DiskCache | CoreWebView2BrowsingDataKinds.CacheStorage;
@@ -529,18 +623,34 @@ public partial class HistoryWindow : Window
                     }
                 }
             }
+            else if (clearCookies || clearCache || clearLocalStorage || clearPasswords)
+            {
+                partialWarning = "No hay una pestaña activa del motor WebView2 para limpiar cookies o caché en este momento.";
+            }
 
+            UpdateHistoryMasterStatusUI();
             LoadDomainFilters();
-            RefreshHistoryList();
+            await RefreshHistoryListAsync();
 
-            MessageBox.Show(
-                scopeIsSite
-                    ? $"Se completó la limpieza de '{targetDomain}' exitosamente."
-                    : "Se completó la limpieza avanzada de datos de navegación exitosamente.",
-                "Limpieza Completada",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information
-            );
+            if (!string.IsNullOrEmpty(partialWarning))
+            {
+                MessageBox.Show(
+                    $"Se completó la limpieza del historial, pero con una advertencia:\n{partialWarning}",
+                    "Limpieza Parcial",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            else
+            {
+                MessageBox.Show(
+                    scopeIsSite
+                        ? $"Se completó la limpieza de '{targetDomain}' exitosamente."
+                        : "Se completó la limpieza avanzada de datos de navegación exitosamente.",
+                    "Limpieza Completada",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information
+                );
+            }
 
             TabExplore.IsChecked = true;
         }
@@ -592,9 +702,15 @@ public partial class HistoryWindow : Window
         return DateTime.Now.AddHours(-1);
     }
 
-    private async Task CleanSpecificWebsiteDataAsync(string domain, bool cookies = true, bool cache = true, bool storage = true)
+    private async Task<(bool FullSuccess, string? ErrorMessage)> CleanSpecificWebsiteDataAsync(
+        string domain, bool cookies = true, bool cache = true, bool storage = true)
     {
-        if (_core == null) return;
+        if (_core == null)
+        {
+            return (false, "El motor del navegador no está disponible para limpiar cookies o almacenamiento del sitio.");
+        }
+
+        var errors = new List<string>();
 
         try
         {
@@ -604,20 +720,26 @@ public partial class HistoryWindow : Window
             // 1. Borrar cookies asociadas al dominio (y sus subdominios)
             if (cookies && _core.CookieManager != null)
             {
-                var allCookies = await _core.CookieManager.GetCookiesAsync("");
-                foreach (var c in allCookies)
+                try
                 {
-                    string cookieDomain = c.Domain.ToLowerInvariant().TrimStart('.');
-                    if (cookieDomain.Equals(cleanDomain, StringComparison.OrdinalIgnoreCase) ||
-                        cookieDomain.EndsWith("." + cleanDomain, StringComparison.OrdinalIgnoreCase))
+                    var allCookies = await _core.CookieManager.GetCookiesAsync("");
+                    foreach (var c in allCookies)
                     {
-                        _core.CookieManager.DeleteCookie(c);
+                        string cookieDomain = c.Domain.ToLowerInvariant().TrimStart('.');
+                        if (cookieDomain.Equals(cleanDomain, StringComparison.OrdinalIgnoreCase) ||
+                            cookieDomain.EndsWith("." + cleanDomain, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _core.CookieManager.DeleteCookie(c);
+                        }
                     }
+                }
+                catch (Exception cookieEx)
+                {
+                    errors.Add($"Cookies: {cookieEx.Message}");
                 }
             }
 
             // 2. Limpieza aislada por origen (Storage.clearDataForOrigin via CDP)
-            // Evita borrar LocalStorage o IndexedDB de otros sitios web del perfil global
             if (cache || storage || cookies)
             {
                 var storageTypes = new List<string>();
@@ -646,6 +768,8 @@ public partial class HistoryWindow : Window
                     $"http://www.{cleanDomain}"
                 };
 
+                int cdpSuccessCount = 0;
+                string? lastCdpError = null;
                 foreach (string origin in origins)
                 {
                     try
@@ -656,54 +780,42 @@ public partial class HistoryWindow : Window
                             storageTypes = typesCsv
                         });
                         await _core.CallDevToolsProtocolMethodAsync("Storage.clearDataForOrigin", cdpParams);
+                        cdpSuccessCount++;
                     }
-                    catch { }
+                    catch (Exception cdpEx)
+                    {
+                        lastCdpError = cdpEx.Message;
+                    }
+                }
+
+                if (cdpSuccessCount == 0 && !string.IsNullOrEmpty(lastCdpError))
+                {
+                    errors.Add($"Almacenamiento de origen: {lastCdpError}");
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            errors.Add(ex.Message);
+        }
+
+        return errors.Count == 0
+            ? (true, null)
+            : (false, string.Join(" | ", errors));
     }
 
     private void LstHistory_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // 1. Si el evento proviene de un ComboBox abierto con scroll interno, desplazar el combo suavemente a 28 px
-        if (GlobalScrollBehavior.TryScrollOpenComboBox(e.OriginalSource as DependencyObject, e.Delta))
-        {
-            e.Handled = true;
-            return;
-        }
-
-        e.Handled = true;
         var scrollViewer = FindVisualChild<ScrollViewer>(LstHistory);
-        if (scrollViewer == null) return;
-
-        // Amortiguación precisa del scroll: 28 píxeles por muesca estándar de 120 delta
-        // Evita saltos bruscos y proporciona un deslizamiento suave tanto en ratón como en trackpads de laptop
-        double deltaUnits = e.Delta / 120.0;
-        double scrollPixels = deltaUnits * 28.0;
-        double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
-        scrollViewer.ScrollToVerticalOffset(newOffset);
+        if (scrollViewer != null)
+        {
+            GlobalScrollBehavior.HandleSmoothScrollViewerMouseWheel(scrollViewer, e, 28.0);
+        }
     }
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // 1. Si el evento proviene de un ComboBox abierto con scroll interno, desplazar el combo suavemente a 28 px
-        if (GlobalScrollBehavior.TryScrollOpenComboBox(e.OriginalSource as DependencyObject, e.Delta))
-        {
-            e.Handled = true;
-            return;
-        }
-
-        // 2. Si el puntero está fuera, o el combo tiene pocas opciones y no necesita scroll:
-        //    desplazar la ventana principal suavemente manteniendo el desplegable visible mientras siga en pantalla
-        e.Handled = true;
-        if (sender is ScrollViewer scrollViewer)
-        {
-            double deltaUnits = e.Delta / 120.0;
-            double scrollPixels = deltaUnits * 28.0;
-            double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
-            scrollViewer.ScrollToVerticalOffset(newOffset);
-        }
+        GlobalScrollBehavior.HandleSmoothScrollViewerMouseWheel(sender, e, 28.0);
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject

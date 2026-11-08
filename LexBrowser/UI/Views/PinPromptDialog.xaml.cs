@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using LexBrowser.Core;
@@ -7,15 +8,13 @@ namespace LexBrowser.UI.Views;
 
 public partial class PinPromptDialog : Window
 {
-    // Último PIN que ya fue rechazado (por el auto-desbloqueo o por Enter).
-    // Evita que el mismo intento fallido cuente dos veces (auto-verificación + pulsar Enter).
     private string? _lastRejectedCandidate;
+    private bool _isVerifying;
 
     public PinPromptDialog(string? actionDescription = null)
     {
         InitializeComponent();
 
-        // Límite responsivo: máximo 85% del área de trabajo de la pantalla actual
         MaxHeight = SystemParameters.WorkArea.Height * 0.85;
         MinHeight = 360;
 
@@ -34,7 +33,6 @@ public partial class PinPromptDialog : Window
         return $"{(int)Math.Ceiling(wait.TotalSeconds)} s";
     }
 
-    /// <summary>Muestra "incorrecto" o, si ya hay bloqueo por intentos, cuánto falta para reintentar.</summary>
     private void ShowPinFailure()
     {
         TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
@@ -46,36 +44,15 @@ public partial class PinPromptDialog : Window
         PwdPinInput.Focus();
     }
 
-    private void PwdPinInput_PasswordChanged(object sender, RoutedEventArgs e)
+    private async void PwdPinInput_PasswordChanged(object sender, RoutedEventArgs e)
     {
         TxtPinError.Visibility = Visibility.Collapsed;
         string current = PwdPinInput.Password;
         int targetLen = SettingsManager.Current.MasterPasswordLength;
 
-        // Auto-desbloqueo instantáneo al llegar al número de caracteres configurados (ej. 6 dígitos)
         if (targetLen > 0 && current.Length == targetLen)
         {
-            // Durante un bloqueo no se verifica nada (ni se suma ningún intento)
-            if (PasswordManager.IsPinLockedOut)
-            {
-                ShowPinFailure();
-                return;
-            }
-
-            if (current == _lastRejectedCandidate)
-                return;
-
-            if (PasswordManager.VerifyMasterPassword(current))
-            {
-                PasswordManager.MarkSessionUnlocked();
-                DialogResult = true;
-                Close();
-            }
-            else
-            {
-                _lastRejectedCandidate = current;
-                ShowPinFailure();
-            }
+            await VerifyPinCandidateAsync(current, isAutoTrigger: true);
         }
     }
 
@@ -91,9 +68,14 @@ public partial class PinPromptDialog : Window
         }
     }
 
-    private void BtnConfirmPin_Click(object sender, RoutedEventArgs e)
+    private async void BtnConfirmPin_Click(object sender, RoutedEventArgs e)
     {
-        string candidate = PwdPinInput.Password;
+        await VerifyPinCandidateAsync(PwdPinInput.Password, isAutoTrigger: false);
+    }
+
+    private async Task VerifyPinCandidateAsync(string candidate, bool isAutoTrigger)
+    {
+        if (_isVerifying) return;
 
         if (PasswordManager.IsPinLockedOut)
         {
@@ -101,23 +83,33 @@ public partial class PinPromptDialog : Window
             return;
         }
 
-        // Ese mismo PIN ya se probó y falló (auto-desbloqueo): no volver a contarlo como otro intento.
         if (candidate == _lastRejectedCandidate)
         {
-            ShowPinFailure();
+            if (!isAutoTrigger) ShowPinFailure();
             return;
         }
 
-        if (PasswordManager.VerifyMasterPassword(candidate))
+        _isVerifying = true;
+        try
         {
-            PasswordManager.MarkSessionUnlocked();
-            DialogResult = true;
-            Close();
+            bool ok = await PasswordManager.VerifyMasterPasswordAsync(candidate);
+            if (!IsLoaded) return;
+
+            if (ok)
+            {
+                PasswordManager.MarkSessionUnlocked();
+                DialogResult = true;
+                Close();
+            }
+            else
+            {
+                _lastRejectedCandidate = candidate;
+                ShowPinFailure();
+            }
         }
-        else
+        finally
         {
-            _lastRejectedCandidate = candidate;
-            ShowPinFailure();
+            _isVerifying = false;
         }
     }
 
@@ -142,12 +134,13 @@ public partial class PinPromptDialog : Window
         PwdPinInput.Focus();
     }
 
-    private void BtnApplyRecovery_Click(object sender, RoutedEventArgs e)
+    private async void BtnApplyRecovery_Click(object sender, RoutedEventArgs e)
     {
+        if (_isVerifying) return;
+
         string answer = TxtRecoveryAnswer.Text;
         string newPin = PwdNewPinAfterRecovery.Password;
 
-        // La recuperación comparte el límite de intentos con el PIN
         TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
         if (wait > TimeSpan.Zero)
         {
@@ -156,33 +149,46 @@ public partial class PinPromptDialog : Window
             return;
         }
 
-        if (!PasswordManager.VerifyRecoveryAnswerOrCode(answer))
+        _isVerifying = true;
+        try
         {
-            wait = PasswordManager.GetPinLockoutRemaining();
-            TxtRecoveryError.Text = wait > TimeSpan.Zero
-                ? $"⏳ Demasiados intentos. Espera {FormatWait(wait)} para volver a intentar."
-                : "❌ La respuesta secreta o el código de recuperación no coinciden.";
-            TxtRecoveryError.Visibility = Visibility.Visible;
-            return;
-        }
+            bool recoveryValid = await PasswordManager.VerifyRecoveryAnswerOrCodeAsync(answer);
+            if (!IsLoaded) return;
 
-        if (string.IsNullOrWhiteSpace(newPin))
+            if (!recoveryValid)
+            {
+                wait = PasswordManager.GetPinLockoutRemaining();
+                TxtRecoveryError.Text = wait > TimeSpan.Zero
+                    ? $"⏳ Demasiados intentos. Espera {FormatWait(wait)} para volver a intentar."
+                    : "❌ La respuesta secreta o el código de recuperación no coinciden.";
+                TxtRecoveryError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(newPin))
+            {
+                TxtRecoveryError.Text = "⚠️ Escribe un nuevo PIN o contraseña para continuar.";
+                TxtRecoveryError.Visibility = Visibility.Visible;
+                return;
+            }
+
+            var s = SettingsManager.Current;
+            await Task.Run(() => PasswordManager.ConfigureMasterPassword(newPin, s.BrowserLockMode, s.SecurityQuestion, answer));
+            if (!IsLoaded) return;
+
+            MessageBox.Show(
+                "¡Tu PIN/contraseña fue actualizado con éxito!\nTodas tus contraseñas guardadas se conservaron intactas.",
+                "Acceso Recuperado — Lex Junior",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            DialogResult = true;
+            Close();
+        }
+        finally
         {
-            TxtRecoveryError.Text = "⚠️ Escribe un nuevo PIN o contraseña para continuar.";
-            TxtRecoveryError.Visibility = Visibility.Visible;
-            return;
+            _isVerifying = false;
         }
-
-        var s = SettingsManager.Current;
-        PasswordManager.ConfigureMasterPassword(newPin, s.BrowserLockMode, s.SecurityQuestion, answer);
-        MessageBox.Show(
-            "¡Tu PIN/contraseña fue actualizado con éxito!\nTodas tus contraseñas guardadas se conservaron intactas.",
-            "Acceso Recuperado — Lex Junior",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
-
-        DialogResult = true;
-        Close();
     }
 
     private void BtnEmergencyReset_Click(object sender, RoutedEventArgs e)

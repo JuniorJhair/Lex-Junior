@@ -115,9 +115,12 @@ public partial class App : Application
             return;
         }
 
-        // Auto-registro en segundo plano en Windows (StartMenuInternet) y limpieza de instaladores residuales
+        // Auto-registro en segundo plano en Windows (StartMenuInternet), limpieza de instaladores residuales
+        // y precarga asíncrona del historial y la bóveda para eliminar tirones al primer uso.
         _ = Task.Run(() =>
         {
+            try { _ = HistoryManager.GetTotalCount(); } catch { }
+            try { _ = PasswordManager.Store.GetTotalCount(); } catch { }
             try { InstallerService.RegisterAsDefaultBrowser(); } catch { }
             try { InstallerService.CleanOldTempInstallers(); } catch { }
         });
@@ -138,7 +141,7 @@ public partial class App : Application
             if (!string.IsNullOrEmpty(vault.LastError))
             {
                 string startupError = vault.LastError!;
-                Dispatcher.BeginInvoke(() =>
+                _ = Dispatcher.BeginInvoke(() =>
                     MessageBox.Show(startupError, "Bóveda de contraseñas — Lex Junior", MessageBoxButton.OK, MessageBoxImage.Warning));
             }
         }
@@ -147,7 +150,7 @@ public partial class App : Application
         // Iniciar el servidor de escucha IPC para enlaces externos entrantes mientras el navegador esté abierto
         SingleInstanceIpc.StartIpcServer(payload =>
         {
-            Dispatcher.BeginInvoke(() =>
+            _ = Dispatcher.BeginInvoke(() =>
             {
                 if (MainWindow is MainWindow win)
                 {
@@ -174,7 +177,8 @@ public partial class App : Application
         // Liberar mutex y servidor IPC
         try { SingleInstanceIpc.Release(); } catch { }
 
-        // Garantiza que el historial pendiente (guardado diferido) llegue a disco al cerrar
+        // Garantiza que la configuración diferida y el historial pendiente lleguen a disco al cerrar
+        try { SettingsManager.FlushDeferredSave(); } catch { }
         try { HistoryManager.Flush(); } catch { }
         base.OnExit(e);
     }

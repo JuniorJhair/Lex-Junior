@@ -28,6 +28,8 @@ public sealed class HistoryStore : IDisposable
     private readonly object _lock = new();
     private readonly object _writeLock = new();
     private readonly List<HistoryEntry> _entries = new();
+    private volatile HistoryEntry[] _snapshot = Array.Empty<HistoryEntry>();
+    private volatile List<DomainVisitStat>? _cachedDomainStats;
     private readonly Timer _saveTimer;
     private bool _dirty;
     private bool _disposed;
@@ -50,6 +52,12 @@ public sealed class HistoryStore : IDisposable
         Load();
     }
 
+    private void RebuildSnapshotUnderLock()
+    {
+        _snapshot = _entries.ToArray();
+        _cachedDomainStats = null;
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Carga / guardado
     // ─────────────────────────────────────────────────────────────────────
@@ -66,7 +74,21 @@ public sealed class HistoryStore : IDisposable
                     if (list != null)
                     {
                         _entries.Clear();
-                        _entries.AddRange(list);
+                        foreach (var item in list)
+                        {
+                            if (item == null || string.IsNullOrWhiteSpace(item.Url)) continue;
+                            // Filtrar o desenvolver URLs internas del visor PDF que pudieran haberse guardado antes
+                            if (Pdf.PdfStudioService.TryUnwrapInternalViewerUrl(item.Url, out string? unwrappedPdf))
+                            {
+                                if (string.IsNullOrWhiteSpace(unwrappedPdf)) continue;
+                                item.Url = unwrappedPdf;
+                                item.Domain = ExtractRootDomain(unwrappedPdf);
+                            }
+                            _ = item.SearchKey;
+                            _entries.Add(item);
+                        }
+                        _entries.Sort((a, b) => a.VisitedAt.CompareTo(b.VisitedAt));
+                        RebuildSnapshotUnderLock();
                     }
                 }
             }
@@ -80,12 +102,12 @@ public sealed class HistoryStore : IDisposable
     /// <summary>Escribe a disco ahora mismo si hay cambios pendientes. Seguro de llamar desde cualquier hilo.</summary>
     public void Flush()
     {
-        List<HistoryEntry> snapshot;
+        HistoryEntry[] snapshot;
         lock (_lock)
         {
             if (!_dirty) return;
             _dirty = false;
-            snapshot = _entries.ToList();
+            snapshot = _snapshot;
         }
 
         lock (_writeLock)
@@ -124,12 +146,30 @@ public sealed class HistoryStore : IDisposable
     // ─────────────────────────────────────────────────────────────────────
     // Altas
     // ─────────────────────────────────────────────────────────────────────
-    private static bool TryNormalize(string url, string title, out string cleanTitle)
+    private static bool TryNormalize(string url, string title, out string normalizedUrl, out string cleanTitle)
     {
+        normalizedUrl = string.Empty;
         cleanTitle = string.Empty;
         if (string.IsNullOrWhiteSpace(url)) return false;
-        if (url.StartsWith("about:") || url.StartsWith("data:") || url.Contains("NewTabPage")) return false;
-        cleanTitle = string.IsNullOrWhiteSpace(title) ? url : title.Trim();
+
+        string trimmed = url.Trim();
+        if (trimmed.StartsWith("about:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("NewTabPage", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // F5: No guardar URLs internas https://pdf.lex.local/ en el historial; si envuelve un PDF web externo, guardar la URL real
+        if (Pdf.PdfStudioService.TryUnwrapInternalViewerUrl(trimmed, out string? externalPdfWebUrl))
+        {
+            if (string.IsNullOrWhiteSpace(externalPdfWebUrl))
+                return false;
+            trimmed = externalPdfWebUrl;
+        }
+
+        normalizedUrl = trimmed;
+        cleanTitle = string.IsNullOrWhiteSpace(title) ? normalizedUrl : title.Trim();
         return true;
     }
 
@@ -137,24 +177,28 @@ public sealed class HistoryStore : IDisposable
     public void AddEntry(string url, string title)
     {
         if (!_isEnabled()) return;
-        if (!TryNormalize(url, title, out string cleanTitle)) return;
+        if (!TryNormalize(url, title, out string normalizedUrl, out string cleanTitle)) return;
 
-        string domain = ExtractRootDomain(url);
+        string domain = ExtractRootDomain(normalizedUrl);
         var now = _clock();
 
         lock (_lock)
         {
             var last = _entries.Count > 0 ? _entries[^1] : null;
-            if (last != null && last.Url.Equals(url, StringComparison.OrdinalIgnoreCase) && (now - last.VisitedAt).TotalSeconds < 5)
+            if (last != null && last.Url.Equals(normalizedUrl, StringComparison.OrdinalIgnoreCase) && (now - last.VisitedAt).TotalSeconds < 5)
             {
                 last.Title = cleanTitle;
                 last.VisitedAt = now;
+                _ = last.SearchKey;
             }
             else
             {
-                _entries.Add(new HistoryEntry { Url = url, Title = cleanTitle, Domain = domain, VisitedAt = now });
+                var entry = new HistoryEntry { Url = normalizedUrl, Title = cleanTitle, Domain = domain, VisitedAt = now };
+                _ = entry.SearchKey;
+                _entries.Add(entry);
                 if (_entries.Count > _maxEntries)
                     _entries.RemoveRange(0, _entries.Count - _maxEntries);
+                RebuildSnapshotUnderLock();
             }
         }
 
@@ -168,68 +212,102 @@ public sealed class HistoryStore : IDisposable
     public void UpdateTitle(string url, string title)
     {
         if (!_isEnabled()) return;
-        if (!TryNormalize(url, title, out string cleanTitle)) return;
+        if (!TryNormalize(url, title, out string normalizedUrl, out string cleanTitle)) return;
 
         bool updated = false;
         lock (_lock)
         {
             var last = _entries.Count > 0 ? _entries[^1] : null;
-            if (last != null && last.Url.Equals(url, StringComparison.OrdinalIgnoreCase))
+            if (last != null && last.Url.Equals(normalizedUrl, StringComparison.OrdinalIgnoreCase))
             {
-                if (!string.IsNullOrWhiteSpace(title)) last.Title = cleanTitle;
+                if (!string.IsNullOrWhiteSpace(title))
+                {
+                    last.Title = cleanTitle;
+                    _ = last.SearchKey;
+                }
                 updated = true;
             }
         }
 
         if (updated) MarkDirtyDeferred();
-        else AddEntry(url, title);
+        else AddEntry(normalizedUrl, title);
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Consultas
+    // Consultas (Sin bloqueo en el hilo lector gracias a _snapshot inmutable)
     // ─────────────────────────────────────────────────────────────────────
+    public IReadOnlyList<HistoryEntry> GetRecentSnapshot(int maxCount = 2500)
+    {
+        var snap = _snapshot;
+        if (snap.Length == 0 || maxCount <= 0)
+            return Array.Empty<HistoryEntry>();
+
+        int take = Math.Min(maxCount, snap.Length);
+        var result = new HistoryEntry[take];
+        for (int i = 0; i < take; i++)
+        {
+            result[i] = snap[snap.Length - 1 - i];
+        }
+        return result;
+    }
+
     public List<HistoryEntry> GetEntries(string? filterText = null, string? domain = null, DateTime? fromDate = null, DateTime? toDate = null)
     {
-        lock (_lock)
+        var snap = _snapshot;
+        if (snap.Length == 0)
+            return new List<HistoryEntry>();
+
+        bool hasDomain = !string.IsNullOrWhiteSpace(domain) && !domain.Equals("Todos", StringComparison.OrdinalIgnoreCase);
+        string? termLower = string.IsNullOrWhiteSpace(filterText) ? null : filterText.Trim().ToLowerInvariant();
+        bool hasFrom = fromDate.HasValue;
+        bool hasTo = toDate.HasValue;
+        DateTime fromVal = fromDate ?? DateTime.MinValue;
+        DateTime toVal = toDate ?? DateTime.MaxValue;
+
+        var results = new List<HistoryEntry>(Math.Min(snap.Length, 256));
+
+        // Recorrido inverso: _snapshot ya está ordenado cronológicamente de más antiguo a más reciente,
+        // por lo que recorrer de atrás hacia adelante entrega orden descendente en O(N) sin OrderByDescending.
+        for (int i = snap.Length - 1; i >= 0; i--)
         {
-            var query = _entries.AsEnumerable();
+            var e = snap[i];
+            if (hasFrom && e.VisitedAt < fromVal) continue;
+            if (hasTo && e.VisitedAt > toVal) continue;
+            if (hasDomain && !e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase)) continue;
+            if (termLower != null && !e.SearchKey.Contains(termLower, StringComparison.Ordinal)) continue;
 
-            if (!string.IsNullOrWhiteSpace(domain) && domain != "Todos")
-                query = query.Where(e => e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase));
-
-            if (!string.IsNullOrWhiteSpace(filterText))
-            {
-                string term = filterText.Trim();
-                query = query.Where(e =>
-                    e.Title.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                    e.Url.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                    e.Domain.Contains(term, StringComparison.OrdinalIgnoreCase));
-            }
-
-            if (fromDate.HasValue) query = query.Where(e => e.VisitedAt >= fromDate.Value);
-            if (toDate.HasValue) query = query.Where(e => e.VisitedAt <= toDate.Value);
-
-            return query.OrderByDescending(e => e.VisitedAt).ToList();
+            results.Add(e);
         }
+
+        return results;
     }
 
     public List<DomainVisitStat> GetDistinctDomains()
     {
-        lock (_lock)
+        var cached = _cachedDomainStats;
+        if (cached != null)
+            return cached.ToList();
+
+        var snap = _snapshot;
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < snap.Length; i++)
         {
-            return _entries
-                .Where(e => !string.IsNullOrWhiteSpace(e.Domain))
-                .GroupBy(e => e.Domain, StringComparer.OrdinalIgnoreCase)
-                .Select(g => new DomainVisitStat { Domain = g.Key, Count = g.Count() })
-                .OrderByDescending(g => g.Count)
-                .ToList();
+            string dom = snap[i].Domain;
+            if (string.IsNullOrWhiteSpace(dom)) continue;
+            counts.TryGetValue(dom, out int c);
+            counts[dom] = c + 1;
         }
+
+        var computed = counts
+            .Select(kvp => new DomainVisitStat { Domain = kvp.Key, Count = kvp.Value })
+            .OrderByDescending(g => g.Count)
+            .ToList();
+
+        _cachedDomainStats = computed;
+        return computed.ToList();
     }
 
-    public int GetTotalCount()
-    {
-        lock (_lock) { return _entries.Count; }
-    }
+    public int GetTotalCount() => _snapshot.Length;
 
     public string GetFileSizeFormatted()
     {
@@ -257,21 +335,33 @@ public sealed class HistoryStore : IDisposable
     // ─────────────────────────────────────────────────────────────────────
     public void DeleteEntry(string id)
     {
-        lock (_lock) { _entries.RemoveAll(e => e.Id == id); }
+        lock (_lock)
+        {
+            _entries.RemoveAll(e => e.Id == id);
+            RebuildSnapshotUnderLock();
+        }
         MarkDirtyNow();
     }
 
     public void DeleteEntries(IEnumerable<string> ids)
     {
         var idSet = new HashSet<string>(ids);
-        lock (_lock) { _entries.RemoveAll(e => idSet.Contains(e.Id)); }
+        lock (_lock)
+        {
+            _entries.RemoveAll(e => idSet.Contains(e.Id));
+            RebuildSnapshotUnderLock();
+        }
         MarkDirtyNow();
     }
 
     public void DeleteByDay(DateTime day)
     {
         var target = day.Date;
-        lock (_lock) { _entries.RemoveAll(e => e.VisitedAt.Date == target); }
+        lock (_lock)
+        {
+            _entries.RemoveAll(e => e.VisitedAt.Date == target);
+            RebuildSnapshotUnderLock();
+        }
         MarkDirtyNow();
     }
 
@@ -284,6 +374,7 @@ public sealed class HistoryStore : IDisposable
                 _entries.RemoveAll(e => e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase) && e.VisitedAt >= fromTime.Value);
             else
                 _entries.RemoveAll(e => e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase));
+            RebuildSnapshotUnderLock();
         }
         MarkDirtyNow();
     }
@@ -296,13 +387,18 @@ public sealed class HistoryStore : IDisposable
                 _entries.RemoveAll(e => e.VisitedAt >= fromTime && e.VisitedAt <= toTime);
             else
                 _entries.RemoveAll(e => e.Domain.Equals(domain, StringComparison.OrdinalIgnoreCase) && e.VisitedAt >= fromTime && e.VisitedAt <= toTime);
+            RebuildSnapshotUnderLock();
         }
         MarkDirtyNow();
     }
 
     public void ClearAll()
     {
-        lock (_lock) { _entries.Clear(); }
+        lock (_lock)
+        {
+            _entries.Clear();
+            RebuildSnapshotUnderLock();
+        }
         MarkDirtyNow();
     }
 

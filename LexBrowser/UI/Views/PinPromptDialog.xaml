@@ -19,85 +19,83 @@
         </Border.Effect>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <Grid Margin="24,20,24,18">
-            <!-- VISTA 1: INGRESO DE PIN / CONTRASEÑA -->
-            <StackPanel x:Name="PanelPinEntry" Visibility="Visible">
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                    <Border Width="38" Height="38" CornerRadius="10" Background="#1E1B4B" BorderBrush="#6366F1" BorderThickness="1" Margin="0,0,12,0">
-                        <TextBlock Text="🔒" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtPromptTitle" Text="Confirmar tu Contraseña / PIN" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF"/>
-                        <TextBlock x:Name="TxtPromptSubtitle" Text="Ingresa tu clave para continuar con esta acción" FontSize="11" Foreground="#9CA3AF" Margin="0,2,0,0"/>
+                <!-- VISTA 1: INGRESO DE PIN / CONTRASEÑA -->
+                <StackPanel x:Name="PanelPinEntry" Visibility="Visible">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <Border Width="38" Height="38" CornerRadius="10" Background="#1E1B4B" BorderBrush="#4F46E5" BorderThickness="1" Margin="0,0,12,0">
+                            <TextBlock Text="🔒" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtPromptTitle" Text="Confirmar tu Contraseña / PIN" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF"/>
+                            <TextBlock x:Name="TxtPromptSubtitle" Text="Ingresa tu clave para continuar con esta acción" FontSize="11" Foreground="#A1A1AA" Margin="0,2,0,0"/>
+                        </StackPanel>
                     </StackPanel>
+
+                    <Border Background="#181824" BorderBrush="#27273A" BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,0,0,12">
+                        <TextBlock Text="⚡ Entrada rápida activa: se desbloquea automáticamente al completar tus caracteres (o presiona Enter)."
+                                   FontSize="11" Foreground="#A5B4FC" TextWrapping="Wrap"/>
+                    </Border>
+
+                    <TextBlock Text="Tu PIN o contraseña:" FontSize="11.5" Foreground="#D4D4D8" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                    <PasswordBox x:Name="PwdPinInput" Style="{StaticResource LexPasswordBox}"
+                                 FontSize="16" Padding="12,9" PasswordChanged="PwdPinInput_PasswordChanged"
+                                 KeyDown="PwdPinInput_KeyDown"/>
+
+                    <TextBlock x:Name="TxtPinError" Text="Contraseña o PIN incorrecto." Foreground="#F87171" FontSize="11" FontWeight="SemiBold"
+                               Margin="0,6,0,0" Visibility="Collapsed"/>
+
+                    <Grid Margin="0,16,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="BtnConfirmPin" Grid.Column="0" Content="🔓 Confirmar y continuar" Click="BtnConfirmPin_Click"
+                                Style="{StaticResource LexPrimaryButton}" FontWeight="Bold" FontSize="12" Padding="14,10"
+                                Margin="0,0,8,0"/>
+                        <Button Grid.Column="1" Content="Cancelar" Click="BtnCancel_Click"
+                                Style="{StaticResource LexSecondaryButton}" FontWeight="SemiBold" FontSize="12" Padding="16,10"/>
+                    </Grid>
+
+                    <Button Content="¿Olvidaste tu PIN o contraseña? Recuperar acceso" Click="BtnShowRecovery_Click"
+                            Style="{StaticResource LexGhostButton}" Foreground="#818CF8" FontSize="11" FontWeight="SemiBold"
+                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
                 </StackPanel>
 
-                <Border Background="#181824" BorderBrush="#27273A" BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,0,0,12">
-                    <TextBlock Text="⚡ Entrada rápida activa: se desbloquea automáticamente al completar tus caracteres (o presiona Enter)."
-                               FontSize="10.5" Foreground="#A5B4FC" TextWrapping="Wrap"/>
-                </Border>
+                <!-- VISTA 2: RECUPERACIÓN SIN PÉRDIDA O RESTABLECIMIENTO DE EMERGENCIA -->
+                <StackPanel x:Name="PanelRecovery" Visibility="Collapsed">
+                    <TextBlock Text="🛟 Recuperar Acceso" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="TxtRecoveryQuestionLabel" Text="Responde tu pregunta secreta o escribe tu Código de Recuperación (LEX-XXXX-XXXX) para conservar todas tus contraseñas:"
+                               FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
-                <TextBlock Text="Tu PIN o contraseña:" FontSize="11.5" Foreground="#D4D4D8" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                <PasswordBox x:Name="PwdPinInput" Background="#171722" BorderBrush="#3B3B54" BorderThickness="1.5"
-                             Foreground="#FFFFFF" FontSize="16" Padding="12,9" PasswordChanged="PwdPinInput_PasswordChanged"
-                             KeyDown="PwdPinInput_KeyDown"/>
+                    <TextBox x:Name="TxtRecoveryAnswer" Style="{StaticResource DarkInput}"
+                             FontSize="12.5" Padding="10,7" Margin="0,0,0,8"/>
 
-                <TextBlock x:Name="TxtPinError" Text="Contraseña o PIN incorrecto." Foreground="#F87171" FontSize="11" FontWeight="SemiBold"
-                           Margin="0,6,0,0" Visibility="Collapsed"/>
+                    <TextBlock Text="Elige tu nuevo PIN o contraseña (ej. 6 dígitos o letras):" FontSize="11" Foreground="#D4D4D8" Margin="0,0,0,4"/>
+                    <PasswordBox x:Name="PwdNewPinAfterRecovery" Style="{StaticResource LexPasswordBox}"
+                                 FontSize="13" Padding="10,7" Margin="0,0,0,6"/>
 
-                <Grid Margin="0,16,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Button Grid.Column="0" Content="🔓 Confirmar y continuar" Click="BtnConfirmPin_Click"
-                            Background="#6366F1" Foreground="#FFFFFF" FontWeight="Bold" FontSize="12" Padding="14,10"
-                            BorderThickness="0" Cursor="Hand" Margin="0,0,8,0"/>
-                    <Button Grid.Column="1" Content="Cancelar" Click="BtnCancel_Click"
-                            Background="#242434" Foreground="#D4D4D8" FontWeight="SemiBold" FontSize="12" Padding="16,10"
-                            BorderThickness="0" Cursor="Hand"/>
-                </Grid>
+                    <TextBlock x:Name="TxtRecoveryError" Text="" Foreground="#F87171" FontSize="11" FontWeight="SemiBold" Visibility="Collapsed" Margin="0,0,0,6"/>
 
-                <Button Content="¿Olvidaste tu PIN o contraseña? Recuperar acceso" Click="BtnShowRecovery_Click"
-                        Background="Transparent" Foreground="#818CF8" FontSize="11" FontWeight="SemiBold"
-                        BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center" Margin="0,8,0,0"/>
-            </StackPanel>
+                    <Button Content="✅ Verificar respuesta y guardar nuevo PIN (Conserva contraseñas)" Click="BtnApplyRecovery_Click"
+                            Style="{StaticResource LexSuccessButton}" FontWeight="Bold" FontSize="11.5" Padding="10,8"
+                            Margin="0,2,0,10"/>
 
-            <!-- VISTA 2: RECUPERACIÓN SIN PÉRDIDA O RESTABLECIMIENTO DE EMERGENCIA -->
-            <StackPanel x:Name="PanelRecovery" Visibility="Collapsed">
-                <TextBlock Text="🛟 Recuperar Acceso" FontWeight="Bold" FontSize="15" Foreground="#FFFFFF" Margin="0,0,0,4"/>
-                <TextBlock x:Name="TxtRecoveryQuestionLabel" Text="Responde tu pregunta secreta o escribe tu Código de Recuperación (LEX-XXXX-XXXX) para conservar todas tus contraseñas:"
-                           FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,10"/>
+                    <!-- Cuadro explicativo de restablecimiento de emergencia -->
+                    <Border Background="#1F1218" BorderBrush="#7F1D1D" BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,6">
+                        <StackPanel>
+                            <TextBlock Text="⚠️ ¿Olvidaste también tu respuesta secreta?" FontWeight="Bold" FontSize="11" Foreground="#FCA5A5"/>
+                            <TextBlock Text="• Se eliminarán: Solo las contraseñas guardadas en la bóveda (por seguridad)." FontSize="11" Foreground="#FECACA" Margin="0,2,0,0"/>
+                            <TextBlock Text="• Se conservarán intactos: Tus marcadores, páginas ancladas, historial, descargas y ajustes." FontSize="11" Foreground="#D4D4D8"/>
+                            <Button Content="🗑️ Restablecer acceso (Borrar solo contraseñas)" Click="BtnEmergencyReset_Click"
+                                    Style="{StaticResource LexDangerButton}" FontWeight="SemiBold" FontSize="11" Padding="8,5"
+                                    Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
 
-                <TextBox x:Name="TxtRecoveryAnswer" Background="#171722" BorderBrush="#3B3B54" BorderThickness="1"
-                         Foreground="#FFFFFF" FontSize="12.5" Padding="10,7" Margin="0,0,0,8"/>
-
-                <TextBlock Text="Elige tu nuevo PIN o contraseña (ej. 6 dígitos o letras):" FontSize="11" Foreground="#D4D4D8" Margin="0,0,0,4"/>
-                <PasswordBox x:Name="PwdNewPinAfterRecovery" Background="#171722" BorderBrush="#3B3B54" BorderThickness="1"
-                             Foreground="#FFFFFF" FontSize="13" Padding="10,7" Margin="0,0,0,6"/>
-
-                <TextBlock x:Name="TxtRecoveryError" Text="" Foreground="#F87171" FontSize="11" FontWeight="SemiBold" Visibility="Collapsed" Margin="0,0,0,6"/>
-
-                <Button Content="✅ Verificar respuesta y guardar nuevo PIN (Conserva contraseñas)" Click="BtnApplyRecovery_Click"
-                        Background="#10B981" Foreground="#FFFFFF" FontWeight="Bold" FontSize="11.5" Padding="10,8"
-                        BorderThickness="0" Cursor="Hand" Margin="0,2,0,10"/>
-
-                <!-- Cuadro explicativo de restablecimiento de emergencia -->
-                <Border Background="#1F1218" BorderBrush="#7F1D1D" BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,6">
-                    <StackPanel>
-                        <TextBlock Text="⚠️ ¿Olvidaste también tu respuesta secreta?" FontWeight="Bold" FontSize="11" Foreground="#FCA5A5"/>
-                        <TextBlock Text="• Se eliminarán: Solo las contraseñas guardadas en la bóveda (por seguridad)." FontSize="10.5" Foreground="#FECACA" Margin="0,2,0,0"/>
-                        <TextBlock Text="• Se conservarán intactos: Tus marcadores, páginas ancladas, historial, descargas y ajustes." FontSize="10.5" Foreground="#D4D4D8"/>
-                        <Button Content="🗑️ Restablecer acceso (Borrar solo contraseñas)" Click="BtnEmergencyReset_Click"
-                                Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="11" Padding="8,5"
-                                BorderThickness="0" Cursor="Hand" Margin="0,6,0,0"/>
-                    </StackPanel>
-                </Border>
-
-                <Button Content="← Volver a ingresar PIN" Click="BtnBackToPin_Click"
-                        Background="Transparent" Foreground="#A1A1AA" FontSize="11" BorderThickness="0" Cursor="Hand" HorizontalAlignment="Center"/>
-            </StackPanel>
-        </Grid>
+                    <Button Content="← Volver a ingresar PIN" Click="BtnBackToPin_Click"
+                            Style="{StaticResource LexGhostButton}" Foreground="#A1A1AA" FontSize="11" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
         </ScrollViewer>
     </Border>
 </Window>
-

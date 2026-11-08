@@ -12,8 +12,8 @@
     <Color x:Key="ColorTextSubtitle">#A1A1AA</Color>
     <SolidColorBrush x:Key="BrushTextSubtitle" Color="{StaticResource ColorTextSubtitle}"/>
 
-    <!-- Texto secundario: #8B8B96 (sustituye a #71717A y #52525B con ratio > 5.1:1 en todas las superficies) -->
-    <Color x:Key="ColorTextSecondary">#8B8B96</Color>
+    <!-- Texto secundario: #A1A1AA (sustituye a #71717A y #52525B con ratio > 5.5:1 en todas las superficies WCAG AA) -->
+    <Color x:Key="ColorTextSecondary">#A1A1AA</Color>
     <SolidColorBrush x:Key="BrushTextSecondary" Color="{StaticResource ColorTextSecondary}"/>
 
     <!-- Gris compliant verificado (7.5:1) -->
@@ -43,14 +43,14 @@
     <Color x:Key="ColorBorderSubtle">#2E2E3E</Color>
     <SolidColorBrush x:Key="BrushBorderSubtle" Color="{StaticResource ColorBorderSubtle}"/>
 
-    <!-- Acentos -->
-    <Color x:Key="ColorAccentIndigo">#6366F1</Color>
+    <!-- Acentos (WCAG 2.1 AA verificado con texto blanco) -->
+    <Color x:Key="ColorAccentIndigo">#4F46E5</Color>
     <SolidColorBrush x:Key="BrushAccentIndigo" Color="{StaticResource ColorAccentIndigo}"/>
 
     <Color x:Key="ColorAccentEmerald">#34D399</Color>
     <SolidColorBrush x:Key="BrushAccentEmerald" Color="{StaticResource ColorAccentEmerald}"/>
 
-    <Color x:Key="ColorAccentDanger">#EF4444</Color>
+    <Color x:Key="ColorAccentDanger">#DC2626</Color>
     <SolidColorBrush x:Key="BrushAccentDanger" Color="{StaticResource ColorAccentDanger}"/>
 
     <!-- ======================================================== -->
@@ -96,16 +96,18 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" 
-                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                        <Border x:Name="HoverOverlay" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#2E2E40"/>
+                            <Setter TargetName="HoverOverlay" Property="Background" Value="#1FFFFFFF"/>
                             <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushAccentIndigo}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#1C1C28"/>
+                            <Setter TargetName="HoverOverlay" Property="Background" Value="#26000000"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -117,10 +119,10 @@
         </Setter>
     </Style>
 
-    <!-- Botón Primario (Acento Indigo) -->
+    <!-- Botón Primario (Acento Indigo WCAG AA 5.8:1) -->
     <Style x:Key="LexPrimaryButton" TargetType="Button">
         <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
-        <Setter Property="Background" Value="#6366F1"/>
+        <Setter Property="Background" Value="#4F46E5"/>
         <Setter Property="Foreground" Value="#FFFFFF"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="FontSize" Value="12"/>
@@ -137,10 +139,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#4F46E5"/>
+                            <Setter TargetName="b" Property="Background" Value="#4338CA"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="b" Property="Background" Value="#4338CA"/>
+                            <Setter TargetName="b" Property="Background" Value="#3730A3"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -516,7 +518,94 @@
         </Setter>
     </Style>
 
+    <!-- Campo de Texto Oscuro Universal (DarkInput) -->
+    <Style x:Key="DarkInput" TargetType="TextBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Background" Value="#171720"/>
+        <Setter Property="Foreground" Value="#F4F4F5"/>
+        <Setter Property="CaretBrush" Value="#FFFFFF"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushBorderSubtle}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="MinHeight" Value="30"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="b" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="BorderBrush" Value="#4338CA"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushAccentIndigo}"/>
+                            <Setter TargetName="b" Property="Background" Value="#1C1C28"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Campo de Contraseña Oscuro Universal -->
+    <Style x:Key="LexPasswordBox" TargetType="PasswordBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Background" Value="#171720"/>
+        <Setter Property="Foreground" Value="#F4F4F5"/>
+        <Setter Property="CaretBrush" Value="#FFFFFF"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushBorderSubtle}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="MinHeight" Value="30"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="b" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="BorderBrush" Value="#4338CA"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushAccentIndigo}"/>
+                            <Setter TargetName="b" Property="Background" Value="#1C1C28"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Estilos Implícitos para Controles Oscuros en Toda la Aplicación -->
+    <Style TargetType="Button" BasedOn="{StaticResource LexBaseButton}"/>
     <Style TargetType="ComboBox" BasedOn="{StaticResource LexComboBox}"/>
     <Style TargetType="ComboBoxItem" BasedOn="{StaticResource LexComboItem}"/>
 

@@ -579,10 +579,44 @@ public static class GlobalScrollBehavior
         // Filtrar estrictamente por VerticalChange != 0 para no cerrar desplegables por simples cambios de layout o scroll horizontal
         if (e.VerticalChange == 0) return;
         if (_suppressScrollClose) return;
+
+        // Salida rápida O(1): si no hay ningún ComboBox abierto registrado, evitar caminar el árbol visual
+        lock (_lock)
+        {
+            if (_openComboBoxes.Count == 0) return;
+        }
+
         if (sender is not ScrollViewer parentSv) return;
         if (IsInsideComboBoxOrPopup(parentSv)) return;
 
         CloseOutOfViewComboBoxes(parentSv);
+    }
+
+    /// <summary>
+    /// Manejador centralizado de rueda de ratón para cualquier ScrollViewer de la interfaz.
+    /// Desplaza primero el ComboBox abierto bajo el cursor si tiene scroll; en caso contrario,
+    /// desplaza suavemente el ScrollViewer principal y reubica o cierra desplegables fuera de vista.
+    /// </summary>
+    public static void HandleSmoothScrollViewerMouseWheel(object sender, MouseWheelEventArgs e, double pixelsPerNotch = 48.0)
+    {
+        if (sender is not ScrollViewer sv) return;
+
+        var hitSource = e.OriginalSource as DependencyObject ?? Mouse.DirectlyOver as DependencyObject;
+        if (TryScrollOpenComboBox(hitSource, e.Delta))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (sv.ScrollableHeight > 0)
+        {
+            double deltaUnits = e.Delta / 120.0;
+            double scrollPixels = deltaUnits * pixelsPerNotch;
+            double newOffset = Math.Clamp(sv.VerticalOffset - scrollPixels, 0, sv.ScrollableHeight);
+            sv.ScrollToVerticalOffset(newOffset);
+            CloseOutOfViewComboBoxes(sv);
+            e.Handled = true;
+        }
     }
 
     /// <summary>

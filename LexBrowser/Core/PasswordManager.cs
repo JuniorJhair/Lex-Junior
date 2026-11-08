@@ -225,6 +225,15 @@ public sealed class PasswordVaultStore
         }
     }
 
+    public string? GetPasswordById(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        lock (_lock)
+        {
+            return _credentials.FirstOrDefault(c => c.Id == id)?.Password;
+        }
+    }
+
     public SavedCredential SaveOrUpdateCredential(string urlOrDomain, string username, string password)
     {
         string baseDomain = ExtractBaseDomain(urlOrDomain);
@@ -907,6 +916,13 @@ public static class PasswordManager
         return true;
     }
 
+    /// <summary>
+    /// Verifica el PIN en un hilo de fondo (Task.Run) para que las 210.000 iteraciones de PBKDF2
+    /// y la escritura en disco no congelen el hilo de la interfaz gráfica.
+    /// </summary>
+    public static System.Threading.Tasks.Task<bool> VerifyMasterPasswordAsync(string? candidatePassword)
+        => System.Threading.Tasks.Task.Run(() => VerifyMasterPassword(candidatePassword));
+
     public static bool VerifyRecoveryAnswerOrCode(string? answerOrCode)
     {
         if (string.IsNullOrWhiteSpace(answerOrCode)) return false;
@@ -946,6 +962,9 @@ public static class PasswordManager
         return true;
     }
 
+    public static System.Threading.Tasks.Task<bool> VerifyRecoveryAnswerOrCodeAsync(string? answerOrCode)
+        => System.Threading.Tasks.Task.Run(() => VerifyRecoveryAnswerOrCode(answerOrCode));
+
     /// <summary>
     /// Restablecimiento de emergencia cuando el usuario olvidó su PIN y su respuesta secreta:
     /// Borra únicamente las contraseñas guardadas por seguridad y quita el bloqueo, conservando marcadores, historial y ajustes.
@@ -957,16 +976,42 @@ public static class PasswordManager
     }
 
     /// <summary>
+    /// Genera un script aislado (IIFE) para inyectar credenciales vía ExecuteScriptAsync.
+    /// A diferencia de PostWebMessageAsJson, ExecuteScriptAsync no emite ningún evento 'message'
+    /// en window.chrome.webview, impidiendo que scripts de terceros en la página intercepten la clave.
+    /// </summary>
+    public static string BuildSafeAutofillScript(string username, string password)
+    {
+        string safeUserJson = JsonSerializer.Serialize(username ?? string.Empty);
+        string safePassJson = JsonSerializer.Serialize(password ?? string.Empty);
+
+        return $@"
+(function() {{
+    try {{
+        if (window.top !== window.self) return;
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
+        const u = {safeUserJson};
+        const p = {safePassJson};
+        if (typeof window.__lexApplyAutofill === 'function') {{
+            window.__lexApplyAutofill(u, p);
+        }}
+    }} catch (_) {{}}
+}})();";
+    }
+
+    /// <summary>
     /// Script pasivo ultraligero (0% CPU en reposo; sin timers ni MutationObserver).
-    /// Solo se activa cuando el usuario envía un formulario con campo de contraseña o recibe orden de autocompletar.
+    /// Solo se activa cuando el usuario enfoca un campo de login o envía un formulario con campo de contraseña.
     /// </summary>
     public const string InjectedPasswordScript = @"
 (function() {
     if (window.__lexPwdGuardActive) return;
+    if (window.top !== window.self) return;
     window.__lexPwdGuardActive = true;
 
     let lastSentKey = '';
     let lastSentTime = 0;
+    let lastAutofillReqTime = 0;
 
     function findUsernameField(pwdInput) {
         const container = pwdInput.closest('form') || pwdInput.closest('div[role=""dialog""], main, section, body') || document.body;
@@ -1057,6 +1102,35 @@ public static class PasswordManager
         }
     }, true);
 
+    // E5: Solicitar autocompletado únicamente cuando el usuario hace foco/clic en un campo de login
+    window.addEventListener('focusin', function(e) {
+        try {
+            const el = e.target;
+            if (!el || el.tagName !== 'INPUT' || el.disabled || el.readOnly) return;
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
+
+            const type = (el.type || 'text').toLowerCase();
+            let isLoginInput = (type === 'password');
+            if (!isLoginInput && (type === 'email' || type === 'text' || type === 'tel')) {
+                const container = el.closest('form') || document;
+                if (container.querySelector('input[type=""password""]')) {
+                    isLoginInput = true;
+                }
+            }
+            if (!isLoginInput) return;
+
+            const now = Date.now();
+            if (now - lastAutofillReqTime < 1200) return;
+            lastAutofillReqTime = now;
+
+            if (window.chrome && window.chrome.webview) {
+                window.chrome.webview.postMessage({
+                    type: 'autofill_requested'
+                });
+            }
+        } catch (_) {}
+    }, true);
+
     function setNativeInputValue(input, value) {
         if (!input || input.value === value) return;
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
@@ -1069,28 +1143,24 @@ public static class PasswordManager
         input.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.addEventListener('message', function(ev) {
-            const msg = ev.data;
-            if (!msg || msg.action !== 'autofill_credentials') return;
-            try {
-                const pwdInputs = Array.from(document.querySelectorAll('input[type=""password""]'));
-                for (const pwd of pwdInputs) {
-                    const rect = pwd.getBoundingClientRect();
-                    if (rect.width < 20 || rect.height < 10 || pwd.disabled || pwd.readOnly) continue;
+    window.__lexApplyAutofill = function(username, password) {
+        try {
+            const pwdInputs = Array.from(document.querySelectorAll('input[type=""password""]'));
+            for (const pwd of pwdInputs) {
+                const rect = pwd.getBoundingClientRect();
+                if (rect.width < 20 || rect.height < 10 || pwd.disabled || pwd.readOnly) continue;
 
-                    const userInp = findUsernameField(pwd);
-                    if (userInp && msg.username && !userInp.value) {
-                        setNativeInputValue(userInp, msg.username);
-                    }
-                    if (msg.password && !pwd.value) {
-                        setNativeInputValue(pwd, msg.password);
-                    }
-                    break;
+                const userInp = findUsernameField(pwd);
+                if (userInp && username && !userInp.value) {
+                    setNativeInputValue(userInp, username);
                 }
-            } catch (_) {}
-        });
-    }
+                if (password && !pwd.value) {
+                    setNativeInputValue(pwd, password);
+                }
+                break;
+            }
+        } catch (_) {}
+    };
 })();
 ";
 }

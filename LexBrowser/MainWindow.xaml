@@ -4,7 +4,7 @@
         Title="Lex Junior Browser" 
         Icon="pack://application:,,,/Assets/logo.png"
         Height="800" Width="1280"
-        MinHeight="480" MinWidth="520"
+        MinHeight="480" MinWidth="640"
         WindowState="Maximized"
         WindowStyle="None"
         AllowsTransparency="False"
@@ -25,11 +25,11 @@
         <SolidColorBrush x:Key="BgDark" Color="#0F0F12"/>
         <SolidColorBrush x:Key="SurfaceDark" Color="#18181D"/>
         <SolidColorBrush x:Key="SurfaceLighter" Color="#22222B"/>
-        <SolidColorBrush x:Key="AccentColor" Color="#6366F1"/>
+        <SolidColorBrush x:Key="AccentColor" Color="#4F46E5"/>
         <SolidColorBrush x:Key="AccentHover" Color="#818CF8"/>
         <SolidColorBrush x:Key="BorderDark" Color="#2E2E3A"/>
         <SolidColorBrush x:Key="TextLight" Color="#F4F4F5"/>
-        <SolidColorBrush x:Key="TextMuted" Color="#9CA3AF"/>
+        <SolidColorBrush x:Key="TextMuted" Color="#A1A1AA"/>
 
         <!-- Estilo botones de ventana (Minimizar, Maximizar, Cerrar) -->
         <Style x:Key="WindowCtrlBtn" TargetType="Button">
@@ -244,7 +244,8 @@
             <!-- Lista de Pestañas con Drag & Drop y botones pegados a la última pestaña (Ley de Fitts: se extiende hasta el tope superior y = 0) -->
             <Grid x:Name="TabStripContainer" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" SizeChanged="TabStripContainer_SizeChanged">
                 <ScrollViewer x:Name="TabsScrollViewer" HorizontalAlignment="Left" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" 
-                              WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Stretch">
+                              WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Stretch"
+                              PreviewMouseWheel="TabsScrollViewer_PreviewMouseWheel">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch">
                         <!-- ItemsControl de pestañas con soporte Drag & Drop -->
                         <ItemsControl x:Name="TabsItemsControl" VerticalAlignment="Stretch">
@@ -256,7 +257,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border x:Name="TabBorder" Width="{Binding TabWidth}" Margin="2,0,2,0" VerticalAlignment="Stretch" CornerRadius="6,6,0,0" Padding="10,0,8,0" Cursor="Hand"
-                                            Background="#16161B"
+                                            Background="#16161B" BorderBrush="Transparent" BorderThickness="0,2,0,0"
                                             WindowChrome.IsHitTestVisibleInChrome="True"
                                             PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
                                             PreviewMouseMove="Tab_PreviewMouseMove"
@@ -310,7 +311,7 @@
                                                        Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
 
                                             <!-- Indicador pin -->
-                                            <TextBlock Grid.Column="1" Text="📌 " FontSize="10.5" 
+                                            <TextBlock Grid.Column="1" Text="📌 " FontSize="11" 
                                                        Visibility="{Binding IsPinned, Converter={StaticResource BoolToVis}}" 
                                                        VerticalAlignment="Center"/>
 
@@ -320,23 +321,25 @@
                                                        Visibility="{Binding ShowTitleInTab, Converter={StaticResource BoolToVis}}"/>
 
                                             <!-- Indicador de audio dinámico (🔊 o 🔇) -->
-                                            <TextBlock Grid.Column="3" Text="{Binding AudioIndicatorText}" Foreground="#67E8F9" FontSize="10.5" Margin="4,0" 
+                                            <TextBlock Grid.Column="3" Text="{Binding AudioIndicatorText}" Foreground="#67E8F9" FontSize="11" Margin="4,0" 
                                                        VerticalAlignment="Center"/>
 
                                             <!-- Botón Cerrar Pestaña (Layout estricto de 18x18 DIP; área de clic expandida con Margin negativo en template) -->
                                             <Button Grid.Column="4" Width="18" Height="18" Margin="4,0,0,0" Padding="0"
-                                                    Background="Transparent" BorderThickness="0" Foreground="#888899"
+                                                    Background="Transparent" BorderThickness="0"
                                                     Cursor="Hand" Click="CloseTab_Click" Tag="{Binding}"
                                                     ToolTip="Cerrar pestaña (Ctrl+W)"
+                                                    AutomationProperties.Name="Cerrar pestaña"
                                                     Visibility="{Binding ShowCloseButton, Converter={StaticResource BoolToVis}}">
                                                 <Button.Style>
                                                     <Style TargetType="Button">
+                                                        <Setter Property="Foreground" Value="#A1A1AA"/>
                                                         <Setter Property="Template">
                                                             <Setter.Value>
                                                                 <ControlTemplate TargetType="Button">
                                                                     <Grid Margin="-3" Background="Transparent">
                                                                         <Border x:Name="b" Width="18" Height="18" CornerRadius="9" Background="{TemplateBinding Background}" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                            <TextBlock Text="✕" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                                                                            <TextBlock Text="✕" FontSize="11" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
                                                                         </Border>
                                                                     </Grid>
                                                                     <ControlTemplate.Triggers>
@@ -389,11 +392,13 @@
                         </ItemsControl>
 
                         <!-- Botón + pegado a la última pestaña -->
-                        <Button Content="＋" Style="{StaticResource TabActionBtn}" ToolTip="Abrir nueva pestaña (Ctrl+T o Ctrl+N)"
+                        <Button x:Name="BtnNewTab" Content="＋" Style="{StaticResource TabActionBtn}" ToolTip="Abrir nueva pestaña (Ctrl+T o Ctrl+N)"
+                                AutomationProperties.Name="Abrir nueva pestaña"
                                 Click="BtnNewTab_Click" Margin="4,0,2,0" VerticalAlignment="Center"/>
 
                         <!-- Botón Incógnito pegado al botón + -->
-                        <Button Content="🕵️" Style="{StaticResource TabActionBtn}" ToolTip="Abrir pestaña de incógnito (Ctrl+Shift+N)"
+                        <Button x:Name="BtnNewIncognitoTab" Content="🕵️" Style="{StaticResource TabActionBtn}" ToolTip="Abrir pestaña de incógnito (Ctrl+Shift+N)"
+                                AutomationProperties.Name="Abrir pestaña de incógnito"
                                 Click="BtnNewIncognitoTab_Click" Margin="2,0,8,0" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ScrollViewer>
@@ -401,9 +406,9 @@
 
             <!-- Controles de Ventana (Minimizar, Maximizar, Cerrar) -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
-                <Button Content="─" Style="{StaticResource WindowCtrlBtn}" Click="BtnMinimize_Click" ToolTip="Minimizar"/>
-                <Button x:Name="BtnMaxRestore" Content="□" Style="{StaticResource WindowCtrlBtn}" Click="BtnMaximize_Click" ToolTip="Maximizar"/>
-                <Button Content="✕" Style="{StaticResource WindowCloseBtn}" Click="BtnClose_Click" ToolTip="Cerrar"/>
+                <Button x:Name="BtnMinimize" Content="─" Style="{StaticResource WindowCtrlBtn}" Click="BtnMinimize_Click" ToolTip="Minimizar" AutomationProperties.Name="Minimizar"/>
+                <Button x:Name="BtnMaxRestore" Content="□" Style="{StaticResource WindowCtrlBtn}" Click="BtnMaximize_Click" ToolTip="Maximizar" AutomationProperties.Name="Maximizar"/>
+                <Button x:Name="BtnClose" Content="✕" Style="{StaticResource WindowCloseBtn}" Click="BtnClose_Click" ToolTip="Cerrar" AutomationProperties.Name="Cerrar"/>
             </StackPanel>
         </Grid>
 
@@ -421,13 +426,13 @@
             <!-- Botones Atrás, Adelante, Recargar, Home -->
             <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="8,0">
                 <Button x:Name="BtnBack" Style="{StaticResource NavBtn}" Content="←" FontSize="14" FontWeight="Bold"
-                        ToolTip="Página anterior (Alt+←)" Click="BtnBack_Click"/>
+                        ToolTip="Página anterior (Alt+←)" AutomationProperties.Name="Página anterior" Click="BtnBack_Click"/>
                 <Button x:Name="BtnForward" Style="{StaticResource NavBtn}" Content="→" FontSize="14" FontWeight="Bold"
-                        ToolTip="Página siguiente (Alt+→)" Click="BtnForward_Click"/>
+                        ToolTip="Página siguiente (Alt+→)" AutomationProperties.Name="Página siguiente" Click="BtnForward_Click"/>
                 <Button x:Name="BtnRefresh" Style="{StaticResource NavBtn}" Content="↻" FontSize="14" FontWeight="Bold"
-                        ToolTip="Recargar página (Ctrl+R / F5)" Click="BtnRefresh_Click"/>
+                        ToolTip="Recargar página (Ctrl+R / F5)" AutomationProperties.Name="Recargar página" Click="BtnRefresh_Click"/>
                 <Button x:Name="BtnHome" Style="{StaticResource NavBtn}" Content="⌂" FontSize="14"
-                        ToolTip="Página de inicio (Nueva pestaña)" Click="BtnHome_Click"/>
+                        ToolTip="Página de inicio (Nueva pestaña)" AutomationProperties.Name="Página de inicio" Click="BtnHome_Click"/>
             </StackPanel>
 
             <!-- Barra de Direcciones / Omnibox (Estilo Chrome / Brave con logo G y autocompletado inteligente) -->
@@ -813,27 +818,32 @@
                                                 <Image Source="{Binding FaviconImage}" Width="16" Height="16"
                                                        RenderOptions.BitmapScalingMode="HighQuality"
                                                        Visibility="{Binding HasFaviconImage, Converter={StaticResource BoolToVis}}"/>
-                                                <TextBlock Text="{Binding IconText}" Foreground="{Binding IconFgHex}" FontSize="10.5" FontWeight="Bold"
+                                                <TextBlock Text="{Binding IconText}" Foreground="{Binding IconFgHex}" FontSize="11" FontWeight="Bold"
                                                            HorizontalAlignment="Center" VerticalAlignment="Center"
                                                            Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
                                             </Grid>
                                         </Border>
 
-                                        <!-- Texto principal + URL o subtítulo en azul -->
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True">
-                                            <TextBlock Text="{Binding PrimaryText}" Foreground="#F4F4F5" FontSize="12.5" FontWeight="SemiBold"
-                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="520"/>
-                                            <TextBlock Text="{Binding SecondaryText}" Foreground="#60A5FA" FontSize="12"
-                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="380"
+                                        <!-- Texto principal + URL o subtítulo en azul (Grid con elipsis adaptable) -->
+                                        <Grid Grid.Column="1" VerticalAlignment="Center" ClipToBounds="True">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" MaxWidth="420"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding PrimaryText}" Foreground="#F4F4F5" FontSize="12.5" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding SecondaryText}" Foreground="#60A5FA" FontSize="12"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                                        Visibility="{Binding HasSecondaryText, Converter={StaticResource BoolToVis}}"/>
-                                        </StackPanel>
+                                        </Grid>
 
                                         <!-- Botón ✕ para borrar búsqueda reciente o entrada del historial -->
                                         <Button Grid.Column="2" Content="✕" Tag="{Binding}"
                                                 PreviewMouseLeftButtonDown="BtnDeleteOmniboxSuggestion_MouseDown"
-                                                Background="Transparent" BorderThickness="0" Foreground="#8B8B96" FontSize="10.5"
+                                                Background="Transparent" BorderThickness="0" Foreground="#A1A1AA" FontSize="11"
                                                 Padding="6,2" Cursor="Hand" VerticalAlignment="Center"
                                                 ToolTip="Eliminar esta sugerencia del historial"
+                                                AutomationProperties.Name="Eliminar sugerencia"
                                                 Visibility="{Binding CanDelete, Converter={StaticResource BoolToVis}}"/>
                                     </Grid>
                                 </Border>
@@ -1109,12 +1119,12 @@
                 </Popup>
 
 
-                <!-- Pill 0 Telemetría (Clic abre la pestaña explicativa en Configuración) -->
+                <!-- Pill Sin Telemetría (Clic abre la pestaña explicativa en Configuración) -->
                 <Border x:Name="BorderTelemetryBadge" Background="#16161D" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="2,0" 
-                        Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="0 Telemetría: haz clic para ver cómo te protege y sus ventajas">
+                        Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="Sin telemetría propia: haz clic para ver los controles de privacidad">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtTelemetryLabel" Text="0 Telemetría" Margin="6,0,0,0" FontSize="11" Foreground="#A1A1AA" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtTelemetryLabel" Text="Sin telemetría" Margin="6,0,0,0" FontSize="11" Foreground="#A1A1AA" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -1131,12 +1141,14 @@
                 </Button>
 
                 <!-- Botón Bóveda de Contraseñas y Seguridad 🔑 (0% CPU en reposo) -->
-                <Button x:Name="BtnPasswordVault" Style="{StaticResource NavBtn}" ToolTip="Bóveda de Contraseñas y Bloqueo por PIN (Ctrl+Shift+K)" Click="BtnPasswordVault_Click">
+                <Button x:Name="BtnPasswordVault" Style="{StaticResource NavBtn}" ToolTip="Bóveda de Contraseñas y Bloqueo por PIN (Ctrl+Shift+K)"
+                        AutomationProperties.Name="Bóveda de contraseñas" Click="BtnPasswordVault_Click">
                     <TextBlock Text="🔑" FontSize="13" Foreground="#A1A1AA"/>
                 </Button>
 
                 <!-- Botón Historial de Descargas ⬇ (0% CPU en reposo) -->
-                <Button x:Name="BtnDownloads" Style="{StaticResource NavBtn}" ToolTip="Historial de Descargas (Ctrl+J)" Click="BtnDownloads_Click">
+                <Button x:Name="BtnDownloads" Style="{StaticResource NavBtn}" ToolTip="Historial de Descargas (Ctrl+J)"
+                        AutomationProperties.Name="Historial de descargas" Click="BtnDownloads_Click">
                     <TextBlock x:Name="TxtDownloadsBtnIcon" Text="⬇" FontSize="13.5" FontWeight="Bold" Foreground="#A1A1AA"/>
                 </Button>
 
@@ -1239,12 +1251,13 @@
 
                 <!-- Botón Centro de Notificaciones 🔔 (0% CPU en reposo) -->
                 <Grid>
-                    <Button x:Name="BtnNotifications" Style="{StaticResource NavBtn}" ToolTip="Centro de Notificaciones (Ctrl+Shift+D para No Molestar)" Click="BtnNotifications_Click">
+                    <Button x:Name="BtnNotifications" Style="{StaticResource NavBtn}" ToolTip="Centro de Notificaciones (Ctrl+Shift+D para No Molestar)"
+                            AutomationProperties.Name="Centro de notificaciones" Click="BtnNotifications_Click">
                         <TextBlock x:Name="TxtNotificationsBtnIcon" Text="🔔" FontSize="13" Foreground="#A1A1AA"/>
                     </Button>
-                    <Border x:Name="BadgeNotifications" Background="#EF4444" CornerRadius="6" MinWidth="14" Height="14" Padding="3,0"
+                    <Border x:Name="BadgeNotifications" Background="#DC2626" CornerRadius="8" MinWidth="16" Height="16" Padding="3,0"
                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,1,1,0" Visibility="Collapsed" IsHitTestVisible="False">
-                        <TextBlock x:Name="TxtBadgeNotificationsCount" Text="0" Foreground="#FFFFFF" FontSize="8.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtBadgeNotificationsCount" Text="0" Foreground="#FFFFFF" FontSize="10.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                 </Grid>
 
@@ -1260,13 +1273,13 @@
                             <Grid Margin="0,0,0,10">
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="🔔 Notificaciones Web" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
-                                    <TextBlock x:Name="TxtNotificationsSubtitle" Text="Novedades y alertas de tus sitios" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0"/>
+                                    <TextBlock x:Name="TxtNotificationsSubtitle" Text="Novedades y alertas de tus sitios" Foreground="#A1A1AA" FontSize="11" Margin="0,2,0,0"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <Button x:Name="BtnToggleDnd" Style="{StaticResource LexGhostButton}" Content="🔕 Silencio" Click="BtnToggleDnd_Click"
-                                            FontSize="10.5" Padding="6,3" MinHeight="26" Margin="0,0,4,0" ToolTip="Alternar modo No Molestar (Ctrl+Shift+D)"/>
+                                            FontSize="11" Padding="6,3" MinHeight="26" Margin="0,0,4,0" ToolTip="Alternar modo No Molestar (Ctrl+Shift+D)"/>
                                     <Button x:Name="BtnClearAllNotifications" Style="{StaticResource LexGhostButton}" Content="Limpiar" Click="BtnClearAllNotifications_Click"
-                                            FontSize="10.5" Padding="6,3" MinHeight="26" ToolTip="Borrar historial de notificaciones"/>
+                                            FontSize="11" Padding="6,3" MinHeight="26" ToolTip="Borrar historial de notificaciones"/>
                                 </StackPanel>
                             </Grid>
 
@@ -1277,7 +1290,7 @@
                                     <Border x:Name="PanelNotificationsEmpty" Padding="0,24" HorizontalAlignment="Center">
                                         <StackPanel HorizontalAlignment="Center">
                                             <TextBlock Text="🔕" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                                            <TextBlock Text="No tienes notificaciones pendientes" Foreground="#71717A" FontSize="11.5" FontWeight="Medium" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="No tienes notificaciones pendientes" Foreground="#A1A1AA" FontSize="11.5" FontWeight="Medium" HorizontalAlignment="Center"/>
                                         </StackPanel>
                                     </Border>
                                 </StackPanel>
@@ -1297,12 +1310,14 @@
                 </Popup>
 
                 <!-- Botón Historial 🕒 -->
-                <Button x:Name="BtnHistory" Style="{StaticResource NavBtn}" ToolTip="Historial de Navegación y Limpieza (Ctrl+H)" Click="BtnHistory_Click">
+                <Button x:Name="BtnHistory" Style="{StaticResource NavBtn}" ToolTip="Historial de Navegación y Limpieza (Ctrl+H)"
+                        AutomationProperties.Name="Historial de navegación" Click="BtnHistory_Click">
                     <TextBlock Text="🕒" FontSize="13" Foreground="#A1A1AA"/>
                 </Button>
 
                 <!-- Botón Configuración ⚙️ -->
-                <Button x:Name="BtnSettings" Style="{StaticResource NavBtn}" ToolTip="Configuración del Navegador (Ctrl+,)" Click="BtnSettings_Click">
+                <Button x:Name="BtnSettings" Style="{StaticResource NavBtn}" ToolTip="Configuración del Navegador (Ctrl+,)"
+                        AutomationProperties.Name="Configuración del navegador" Click="BtnSettings_Click">
                     <TextBlock Text="⚙" FontSize="15" Foreground="#A1A1AA"/>
                 </Button>
             </StackPanel>
@@ -1361,17 +1376,19 @@
                                     <TextBlock Text="{Binding Title}" Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center" MaxWidth="110" TextTrimming="CharacterEllipsis"/>
                                     <!-- Botón '✕' protegido (Área de clic ampliada a 22x22 de forma invisible, icono visual de 16x16) -->
                                     <Button Width="22" Height="22" Margin="3,0,0,0" Padding="0"
-                                            Background="Transparent" BorderThickness="0" Foreground="#8B8B96" FontSize="10.5"
+                                            Background="Transparent" BorderThickness="0" FontSize="11"
                                             Cursor="Hand" ToolTip="Quitar de la barra de accesos directos"
+                                            AutomationProperties.Name="Quitar marcador"
                                             Click="BtnRemoveBookmark_Click" Tag="{Binding}" FocusVisualStyle="{StaticResource LexFocusVisual}">
                                         <Button.Style>
                                             <Style TargetType="Button">
+                                                <Setter Property="Foreground" Value="#A1A1AA"/>
                                                 <Setter Property="Template">
                                                     <Setter.Value>
                                                         <ControlTemplate TargetType="Button">
                                                             <Grid Background="Transparent">
                                                                 <Border x:Name="xb" Width="16" Height="16" CornerRadius="8" Background="{TemplateBinding Background}" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                                    <TextBlock Text="✕" FontSize="10.5" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
+                                                                    <TextBlock Text="✕" FontSize="11" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0"/>
                                                                 </Border>
                                                             </Grid>
                                                             <ControlTemplate.Triggers>
@@ -1406,7 +1423,7 @@
                         Padding="8,3" Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="Marcador quitado" Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center"/>
-                        <Button x:Name="BtnUndoBookmark" Content="Deshacer" Foreground="#38BDF8" FontWeight="Bold" FontSize="11"
+                        <Button x:Name="BtnUndoBookmark" Content="Deshacer" FontWeight="Bold" FontSize="11"
                                 Background="Transparent" BorderThickness="0" Cursor="Hand" Click="BtnUndoBookmark_Click" Margin="6,0,0,0"
                                 FocusVisualStyle="{StaticResource LexFocusVisual}">
                             <Button.Template>
@@ -1416,6 +1433,7 @@
                             </Button.Template>
                             <Button.Style>
                                 <Style TargetType="Button">
+                                    <Setter Property="Foreground" Value="#38BDF8"/>
                                     <Style.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter Property="Foreground" Value="#7DD3FC"/>
@@ -1424,8 +1442,9 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-                        <Button Content="✕" Foreground="#8B8B96" FontSize="10.5" Background="Transparent" BorderThickness="0"
-                                Cursor="Hand" Click="BtnCloseUndoBanner_Click" Margin="6,0,0,0" FocusVisualStyle="{StaticResource LexFocusVisual}">
+                        <Button Content="✕" FontSize="11" Background="Transparent" BorderThickness="0"
+                                Cursor="Hand" Click="BtnCloseUndoBanner_Click" Margin="6,0,0,0" FocusVisualStyle="{StaticResource LexFocusVisual}"
+                                AutomationProperties.Name="Cerrar aviso de deshacer">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"/>
@@ -1433,6 +1452,7 @@
                             </Button.Template>
                             <Button.Style>
                                 <Style TargetType="Button">
+                                    <Setter Property="Foreground" Value="#A1A1AA"/>
                                     <Style.Triggers>
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter Property="Foreground" Value="#FFFFFF"/>
@@ -1445,8 +1465,9 @@
                 </Border>
 
                 <!-- Botón para ocultar barra de accesos directos -->
-                <Button Style="{StaticResource NavBtn}" Width="26" Height="26" ToolTip="Ocultar barra de accesos directos (Ctrl+Shift+B)" Click="BtnHideBookmarksBar_Click">
-                    <TextBlock Text="···" FontSize="13" Foreground="#8B8B96"/>
+                <Button Style="{StaticResource NavBtn}" Width="26" Height="26" ToolTip="Ocultar barra de accesos directos (Ctrl+Shift+B)"
+                        AutomationProperties.Name="Ocultar barra de accesos directos" Click="BtnHideBookmarksBar_Click">
+                    <TextBlock Text="···" FontSize="13" Foreground="#A1A1AA"/>
                 </Button>
             </StackPanel>
 
@@ -1463,7 +1484,7 @@
                                    FontSize="11" Foreground="#E2E8F0" VerticalAlignment="Center" TextWrapping="Wrap"/>
                     </DockPanel>
                     <Button Grid.Column="1" Content="🔑 Desbloquear mi cuenta con PIN" Click="BtnUnlockFromGuest_Click"
-                            VerticalAlignment="Center" Background="#0284C7" Foreground="#FFFFFF"
+                            VerticalAlignment="Center" Background="#0369A1" Foreground="#FFFFFF"
                             FontSize="11" FontWeight="Bold" Padding="12,5" MinHeight="28" BorderThickness="0" Cursor="Hand"
                             FocusVisualStyle="{StaticResource LexFocusVisual}" SnapsToDevicePixels="True">
                         <Button.Style>
@@ -1476,7 +1497,7 @@
                                             </Border>
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="b" Property="Background" Value="#0369A1"/>
+                                                    <Setter TargetName="b" Property="Background" Value="#075985"/>
                                                 </Trigger>
                                                 <Trigger Property="IsEnabled" Value="False">
                                                     <Setter Property="Opacity" Value="0.4"/>
@@ -1538,7 +1559,7 @@
                         </Button.Style>
                     </Button>
                     <Button x:Name="BtnDismissDefaultBrowser" Content="Ahora no" Background="#262638" Foreground="#E4E4E7"
-                            FontWeight="SemiBold" FontSize="11.5" Padding="12,6" Cursor="Hand" Click="BtnDismissDefaultBrowser_Click"
+                            FontWeight="SemiBold" FontSize="11.5" Padding="12,6" Cursor="Hand" Click="BtnDismissDefaultBrowser_Click" Margin="0,0,6,0"
                             FocusVisualStyle="{StaticResource LexFocusVisual}" SnapsToDevicePixels="True">
                         <Button.Style>
                             <Style TargetType="Button">
@@ -1562,6 +1583,8 @@
                             </Style>
                         </Button.Style>
                     </Button>
+                    <Button x:Name="BtnNeverAskDefaultBrowser" Style="{StaticResource LexGhostButton}" Content="No volver a mostrar"
+                            Foreground="#A1A1AA" FontSize="11" Padding="10,6" Click="BtnNeverAskDefaultBrowser_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -1575,80 +1598,82 @@
             <!-- Los WebViews de las pestañas se alojan aquí dinámicamente -->
         </Grid>
 
-        <!-- Banner Flotante para Guardar o Actualizar Contraseña al iniciar sesión (Esquina Superior Derecha) -->
-        <Border x:Name="SavePasswordBanner" Grid.Row="5" HorizontalAlignment="Right" VerticalAlignment="Top"
-                Margin="0,14,24,0" Width="365" Background="#161622" BorderBrush="#6366F1" BorderThickness="1.5"
-                CornerRadius="12" Padding="16,14" Visibility="Collapsed" Panel.ZIndex="1100">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.75" Color="#000000"/>
-            </Border.Effect>
-            <StackPanel>
-                <Grid Margin="0,0,0,8">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="🔑 " FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtSavePwdPromptTitle" Text="¿Guardar contraseña para este sitio?" FontWeight="Bold" FontSize="12.5" Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <Button Style="{StaticResource LexGhostButton}" Content="✕" Width="28" Height="28" Padding="0"
-                            HorizontalAlignment="Right" Click="BtnDismissSavePassword_Click" ToolTip="Cerrar"/>
-                </Grid>
+        <!-- Popup Airspace-Safe para Guardar o Actualizar Contraseña sobre WebView2 -->
+        <Popup x:Name="PopupSavePassword" PlacementTarget="{Binding ElementName=BtnPasswordVault}" Placement="Bottom"
+               VerticalOffset="6" HorizontalOffset="-330" AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade">
+            <Border x:Name="SavePasswordBanner" Width="365" Background="#161622" BorderBrush="#6366F1" BorderThickness="1.5"
+                    CornerRadius="12" Padding="16,14" Visibility="Collapsed">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.75" Color="#000000"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Grid Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🔑 " FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtSavePwdPromptTitle" Text="¿Guardar contraseña para este sitio?" FontWeight="Bold" FontSize="12.5" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <Button Style="{StaticResource LexGhostButton}" Content="✕" Width="28" Height="28" Padding="0"
+                                HorizontalAlignment="Right" Click="BtnDismissSavePassword_Click" ToolTip="Cerrar" AutomationProperties.Name="Cerrar aviso"/>
+                    </Grid>
 
-                <TextBlock x:Name="TxtSavePwdDomainSubtitle" Text="Se asociará al dominio raíz (.com) aunque cambie la ruta"
-                           FontSize="10.5" Foreground="#A5B4FC" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="TxtSavePwdDomainSubtitle" Text="Se asociará al dominio raíz (.com) aunque cambie la ruta"
+                               FontSize="11" Foreground="#A5B4FC" Margin="0,0,0,10" TextWrapping="Wrap"/>
 
-                <TextBlock Text="Usuario o correo:" FontSize="10.5" Foreground="#A1A1AA" Margin="0,0,0,3"/>
-                <TextBox x:Name="TxtPromptSaveUsername" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
-                         Foreground="#FFFFFF" FontSize="12" Padding="8,5" Margin="0,0,0,8"/>
+                    <TextBlock Text="Usuario o correo:" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,3"/>
+                    <TextBox x:Name="TxtPromptSaveUsername" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
+                             Foreground="#FFFFFF" FontSize="12" Padding="8,5" Margin="0,0,0,8"/>
 
-                <TextBlock Text="Contraseña:" FontSize="10.5" Foreground="#A1A1AA" Margin="0,0,0,3"/>
-                <Grid Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="TxtPromptSavePasswordPlain" Grid.Column="0" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
-                             Foreground="#34D399" FontSize="12" FontWeight="Bold" Padding="8,5" Visibility="Collapsed"/>
-                    <PasswordBox x:Name="PwdPromptSavePassword" Grid.Column="0" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
-                                 Foreground="#FFFFFF" FontSize="12" Padding="8,5"/>
-                    <Button x:Name="BtnPromptPeekPassword" Grid.Column="1" Style="{StaticResource LexSecondaryButton}" Content="👁️" Click="BtnPromptPeekPassword_Click"
-                            FontSize="11" Padding="8,5" MinHeight="28" MinWidth="28" Margin="6,0,0,0" ToolTip="Ver por 5 segundos"/>
-                </Grid>
+                    <TextBlock Text="Contraseña:" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,3"/>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtPromptSavePasswordPlain" Grid.Column="0" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
+                                 Foreground="#34D399" FontSize="12" FontWeight="Bold" Padding="8,5" Visibility="Collapsed"/>
+                        <PasswordBox x:Name="PwdPromptSavePassword" Grid.Column="0" Background="#101018" BorderBrush="#2D2D42" BorderThickness="1"
+                                     Foreground="#FFFFFF" FontSize="12" Padding="8,5"/>
+                        <Button x:Name="BtnPromptPeekPassword" Grid.Column="1" Style="{StaticResource LexSecondaryButton}" Content="👁️" Click="BtnPromptPeekPassword_Click"
+                                FontSize="11" Padding="8,5" MinHeight="28" MinWidth="28" Margin="6,0,0,0" ToolTip="Ver por 5 segundos" AutomationProperties.Name="Mostrar u ocultar contraseña"/>
+                    </Grid>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Button x:Name="BtnConfirmSavePassword" Grid.Column="0" Style="{StaticResource LexPrimaryButton}" Content="💾 Guardar" Click="BtnConfirmSavePassword_Click"
-                            FontWeight="Bold" FontSize="11.5" Padding="12,7" Margin="0,0,6,0"/>
-                    <Button x:Name="BtnDismissSavePassword" Grid.Column="1" Style="{StaticResource LexSecondaryButton}" Content="Ahora no" Click="BtnDismissSavePassword_Click"
-                            FontSize="11" Padding="10,7" Margin="0,0,6,0"/>
-                    <Button x:Name="BtnNeverSaveForDomain" Grid.Column="2" Content="Nunca aquí" Click="BtnNeverSaveForDomain_Click"
-                            Background="#2A161D" Foreground="#FCA5A5" FontSize="11" Padding="10,7" MinHeight="28"
-                            BorderThickness="0" Cursor="Hand" ToolTip="No volver a preguntar en este dominio"
-                            FocusVisualStyle="{StaticResource LexFocusVisual}" SnapsToDevicePixels="True">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="b" Property="Background" Value="#3D1F2A"/>
-                                    </Trigger>
-                                    <Trigger Property="IsEnabled" Value="False">
-                                        <Setter Property="Opacity" Value="0.4"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
-                </Grid>
-            </StackPanel>
-        </Border>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="BtnConfirmSavePassword" Grid.Column="0" Style="{StaticResource LexPrimaryButton}" Content="💾 Guardar" Click="BtnConfirmSavePassword_Click"
+                                FontWeight="Bold" FontSize="11.5" Padding="12,7" Margin="0,0,6,0"/>
+                        <Button x:Name="BtnDismissSavePassword" Grid.Column="1" Style="{StaticResource LexSecondaryButton}" Content="Ahora no" Click="BtnDismissSavePassword_Click"
+                                FontSize="11" Padding="10,7" Margin="0,0,6,0"/>
+                        <Button x:Name="BtnNeverSaveForDomain" Grid.Column="2" Content="Nunca aquí" Click="BtnNeverSaveForDomain_Click"
+                                Background="#2A161D" Foreground="#FCA5A5" FontSize="11" Padding="10,7" MinHeight="28"
+                                BorderThickness="0" Cursor="Hand" ToolTip="No volver a preguntar en este dominio"
+                                FocusVisualStyle="{StaticResource LexFocusVisual}" SnapsToDevicePixels="True">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="b" Property="Background" Value="#3D1F2A"/>
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Opacity" Value="0.4"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <!-- Pantalla de Bloqueo al Iniciar / Reanudar Windows (Con Configuración Inicial, Modo Invitado y Recuperación) -->
-        <Border x:Name="BrowserLockOverlay" Grid.Row="1" Grid.RowSpan="4" Background="#0C0C12" Visibility="Collapsed" Panel.ZIndex="2500">
+        <Border x:Name="BrowserLockOverlay" Grid.Row="1" Grid.RowSpan="5" Background="#0C0C12" Visibility="Collapsed" Panel.ZIndex="2500">
             <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="Auto" MaxWidth="500" Margin="16">
                 <Border Background="#14141E" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Padding="28,22">
                     <Border.Effect>
@@ -1804,29 +1829,31 @@
             </Grid>
         </Border>
 
-        <!-- Widget Flotante de Zoom en Esquina Superior Derecha -->
-        <Border x:Name="FloatingZoomWidget" Grid.Row="4" HorizontalAlignment="Right" VerticalAlignment="Top"
-                Margin="0,16,24,0" Background="#181824" BorderBrush="#6366F1" BorderThickness="1.5"
-                CornerRadius="8" Padding="10,6" Visibility="Collapsed" Panel.ZIndex="1000">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.6" Color="Black"/>
-            </Border.Effect>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Style="{StaticResource LexSecondaryButton}" Content="−" Width="28" Height="28" Padding="0"
-                        FontWeight="Bold" Click="BtnZoomOut_Click" ToolTip="Reducir zoom (Ctrl -)"/>
-                <TextBlock x:Name="TxtFloatingZoomValue" Text="100%" Foreground="#818CF8" FontWeight="Bold" FontSize="12"
-                           VerticalAlignment="Center" Margin="8,0"/>
-                <Button Style="{StaticResource LexSecondaryButton}" Content="+" Width="28" Height="28" Padding="0"
-                        FontWeight="Bold" Click="BtnZoomIn_Click" ToolTip="Aumentar zoom (Ctrl +)"/>
-                <Button Style="{StaticResource LexPrimaryButton}" Content="↺ 100%" FontSize="11"
-                        Padding="8,3" MinHeight="28" Margin="8,0,0,0" Click="BtnZoomReset_Click"
-                        ToolTip="Restablecer zoom al 100% original (Ctrl+0)"/>
-            </StackPanel>
-        </Border>
+        <!-- Popup Flotante Airspace-Safe de Zoom sobre WebView2 -->
+        <Popup x:Name="PopupZoomWidget" PlacementTarget="{Binding ElementName=PillZoomIndicator}" Placement="Bottom"
+               VerticalOffset="6" HorizontalOffset="-80" AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade">
+            <Border x:Name="FloatingZoomWidget" Background="#181824" BorderBrush="#6366F1" BorderThickness="1.5"
+                    CornerRadius="8" Padding="10,6" Visibility="Collapsed">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.6" Color="Black"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource LexSecondaryButton}" Content="−" Width="28" Height="28" Padding="0"
+                            FontWeight="Bold" Click="BtnZoomOut_Click" ToolTip="Reducir zoom (Ctrl -)" AutomationProperties.Name="Reducir zoom"/>
+                    <TextBlock x:Name="TxtFloatingZoomValue" Text="100%" Foreground="#818CF8" FontWeight="Bold" FontSize="12"
+                               VerticalAlignment="Center" Margin="8,0"/>
+                    <Button Style="{StaticResource LexSecondaryButton}" Content="+" Width="28" Height="28" Padding="0"
+                            FontWeight="Bold" Click="BtnZoomIn_Click" ToolTip="Aumentar zoom (Ctrl +)" AutomationProperties.Name="Aumentar zoom"/>
+                    <Button Style="{StaticResource LexPrimaryButton}" Content="↺ 100%" FontSize="11"
+                            Padding="8,3" MinHeight="28" Margin="8,0,0,0" Click="BtnZoomReset_Click"
+                            ToolTip="Restablecer zoom al 100% original (Ctrl+0)"/>
+                </StackPanel>
+            </Border>
+        </Popup>
 
         <!-- Toast / Notificación flotante informativa sobre WebView2 (Airspace-safe) -->
         <Popup x:Name="PopupToast" PlacementTarget="{Binding ElementName=BrowserContainer}" Placement="Bottom"
-               VerticalOffset="-65" AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade">
+               VerticalOffset="-65" AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade">
             <Border x:Name="ToastNotification"
                     Background="#1E1E2E" BorderBrush="#6366F1" BorderThickness="1.5" CornerRadius="10"
                     Padding="16,10" Margin="0,0,0,0">
@@ -1838,7 +1865,7 @@
                                Foreground="#FFFFFF" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     <Button x:Name="BtnToastAction" Style="{StaticResource LexSecondaryButton}" Content="Detalles ⬇" Foreground="#38BDF8" FontWeight="Bold" FontSize="11" 
                             Padding="10,4" MinHeight="28" Click="ToastAction_Click" Margin="12,0,0,0"/>
-                    <Button Style="{StaticResource LexGhostButton}" Content="✕" Width="28" Height="28" Padding="0" FontSize="10.5" Click="ToastClose_Click" Margin="8,0,0,0" ToolTip="Cerrar"/>
+                    <Button Style="{StaticResource LexGhostButton}" Content="✕" Width="28" Height="28" Padding="0" FontSize="11" Click="ToastClose_Click" Margin="8,0,0,0" ToolTip="Cerrar" AutomationProperties.Name="Cerrar notificación"/>
                 </StackPanel>
             </Border>
         </Popup>

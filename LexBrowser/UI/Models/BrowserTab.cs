@@ -44,6 +44,8 @@ public class BrowserTab : INotifyPropertyChanged
 {
     private string _title = "Nueva pestaña";
     private string _url = "";
+    private string? _originHost;
+    private string? _detectedLanguage;
     private bool _isLoading = false;
     private bool _canGoBack = false;
     private bool _canGoForward = false;
@@ -110,6 +112,25 @@ public class BrowserTab : INotifyPropertyChanged
     /// </summary>
     public DateTime? LastNewWindowRequestedTime { get; set; }
 
+    /// <summary>Marca de tiempo UTC de la última apertura externa de YouTube para limitar frecuencia.</summary>
+    public DateTime LastYoutubePopupUtc { get; set; }
+
+    /// <summary>Contador de intentos de recuperación ante caídas del proceso de renderizado.</summary>
+    public int CrashRecoveryAttempts { get; set; }
+
+    /// <summary>Marca de tiempo UTC del último intento de recuperación de proceso.</summary>
+    public DateTime LastCrashRecoveryUtc { get; set; }
+
+    /// <summary>Idioma detectado en caché para la navegación actual de la pestaña.</summary>
+    public string? DetectedLanguage
+    {
+        get => _detectedLanguage;
+        set => _detectedLanguage = value;
+    }
+
+    /// <summary>Host precalculado de la URL actual para evitar parsear Uri en cada petición de red.</summary>
+    public string? OriginHost => _originHost;
+
     /// <summary>URI actual de navegación de la pestaña, si está disponible.</summary>
     public Uri? CurrentUri
     {
@@ -156,6 +177,16 @@ public class BrowserTab : INotifyPropertyChanged
         {
             if (SetField(ref _url, value))
             {
+                _detectedLanguage = null;
+                if (!string.IsNullOrEmpty(value) && Uri.TryCreate(value, UriKind.Absolute, out var u) && !string.IsNullOrEmpty(u.Host))
+                {
+                    _originHost = u.Host;
+                }
+                else
+                {
+                    _originHost = null;
+                }
+                OnPropertyChanged(nameof(OriginHost));
                 OnPropertyChanged(nameof(FaviconIcon));
             }
         }

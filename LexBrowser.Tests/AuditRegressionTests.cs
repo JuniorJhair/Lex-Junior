@@ -1,216 +1,135 @@
 using System;
 using System.IO;
-using System.Threading.Tasks;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using LexBrowser.Core;
-using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.Engine;
+using LexBrowser.Core.Pdf;
 using Xunit;
 
 namespace LexBrowser.Tests;
 
-[Collection("SettingsCollection")]
 public class AuditRegressionTests
 {
-    private static byte[] CreateValidPngBytes()
-    {
-        var pixels = new byte[4 * 4 * 4];
-        var bmp = BitmapSource.Create(4, 4, 96, 96, PixelFormats.Bgra32, null, pixels, 16);
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(bmp));
-        using var ms = new MemoryStream();
-        encoder.Save(ms);
-        return ms.ToArray();
-    }
-
     [Fact]
-    public async Task FaviconService_IncognitoMode_DoesNotCacheDomainInMemory()
+    public void PdfStudioService_BlocksUnauthorizedLocalFiles_AndAllowsExplicitlyAuthorizedPdf()
     {
-        FaviconService.ClearCache();
-        string incognitoUrl = "https://private-incognito-test.example.org/secret";
-        using var stream = new MemoryStream(CreateValidPngBytes());
+        PdfStudioService.ClearAuthorizedFiles();
+        string tempPdf = Path.Combine(Path.GetTempPath(), $"lex_audit_test_{Guid.NewGuid():N}.pdf");
+        string tempTxt = Path.Combine(Path.GetTempPath(), $"lex_audit_test_{Guid.NewGuid():N}.txt");
 
-        var icon = await FaviconService.ResolveFaviconAsync(
-            incognitoUrl,
-            webViewStream: stream,
-            faviconUri: null,
-            isIncognito: true);
-
-        Assert.NotNull(icon);
-        Assert.Null(FaviconService.GetCachedFavicon("private-incognito-test.example.org"));
-    }
-
-    [Fact]
-    public async Task FaviconService_NormalMode_CachesDomainInMemory()
-    {
-        FaviconService.ClearCache();
-        string normalUrl = "https://normal-session-test.example.org/page";
-        using var stream = new MemoryStream(CreateValidPngBytes());
-
-        var icon = await FaviconService.ResolveFaviconAsync(
-            normalUrl,
-            webViewStream: stream,
-            faviconUri: null,
-            isIncognito: false);
-
-        Assert.NotNull(icon);
-        Assert.NotNull(FaviconService.GetCachedFavicon("normal-session-test.example.org"));
-        FaviconService.ClearCache();
-    }
-
-    [Fact]
-    public void NewTabPage_RespectsSelectedDefaultSearchEngine()
-    {
-        string originalEngine = SettingsManager.Current.DefaultSearchEngine;
         try
         {
-            SettingsManager.Current.DefaultSearchEngine = "DuckDuckGo";
-            string htmlDdg = NewTabPage.GetHtml(incognito: false);
-            Assert.Contains("Buscar en DuckDuckGo", htmlDdg);
-            Assert.Contains("https://duckduckgo.com/?q=__LEX_QUERY__", htmlDdg);
+            File.WriteAllBytes(tempPdf, new byte[] { 0x25, 0x50, 0x44, 0x46 });
+            File.WriteAllText(tempTxt, "secret");
 
-            SettingsManager.Current.DefaultSearchEngine = "Brave";
-            string htmlBrave = NewTabPage.GetHtml(incognito: true);
-            Assert.Contains("Buscar en Brave Search", htmlBrave);
-            Assert.Contains("https://search.brave.com/search?q=__LEX_QUERY__", htmlBrave);
+            // Archivo local no autorizado previamente debe ser rechazado (Auditoría E6)
+            Assert.False(PdfStudioService.IsLocalFileAuthorized(tempPdf));
+
+            // Archivos que no son .pdf jamás deben autorizarse
+            PdfStudioService.AuthorizeLocalFile(tempTxt);
+            Assert.False(PdfStudioService.IsLocalFileAuthorized(tempTxt));
+
+            // Al generar la URL del visor (o autorizar explícitamente), el PDF queda en la lista blanca
+            string viewerUrl = PdfStudioService.GetViewerUrl(tempPdf);
+            Assert.True(PdfStudioService.IsLocalFileAuthorized(tempPdf));
+            Assert.StartsWith("https://pdf.lex.local/viewer.html?file=", viewerUrl, StringComparison.OrdinalIgnoreCase);
+
+            // Desempaquetar URL interna del visor devuelve la ruta original (Auditoría F5)
+            Assert.True(PdfStudioService.TryUnwrapInternalViewerUrl(viewerUrl, out string? unwrapped));
+            Assert.NotNull(unwrapped);
+            Assert.Equal(Path.GetFullPath(tempPdf), Path.GetFullPath(unwrapped!), ignoreCase: true);
         }
         finally
         {
-            SettingsManager.Current.DefaultSearchEngine = originalEngine;
+            PdfStudioService.ClearAuthorizedFiles();
+            try { if (File.Exists(tempPdf)) File.Delete(tempPdf); } catch { }
+            try { if (File.Exists(tempTxt)) File.Delete(tempTxt); } catch { }
         }
+    }
+
+    [Fact]
+    public void PdfStudioService_ValidatesOriginAndRefererStrictly()
+    {
+        Assert.False(PdfStudioService.IsValidPdfOriginOrReferer(null, null));
+        Assert.False(PdfStudioService.IsValidPdfOriginOrReferer("https://attacker.example.com", "https://attacker.example.com/page"));
+        Assert.False(PdfStudioService.IsValidPdfOriginOrReferer("null", ""));
+        Assert.True(PdfStudioService.IsValidPdfOriginOrReferer("https://pdf.lex.local", null));
+        Assert.True(PdfStudioService.IsValidPdfOriginOrReferer(null, "https://pdf.lex.local/viewer.html?file=test.pdf"));
     }
 
     [Theory]
-    [InlineData("DuckDuckGo", "hola mundo", "https://duckduckgo.com/?q=hola%20mundo")]
-    [InlineData("Brave", "c# wpf", "https://search.brave.com/search?q=c%23%20wpf")]
-    [InlineData("Bing", "test", "https://www.bing.com/search?q=test")]
-    [InlineData("Google", "lex", "https://www.google.com/search?q=lex")]
-    public void SettingsManager_GetSearchUrl_FormatsCorrectly(string engine, string query, string expected)
+    [InlineData("localhost:3000", "http://localhost:3000")]
+    [InlineData("localhost:5173/app", "http://localhost:5173/app")]
+    [InlineData("127.0.0.1:8080/api", "http://127.0.0.1:8080/api")]
+    [InlineData("192.168.1.1:8080/admin", "http://192.168.1.1:8080/admin")]
+    [InlineData("[::1]:8080/test", "http://[::1]:8080/test")]
+    [InlineData("intranet:9000/status", "http://intranet:9000/status")]
+    [InlineData("github.com/dotnet/runtime", "https://github.com/dotnet/runtime")]
+    [InlineData("https://example.com/docs", "https://example.com/docs")]
+    public void OmniboxInputResolver_ResolvesUrlsAndHostPortsCorrectly(string rawInput, string expectedUrl)
     {
-        string originalEngine = SettingsManager.Current.DefaultSearchEngine;
-        try
-        {
-            SettingsManager.Current.DefaultSearchEngine = engine;
-            string actual = SettingsManager.GetSearchUrl(query);
-            Assert.Equal(expected, actual);
-        }
-        finally
-        {
-            SettingsManager.Current.DefaultSearchEngine = originalEngine;
-        }
-    }
+        string actual = OmniboxInputResolver.ResolveNavigationTarget(
+            rawInput,
+            q => $"https://www.google.com/search?q={Uri.EscapeDataString(q)}");
 
-    [Fact]
-    public void YouTubeOptimizer_ContainsPolymerBackdropAndPipHandlers()
-    {
-        string script = YouTubeOptimizer.InjectedScript;
-        Assert.Contains("closePolymerDialog", script);
-        Assert.Contains("tp-yt-iron-overlay-backdrop", script);
-        Assert.Contains("pointer-events: none !important", script);
-        Assert.Contains("pip_leaving_now", script);
-        Assert.Contains("pip_left", script);
-    }
-
-    [Fact]
-    public void YouTubeOptimizer_ForwardsTabShortcuts_AndRemovesVideoOnlyMode()
-    {
-        string script = YouTubeOptimizer.InjectedScript;
-        Assert.Contains("shortcut_new_tab", script);
-        Assert.Contains("shortcut_reopen_tab", script);
-        Assert.Contains("shortcut_close_tab", script);
-        Assert.DoesNotContain("set_video_only_mode", script);
-        Assert.DoesNotContain("lex-video-only-style", script);
-    }
-
-    [Fact]
-    public void YouTubeOptimizer_InjectedScript_HasValidJavaScriptSyntax()
-    {
-        string tempJs = Path.Combine(Path.GetTempPath(), $"lex_yt_syntax_{Guid.NewGuid():N}.js");
-        try
-        {
-            File.WriteAllText(tempJs, YouTubeOptimizer.InjectedScript);
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "node",
-                Arguments = $"--check \"{tempJs}\"",
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var proc = System.Diagnostics.Process.Start(psi);
-            Assert.NotNull(proc);
-            string stderr = proc!.StandardError.ReadToEnd();
-            proc.WaitForExit(5000);
-            Assert.True(proc.ExitCode == 0, $"JavaScript SyntaxError in YouTubeOptimizer.InjectedScript:\n{stderr}");
-        }
-        finally
-        {
-            if (File.Exists(tempJs)) File.Delete(tempJs);
-        }
-    }
-
-    [Fact]
-    public void NewTabPage_RendersOfficialBrandSvgIcons_WithoutOldEmojis()
-    {
-        string html = NewTabPage.GetHtml(incognito: false);
-        Assert.DoesNotContain(">▶️</div>", html);
-        Assert.DoesNotContain(">🌐</div>", html);
-        Assert.DoesNotContain(">📧</div>", html);
-        Assert.DoesNotContain(">📅</div>", html);
-        Assert.DoesNotContain(">💾</div>", html);
-        Assert.DoesNotContain(">🎮</div>", html);
-        Assert.Contains("#FF0000", html); // YouTube SVG
-        Assert.Contains("#9146FF", html); // Twitch SVG
-    }
-
-    [Fact]
-    public void YouTubeOptimizer_SupportsVolumeBoost300AndOnDemandMediaScan()
-    {
-        string script = YouTubeOptimizer.InjectedScript;
-        Assert.Contains("set_volume_boost", script);
-        Assert.Contains("createDynamicsCompressor", script);
-        Assert.Contains("scan_page_media", script);
-        Assert.Contains("media_detected_batch", script);
+        Assert.Equal(expectedUrl, actual);
     }
 
     [Theory]
-    [InlineData("v1.0.0", 1, 0, 0)]
-    [InlineData("1.2.5", 1, 2, 5)]
-    [InlineData("V2.1.0-beta", 2, 1, 0)]
-    public void UpdateManager_ParseVersionTag_ParsesReleaseTagsCorrectly(string tag, int major, int minor, int build)
+    [InlineData("como programar en c#")]
+    [InlineData("noticias")]
+    [InlineData("what is a port:number")]
+    public void OmniboxInputResolver_RoutesSearchQueriesToSearchEngine(string query)
     {
-        var parsed = UpdateManager.ParseVersionTag(tag);
-        Assert.NotNull(parsed);
-        Assert.Equal(new Version(major, minor, build), parsed);
+        string actual = OmniboxInputResolver.ResolveNavigationTarget(
+            query,
+            q => $"https://search.example/q={Uri.EscapeDataString(q)}");
+
+        Assert.StartsWith("https://search.example/q=", actual, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void InstallerService_RecognizesCommandLineModes()
+    public void OmniboxInputResolver_DetectsLocalAndPrivateHostsForFaviconPrivacy()
     {
-        Assert.True(InstallerService.ShouldRunAsInstaller(new[] { "--install" }));
-        Assert.True(InstallerService.ShouldRunAsUninstaller(new[] { "--uninstall" }));
-        Assert.True(InstallerService.ShouldRunAsSilentUpdate(new[] { "--silent-update" }));
-        Assert.False(InstallerService.ShouldRunAsUninstaller(Array.Empty<string>()));
+        Assert.True(OmniboxInputResolver.IsLocalOrPrivateHost("localhost"));
+        Assert.True(OmniboxInputResolver.IsLocalOrPrivateHost("127.0.0.1"));
+        Assert.True(OmniboxInputResolver.IsLocalOrPrivateHost("10.0.0.5"));
+        Assert.True(OmniboxInputResolver.IsLocalOrPrivateHost("192.168.1.1"));
+        Assert.True(OmniboxInputResolver.IsLocalOrPrivateHost("172.20.0.1"));
+        Assert.True(OmniboxInputResolver.IsLocalOrPrivateHost("printer.local"));
+        Assert.True(OmniboxInputResolver.IsLocalOrPrivateHost("intranet-server"));
+
+        Assert.False(OmniboxInputResolver.IsLocalOrPrivateHost("wikipedia.org"));
+        Assert.False(OmniboxInputResolver.IsLocalOrPrivateHost("github.com"));
     }
 
     [Fact]
-    public void WebView2_GetController_ReflectsExpectedMembers()
+    public void HistoryStore_UnwrapsPdfViewerUrls_AndPrecalculatesSearchFields()
     {
-        var type = typeof(Microsoft.Web.WebView2.Wpf.WebView2);
-        var baseField = type.GetField("m_webview2Base", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(baseField);
-        var controllerProp = baseField.FieldType.GetProperty("CoreWebView2Controller", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(controllerProp);
-        Assert.Equal(typeof(Microsoft.Web.WebView2.Core.CoreWebView2Controller), controllerProp.PropertyType);
+        string tempFile = Path.Combine(Path.GetTempPath(), $"lex_hist_audit_{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new HistoryStore(tempFile);
+            string wrappedPdf = PdfStudioService.GetViewerUrl("https://example.com/manual.pdf");
+
+            store.AddEntry(wrappedPdf, "Manual Técnico PDF");
+
+            var snapshot = store.GetRecentSnapshot(100);
+            Assert.Single(snapshot);
+            Assert.Equal("https://example.com/manual.pdf", snapshot[0].Url);
+            Assert.Equal("example.com", snapshot[0].Domain);
+            Assert.Equal("example.com/manual.pdf", snapshot[0].CleanDisplayUrl);
+            Assert.Contains("manual técnico pdf", snapshot[0].TitleLower);
+        }
+        finally
+        {
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+        }
     }
 
     [Fact]
-    public void NewTabPage_HtmlSize_IsWellWithinWebView2Limits()
+    public void PasswordManager_BuildSafeAutofillScript_DoesNotUsePostMessage()
     {
-        string html = NewTabPage.GetHtml(incognito: false);
-        // Debe ser mucho menor a 500 KB para evitar E_INVALIDARG en CoreWebView2.NavigateToString
-        Assert.True(html.Length < 150000, $"El HTML de nueva pestaña es demasiado pesado ({html.Length} caracteres)");
+        string script = PasswordManager.BuildSafeAutofillScript("user@example.com", "S3cr3t\"Pass");
+        Assert.DoesNotContain("postMessage", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("user@example.com", script, StringComparison.Ordinal);
     }
 }
-

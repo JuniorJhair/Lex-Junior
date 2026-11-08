@@ -15,11 +15,88 @@ public class HistoryEntry : INotifyPropertyChanged
     protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
+    private string _url = string.Empty;
+    private string _title = string.Empty;
+    private string _domain = string.Empty;
+
+    private string? _searchKey;
+    private string? _titleLower;
+    private string? _cleanDisplayUrl;
+    private string? _cleanDisplayUrlLower;
+    private string? _extractedSearchQuery;
+    private bool _searchQueryEvaluated;
+
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
-    public string Url { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public string Domain { get; set; } = string.Empty;
+
+    public string Url
+    {
+        get => _url;
+        set
+        {
+            _url = value ?? string.Empty;
+            InvalidateCachedFields();
+        }
+    }
+
+    public string Title
+    {
+        get => _title;
+        set
+        {
+            _title = value ?? string.Empty;
+            _searchKey = null;
+            _titleLower = null;
+        }
+    }
+
+    public string Domain
+    {
+        get => _domain;
+        set
+        {
+            _domain = value ?? string.Empty;
+            _searchKey = null;
+        }
+    }
+
     public DateTime VisitedAt { get; set; } = DateTime.Now;
+
+    public void InvalidateCachedFields()
+    {
+        _searchKey = null;
+        _titleLower = null;
+        _cleanDisplayUrl = null;
+        _cleanDisplayUrlLower = null;
+        _extractedSearchQuery = null;
+        _searchQueryEvaluated = false;
+    }
+
+    // Campos precalculados en memoria para filtrado O(1) sin allocaciones repetitivas en UI/Omnibox
+    [JsonIgnore]
+    public string SearchKey => _searchKey ??= $"{_title}\n{_url}\n{_domain}".ToLowerInvariant();
+
+    [JsonIgnore]
+    public string TitleLower => _titleLower ??= _title.ToLowerInvariant();
+
+    [JsonIgnore]
+    public string CleanDisplayUrl => _cleanDisplayUrl ??= OmniboxSuggestionService.FormatCleanDisplayUrl(_url);
+
+    [JsonIgnore]
+    public string CleanDisplayUrlLower => _cleanDisplayUrlLower ??= CleanDisplayUrl.ToLowerInvariant();
+
+    [JsonIgnore]
+    public string? ExtractedSearchQuery
+    {
+        get
+        {
+            if (!_searchQueryEvaluated)
+            {
+                _extractedSearchQuery = OmniboxSuggestionService.TryExtractSearchQueryFromUrl(_url);
+                _searchQueryEvaluated = true;
+            }
+            return _extractedSearchQuery;
+        }
+    }
 
     // Propiedades calculadas solo para la interfaz gráfica (no se guardan en disco)
     [JsonIgnore] public string DisplayTime => VisitedAt.ToString("HH:mm:ss");
@@ -129,6 +206,9 @@ public static class HistoryManager
 
     public static List<HistoryEntry> GetEntries(string? filterText = null, string? domain = null, DateTime? fromDate = null, DateTime? toDate = null)
         => _store.GetEntries(filterText, domain, fromDate, toDate);
+
+    public static IReadOnlyList<HistoryEntry> GetRecentSnapshot(int maxCount = 2500)
+        => _store.GetRecentSnapshot(maxCount);
 
     public static List<DomainVisitStat> GetDistinctDomains() => _store.GetDistinctDomains();
 

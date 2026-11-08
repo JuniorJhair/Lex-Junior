@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -14,6 +15,32 @@ namespace LexBrowser.UI.Views;
 
 public partial class SettingsWindow : Window
 {
+    private static readonly SolidColorBrush BrushEmeraldFg = CreateFrozenBrush(0x34, 0xD3, 0x99);
+    private static readonly SolidColorBrush BrushEmeraldBg = CreateFrozenBrush(0x06, 0x5F, 0x46);
+    private static readonly SolidColorBrush BrushSecondaryFg = CreateFrozenBrush(0xA1, 0xA1, 0xAA);
+    private static readonly SolidColorBrush BrushPrimaryIndigo = CreateFrozenBrush(0x4F, 0x46, 0xE5);
+    private static readonly SolidColorBrush BrushSiteCardBg = CreateFrozenBrush(0x18, 0x18, 0x24);
+    private static readonly SolidColorBrush BrushSiteCardBorder = CreateFrozenBrush(0x29, 0x29, 0x3C);
+    private static readonly SolidColorBrush BrushSiteIconBg = CreateFrozenBrush(0x23, 0x23, 0x34);
+    private static readonly SolidColorBrush BrushBadgeBlockBg = CreateFrozenBrush(0x3B, 0x16, 0x1B);
+    private static readonly SolidColorBrush BrushBadgeBlockFg = CreateFrozenBrush(0xF8, 0x71, 0x71);
+    private static readonly SolidColorBrush BrushBadgeAllowBg = CreateFrozenBrush(0x0E, 0x33, 0x21);
+    private static readonly SolidColorBrush BrushBadgeSilentBg = CreateFrozenBrush(0x28, 0x20, 0x48);
+    private static readonly SolidColorBrush BrushBadgeSilentFg = CreateFrozenBrush(0xA7, 0x8B, 0xFA);
+    private static readonly SolidColorBrush BrushBadgeAskBg = CreateFrozenBrush(0x25, 0x25, 0x33);
+    private static readonly SolidColorBrush BrushBadgeAskFg = CreateFrozenBrush(0xD4, 0xD4, 0xD8);
+    private static readonly SolidColorBrush BrushDrawerBg = CreateFrozenBrush(0x14, 0x14, 0x1F);
+    private static readonly SolidColorBrush BrushDrawerBorder = CreateFrozenBrush(0x31, 0x2E, 0x81);
+    private static readonly SolidColorBrush BrushComboBg = CreateFrozenBrush(0x1E, 0x1E, 0x2A);
+    private static readonly SolidColorBrush BrushComboBorder = CreateFrozenBrush(0x3D, 0x3D, 0x56);
+
+    private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
     private readonly CoreWebView2? _core;
     private bool _isInitializing = true;
 
@@ -31,6 +58,7 @@ public partial class SettingsWindow : Window
         LoadCurrentSettings();
         _isInitializing = false;
         Activated += (s, e) => UpdateDefaultBrowserUI();
+        Closed += (_, _) => SettingsManager.FlushDeferredSave();
     }
 
     private void LoadCurrentSettings()
@@ -46,6 +74,9 @@ public partial class SettingsWindow : Window
         ChkSubframeWebShield.IsChecked = s.EnableWebShieldInSubframes;
         ChkRestoreSession.IsChecked = s.RestorePreviousSession;
         ChkEnableHistory.IsChecked = s.EnableHistory;
+        if (ChkEnableSearchSuggestions != null) ChkEnableSearchSuggestions.IsChecked = s.EnableSearchSuggestions;
+        if (ChkEnableExternalFavicons != null) ChkEnableExternalFavicons.IsChecked = s.EnableExternalFaviconService;
+
         TxtSettingsHistoryStorage.Text = $"Espacio ocupado: {HistoryManager.GetHistoryFileSizeFormatted()}";
         if (TxtSettingsVaultSummary != null)
         {
@@ -65,7 +96,6 @@ public partial class SettingsWindow : Window
             default: RbGoogle.IsChecked = true; break;
         }
 
-        // Notificaciones Web (0.0% CPU en reposo)
         switch (s.NotificationGlobalPolicy)
         {
             case "BlockAll": RbPolicyBlockAll.IsChecked = true; break;
@@ -139,11 +169,12 @@ public partial class SettingsWindow : Window
         s.RestorePreviousSession = ChkRestoreSession.IsChecked == true;
         s.NotificationDiscardOlderThan24Hours = ChkDiscardOlder24h.IsChecked == true;
         s.NotificationDndOnFullscreen = ChkDndFullscreen.IsChecked == true;
+        if (ChkEnableSearchSuggestions != null) s.EnableSearchSuggestions = ChkEnableSearchSuggestions.IsChecked == true;
+        if (ChkEnableExternalFavicons != null) s.EnableExternalFaviconService = ChkEnableExternalFavicons.IsChecked == true;
 
         bool wantsHistory = ChkEnableHistory.IsChecked == true;
         if (!wantsHistory && s.EnableHistory)
         {
-            // Estaba activado y el usuario lo acaba de desactivar
             int total = HistoryManager.GetTotalCount();
             if (total > 0)
             {
@@ -164,7 +195,6 @@ public partial class SettingsWindow : Window
                 }
                 else
                 {
-                    // Canceló: revertir el switch a activado
                     ChkEnableHistory.IsChecked = true;
                     return;
                 }
@@ -231,12 +261,12 @@ public partial class SettingsWindow : Window
         SettingsManager.Save();
     }
 
-    private void TxtCustomSearchUrl_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void TxtCustomSearchUrl_TextChanged(object sender, TextChangedEventArgs e)
     {
         if (_isInitializing) return;
 
         SettingsManager.Current.CustomSearchUrl = TxtCustomSearchUrl.Text.Trim();
-        SettingsManager.Save();
+        SettingsManager.SaveDeferred(600, notify: true);
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -254,15 +284,18 @@ public partial class SettingsWindow : Window
             bool isDefault = InstallerService.IsDefaultBrowser();
             if (isDefault)
             {
-                SettingsManager.Current.WasPreviouslyDefaultBrowser = true;
-                SettingsManager.Current.UserDecidedDefaultBrowser = true;
-                SettingsManager.Save();
+                if (!SettingsManager.Current.WasPreviouslyDefaultBrowser || !SettingsManager.Current.UserDecidedDefaultBrowser)
+                {
+                    SettingsManager.Current.WasPreviouslyDefaultBrowser = true;
+                    SettingsManager.Current.UserDecidedDefaultBrowser = true;
+                    SettingsManager.Save();
+                }
 
                 TxtDefaultBrowserStatus.Text = "🎉 ¡Gracias por preferirnos como tu navegador predeterminado en Windows!";
-                TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#34D399"));
+                TxtDefaultBrowserStatus.Foreground = BrushEmeraldFg;
                 BtnSetDefaultBrowser.Content = "✓ Ya es predeterminado";
-                BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#065F46"));
-                BtnSetDefaultBrowser.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#34D399"));
+                BtnSetDefaultBrowser.Background = BrushEmeraldBg;
+                BtnSetDefaultBrowser.Foreground = BrushEmeraldFg;
                 BtnSetDefaultBrowser.IsEnabled = false;
             }
             else
@@ -274,10 +307,10 @@ public partial class SettingsWindow : Window
                 }
 
                 TxtDefaultBrowserStatus.Text = "Haz de Lex Junior tu navegador principal para abrir enlaces externos.";
-                TxtDefaultBrowserStatus.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#71717A"));
+                TxtDefaultBrowserStatus.Foreground = BrushSecondaryFg;
                 BtnSetDefaultBrowser.Content = "🌐 Establecer como predeterminado";
-                BtnSetDefaultBrowser.Background = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#6366F1"));
-                BtnSetDefaultBrowser.Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#FFFFFF"));
+                BtnSetDefaultBrowser.Background = BrushPrimaryIndigo;
+                BtnSetDefaultBrowser.Foreground = Brushes.White;
                 BtnSetDefaultBrowser.IsEnabled = true;
             }
         }
@@ -390,7 +423,6 @@ public partial class SettingsWindow : Window
             TxtNotificationSitesSummary.Text = $"Sitios registrados: {totalSites} · Bloqueados: {blockedCount} · Permitidos: {allowedCount} · Silenciosos: {silentCount}";
         }
 
-        // Aplicar filtro de categoría
         IEnumerable<SiteNotificationEntry> filtered = allSites;
         if (FilterBlocked?.IsChecked == true)
         {
@@ -405,7 +437,6 @@ public partial class SettingsWindow : Window
             filtered = filtered.Where(s => s.Mode == SiteNotificationMode.Silent);
         }
 
-        // Aplicar filtro de búsqueda
         string query = TxtSearchSite?.Text?.Trim().ToLowerInvariant() ?? string.Empty;
         if (!string.IsNullOrEmpty(query))
         {
@@ -434,8 +465,8 @@ public partial class SettingsWindow : Window
     {
         var container = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x18, 0x18, 0x24)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x29, 0x29, 0x3C)),
+            Background = BrushSiteCardBg,
+            BorderBrush = BrushSiteCardBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12, 10, 12, 10),
@@ -444,13 +475,11 @@ public partial class SettingsWindow : Window
 
         var rootStack = new StackPanel();
 
-        // 1. Fila Principal
         var mainGrid = new Grid();
         mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // Favicon
         string host = "sitio";
         try { host = new Uri(entry.Origin).Host; } catch { host = entry.Origin; }
 
@@ -459,7 +488,7 @@ public partial class SettingsWindow : Window
             Width = 26,
             Height = 26,
             CornerRadius = new CornerRadius(6),
-            Background = new SolidColorBrush(Color.FromRgb(0x23, 0x23, 0x34)),
+            Background = BrushSiteIconBg,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 10, 0)
         };
@@ -494,7 +523,6 @@ public partial class SettingsWindow : Window
         Grid.SetColumn(iconBorder, 0);
         mainGrid.Children.Add(iconBorder);
 
-        // Información del sitio
         var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
 
         var titleBlock = new TextBlock
@@ -509,67 +537,64 @@ public partial class SettingsWindow : Window
 
         var detailsStack = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
 
-        // Badge de estado
         string badgeText;
-        Color badgeBgColor;
-        Color badgeFgColor;
+        Brush badgeBg;
+        Brush badgeFg;
         switch (entry.Mode)
         {
             case SiteNotificationMode.Block:
                 badgeText = "🚫 Bloqueado";
-                badgeBgColor = Color.FromRgb(0x3B, 0x16, 0x1B);
-                badgeFgColor = Color.FromRgb(0xF8, 0x71, 0x71);
+                badgeBg = BrushBadgeBlockBg;
+                badgeFg = BrushBadgeBlockFg;
                 break;
             case SiteNotificationMode.Allow:
                 badgeText = "✅ Permitido";
-                badgeBgColor = Color.FromRgb(0x0E, 0x33, 0x21);
-                badgeFgColor = Color.FromRgb(0x34, 0xD3, 0x99);
+                badgeBg = BrushBadgeAllowBg;
+                badgeFg = BrushEmeraldFg;
                 break;
             case SiteNotificationMode.Silent:
                 badgeText = "🔕 Silencioso";
-                badgeBgColor = Color.FromRgb(0x28, 0x20, 0x48);
-                badgeFgColor = Color.FromRgb(0xA7, 0x8B, 0xFA);
+                badgeBg = BrushBadgeSilentBg;
+                badgeFg = BrushBadgeSilentFg;
                 break;
             default:
                 badgeText = "❓ Preguntar";
-                badgeBgColor = Color.FromRgb(0x25, 0x25, 0x33);
-                badgeFgColor = Color.FromRgb(0xD4, 0xD4, 0xD8);
+                badgeBg = BrushBadgeAskBg;
+                badgeFg = BrushBadgeAskFg;
                 break;
         }
 
         var badgeBorder = new Border
         {
-            Background = new SolidColorBrush(badgeBgColor),
+            Background = badgeBg,
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(5, 1, 5, 1),
-            Margin = new Thickness(0, 0, 8, 0)
-        };
-        badgeBorder.Child = new TextBlock
-        {
-            Text = badgeText,
-            Foreground = new SolidColorBrush(badgeFgColor),
-            FontSize = 9.5,
-            FontWeight = FontWeights.SemiBold
+            Margin = new Thickness(0, 0, 8, 0),
+            Child = new TextBlock
+            {
+                Text = badgeText,
+                Foreground = badgeFg,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold
+            }
         };
         detailsStack.Children.Add(badgeBorder);
 
-        // Límite diario
         string quotaText = entry.DailyLimit > 0 ? $"Cuota: {entry.DailyLimit}/día" : "Cuota: Predeterminada";
         detailsStack.Children.Add(new TextBlock
         {
             Text = quotaText,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x8B, 0x96)),
-            FontSize = 10,
+            Foreground = BrushSecondaryFg,
+            FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 8, 0)
         });
 
-        // Fecha de adición
         detailsStack.Children.Add(new TextBlock
         {
             Text = $"Agregado: {entry.CreatedAt.ToLocalTime():dd/MM/yyyy}",
-            Foreground = new SolidColorBrush(Color.FromRgb(0x71, 0x71, 0x7A)),
-            FontSize = 10,
+            Foreground = BrushSecondaryFg,
+            FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center
         });
 
@@ -577,14 +602,12 @@ public partial class SettingsWindow : Window
         Grid.SetColumn(infoStack, 1);
         mainGrid.Children.Add(infoStack);
 
-        // Botones de Acción según estado
         var actionButtons = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
-        // Cajón desplegable de personalización (inicialmente colapsado)
         var customDrawer = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x14, 0x14, 0x1F)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x31, 0x2E, 0x81)),
+            Background = BrushDrawerBg,
+            BorderBrush = BrushDrawerBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(12, 10, 12, 10),
@@ -594,7 +617,6 @@ public partial class SettingsWindow : Window
 
         if (entry.Mode == SiteNotificationMode.Block)
         {
-            // BOTÓN 1: Quitar bloqueo (vuelve a neutral)
             var btnUnblock = new Button
             {
                 Content = "Quitar bloqueo",
@@ -612,38 +634,29 @@ public partial class SettingsWindow : Window
             };
             actionButtons.Children.Add(btnUnblock);
 
-            // BOTÓN 2: Desbloquear y Permitir (con opción guiada de personalización)
             var btnUnblockAndAllow = new Button
             {
                 Content = "Desbloquear y Permitir",
-                Background = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1)),
-                Foreground = Brushes.White,
+                Style = (Style)FindResource("LexPrimaryButton"),
                 FontWeight = FontWeights.SemiBold,
                 FontSize = 11,
                 Padding = new Thickness(12, 5, 12, 5),
                 Cursor = Cursors.Hand,
                 ToolTip = "Habilitar notificaciones para este sitio"
             };
-            btnUnblockAndAllow.Resources.Add(typeof(Border), new Style(typeof(Border))
-            {
-                Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(6)) }
-            });
-
             btnUnblockAndAllow.Click += (s, e) =>
             {
-                // Alternar cajón de confirmación / personalización
                 customDrawer.Visibility = customDrawer.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
             };
             actionButtons.Children.Add(btnUnblockAndAllow);
         }
         else
         {
-            // Para sitios Permitidos / Silenciosos: Botón Personalizar reglas
             var btnCustomize = new Button
             {
                 Content = "⚙️ Reglas",
                 Style = (Style)FindResource("LexGhostButton"),
-                FontSize = 10.5,
+                FontSize = 11,
                 Padding = new Thickness(8, 4, 8, 4),
                 Margin = new Thickness(0, 0, 4, 0),
                 Cursor = Cursors.Hand,
@@ -655,7 +668,6 @@ public partial class SettingsWindow : Window
             };
             actionButtons.Children.Add(btnCustomize);
 
-            // Botón Bloquear
             var btnBlock = new Button
             {
                 Content = "🚫",
@@ -673,7 +685,6 @@ public partial class SettingsWindow : Window
             };
             actionButtons.Children.Add(btnBlock);
 
-            // Botón Eliminar
             var btnRemove = new Button
             {
                 Content = "✕",
@@ -695,7 +706,6 @@ public partial class SettingsWindow : Window
         mainGrid.Children.Add(actionButtons);
         rootStack.Children.Add(mainGrid);
 
-        // 2. Contenido del Cajón de Personalización / Desbloqueo Guiado
         var drawerStack = new StackPanel();
 
         var promptGrid = new Grid { Margin = new Thickness(0, 0, 0, 8) };
@@ -717,7 +727,7 @@ public partial class SettingsWindow : Window
         {
             Content = "✕",
             Style = (Style)FindResource("LexGhostButton"),
-            FontSize = 9.5,
+            FontSize = 11,
             Padding = new Thickness(4, 2, 4, 2),
             Cursor = Cursors.Hand
         };
@@ -726,28 +736,26 @@ public partial class SettingsWindow : Window
         promptGrid.Children.Add(btnCloseDrawer);
         drawerStack.Children.Add(promptGrid);
 
-        // Opciones de Ajuste Granular
         var optionsGrid = new Grid { Margin = new Thickness(0, 0, 0, 10) };
         optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        // Columna 1: Cuota diaria de este sitio
         var col1Stack = new StackPanel { Margin = new Thickness(0, 0, 6, 0) };
         col1Stack.Children.Add(new TextBlock
         {
             Text = "Límite diario de este sitio:",
-            FontSize = 10.5,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xA1, 0xA1, 0xAA)),
+            FontSize = 11,
+            Foreground = BrushSecondaryFg,
             Margin = new Thickness(0, 0, 0, 3)
         });
 
         var cmbSiteLimit = new ComboBox
         {
-            Height = 26,
+            Height = 28,
             FontSize = 11,
-            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2A)),
+            Background = BrushComboBg,
             Foreground = Brushes.White,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x56))
+            BorderBrush = BrushComboBorder
         };
         cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Predeterminado (Global)", Tag = "0" });
         cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Máx 1 al día", Tag = "1" });
@@ -760,23 +768,22 @@ public partial class SettingsWindow : Window
         Grid.SetColumn(col1Stack, 0);
         optionsGrid.Children.Add(col1Stack);
 
-        // Columna 2: Modo visual
         var col2Stack = new StackPanel { Margin = new Thickness(6, 0, 0, 0) };
         col2Stack.Children.Add(new TextBlock
         {
             Text = "Modo de entrega:",
-            FontSize = 10.5,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xA1, 0xA1, 0xAA)),
+            FontSize = 11,
+            Foreground = BrushSecondaryFg,
             Margin = new Thickness(0, 0, 0, 3)
         });
 
         var cmbSiteMode = new ComboBox
         {
-            Height = 26,
+            Height = 28,
             FontSize = 11,
-            Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2A)),
+            Background = BrushComboBg,
             Foreground = Brushes.White,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x3D, 0x56))
+            BorderBrush = BrushComboBorder
         };
         cmbSiteMode.Items.Add(new ComboBoxItem { Content = "Aviso emergente (Toast)", Tag = "Allow" });
         cmbSiteMode.Items.Add(new ComboBoxItem { Content = "Solo silencioso (Centro)", Tag = "Silent" });
@@ -788,14 +795,13 @@ public partial class SettingsWindow : Window
 
         drawerStack.Children.Add(optionsGrid);
 
-        // Botones de acción del cajón
         var drawerButtons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
 
         var btnApplyDefault = new Button
         {
             Content = "Usar estándar",
             Style = (Style)FindResource("LexGhostButton"),
-            FontSize = 10.5,
+            FontSize = 11,
             Padding = new Thickness(8, 3, 8, 3),
             Margin = new Thickness(0, 0, 6, 0),
             Cursor = Cursors.Hand
@@ -810,17 +816,12 @@ public partial class SettingsWindow : Window
         var btnSaveCustom = new Button
         {
             Content = "Guardar reglas",
-            Background = new SolidColorBrush(Color.FromRgb(0x63, 0x66, 0xF1)),
-            Foreground = Brushes.White,
+            Style = (Style)FindResource("LexPrimaryButton"),
             FontWeight = FontWeights.SemiBold,
-            FontSize = 10.5,
+            FontSize = 11,
             Padding = new Thickness(10, 4, 10, 4),
             Cursor = Cursors.Hand
         };
-        btnSaveCustom.Resources.Add(typeof(Border), new Style(typeof(Border))
-        {
-            Setters = { new Setter(Border.CornerRadiusProperty, new CornerRadius(5)) }
-        });
         btnSaveCustom.Click += (s, e) =>
         {
             int siteLimit = 0;
@@ -857,22 +858,6 @@ public partial class SettingsWindow : Window
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        // 1. Si el evento proviene de un ComboBox abierto con scroll interno, desplazar el combo suavemente a 28 px
-        if (GlobalScrollBehavior.TryScrollOpenComboBox(e.OriginalSource as DependencyObject, e.Delta))
-        {
-            e.Handled = true;
-            return;
-        }
-
-        // 2. Si el puntero está fuera, o el combo no tiene scroll interno: desplazar la ventana principal suavemente a 28 px
-        e.Handled = true;
-        if (sender is ScrollViewer scrollViewer)
-        {
-            double deltaUnits = e.Delta / 120.0;
-            double scrollPixels = deltaUnits * 28.0;
-            double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
-            scrollViewer.ScrollToVerticalOffset(newOffset);
-        }
+        GlobalScrollBehavior.HandleSmoothScrollViewerMouseWheel(sender, e, 28.0);
     }
 }
-

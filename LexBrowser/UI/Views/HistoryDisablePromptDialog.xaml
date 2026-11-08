@@ -65,76 +65,18 @@
             <StackPanel Grid.Row="3" VerticalAlignment="Bottom">
                 <!-- Botón 1: Eliminar y desactivar (Recomendado) -->
                 <Button x:Name="BtnDeleteAndDisable" Content="🗑️ Eliminar historial actual y liberar espacio" 
-                        Background="#DC2626" Foreground="#FFFFFF" FontWeight="SemiBold" FontSize="12" Padding="12,9" Cursor="Hand"
-                        BorderThickness="0" Margin="0,0,0,8" Click="BtnDeleteAndDisable_Click">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="b" Property="Background" Value="#B91C1C"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                        Style="{StaticResource LexDangerButton}" FontWeight="SemiBold" FontSize="12" Padding="12,9"
+                        Margin="0,0,0,8" Click="BtnDeleteAndDisable_Click"/>
 
                 <!-- Botón 2: Conservar y desactivar -->
                 <Button x:Name="BtnKeepAndDisable" Content="📦 Conservar lo que ya estaba guardado" 
-                        Background="#222230" Foreground="#E4E4E7" FontWeight="SemiBold" FontSize="12" Padding="12,8" Cursor="Hand"
-                        BorderBrush="#2F2F42" BorderThickness="1" Margin="0,0,0,8" Click="BtnKeepAndDisable_Click">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="b" Property="Background" Value="#2D2D40"/>
-                                                <Setter TargetName="b" Property="BorderBrush" Value="#4B4B68"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                        Style="{StaticResource LexBaseButton}" FontWeight="SemiBold" FontSize="12" Padding="12,8"
+                        Margin="0,0,0,8" Click="BtnKeepAndDisable_Click"/>
 
                 <!-- Botón 3: Cancelar -->
                 <Button x:Name="BtnCancel" Content="Cancelar" 
-                        Background="Transparent" Foreground="#A1A1AA" FontSize="12" Padding="8,4" Cursor="Hand"
-                        BorderThickness="0" Click="BtnCancel_Click">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="b" Background="{TemplateBinding Background}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Foreground" Value="#FFFFFF"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                        Style="{StaticResource LexGhostButton}" Foreground="#A1A1AA" FontSize="12" Padding="8,4"
+                        Click="BtnCancel_Click"/>
             </StackPanel>
         </Grid>
     </Border>

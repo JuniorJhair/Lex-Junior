@@ -28,6 +28,8 @@ public class BrowserSettings
     public double MainWindowTop { get; set; } = double.NaN;
     public string DefaultSearchEngine { get; set; } = "Google";
     public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
+    public bool EnableSearchSuggestions { get; set; } = true;
+    public bool EnableExternalFaviconService { get; set; } = true;
     public bool RestorePreviousSession { get; set; } = true;
 
     // Guardador de Contraseñas y Bloqueo Inteligente del Navegador (0% CPU en reposo)
@@ -64,6 +66,9 @@ public class BrowserSettings
 public static class SettingsManager
 {
     private static readonly object _saveLock = new();
+    private static System.Threading.Timer? _deferredSaveTimer;
+    private static volatile bool _deferredSavePending;
+    private static volatile bool _deferredSaveNotify;
 
     private static readonly string DefaultSettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -191,6 +196,70 @@ public static class SettingsManager
         return false;
     }
 
+    /// <summary>
+    /// Programa un guardado diferido en segundo plano (por defecto 600 ms) para evitar escrituras
+    /// síncronas repetitivas en el hilo de interfaz (ej. al redimensionar o mover ventanas PiP).
+    /// 0% CPU en reposo: el temporizador es de un solo disparo y permanece inactivo el resto del tiempo.
+    /// </summary>
+    public static void SaveDeferred(int delayMs = 600, bool notify = false)
+    {
+        lock (_saveLock)
+        {
+            _deferredSavePending = true;
+            if (notify) _deferredSaveNotify = true;
+
+            if (_deferredSaveTimer == null)
+            {
+                _deferredSaveTimer = new System.Threading.Timer(_ =>
+                {
+                    bool shouldSave = false;
+                    bool shouldNotify = false;
+                    lock (_saveLock)
+                    {
+                        if (_deferredSavePending)
+                        {
+                            shouldSave = true;
+                            shouldNotify = _deferredSaveNotify;
+                            _deferredSavePending = false;
+                            _deferredSaveNotify = false;
+                        }
+                    }
+
+                    if (shouldSave)
+                    {
+                        Save(notify: shouldNotify);
+                    }
+                }, null, Math.Max(50, delayMs), System.Threading.Timeout.Infinite);
+            }
+            else
+            {
+                _deferredSaveTimer.Change(Math.Max(50, delayMs), System.Threading.Timeout.Infinite);
+            }
+        }
+    }
+
+    public static void FlushDeferredSave()
+    {
+        bool shouldSave = false;
+        bool shouldNotify = false;
+        lock (_saveLock)
+        {
+            if (_deferredSavePending)
+            {
+                shouldSave = true;
+                shouldNotify = _deferredSaveNotify;
+                _deferredSavePending = false;
+                _deferredSaveNotify = false;
+                _deferredSaveTimer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+            }
+        }
+
+        if (shouldSave)
+        {
+            Save(notify: shouldNotify);
+        }
+    }
+
     public static void Save(bool notify = true)
     {
         string path = SettingsPath;
@@ -201,6 +270,10 @@ public static class SettingsManager
         {
             lock (_saveLock)
             {
+                _deferredSavePending = false;
+                _deferredSaveNotify = false;
+                _deferredSaveTimer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+
                 if (!string.IsNullOrEmpty(dir))
                 {
                     Directory.CreateDirectory(dir);
