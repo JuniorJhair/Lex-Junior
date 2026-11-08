@@ -7,13 +7,39 @@ public static class NewTabPage
 {
     private static string? _logoBase64;
 
+    private static string ResizeAndEncodeBase64(byte[] rawBytes, int maxWidth = 128, int maxHeight = 128)
+    {
+        try
+        {
+            using var ms = new MemoryStream(rawBytes);
+            var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(ms, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+            var frame = decoder.Frames[0];
+            double scale = Math.Min((double)maxWidth / frame.PixelWidth, (double)maxHeight / frame.PixelHeight);
+            if (scale >= 1.0) scale = 1.0;
+            var transformed = new System.Windows.Media.Imaging.TransformedBitmap(frame, new System.Windows.Media.ScaleTransform(scale, scale));
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(transformed));
+            using var outMs = new MemoryStream();
+            encoder.Save(outMs);
+            return Convert.ToBase64String(outMs.ToArray());
+        }
+        catch
+        {
+            if (rawBytes.Length <= 65536)
+                return Convert.ToBase64String(rawBytes);
+            return "";
+        }
+    }
+
     private static string GetLogoBase64()
     {
         if (_logoBase64 != null) return _logoBase64;
+
+        // 1. Intentar cargar primero la versión web optimizada (~23 KB) desde los recursos ensamblados
         try
         {
-            var resourceUri = new Uri("pack://application:,,,/Assets/logo.png", UriKind.Absolute);
-            var streamInfo = System.Windows.Application.GetResourceStream(resourceUri);
+            var webUri = new Uri("pack://application:,,,/Assets/logo_web.png", UriKind.Absolute);
+            var streamInfo = System.Windows.Application.GetResourceStream(webUri);
             if (streamInfo?.Stream != null)
             {
                 using var ms = new MemoryStream();
@@ -24,22 +50,50 @@ public static class NewTabPage
         }
         catch { }
 
+        // 2. Intentar archivo físico de logo_web.png
+        try
+        {
+            string webPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo_web.png");
+            if (File.Exists(webPath))
+            {
+                _logoBase64 = Convert.ToBase64String(File.ReadAllBytes(webPath));
+                return _logoBase64;
+            }
+            string devWebPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Assets", "logo_web.png");
+            if (File.Exists(devWebPath))
+            {
+                _logoBase64 = Convert.ToBase64String(File.ReadAllBytes(devWebPath));
+                return _logoBase64;
+            }
+        }
+        catch { }
+
+        // 3. Fallback a logo.png pero reescalado en memoria a 128x128 para jamás exceder límites de NavigateToString
+        try
+        {
+            var resourceUri = new Uri("pack://application:,,,/Assets/logo.png", UriKind.Absolute);
+            var streamInfo = System.Windows.Application.GetResourceStream(resourceUri);
+            if (streamInfo?.Stream != null)
+            {
+                using var ms = new MemoryStream();
+                streamInfo.Stream.CopyTo(ms);
+                _logoBase64 = ResizeAndEncodeBase64(ms.ToArray());
+                return _logoBase64;
+            }
+        }
+        catch { }
+
         try
         {
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Assets", "logo.png");
             if (File.Exists(path))
             {
-                _logoBase64 = Convert.ToBase64String(File.ReadAllBytes(path));
-                return _logoBase64;
-            }
-            string devPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "Assets", "logo.png");
-            if (File.Exists(devPath))
-            {
-                _logoBase64 = Convert.ToBase64String(File.ReadAllBytes(devPath));
+                _logoBase64 = ResizeAndEncodeBase64(File.ReadAllBytes(path));
                 return _logoBase64;
             }
         }
         catch { }
+
         return "";
     }
 

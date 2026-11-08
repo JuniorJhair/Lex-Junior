@@ -1004,7 +1004,15 @@ public partial class MainWindow : Window
             {
                 if (isNewTabDefault)
                 {
-                    webView.NavigateToString(NewTabPage.GetHtml(isIncognito, isGuest: _isGuestSession));
+                    try
+                    {
+                        webView.NavigateToString(NewTabPage.GetHtml(isIncognito, isGuest: _isGuestSession));
+                    }
+                    catch (Exception navEx)
+                    {
+                        ShieldLogger.Log("NAVIGATE_TO_STRING_ERROR", "local", "newtab", "MainFrame", navEx.Message, tab.TabId);
+                        webView.NavigateToString("<!DOCTYPE html><html><body style='background:#0F0F12;color:#fff;font-family:sans-serif;padding:40px;text-align:center;'><h2>Nueva pestaña</h2></body></html>");
+                    }
                 }
                 else if (!string.IsNullOrWhiteSpace(initialUrl))
                 {
@@ -1446,11 +1454,12 @@ public partial class MainWindow : Window
                         ShieldLogger.Log("REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "AdBlockResources redirect stub (200 OK)", tabDesc);
                     }
                     else if (uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
-                             uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase))
+                             uri.Host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase) ||
+                             AdBlockFilter.IsGoogleDomain(originHost))
                     {
                         statusCode = 204;
                         statusReason = "No Content";
-                        ShieldLogger.Log("REQUEST_BLOCKED_204", "youtube.com", uri.AbsoluteUri, frameDesc, "YouTube ad/telemetry endpoint", tabDesc);
+                        ShieldLogger.Log("REQUEST_BLOCKED_204", originHost, uri.AbsoluteUri, frameDesc, "Google/YouTube ad or telemetry endpoint", tabDesc);
                     }
                     else
                     {

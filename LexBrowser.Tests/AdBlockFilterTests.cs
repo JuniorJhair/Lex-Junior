@@ -235,6 +235,8 @@ public class AdBlockFilterTests
         // Desde Google (ej. google.com durante búsqueda o Google Lens con IA):
         Assert.False(AdBlockFilter.ShouldBlock(adserviceUri, "www.google.com"));
         Assert.False(AdBlockFilter.ShouldBlock(googleAdservicesTokenUri, "google.com"));
+        Assert.False(AdBlockFilter.ShouldBlock(new Uri("https://www.google-analytics.com/analytics.js"), "www.google.com"));
+        Assert.False(AdBlockFilter.ShouldBlock(new Uri("https://www.googletagmanager.com/gtm.js"), "www.google.com"));
 
         // Los anuncios puros en Google siguen bloqueados:
         Assert.True(AdBlockFilter.ShouldBlock(googleAdsDoubleclickUri, "www.google.com"));
@@ -243,6 +245,8 @@ public class AdBlockFilterTests
         // Desde un sitio tercero no Google, o sin origin, los servicios de anuncios y tracking se bloquean:
         Assert.True(AdBlockFilter.ShouldBlock(adserviceUri, "noticias.com"));
         Assert.True(AdBlockFilter.ShouldBlock(adserviceUri, null));
+        Assert.True(AdBlockFilter.ShouldBlock(new Uri("https://www.google-analytics.com/analytics.js"), "noticias.com"));
+        Assert.True(AdBlockFilter.ShouldBlock(new Uri("https://www.googletagmanager.com/gtm.js"), "noticias.com"));
     }
 }
 

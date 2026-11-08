@@ -204,5 +204,13 @@ public class AuditRegressionTests
         Assert.NotNull(controllerProp);
         Assert.Equal(typeof(Microsoft.Web.WebView2.Core.CoreWebView2Controller), controllerProp.PropertyType);
     }
+
+    [Fact]
+    public void NewTabPage_HtmlSize_IsWellWithinWebView2Limits()
+    {
+        string html = NewTabPage.GetHtml(incognito: false);
+        // Debe ser mucho menor a 500 KB para evitar E_INVALIDARG en CoreWebView2.NavigateToString
+        Assert.True(html.Length < 150000, $"El HTML de nueva pestaña es demasiado pesado ({html.Length} caracteres)");
+    }
 }
 

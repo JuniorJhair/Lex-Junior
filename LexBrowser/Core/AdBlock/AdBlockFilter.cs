@@ -314,14 +314,18 @@ public static class AdBlockFilter
         bool isGoogleServiceHost = IsGoogleDomain(host);
         bool isGoogleOrigin = !string.IsNullOrEmpty(originHost) && IsGoogleDomain(originHost);
 
-        if (isGoogleOrigin && isGoogleServiceHost)
+        if (isGoogleOrigin)
         {
             if (path.StartsWith("/pagead", StringComparison.OrdinalIgnoreCase) ||
                 fullUrl.Contains("googleads.g.doubleclick.net", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
-            return false;
+
+            if (isGoogleServiceHost)
+            {
+                return false;
+            }
         }
 
         // 1. Bloquear dominios completos (incluyendo subdominios)
@@ -439,7 +443,19 @@ public static class AdBlockFilter
                host.Equals("googlesyndication.com", StringComparison.OrdinalIgnoreCase) ||
                host.EndsWith(".googlesyndication.com", StringComparison.OrdinalIgnoreCase) ||
                host.Equals("gstatic.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".gstatic.com", StringComparison.OrdinalIgnoreCase);
+               host.EndsWith(".gstatic.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("googleapis.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("googleusercontent.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".googleusercontent.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("googlevideo.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".googlevideo.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("google-analytics.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".google-analytics.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("googletagmanager.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".googletagmanager.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("doubleclick.net", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".doubleclick.net", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);
