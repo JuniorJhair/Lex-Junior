@@ -2074,6 +2074,7 @@ public partial class MainWindow : Window
 
                 _ = win.UpdateTabFaviconAsync(tab);
                 _ = win.UpdateTranslateIndicatorUIAsync(tab);
+                if (win._activeTab == tab) win.UpdatePdfToolsUI();
             });
         };
 
@@ -2126,6 +2127,7 @@ public partial class MainWindow : Window
                     win.UpdateSecurityIndicatorUI();
                     win.UpdateCurrentTabBookmarkUI();
                     win.UpdateMediaSnifferUI();
+                    win.UpdatePdfToolsUI();
                 }
             });
         };
@@ -2332,6 +2334,7 @@ public partial class MainWindow : Window
             UpdateMediaSnifferUI();
             UpdateNotificationPermissionUI();
             _ = UpdateTranslateIndicatorUIAsync(tab);
+            UpdatePdfToolsUI();
             FocusOmniboxIfNewTab(tab);
         }
         catch (Exception ex)
@@ -3722,9 +3725,32 @@ public partial class MainWindow : Window
 
         string targetUrl;
         if (input.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            input.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            input.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            input.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
+            input.StartsWith("about:", StringComparison.OrdinalIgnoreCase) ||
+            input.StartsWith("view-source:", StringComparison.OrdinalIgnoreCase) ||
+            input.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
         {
             targetUrl = input;
+        }
+        else if ((input.Length >= 2 && char.IsLetter(input[0]) && input[1] == ':') ||
+                 input.StartsWith(@"\\") ||
+                 input.StartsWith("//"))
+        {
+            try
+            {
+                targetUrl = new Uri(Path.GetFullPath(input)).AbsoluteUri;
+            }
+            catch
+            {
+                targetUrl = "file:///" + input.Replace('\\', '/');
+            }
+        }
+        else if (input.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                 input.StartsWith("localhost:", StringComparison.OrdinalIgnoreCase) ||
+                 input.StartsWith("127.0.0.1", StringComparison.OrdinalIgnoreCase))
+        {
+            targetUrl = "http://" + input;
         }
         else if (input.Contains('.') && !input.Contains(' '))
         {
@@ -6611,5 +6637,155 @@ public partial class MainWindow : Window
             double newOffset = Math.Clamp(scrollViewer.VerticalOffset - scrollPixels, 0, scrollViewer.ScrollableHeight);
             scrollViewer.ScrollToVerticalOffset(newOffset);
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HERRAMIENTAS AVANZADAS DE LECTURA PDF (0% CPU Y 0 MB RAM EN REPOSO)
+    // ─────────────────────────────────────────────────────────────────────
+    private bool IsCurrentTabPdf()
+    {
+        if (_activeTab == null || _activeTab.IsDisposed) return false;
+        string url = _activeTab.Url ?? "";
+        string source = _activeTab.WebView?.CoreWebView2?.Source ?? "";
+        string title = _activeTab.Title ?? "";
+
+        return IsPdfTarget(url) || IsPdfTarget(source) || title.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPdfTarget(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        int qIdx = raw.IndexOfAny(new[] { '?', '#' });
+        string clean = qIdx >= 0 ? raw.Substring(0, qIdx) : raw;
+        return clean.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void UpdatePdfToolsUI()
+    {
+        bool isPdf = IsCurrentTabPdf();
+        BtnPdfTools.Visibility = isPdf ? Visibility.Visible : Visibility.Collapsed;
+        if (!isPdf && PopupPdfTools.IsOpen)
+        {
+            PopupPdfTools.IsOpen = false;
+        }
+    }
+
+    private void BtnPdfTools_Click(object sender, RoutedEventArgs e)
+    {
+        PopupPdfTools.IsOpen = !PopupPdfTools.IsOpen;
+    }
+
+    private async void BtnPdfDarkMode_Click(object sender, RoutedEventArgs e)
+    {
+        PopupPdfTools.IsOpen = false;
+        if (_activeTab?.WebView?.CoreWebView2 == null) return;
+        try
+        {
+            const string script = @"(function(){
+                var style = document.getElementById('lex-pdf-custom-style');
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'lex-pdf-custom-style';
+                    (document.head || document.documentElement).appendChild(style);
+                }
+                style.textContent = 'html, embed, object { filter: invert(0.9) hue-rotate(180deg) contrast(1.1) !important; background: #121216 !important; }';
+            })();";
+            await _activeTab.WebView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        catch { }
+    }
+
+    private async void BtnPdfSepiaMode_Click(object sender, RoutedEventArgs e)
+    {
+        PopupPdfTools.IsOpen = false;
+        if (_activeTab?.WebView?.CoreWebView2 == null) return;
+        try
+        {
+            const string script = @"(function(){
+                var style = document.getElementById('lex-pdf-custom-style');
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'lex-pdf-custom-style';
+                    (document.head || document.documentElement).appendChild(style);
+                }
+                style.textContent = 'html, embed, object { filter: sepia(0.55) contrast(0.95) brightness(0.95) !important; background: #28241D !important; }';
+            })();";
+            await _activeTab.WebView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        catch { }
+    }
+
+    private async void BtnPdfNormalMode_Click(object sender, RoutedEventArgs e)
+    {
+        PopupPdfTools.IsOpen = false;
+        if (_activeTab?.WebView?.CoreWebView2 == null) return;
+        try
+        {
+            const string script = @"(function(){
+                var style = document.getElementById('lex-pdf-custom-style');
+                if (style) { style.remove(); }
+            })();";
+            await _activeTab.WebView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        catch { }
+    }
+
+    private async void BtnPdfReadAloud_Click(object sender, RoutedEventArgs e)
+    {
+        PopupPdfTools.IsOpen = false;
+        if (_activeTab?.WebView?.CoreWebView2 == null) return;
+        try
+        {
+            const string script = @"(function(){
+                try {
+                    if (!window.speechSynthesis) return;
+                    window.speechSynthesis.cancel();
+                    var text = (window.getSelection && window.getSelection().toString()) || '';
+                    if (!text || text.trim().length === 0) {
+                        text = document.body ? (document.body.innerText || document.body.textContent || '') : '';
+                    }
+                    text = text.trim();
+                    if (!text) return;
+                    if (text.length > 8000) text = text.substring(0, 8000);
+                    var u = new SpeechSynthesisUtterance(text);
+                    u.rate = 1.0;
+                    u.lang = 'es-ES';
+                    window.speechSynthesis.speak(u);
+                } catch(e) {}
+            })();";
+            await _activeTab.WebView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+        catch { }
+    }
+
+    private async void BtnPdfStopAudio_Click(object sender, RoutedEventArgs e)
+    {
+        PopupPdfTools.IsOpen = false;
+        if (_activeTab?.WebView?.CoreWebView2 == null) return;
+        try
+        {
+            await _activeTab.WebView.CoreWebView2.ExecuteScriptAsync("if(window.speechSynthesis){window.speechSynthesis.cancel();}");
+        }
+        catch { }
+    }
+
+    private async void BtnPdfSummarizeAI_Click(object sender, RoutedEventArgs e)
+    {
+        PopupPdfTools.IsOpen = false;
+        if (_activeTab == null) return;
+        string name = _activeTab.Title;
+        if (string.IsNullOrWhiteSpace(name) || name == "Lex Junior")
+        {
+            try
+            {
+                name = System.IO.Path.GetFileNameWithoutExtension(_activeTab.Url);
+            }
+            catch { }
+        }
+        if (string.IsNullOrWhiteSpace(name)) name = "documento";
+
+        string query = Uri.EscapeDataString($"resumen explicativo puntos clave del documento {name}");
+        string aiUrl = $"https://www.google.com/search?q={query}&udm=ai";
+        await AddNewTabAsync(aiUrl, isIncognito: _activeTab.IsIncognito);
     }
 }

@@ -109,6 +109,39 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- ScrollBar Oscura Moderna y Suave para Configuración -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="ThumbBorder" Background="#3E3E54" CornerRadius="4" Margin="1,0"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#6366F1"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsDragging" Value="True">
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="#818CF8"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -492,7 +525,7 @@
                                         <TextBlock Text="Límite diario acumulado (Todas las páginas combinadas)" FontSize="12" FontWeight="Medium" Foreground="#F4F4F5"/>
                                         <TextBlock Text="Máximo total de alertas emergentes que recibirás al día" FontSize="10.5" Foreground="#71717A" Margin="0,2,0,0"/>
                                     </StackPanel>
-                                    <ComboBox x:Name="CmbGlobalDailyLimit" Grid.Column="1" Height="30" SelectionChanged="Limits_SelectionChanged" Background="#1E1E2A" Foreground="#FFFFFF" BorderBrush="#3D3D56">
+                                    <ComboBox x:Name="CmbGlobalDailyLimit" Grid.Column="1" Height="30" SelectionChanged="Limits_SelectionChanged" Style="{StaticResource LexComboBox}">
                                         <ComboBoxItem Content="Sin límite" Tag="0"/>
                                         <ComboBoxItem Content="10 al día" Tag="10"/>
                                         <ComboBoxItem Content="20 al día" Tag="20"/>
@@ -510,7 +543,7 @@
                                         <TextBlock Text="Límite predeterminado por sitio web" FontSize="12" FontWeight="Medium" Foreground="#F4F4F5"/>
                                         <TextBlock Text="Tope diario para cualquier página que no tenga una regla personalizada" FontSize="10.5" Foreground="#71717A" Margin="0,2,0,0"/>
                                     </StackPanel>
-                                    <ComboBox x:Name="CmbDefaultSiteLimit" Grid.Column="1" Height="30" SelectionChanged="Limits_SelectionChanged" Background="#1E1E2A" Foreground="#FFFFFF" BorderBrush="#3D3D56">
+                                    <ComboBox x:Name="CmbDefaultSiteLimit" Grid.Column="1" Height="30" SelectionChanged="Limits_SelectionChanged" Style="{StaticResource LexComboBox}">
                                         <ComboBoxItem Content="Sin límite" Tag="0"/>
                                         <ComboBoxItem Content="1 al día" Tag="1"/>
                                         <ComboBoxItem Content="2 al día" Tag="2"/>

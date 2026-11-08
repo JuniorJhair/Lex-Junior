@@ -309,23 +309,17 @@ public static class AdBlockFilter
         }
 
         // Regla especial de Google: Proteger búsquedas, respuestas IA (Gemini / Visión general IA / Lens)
-        // Cuando el origen de la navegación es Google y la petición es a Google o sus servicios de sesión/token,
-        // no bloquear los tokens de integridad ni endpoints asíncronos que requiere Google Lens e IA Overviews.
+        // Cuando el origen de la navegación es Google y la petición es a Google o sus servicios internos,
+        // no bloquear los tokens de integridad, sesión ni endpoints asíncronos que requiere Google Lens e IA Overviews.
         bool isGoogleServiceHost = IsGoogleDomain(host);
         bool isGoogleOrigin = !string.IsNullOrEmpty(originHost) && IsGoogleDomain(originHost);
 
-        if (isGoogleOrigin)
+        if (isGoogleOrigin && isGoogleServiceHost)
         {
-            if (path.StartsWith("/pagead", StringComparison.OrdinalIgnoreCase) ||
-                fullUrl.Contains("googleads.g.doubleclick.net", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (isGoogleServiceHost)
-            {
-                return false;
-            }
+            // Dentro de Google (búsqueda, Google Lens con subida de imagen, Visión General IA):
+            // Permitir que todas las llamadas internas de Google se completen con éxito sin 403 ni 204
+            // para que el streaming continuo de la IA no se interrumpa.
+            return false;
         }
 
         // 1. Bloquear dominios completos (incluyendo subdominios)

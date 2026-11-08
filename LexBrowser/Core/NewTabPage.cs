@@ -494,8 +494,10 @@ public static class NewTabPage
     function go() {
       const v = document.getElementById('si').value.trim();
       if (!v) return;
-      if (/^https?:\/\//i.test(v)) {
+      if (/^(https?|file|about|view-source|data):/i.test(v)) {
         window.location.href = v;
+      } else if (/^[a-zA-Z]:[\\\/]/i.test(v)) {
+        window.location.href = 'file:///' + v.replace(/\\/g, '/');
       } else if (/^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+/i.test(v) && !v.includes(' ')) {
         window.location.href = 'https://' + v;
       } else {

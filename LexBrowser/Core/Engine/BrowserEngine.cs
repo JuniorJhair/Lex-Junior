@@ -27,7 +27,7 @@ public static class BrowserEngine
         "--disable-client-side-phishing-detection " +
         "--disable-default-apps " +
         "--disable-features=OptimizationHints,Translate,InterestCohort,msSmartScreenProtection,MediaRouter,HardwareMediaKeyHandling " +
-        "--enable-features=OverlayScrollbar,WebRtcHideLocalIpsWithMdns " +
+        "--enable-features=OverlayScrollbar,WebRtcHideLocalIpsWithMdns,PdfAnnotations,PdfViewerUpdate,ReadAloud " +
         "--autoplay-policy=no-user-gesture-required";
 
     /// <summary>
