@@ -64,4 +64,17 @@ public class PdfStudioServiceTests
         Assert.StartsWith(PdfStudioService.VirtualOrigin + "viewer.html?file=", viewerUrl);
         Assert.Contains(Uri.EscapeDataString(remoteUrl), viewerUrl);
     }
+
+    [Theory]
+    [InlineData("viewer.html")]
+    [InlineData("pdf.min.js")]
+    [InlineData("pdf.worker.min.js")]
+    [InlineData("pdf-lib.min.js")]
+    public void EmbeddedResources_ArePresentAndReadable(string filename)
+    {
+        string resName = $"LexBrowser.Assets.pdf.{filename}";
+        using var stream = typeof(PdfStudioService).Assembly.GetManifestResourceStream(resName);
+        Assert.NotNull(stream);
+        Assert.True(stream.Length > 0);
+    }
 }

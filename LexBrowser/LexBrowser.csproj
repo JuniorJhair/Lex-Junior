@@ -20,6 +20,7 @@
     <Resource Include="Assets\logo.png" />
     <Resource Include="Assets\logo_web.png" />
     <Resource Include="Assets\app.ico" />
+    <EmbeddedResource Include="Assets\pdf\**" />
     <None Update="Assets\pdf\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

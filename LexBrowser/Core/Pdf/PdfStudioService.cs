@@ -140,12 +140,32 @@ public static class PdfStudioService
         // 2. Archivos estáticos del visor (viewer.html, pdf.min.js, pdf.worker.min.js, pdf-lib.min.js)
         if (string.IsNullOrEmpty(path)) path = "viewer.html";
 
+        byte[]? bytes = null;
         string diskFile = Path.Combine(folder, path);
+
         if (File.Exists(diskFile))
+        {
+            try { bytes = File.ReadAllBytes(diskFile); } catch { }
+        }
+
+        // Respaldo de alta disponibilidad: Si no está en disco (ej. Single-file publish autónomo en otra máquina),
+        // cargar directamente desde los recursos incrustados en el ensamblado binario.
+        if (bytes == null)
+        {
+            string resName = $"LexBrowser.Assets.pdf.{path.Replace('/', '.')}";
+            using var stream = typeof(PdfStudioService).Assembly.GetManifestResourceStream(resName);
+            if (stream != null)
+            {
+                using var ms = new MemoryStream();
+                stream.CopyTo(ms);
+                bytes = ms.ToArray();
+            }
+        }
+
+        if (bytes != null)
         {
             try
             {
-                byte[] bytes = File.ReadAllBytes(diskFile);
                 string contentType = path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ? "text/html; charset=utf-8" :
                                      path.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ? "application/javascript; charset=utf-8" :
                                      path.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ? "text/css; charset=utf-8" :
