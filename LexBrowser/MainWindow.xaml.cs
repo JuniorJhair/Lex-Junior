@@ -20,6 +20,7 @@ using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
 using LexBrowser.Core.Engine;
 using LexBrowser.Core.Notifications;
+using LexBrowser.Core.Pdf;
 using LexBrowser.UI.Models;
 using LexBrowser.UI.Views;
 
@@ -1016,7 +1017,10 @@ public partial class MainWindow : Window
                 }
                 else if (!string.IsNullOrWhiteSpace(initialUrl))
                 {
-                    webView.CoreWebView2.Navigate(initialUrl!);
+                    string navTarget = PdfStudioService.IsPdfTarget(initialUrl)
+                        ? PdfStudioService.GetViewerUrl(initialUrl)
+                        : initialUrl;
+                    webView.CoreWebView2.Navigate(navTarget);
                 }
             }
         }
@@ -1376,8 +1380,12 @@ public partial class MainWindow : Window
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Image);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Ping);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Other);
+        core.AddWebResourceRequestedFilter("https://pdf.lex.local/*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += (s, e) =>
         {
+            if (PdfStudioService.TryHandleWebResourceRequest(core.Environment, e))
+                return;
+
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri))
             {
                 // Detección forense del origen y contexto del marco (MainFrame vs Subframe/Iframe del reproductor)
@@ -1942,6 +1950,22 @@ public partial class MainWindow : Window
             string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
             ShieldLogger.Log("NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}", tabDesc);
 
+            // Redirección hacia Lex PDF Studio si el destino es un documento PDF
+            if (PdfStudioService.IsPdfTarget(e.Uri))
+            {
+                e.Cancel = true;
+                string viewerUrl = PdfStudioService.GetViewerUrl(e.Uri);
+                var winRef = tab.OwnerWindow ?? this;
+                winRef.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!tab.IsDisposed)
+                    {
+                        tab.WebView?.CoreWebView2?.Navigate(viewerUrl);
+                    }
+                }));
+                return;
+            }
+
             // Filtro de seguridad y anti-secuestro de pestaña (Tab-under / Reverse Popunder)
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Uri, UriKind.Absolute, out var targetUri))
             {
@@ -2091,7 +2115,39 @@ public partial class MainWindow : Window
                 }
                 else
                 {
-                    tab.Url = core.Source;
+                    if (core.Source.StartsWith(PdfStudioService.VirtualOrigin, StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var vUri = new Uri(core.Source);
+                            var vQuery = System.Web.HttpUtility.ParseQueryString(vUri.Query);
+                            string? fileParam = vQuery.Get("file");
+                            if (!string.IsNullOrWhiteSpace(fileParam) && fileParam.Contains("api/load-local-pdf"))
+                            {
+                                int qIdx = fileParam.IndexOf('?');
+                                string qSub = qIdx >= 0 ? fileParam.Substring(qIdx) : "";
+                                var innerQuery = System.Web.HttpUtility.ParseQueryString(qSub);
+                                string? rawPath = innerQuery.Get("path");
+                                tab.Url = !string.IsNullOrWhiteSpace(rawPath) ? rawPath : core.Source;
+                            }
+                            else if (!string.IsNullOrWhiteSpace(fileParam))
+                            {
+                                tab.Url = fileParam;
+                            }
+                            else
+                            {
+                                tab.Url = core.Source;
+                            }
+                        }
+                        catch
+                        {
+                            tab.Url = core.Source;
+                        }
+                    }
+                    else
+                    {
+                        tab.Url = core.Source;
+                    }
                     tab.IsNewTab = false;
                 }
 
@@ -3762,12 +3818,16 @@ public partial class MainWindow : Window
         TxtUrl.Text = targetUrl;
         _isUpdatingOmniboxTextProgrammatically = false;
 
+        string finalNavUrl = PdfStudioService.IsPdfTarget(targetUrl)
+            ? PdfStudioService.GetViewerUrl(targetUrl)
+            : targetUrl;
+
         if (_activeTab.WebView.CoreWebView2 != null)
         {
-            _activeTab.WebView.CoreWebView2.Navigate(targetUrl);
+            _activeTab.WebView.CoreWebView2.Navigate(finalNavUrl);
             _activeTab.WebView.Focus();
         }
-        else if (Uri.TryCreate(targetUrl, UriKind.Absolute, out var navUri))
+        else if (Uri.TryCreate(finalNavUrl, UriKind.Absolute, out var navUri))
         {
             _activeTab.WebView.Source = navUri;
         }
