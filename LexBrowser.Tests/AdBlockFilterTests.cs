@@ -223,5 +223,26 @@ public class AdBlockFilterTests
         Assert.Contains("text/xml", exoType);
         Assert.NotEmpty(exoBytes);
     }
+
+    [Fact]
+    public void Google_internal_verification_is_allowed_on_google_origin_but_blocked_on_third_party()
+    {
+        var adserviceUri = new Uri("https://adservice.google.com/adsid/google/ui?source=lns.web.gsbubb");
+        var googleAdservicesTokenUri = new Uri("https://www.googleadservices.com/signals/token?id=123");
+        var googleAdsDoubleclickUri = new Uri("https://googleads.g.doubleclick.net/pagead/ads?client=ca-pub");
+        var pageadUri = new Uri("https://www.google.com/pagead/adview?ai=1");
+
+        // Desde Google (ej. google.com durante búsqueda o Google Lens con IA):
+        Assert.False(AdBlockFilter.ShouldBlock(adserviceUri, "www.google.com"));
+        Assert.False(AdBlockFilter.ShouldBlock(googleAdservicesTokenUri, "google.com"));
+
+        // Los anuncios puros en Google siguen bloqueados:
+        Assert.True(AdBlockFilter.ShouldBlock(googleAdsDoubleclickUri, "www.google.com"));
+        Assert.True(AdBlockFilter.ShouldBlock(pageadUri, "www.google.com"));
+
+        // Desde un sitio tercero no Google, o sin origin, los servicios de anuncios y tracking se bloquean:
+        Assert.True(AdBlockFilter.ShouldBlock(adserviceUri, "noticias.com"));
+        Assert.True(AdBlockFilter.ShouldBlock(adserviceUri, null));
+    }
 }
 

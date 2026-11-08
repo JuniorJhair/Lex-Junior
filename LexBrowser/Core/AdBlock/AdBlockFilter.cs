@@ -280,7 +280,7 @@ public static class AdBlockFilter
         }
     }
 
-    public static bool ShouldBlock(Uri? uri)
+    public static bool ShouldBlock(Uri? uri, string? originHost = null)
     {
         if (uri == null) return false;
 
@@ -308,15 +308,24 @@ public static class AdBlockFilter
             return false;
         }
 
+        // Regla especial de Google: Proteger búsquedas, respuestas IA (Gemini / Visión general IA / Lens)
+        // Cuando el origen de la navegación es Google y la petición es a Google o sus servicios de sesión/token,
+        // no bloquear los tokens de integridad ni endpoints asíncronos que requiere Google Lens e IA Overviews.
+        bool isGoogleServiceHost = IsGoogleDomain(host);
+        bool isGoogleOrigin = !string.IsNullOrEmpty(originHost) && IsGoogleDomain(originHost);
+
+        if (isGoogleOrigin && isGoogleServiceHost)
+        {
+            if (path.StartsWith("/pagead", StringComparison.OrdinalIgnoreCase) ||
+                fullUrl.Contains("googleads.g.doubleclick.net", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return false;
+        }
+
         // 1. Bloquear dominios completos (incluyendo subdominios)
         if (HostMatchesSet(host, BlockedDomains)) return true;
-
-        // Regla especial de Google: Proteger búsquedas, respuestas IA (Gemini / SGE) y endpoints asíncronos
-        // para que las consultas y respuestas nunca sean bloqueadas por coincidencia accidental con GenericAdUrlPatterns.
-        bool isGoogleServiceHost = host.Equals("google.com", StringComparison.OrdinalIgnoreCase) ||
-                                  host.EndsWith(".google.com", StringComparison.OrdinalIgnoreCase) ||
-                                  host.Contains(".google.") ||
-                                  host.StartsWith("google.");
 
         if (isGoogleServiceHost)
         {
@@ -416,6 +425,21 @@ public static class AdBlockFilter
         }
 
         return false;
+    }
+
+    public static bool IsGoogleDomain(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        return host.Equals("google.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".google.com", StringComparison.OrdinalIgnoreCase) ||
+               host.StartsWith("google.", StringComparison.OrdinalIgnoreCase) ||
+               host.Contains(".google.") ||
+               host.Equals("googleadservices.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".googleadservices.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("googlesyndication.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".googlesyndication.com", StringComparison.OrdinalIgnoreCase) ||
+               host.Equals("gstatic.com", StringComparison.OrdinalIgnoreCase) ||
+               host.EndsWith(".gstatic.com", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);

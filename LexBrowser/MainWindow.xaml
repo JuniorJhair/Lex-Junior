@@ -242,8 +242,8 @@
             </StackPanel>
 
             <!-- Lista de Pestañas con Drag & Drop y botones pegados a la última pestaña (Ley de Fitts: se extiende hasta el tope superior y = 0) -->
-            <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Stretch">
-                <ScrollViewer HorizontalAlignment="Left" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" 
+            <Grid x:Name="TabStripContainer" Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" SizeChanged="TabStripContainer_SizeChanged">
+                <ScrollViewer x:Name="TabsScrollViewer" HorizontalAlignment="Left" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" 
                               WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Stretch">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch">
                         <!-- ItemsControl de pestañas con soporte Drag & Drop -->
@@ -255,7 +255,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border x:Name="TabBorder" Margin="2,0,2,0" VerticalAlignment="Stretch" CornerRadius="6,6,0,0" Padding="10,0,8,0" Cursor="Hand"
+                                    <Border x:Name="TabBorder" Width="{Binding TabWidth}" Margin="2,0,2,0" VerticalAlignment="Stretch" CornerRadius="6,6,0,0" Padding="10,0,8,0" Cursor="Hand"
                                             Background="#16161B"
                                             WindowChrome.IsHitTestVisibleInChrome="True"
                                             PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
@@ -316,7 +316,7 @@
 
                                             <!-- Título (Visible solo si no es solo logo) -->
                                             <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" Foreground="{StaticResource TextLight}" FontSize="12" 
-                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" MaxWidth="160"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                                        Visibility="{Binding ShowTitleInTab, Converter={StaticResource BoolToVis}}"/>
 
                                             <!-- Indicador de audio dinámico (🔊 o 🔇) -->

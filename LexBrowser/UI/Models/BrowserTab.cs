@@ -59,6 +59,7 @@ public class BrowserTab : INotifyPropertyChanged
     private bool _isIncognito = false;
     private bool _isGuest = false;
     private bool _isNewTab = true;
+    private double _tabWidth = 215.0;
     private int _volumeBoostPercent = 100;
     private bool _isMediaSnifferActive = false;
     private bool _keepSnifferActiveOnNavigate = false;
@@ -243,8 +244,22 @@ public class BrowserTab : INotifyPropertyChanged
     }
 
     public bool IsPinned => PinMode != TabPinMode.None;
-    public bool ShowTitleInTab => PinMode != TabPinMode.LogoOnly;
-    public bool ShowCloseButton => PinMode == TabPinMode.None;
+    public bool ShowTitleInTab => PinMode != TabPinMode.LogoOnly && _tabWidth >= 60;
+    public bool ShowCloseButton => PinMode == TabPinMode.None && (_tabWidth >= 75 || IsSelected);
+
+    /// <summary>Ancho uniforme dinámico de la pestaña en DIPs (215px estándar, encoge proporcionalmente).</summary>
+    public double TabWidth
+    {
+        get => _tabWidth;
+        set
+        {
+            if (SetField(ref _tabWidth, value))
+            {
+                OnPropertyChanged(nameof(ShowCloseButton));
+                OnPropertyChanged(nameof(ShowTitleInTab));
+            }
+        }
+    }
 
     public string DisplayTitle
     {

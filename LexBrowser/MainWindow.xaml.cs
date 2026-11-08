@@ -89,6 +89,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         InitializeTranslateLanguageList();
         TabsItemsControl.ItemsSource = Tabs;
+        Tabs.CollectionChanged += (s, e) => UpdateTabWidths();
         BookmarksItemsControl.ItemsSource = BookmarkManager.Bookmarks;
 
         // Configurar temporizador de 10 segundos para Deshacer
@@ -1260,7 +1261,7 @@ public partial class MainWindow : Window
             {
                 if (SettingsManager.Current.EnableAdBlocker && !isOAuthUrl)
                 {
-                    bool shouldBlock = AdBlockFilter.ShouldBlock(uri) || AdBlockFilter.IsSuspiciousPopup(uri, currentUri);
+                    bool shouldBlock = AdBlockFilter.ShouldBlock(uri, currentUri?.Host) || AdBlockFilter.IsSuspiciousPopup(uri, currentUri);
                     string blockReason = "AdBlockFilter domain or suspicious pattern";
 
                     // Si proviene de un subframe (ej. reproductor de anime/streaming) hacia un dominio cruzado ajeno
@@ -1426,7 +1427,7 @@ public partial class MainWindow : Window
                 string stubContentType = string.Empty;
                 bool isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType, originHost, e.ResourceContext);
                 string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
-                if (isRedirectStub || AdBlockFilter.ShouldBlock(uri))
+                if (isRedirectStub || AdBlockFilter.ShouldBlock(uri, originHost))
                 {
                     int statusCode = 403;
                     string statusReason = "Blocked by LexShield";
@@ -1938,7 +1939,7 @@ public partial class MainWindow : Window
                 if (targetUri.Scheme == "http" || targetUri.Scheme == "https")
                 {
                     // 1. Bloqueo directo de dominios de publicidad / malware si una página o script intenta navegar hacia ellos
-                    if (AdBlockFilter.ShouldBlock(targetUri))
+                    if (AdBlockFilter.ShouldBlock(targetUri, tab.CurrentUri?.Host))
                     {
                         e.Cancel = true;
                         ShieldLogger.Log("NAVIGATION_CANCELLED", tab.CurrentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Blocked ad/malware domain on navigation", tabDesc);
@@ -3188,6 +3189,7 @@ public partial class MainWindow : Window
 
         tab.PinMode = TabPinMode.LogoOnly;
         MoveToPinnedSection(tab);
+        UpdateTabWidths();
     }
 
     private void MenuPinLogoAndName_Click(object sender, RoutedEventArgs e)
@@ -3197,6 +3199,7 @@ public partial class MainWindow : Window
 
         tab.PinMode = TabPinMode.LogoAndName;
         MoveToPinnedSection(tab);
+        UpdateTabWidths();
     }
 
     private void MenuUnpin_Click(object sender, RoutedEventArgs e)
@@ -3213,6 +3216,7 @@ public partial class MainWindow : Window
         {
             Tabs.Move(oldIndex, targetIndex);
         }
+        UpdateTabWidths();
     }
 
     private void MoveToPinnedSection(BrowserTab tab)
@@ -4903,6 +4907,60 @@ public partial class MainWindow : Window
             return;
 
         RecordCurrentNormalBounds(saveToDisk: false);
+    }
+
+    private void TabStripContainer_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateTabWidths();
+    }
+
+    public void UpdateTabWidths()
+    {
+        if (Tabs == null || Tabs.Count == 0) return;
+
+        double availableWidth = TabStripContainer?.ActualWidth ?? 0;
+        if (availableWidth <= 0)
+        {
+            availableWidth = Math.Max(300, ActualWidth - 280);
+        }
+
+        // Restar el ancho de los botones de acción (+ e incógnito) y márgenes de separación (~76 DIPs)
+        double actionButtonsWidth = 76.0;
+        double usableWidth = Math.Max(100, availableWidth - actionButtonsWidth);
+
+        double pinnedTotalWidth = 0;
+        int unpinnedCount = 0;
+
+        foreach (var t in Tabs)
+        {
+            if (t.IsPinned)
+            {
+                double pinW = t.PinMode == TabPinMode.LogoOnly ? 40.0 : 110.0;
+                t.TabWidth = pinW;
+                pinnedTotalWidth += (pinW + 4.0);
+            }
+            else
+            {
+                unpinnedCount++;
+            }
+        }
+
+        if (unpinnedCount == 0) return;
+
+        double remainingWidthForUnpinned = Math.Max(0, usableWidth - pinnedTotalWidth);
+        // Cada pestaña tiene 4 DIPs de margen horizontal (Margin="2,0,2,0")
+        double perTabAvailable = (remainingWidthForUnpinned / unpinnedCount) - 4.0;
+
+        // Ancho estándar idéntico: 215 DIPs como máximo (como "Recibidos..."), y encoge proporcionalmente hasta 46 DIPs como mínimo
+        double targetWidth = Math.Clamp(Math.Floor(perTabAvailable), 46.0, 215.0);
+
+        foreach (var t in Tabs)
+        {
+            if (!t.IsPinned)
+            {
+                t.TabWidth = targetWidth;
+            }
+        }
     }
 
     private void UpdateResponsiveToolbarLayout()

@@ -168,13 +168,13 @@ public static class NewTabPage
       text-transform: capitalize; font-weight: 400;
     }
 
-    .search-wrap { width: min(560px, 92vw); margin-bottom: clamp(16px, 3.4vh, 36px); }
+    .search-wrap { width: min(680px, 94vw); margin-bottom: clamp(16px, 3.4vh, 36px); }
 
     .search-bar {
-      display: flex; align-items: center;
+      display: flex; align-items: center; gap: 6px;
       background: #18181D;
       border: 1.5px solid #272730;
-      border-radius: 32px; padding: 10px 18px;
+      border-radius: 32px; padding: 7px 14px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
 
@@ -183,22 +183,78 @@ public static class NewTabPage
       box-shadow: 0 0 0 4px " + focusGlow + @";
     }
 
-    .g-logo { width: 22px; height: 22px; margin-right: 12px; flex-shrink: 0; }
+    .icon-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      color: #9AA0A6;
+      transition: background 0.15s, transform 0.15s;
+      flex-shrink: 0;
+      padding: 0;
+    }
+    .icon-btn:hover {
+      background: rgba(255,255,255,0.08);
+      transform: scale(1.08);
+    }
+    .icon-btn:active {
+      transform: scale(0.95);
+    }
+
+    @keyframes micPulse {
+      0% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234, 67, 53, 0.7)); }
+      50% { transform: scale(1.15); filter: drop-shadow(0 0 10px rgba(234, 67, 53, 0.9)); }
+      100% { transform: scale(1); filter: drop-shadow(0 0 0 rgba(234, 67, 53, 0.7)); }
+    }
+    .mic-listening {
+      animation: micPulse 1.2s infinite ease-in-out;
+      background: rgba(234, 67, 53, 0.2) !important;
+      color: #EA4335 !important;
+    }
+
+    .ai-mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #23232A;
+      border: 1px solid #32323E;
+      color: #E4E4E7;
+      font-size: 12.5px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .ai-mode-btn:hover {
+      background: #2C2C36;
+      border-color: #6366F1;
+      color: #FFFFFF;
+      box-shadow: 0 0 14px rgba(99,102,241,0.25);
+      transform: translateY(-1px);
+    }
 
     .search-bar input {
       flex: 1; min-width: 0; background: transparent; border: none; outline: none;
       color: #F4F4F5; font-size: 15px;
       caret-color: " + accent + @";
+      padding: 4px 6px;
     }
 
     .search-bar input::placeholder { color: #52525B; }
 
     .search-btn {
       background: " + accentBtn + @";
-      border: none; border-radius: 22px;
-      color: white; padding: 8px 18px;
+      border: none; border-radius: 20px;
+      color: white; padding: 7px 16px;
       cursor: pointer; font-size: 13px; font-weight: 500;
-      transition: opacity 0.15s; flex-shrink: 0; margin-left: 10px;
+      transition: opacity 0.15s; flex-shrink: 0;
     }
     .search-btn:hover { opacity: 0.88; }
 
@@ -253,13 +309,45 @@ public static class NewTabPage
 
     <div class=""search-wrap"">
       <div class=""search-bar"">
-        <svg class=""g-logo"" viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
-          <path d=""M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"" fill=""#4285F4""/>
-          <path d=""M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"" fill=""#34A853""/>
-          <path d=""M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"" fill=""#FBBC05""/>
-          <path d=""M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"" fill=""#EA4335""/>
-        </svg>
+        <input type=""file"" id=""file-input"" accept=""image/*"" style=""display:none"" onchange=""handleFileSelected(event)""/>
+        <button class=""icon-btn"" title=""Subir archivo o imagen"" onclick=""document.getElementById('file-input').click()"">
+          <svg viewBox=""0 0 24 24"" width=""18"" height=""18"" fill=""none"" stroke=""#9AA0A6"" stroke-width=""2.2"" stroke-linecap=""round"">
+            <line x1=""12"" y1=""5"" x2=""12"" y2=""19""></line>
+            <line x1=""5"" y1=""12"" x2=""19"" y2=""12""></line>
+          </svg>
+        </button>
         <input type=""text"" placeholder=""Buscar en " + engineName + @" o escribir una URL..."" id=""si"" autocomplete=""off"" spellcheck=""false""/>
+        <button class=""icon-btn"" id=""mic-btn"" title=""Buscar por voz"" onclick=""startVoiceSearch()"">
+          <svg viewBox=""0 0 24 24"" width=""19"" height=""19"">
+            <path fill=""#4285F4"" d=""M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z""/>
+            <path fill=""#34A853"" d=""M11 18.92V22h2v-3.08c3.39-.49 6-3.39 6-6.92h-2a5 5 0 0 1-10 0H5c0 3.53 2.61 6.43 6 6.92z""/>
+            <path fill=""#FBBC05"" d=""M7 11H5a7 7 0 0 0 7 7v-2a5 5 0 0 1-5-5z""/>
+            <path fill=""#EA4335"" d=""M12 16a5 5 0 0 0 5-5h2a7 7 0 0 1-7 7v-2z""/>
+          </svg>
+        </button>
+        <button class=""icon-btn"" title=""Búsqueda por imágenes (Google Lens)"" onclick=""openLens()"">
+          <svg viewBox=""0 0 24 24"" width=""19"" height=""19"">
+            <path fill=""#4285F4"" d=""M5 15v4a2 2 0 0 0 2 2h4v-2H7v-4H5z""/>
+            <path fill=""#34A853"" d=""M19 15v4a2 2 0 0 1-2 2h-4v-2h4v-4h2z""/>
+            <path fill=""#FBBC05"" d=""M5 9V5a2 2 0 0 1 2-2h4v2H7v4H5z""/>
+            <path fill=""#EA4335"" d=""M19 9V5a2 2 0 0 0-2-2h-4v2h4v4h2z""/>
+            <circle cx=""12"" cy=""12"" r=""3.2"" fill=""#4285F4""/>
+            <circle cx=""15.5"" cy=""8.5"" r=""1.2"" fill=""#34A853""/>
+          </svg>
+        </button>
+        <button class=""ai-mode-btn"" title=""Modo IA (Búsqueda inteligente / Gemini)"" onclick=""goAI()"">
+          <svg viewBox=""0 0 24 24"" width=""15"" height=""15"" fill=""none"">
+            <path d=""M12 2L14.39 9.61L22 12L14.39 14.39L12 22L9.61 14.39L2 12L9.61 9.61L12 2Z"" fill=""url(#ai-grad)""/>
+            <defs>
+              <linearGradient id=""ai-grad"" x1=""2"" y1=""2"" x2=""22"" y2=""22"" gradientUnits=""userSpaceOnUse"">
+                <stop stop-color=""#60A5FA""/>
+                <stop offset=""0.5"" stop-color=""#A855F7""/>
+                <stop offset=""1"" stop-color=""#EC4899""/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <span>Modo IA</span>
+        </button>
         <button class=""search-btn"" onclick=""go()"">Buscar</button>
       </div>
     </div>
@@ -365,6 +453,57 @@ public static class NewTabPage
     document.getElementById('si').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') go();
     });
+
+    function handleFileSelected(e) {
+      if (e.target.files && e.target.files.length > 0) {
+        window.location.href = 'https://lens.google.com/';
+      }
+    }
+
+    function openLens() {
+      window.location.href = 'https://lens.google.com/';
+    }
+
+    function goAI() {
+      const v = document.getElementById('si').value.trim();
+      if (v) {
+        window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(v) + '&udm=ai';
+      } else {
+        window.location.href = 'https://gemini.google.com/';
+      }
+    }
+
+    function startVoiceSearch() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRec) {
+        alert('Búsqueda por voz no disponible en este dispositivo.');
+        return;
+      }
+      try {
+        const rec = new SpeechRec();
+        rec.lang = 'es-ES';
+        rec.interimResults = false;
+        const mic = document.getElementById('mic-btn');
+        mic.classList.add('mic-listening');
+        rec.onresult = function(ev) {
+          if (ev.results && ev.results[0] && ev.results[0][0]) {
+            const txt = ev.results[0][0].transcript;
+            document.getElementById('si').value = txt;
+            mic.classList.remove('mic-listening');
+            go();
+          }
+        };
+        rec.onerror = function() {
+          mic.classList.remove('mic-listening');
+        };
+        rec.onend = function() {
+          mic.classList.remove('mic-listening');
+        };
+        rec.start();
+      } catch (err) {
+        document.getElementById('mic-btn').classList.remove('mic-listening');
+      }
+    }
   </script>
 </body>
 </html>";
