@@ -226,56 +226,69 @@
                             <StackPanel>
                                 <CheckBox x:Name="ChkAdBlocker" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                     <StackPanel>
-                                        <TextBlock Text="Escudo Bloqueador de Anuncios y Popunders" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Neutraliza publicidad en video de YouTube, banners molestos y capas invisibles de click-jacking" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <TextBlock Text="Escudo Maestro Bloqueador de Anuncios y Popunders (LexShield)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Neutraliza publicidad en video de YouTube y Dailymotion, banners molestos y capas invisibles de click-jacking. Puedes ajustar cada sitio desde el icono 🛡️ de la barra de direcciones." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                     </StackPanel>
                                 </CheckBox>
                             </StackPanel>
                         </Border>
 
-                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
-                            <StackPanel>
-                                <CheckBox x:Name="ChkVideoPlayerDefuser" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
-                                    <StackPanel>
-                                        <TextBlock Text="Desarmador Seguro de Anuncios en Reproductores (JW Player / Fluid)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Intenta saltar cuentas regresivas pre-roll en reproductores de video sin alterar su configuración ni licencia." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                    </StackPanel>
-                                </CheckBox>
-                            </StackPanel>
-                        </Border>
+                        <StackPanel x:Name="PanelAdBlockSubModules">
+                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkImaSdkStub" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="Simulador de Google IMA SDK y Stubs VAST/VMAP (ima3.js)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Neutraliza solicitudes publicitarias de video simulando la API de Google IMA. Desactívalo para usar el SDK original de Google si un reproductor presenta incompatibilidad." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
 
-                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
-                            <StackPanel>
-                                <CheckBox x:Name="ChkImaSdkStub" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
-                                    <StackPanel>
-                                        <TextBlock Text="Simulador de Google IMA SDK (ima3.js)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Neutraliza solicitudes publicitarias de video simulando la API de Google IMA. Desactívalo para usar el SDK original de Google si un reproductor presenta incompatibilidad." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                    </StackPanel>
-                                </CheckBox>
-                            </StackPanel>
-                        </Border>
+                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkCosmeticShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="Filtrado Cosmético de Anuncios y Banners" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Oculta espacios publicitarios vacíos y contenedores de banners promocionales para una visualización limpia." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
 
-                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
-                            <StackPanel>
-                                <CheckBox x:Name="ChkCosmeticShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
-                                    <StackPanel>
-                                        <TextBlock Text="Filtrado Cosmético de Anuncios y Banners" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Oculta espacios publicitarios vacíos y contenedores de banners promocionales para una visualización limpia." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                    </StackPanel>
-                                </CheckBox>
-                            </StackPanel>
-                        </Border>
+                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkVideoPlayerDefuser" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="Experimental: Acelerador de Anuncios en Reproductores Externos (JW Player / Video.js / Fluid)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Intenta saltar cuentas regresivas pre-roll en reproductores de terceros restaurando tu velocidad y volumen al terminar el anuncio (no afecta a YouTube ni Dailymotion)." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
 
-                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
-                            <StackPanel>
-                                <CheckBox x:Name="ChkSubframeWebShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
-                                    <StackPanel>
-                                        <TextBlock Text="Protección Activa en Submarcos e Iframes (WebShield)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                        <TextBlock Text="Neutraliza popunders, enlaces trampa y comerciales pre-roll dentro de reproductores incrustados y marcos secundarios." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                    </StackPanel>
-                                </CheckBox>
-                            </StackPanel>
-                        </Border>
+                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkSubframeWebShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="Experimental: Inyección de WebShield en Submarcos e Iframes" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Inyecta la defensa DOM también dentro de marcos secundarios (desactivado por defecto para máxima compatibilidad con pasarelas de pago, CAPTCHAs y SSO)." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkDiagnosticMode" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="Modo Diagnóstico Verboso de LexShield (Temporal en esta sesión)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Registra también peticiones permitidas y navegaciones en memoria para depuración (Ctrl+Shift+L). Jamás registra pestañas de Incógnito ni Modo Invitado." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
 
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <StackPanel>

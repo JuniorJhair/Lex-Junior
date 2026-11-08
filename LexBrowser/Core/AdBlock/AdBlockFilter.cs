@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.Web.WebView2.Core;
 
 namespace LexBrowser.Core.AdBlock;
 
@@ -172,20 +173,18 @@ public static class AdBlockFilter
         "bc.game"
     };
 
-    // ── Hosts de Facebook a bloquear ──────────────────────────────────────
-    private static readonly HashSet<string> FacebookBlockedHosts = new(StringComparer.OrdinalIgnoreCase)
+    // ── Hosts de Facebook exclusivamente publicitarios ────────────────────
+    private static readonly HashSet<string> FacebookAdOnlyHosts = new(StringComparer.OrdinalIgnoreCase)
     {
-        "connect.facebook.net",
         "an.facebook.com"
     };
 
-    // ── Paths que indican tracker ─────────────────────────────────────────
+    // ── Paths de Facebook que indican tracker (conservando sdk.js para OAuth) ──
     private static readonly string[] FacebookBlockedPaths = new[]
     {
         "/tr",
         "/signals",
-        "/en_US/fbevents.js",
-        "/en_US/sdk.js"
+        "/en_US/fbevents.js"
     };
 
     // ── Patrones de URL de telemetría, popunders y recursos publicitarios ─
@@ -256,10 +255,12 @@ public static class AdBlockFilter
     private static readonly HashSet<string> TrustedRootDomains = new(StringComparer.OrdinalIgnoreCase)
     {
         "google.com", "google.com.pe", "google.es", "bing.com", "microsoft.com",
-        "youtube.com", "youtu.be", "wikipedia.org", "github.com", "reddit.com",
+        "youtube.com", "youtu.be", "youtube-nocookie.com", "wikipedia.org", "github.com", "reddit.com",
         "twitter.com", "x.com", "facebook.com", "instagram.com", "twitch.tv",
         "amazon.com", "discord.com", "apple.com", "netflix.com", "spotify.com",
-        "live.com", "microsoftonline.com", "paypal.com", "linkedin.com", "mercadolibre.com"
+        "live.com", "microsoftonline.com", "office.com", "paypal.com", "linkedin.com", "mercadolibre.com",
+        "openai.com", "chatgpt.com", "claude.ai", "duckduckgo.com", "vimeo.com", "cloudflare.com",
+        "gstatic.com", "googleapis.com", "googleusercontent.com", "whatsapp.com"
     };
 
     /// <summary>
@@ -280,7 +281,7 @@ public static class AdBlockFilter
         }
     }
 
-    public static bool ShouldBlock(Uri? uri, string? originHost = null)
+    public static bool ShouldBlock(Uri? uri, string? originHost = null, CoreWebView2WebResourceContext? resourceContext = null)
     {
         if (uri == null) return false;
 
@@ -290,9 +291,10 @@ public static class AdBlockFilter
 
         // Regla especial de YouTube: proteger el registro del historial del usuario (watchtime, playback, ptracking)
         // YouTube requiere s.youtube.com/api/stats/watchtime, playback, etc., para guardar el historial y sincronizar el progreso.
-        if (host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith("youtu.be", StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith("googlevideo.com", StringComparison.OrdinalIgnoreCase))
+        if (PublicSuffix.HostMatchesDomain(host, "youtube.com") ||
+            PublicSuffix.HostMatchesDomain(host, "youtu.be") ||
+            PublicSuffix.HostMatchesDomain(host, "youtube-nocookie.com") ||
+            PublicSuffix.HostMatchesDomain(host, "googlevideo.com"))
         {
             // Solo bloquear anuncios explícitos conocidos dentro de YouTube
             if (path.StartsWith("/api/stats/ads", StringComparison.OrdinalIgnoreCase) ||
@@ -335,17 +337,29 @@ public static class AdBlockFilter
             return false;
         }
 
-        // 2. Bloquear Facebook solo en paths de tracking
-        if (FacebookBlockedHosts.Contains(host) ||
-            host.EndsWith(".facebook.net", StringComparison.OrdinalIgnoreCase))
+        // 2. Bloquear Facebook solo en paths de tracking (permitiendo sdk.js para inicio de sesión OAuth)
+        if (FacebookAdOnlyHosts.Contains(host))
         {
-            foreach (var fbPath in FacebookBlockedPaths)
+            return true;
+        }
+
+        if (PublicSuffix.HostMatchesDomain(host, "facebook.net") ||
+            PublicSuffix.HostMatchesDomain(host, "facebook.com"))
+        {
+            if (path.EndsWith("/fbevents.js", StringComparison.OrdinalIgnoreCase) ||
+                path.Equals("/tr", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/tr/", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/signals", StringComparison.OrdinalIgnoreCase))
             {
-                if (path.StartsWith(fbPath, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            if (FacebookBlockedHosts.Contains(host))
                 return true;
+            }
+        }
+
+        // No aplicar patrones genéricos por subcadena en navegaciones de documentos principales
+        // ni sobre dominios globales de confianza (evita 403 en búsquedas o páginas con ?zone_id= o click.php).
+        if (resourceContext == CoreWebView2WebResourceContext.Document || IsTrustedDomain(host))
+        {
+            return false;
         }
 
         // 3. Patrones de anuncios, scripts de popunder y telemetría
@@ -374,19 +388,15 @@ public static class AdBlockFilter
         string targetHost = targetUri.Host.ToLowerInvariant();
         string targetUrl = targetUri.AbsoluteUri.ToLowerInvariant();
 
-        // 1. Si el host es idéntico o subdominio del sitio actual, es una navegación legítima (ej: login, links internos)
-        if (currentSiteUri != null)
+        // 1. Si el host es idéntico, subdominio o comparte dominio registrable con el sitio actual, es navegación legítima
+        if (currentSiteUri != null && IsSameSiteOrDomain(targetUri, currentSiteUri))
         {
-            string currentHost = currentSiteUri.Host.ToLowerInvariant();
-            if (targetHost == currentHost || targetHost.EndsWith("." + currentHost) || currentHost.EndsWith("." + targetHost))
-            {
-                return false;
-            }
+            return false;
         }
 
         // Los dominios de confianza (Google, Microsoft, PayPal…) nunca se tratan como popunder:
         // sus URLs usan parámetros como &z= (zoom de Maps) o redirect_uri (OAuth) de forma legítima.
-        if (IsTrustedDomain(targetHost)) return false;
+        if (IsTrustedDomain(targetHost) || IsGoogleDomain(targetHost)) return false;
 
         // 2. Identificadores de trackers de afiliados y popunders (trkr.*, ?z=, zoneid=)
         if (targetHost.Contains("trkr.") || targetHost.Contains("ppof.net") ||
@@ -428,28 +438,25 @@ public static class AdBlockFilter
     public static bool IsGoogleDomain(string? host)
     {
         if (string.IsNullOrWhiteSpace(host)) return false;
-        return host.Equals("google.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".google.com", StringComparison.OrdinalIgnoreCase) ||
-               host.StartsWith("google.", StringComparison.OrdinalIgnoreCase) ||
-               host.Contains(".google.") ||
-               host.Equals("googleadservices.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".googleadservices.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("googlesyndication.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".googlesyndication.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("gstatic.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".gstatic.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("googleapis.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("googleusercontent.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".googleusercontent.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("googlevideo.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".googlevideo.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("google-analytics.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".google-analytics.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("googletagmanager.com", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".googletagmanager.com", StringComparison.OrdinalIgnoreCase) ||
-               host.Equals("doubleclick.net", StringComparison.OrdinalIgnoreCase) ||
-               host.EndsWith(".doubleclick.net", StringComparison.OrdinalIgnoreCase);
+
+        if (PublicSuffix.HostMatchesDomain(host, "google.com") ||
+            PublicSuffix.HostMatchesDomain(host, "googleadservices.com") ||
+            PublicSuffix.HostMatchesDomain(host, "googlesyndication.com") ||
+            PublicSuffix.HostMatchesDomain(host, "gstatic.com") ||
+            PublicSuffix.HostMatchesDomain(host, "googleapis.com") ||
+            PublicSuffix.HostMatchesDomain(host, "googleusercontent.com") ||
+            PublicSuffix.HostMatchesDomain(host, "googlevideo.com") ||
+            PublicSuffix.HostMatchesDomain(host, "google-analytics.com") ||
+            PublicSuffix.HostMatchesDomain(host, "googletagmanager.com") ||
+            PublicSuffix.HostMatchesDomain(host, "doubleclick.net"))
+        {
+            return true;
+        }
+
+        // Soportar ccTLDs oficiales de Google (ej. google.com.pe, google.es, google.co.uk)
+        // verificando que el dominio registrable comience por "google." para impedir falsos positivos como google.example.top
+        string regDomain = PublicSuffix.GetRegistrableDomain(host);
+        return regDomain.StartsWith("google.", StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);
@@ -460,22 +467,7 @@ public static class AdBlockFilter
     public static bool IsSameSiteOrDomain(Uri? a, Uri? b)
     {
         if (a == null || b == null) return false;
-        string hostA = a.Host.ToLowerInvariant();
-        string hostB = b.Host.ToLowerInvariant();
-        if (hostA == hostB) return true;
-        if (hostA.EndsWith("." + hostB) || hostB.EndsWith("." + hostA)) return true;
-
-        string rootA = GetRegistrableDomain(hostA);
-        string rootB = GetRegistrableDomain(hostB);
-        return !string.IsNullOrEmpty(rootA) && string.Equals(rootA, rootB, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetRegistrableDomain(string host)
-    {
-        if (string.IsNullOrEmpty(host)) return string.Empty;
-        var parts = host.Split('.');
-        if (parts.Length <= 2) return host;
-        return parts[^2] + "." + parts[^1];
+        return PublicSuffix.IsSameRegistrableDomain(a.Host, b.Host);
     }
 }
 

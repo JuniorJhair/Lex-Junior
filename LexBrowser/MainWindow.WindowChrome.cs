@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,6 +13,7 @@ using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using LexBrowser.Core;
+using LexBrowser.Core.AdBlock;
 using LexBrowser.Core.Interop;
 using LexBrowser.UI.Models;
 using LexBrowser.UI.Views;
@@ -274,13 +276,272 @@ public partial class MainWindow
         });
     }
 
+    private static readonly SolidColorBrush BrushShieldActiveText = CreateFrozenBrush(0x38, 0xBD, 0xF8);
+    private static readonly SolidColorBrush BrushShieldCompatText = CreateFrozenBrush(0xF5, 0x9E, 0x0B);
+    private static readonly SolidColorBrush BrushShieldOffText = CreateFrozenBrush(0x9C, 0xA3, 0xAF);
+    private static readonly SolidColorBrush BrushShieldGreen = CreateFrozenBrush(0x10, 0xB9, 0x81);
+    private bool _isUpdatingShieldPopupUI = false;
+
     private void UpdateShieldBadgeText()
     {
         if (TxtShieldBadge == null) return;
         int count = _activeTab?.BlockedAdsCount ?? 0;
         double w = ActualWidth > 0 ? ActualWidth : Width;
         bool isCompact = !double.IsNaN(w) && w > 0 && w < 1150;
-        TxtShieldBadge.Text = isCompact ? $"{count}" : $"{count} bloqueados";
+
+        string? host = _activeTab?.CurrentUri?.Host;
+        var policy = SitePolicy.Resolve(host, _activeTab?.TemporaryCompatMode ?? false);
+
+        if (!policy.ShieldEnabled)
+        {
+            TxtShieldBadge.Text = isCompact ? "Off" : "Pausado";
+            TxtShieldBadge.Foreground = BrushShieldOffText;
+        }
+        else if (policy.IsCompatMode)
+        {
+            TxtShieldBadge.Text = isCompact ? $"{count} · ⚡" : $"{count} · Compatible";
+            TxtShieldBadge.Foreground = BrushShieldCompatText;
+        }
+        else
+        {
+            TxtShieldBadge.Text = isCompact ? $"{count}" : $"{count} bloqueados";
+            TxtShieldBadge.Foreground = BrushShieldActiveText;
+        }
+
+        if (PopupShieldPanel != null && PopupShieldPanel.IsOpen)
+        {
+            UpdateShieldPopupCounters();
+        }
+    }
+
+    private string? GetActiveTabDomainForShield()
+    {
+        if (_activeTab == null || _activeTab.IsNewTab) return null;
+        if (_activeTab.CurrentUri != null && (_activeTab.CurrentUri.Scheme == "http" || _activeTab.CurrentUri.Scheme == "https"))
+        {
+            return PublicSuffix.GetRegistrableDomain(_activeTab.CurrentUri.Host);
+        }
+        if (!string.IsNullOrWhiteSpace(_activeTab.Url) && Uri.TryCreate(_activeTab.Url, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https"))
+        {
+            return PublicSuffix.GetRegistrableDomain(u.Host);
+        }
+        return null;
+    }
+
+    private void BorderShieldBadge_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (PopupShieldPanel == null) return;
+
+        if (PopupShieldPanel.IsOpen)
+        {
+            PopupShieldPanel.IsOpen = false;
+            return;
+        }
+
+        UpdateShieldPopupUI();
+        PopupShieldPanel.IsOpen = true;
+    }
+
+    private void BtnCloseShieldPopup_Click(object sender, RoutedEventArgs e)
+    {
+        if (PopupShieldPanel != null)
+            PopupShieldPanel.IsOpen = false;
+    }
+
+    private void UpdateShieldPopupCounters()
+    {
+        if (_activeTab == null) return;
+        if (TxtShieldCountNetwork != null) TxtShieldCountNetwork.Text = _activeTab.BlockedNetworkCount.ToString();
+        if (TxtShieldCountStubs != null) TxtShieldCountStubs.Text = _activeTab.BlockedStubsCount.ToString();
+        if (TxtShieldCountPopups != null) TxtShieldCountPopups.Text = _activeTab.BlockedPopupsCount.ToString();
+        if (TxtShieldCountOverlays != null) TxtShieldCountOverlays.Text = (_activeTab.BlockedOverlaysCount + _activeTab.BlockedCosmeticCount + _activeTab.BlockedAdapterCount).ToString();
+        if (TxtShieldCountTelemetry != null) TxtShieldCountTelemetry.Text = _activeTab.BlockedTelemetry204Count.ToString();
+    }
+
+    private void UpdateShieldPopupUI()
+    {
+        if (PopupShieldPanel == null) return;
+        _isUpdatingShieldPopupUI = true;
+        try
+        {
+            UpdateShieldPopupCounters();
+
+            string? domain = GetActiveTabDomainForShield();
+            bool hasSite = !string.IsNullOrEmpty(domain);
+            TxtShieldPopupDomain.Text = hasSite ? domain! : "Nueva pestaña";
+
+            var policy = SitePolicy.Resolve(domain, _activeTab?.TemporaryCompatMode ?? false);
+
+            ChkShieldSiteEnabled.IsEnabled = hasSite && SettingsManager.Current.EnableAdBlocker;
+            ChkShieldSiteEnabled.IsChecked = policy.ShieldEnabled;
+            PanelShieldSiteModules.IsEnabled = hasSite && policy.ShieldEnabled;
+            BtnShieldCompatMode.IsEnabled = hasSite && SettingsManager.Current.EnableAdBlocker;
+
+            if (!SettingsManager.Current.EnableAdBlocker)
+            {
+                TxtShieldSiteModeStatus.Text = "Escudo global desactivado en Ajustes";
+                TxtShieldSiteModeStatus.Foreground = BrushShieldOffText;
+            }
+            else if (!hasSite)
+            {
+                TxtShieldSiteModeStatus.Text = "Abre un sitio web para configurar su escudo";
+                TxtShieldSiteModeStatus.Foreground = BrushShieldOffText;
+            }
+            else if (!policy.ShieldEnabled)
+            {
+                TxtShieldSiteModeStatus.Text = "Protección pausada en este sitio";
+                TxtShieldSiteModeStatus.Foreground = BrushShieldOffText;
+            }
+            else if (policy.IsCompatMode)
+            {
+                TxtShieldSiteModeStatus.Text = "⚡ Modo compatible activo en este sitio";
+                TxtShieldSiteModeStatus.Foreground = BrushShieldCompatText;
+            }
+            else
+            {
+                TxtShieldSiteModeStatus.Text = "Protección estándar activa en este sitio";
+                TxtShieldSiteModeStatus.Foreground = BrushShieldGreen;
+            }
+
+            ChkSiteModNetwork.IsChecked = policy.Network;
+            ChkSiteModStubs.IsChecked = policy.Stubs;
+            ChkSiteModPopups.IsChecked = policy.Popups;
+            ChkSiteModOverlays.IsChecked = policy.Overlays;
+            ChkSiteModCosmetic.IsChecked = policy.Cosmetic;
+            ChkSiteModVideoDefuser.IsChecked = policy.VideoDefuser;
+            ChkSiteModAdapter.IsChecked = policy.Adapter;
+        }
+        finally
+        {
+            _isUpdatingShieldPopupUI = false;
+        }
+    }
+
+    private async void ChkShieldSiteEnabled_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingShieldPopupUI) return;
+        string? domain = GetActiveTabDomainForShield();
+        if (string.IsNullOrEmpty(domain)) return;
+
+        bool enabled = ChkShieldSiteEnabled.IsChecked == true;
+        if (_activeTab != null) _activeTab.TemporaryCompatMode = false;
+
+        var profile = SitePolicy.GetOrCreateSiteProfile(domain);
+        profile.Mode = enabled ? SitePolicy.ModeNormal : SitePolicy.ModeOff;
+        SettingsManager.Save();
+
+        await RefreshAllTabsShieldScriptsAsync();
+        UpdateShieldPopupUI();
+        UpdateShieldBadgeText();
+    }
+
+    private async void ChkShieldSiteModule_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingShieldPopupUI) return;
+        string? domain = GetActiveTabDomainForShield();
+        if (string.IsNullOrEmpty(domain)) return;
+
+        var profile = SitePolicy.GetOrCreateSiteProfile(domain);
+        profile.Network = ChkSiteModNetwork.IsChecked == true;
+        profile.Stubs = ChkSiteModStubs.IsChecked == true;
+        profile.Popups = ChkSiteModPopups.IsChecked == true;
+        profile.Overlays = ChkSiteModOverlays.IsChecked == true;
+        profile.Cosmetic = ChkSiteModCosmetic.IsChecked == true;
+        profile.VideoDefuser = ChkSiteModVideoDefuser.IsChecked == true;
+        profile.Adapter = ChkSiteModAdapter.IsChecked == true;
+        SettingsManager.Save();
+
+        await RefreshAllTabsShieldScriptsAsync();
+        UpdateShieldPopupUI();
+        UpdateShieldBadgeText();
+    }
+
+    private async void BtnShieldCompatMode_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab == null) return;
+        await ActivateCompatModeForTabAsync(_activeTab, persistForSite: true);
+        UpdateShieldPopupUI();
+        if (PopupShieldPanel != null) PopupShieldPanel.IsOpen = false;
+    }
+
+    private async void BtnShieldReloadNow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_activeTab == null) return;
+        if (PopupShieldPanel != null) PopupShieldPanel.IsOpen = false;
+        await RefreshTabShieldScriptsAsync(_activeTab);
+        _activeTab.WebView?.CoreWebView2?.Reload();
+    }
+
+    private void BtnShieldCopyTabDiag_Click(object sender, RoutedEventArgs e)
+    {
+        if (PopupShieldPanel != null) PopupShieldPanel.IsOpen = false;
+        CopyOrExportShieldLog(onlyActiveTab: true);
+    }
+
+    public void RecordUserReloadAndCheckCompat(BrowserTab tab)
+    {
+        if (tab == null || tab.IsDisposed || !SettingsManager.Current.EnableAdBlocker) return;
+        string? host = tab.CurrentUri?.Host;
+        if (string.IsNullOrEmpty(host)) return;
+
+        string regDomain = PublicSuffix.GetRegistrableDomain(host);
+        if (string.IsNullOrEmpty(regDomain)) return;
+
+        var policy = SitePolicy.Resolve(regDomain, tab.TemporaryCompatMode);
+        if (!policy.ShieldEnabled || policy.IsCompatMode) return;
+
+        var now = DateTime.UtcNow;
+        if (!string.Equals(tab.LastReloadHost, regDomain, StringComparison.OrdinalIgnoreCase))
+        {
+            tab.LastReloadHost = regDomain;
+            tab.RecentReloadTimesUtc.Clear();
+        }
+
+        tab.RecentReloadTimesUtc.RemoveAll(t => (now - t).TotalSeconds > 20);
+        tab.RecentReloadTimesUtc.Add(now);
+
+        if (tab.RecentReloadTimesUtc.Count >= 2 && !tab.CompatibilityPromptShownDomains.Contains(regDomain))
+        {
+            tab.CompatibilityPromptShownDomains.Add(regDomain);
+            OfferCompatibilityModeToast(tab, $"¿Problemas al cargar {regDomain}?");
+        }
+    }
+
+    public void OfferCompatibilityModeToast(BrowserTab tab, string reasonPrefix)
+    {
+        if (tab == null || tab.IsDisposed || !SettingsManager.Current.EnableAdBlocker) return;
+        string? host = tab.CurrentUri?.Host;
+        string regDomain = PublicSuffix.GetRegistrableDomain(host);
+        if (string.IsNullOrEmpty(regDomain)) regDomain = "este sitio";
+
+        var policy = SitePolicy.Resolve(regDomain, tab.TemporaryCompatMode);
+        if (!policy.ShieldEnabled || policy.IsCompatMode) return;
+
+        ShowToast(
+            $"🛡️ {reasonPrefix} Puedes probar el Modo Compatible de LexShield en {regDomain}.",
+            "⚡ Probar modo compatible",
+            () => _ = ActivateCompatModeForTabAsync(tab, persistForSite: true),
+            durationSeconds: 10);
+    }
+
+    public async Task ActivateCompatModeForTabAsync(BrowserTab tab, bool persistForSite = true)
+    {
+        if (tab == null || tab.IsDisposed) return;
+        tab.TemporaryCompatMode = true;
+
+        string? host = tab.CurrentUri?.Host;
+        string regDomain = PublicSuffix.GetRegistrableDomain(host);
+        if (persistForSite && !string.IsNullOrEmpty(regDomain))
+        {
+            SitePolicy.SetSiteMode(regDomain, SitePolicy.ModeCompat);
+            SettingsManager.Save();
+        }
+
+        await RefreshAllTabsShieldScriptsAsync();
+        UpdateShieldBadgeText();
+        tab.WebView?.CoreWebView2?.Reload();
+        ShowToast($"⚡ Modo compatible activado en {(string.IsNullOrEmpty(regDomain) ? "esta pestaña" : regDomain)}.");
     }
 
     private void RecordCurrentNormalBounds(bool saveToDisk)
@@ -607,6 +868,8 @@ public partial class MainWindow
             settingsWin.OpenToSection(defaultSection);
             settingsWin.ShowDialog();
             ApplySettings();
+            _ = RefreshAllTabsShieldScriptsAsync();
+            UpdateShieldBadgeText();
 
             if (prevEngine != SettingsManager.Current.DefaultSearchEngine ||
                 prevCustom != SettingsManager.Current.CustomSearchUrl)

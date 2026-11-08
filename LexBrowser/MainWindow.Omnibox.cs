@@ -401,7 +401,11 @@ public partial class MainWindow
 
     private void BtnRefresh_Click(object sender, RoutedEventArgs e)
     {
-        _activeTab?.WebView?.CoreWebView2?.Reload();
+        if (_activeTab != null)
+        {
+            RecordUserReloadAndCheckCompat(_activeTab);
+            _activeTab.WebView?.CoreWebView2?.Reload();
+        }
     }
 
     private void BtnHome_Click(object sender, RoutedEventArgs e)

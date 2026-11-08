@@ -5,6 +5,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
+[Collection("ShieldLoggerCollection")]
 public class ShieldLoggerTests
 {
     [Fact]

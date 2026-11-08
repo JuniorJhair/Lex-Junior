@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
 using LexBrowser.Core;
+using LexBrowser.Core.AdBlock;
 using LexBrowser.Core.Engine;
 using LexBrowser.Core.Notifications;
 
@@ -72,6 +73,8 @@ public partial class SettingsWindow : Window
         ChkImaSdkStub.IsChecked = s.EnableImaSdkStub;
         ChkCosmeticShield.IsChecked = s.EnableCosmeticShield;
         ChkSubframeWebShield.IsChecked = s.EnableWebShieldInSubframes;
+        if (ChkDiagnosticMode != null) ChkDiagnosticMode.IsChecked = ShieldLogger.DiagnosticMode;
+        UpdateAdBlockerSubTogglesEnabledState();
         ChkRestoreSession.IsChecked = s.RestorePreviousSession;
         ChkEnableHistory.IsChecked = s.EnableHistory;
         if (ChkEnableSearchSuggestions != null) ChkEnableSearchSuggestions.IsChecked = s.EnableSearchSuggestions;
@@ -153,6 +156,16 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void UpdateAdBlockerSubTogglesEnabledState()
+    {
+        bool masterEnabled = ChkAdBlocker.IsChecked == true;
+        if (PanelAdBlockSubModules != null)
+        {
+            PanelAdBlockSubModules.IsEnabled = masterEnabled;
+            PanelAdBlockSubModules.Opacity = masterEnabled ? 1.0 : 0.45;
+        }
+    }
+
     private void SaveSettings_Click(object sender, RoutedEventArgs e)
     {
         if (_isInitializing) return;
@@ -166,6 +179,18 @@ public partial class SettingsWindow : Window
         s.EnableImaSdkStub = ChkImaSdkStub.IsChecked == true;
         s.EnableCosmeticShield = ChkCosmeticShield.IsChecked == true;
         s.EnableWebShieldInSubframes = ChkSubframeWebShield.IsChecked == true;
+        if (ChkDiagnosticMode != null)
+        {
+            ShieldLogger.DiagnosticMode = ChkDiagnosticMode.IsChecked == true;
+        }
+        UpdateAdBlockerSubTogglesEnabledState();
+
+        // Sincronizar módulos globales de LexShield
+        s.Shield.Modules.Cosmetic = s.EnableCosmeticShield;
+        s.Shield.Modules.Stubs = s.EnableImaSdkStub;
+        s.Shield.Modules.VideoDefuser = s.EnableVideoPlayerDefuser;
+        s.Shield.Modules.Subframes = s.EnableWebShieldInSubframes;
+
         s.RestorePreviousSession = ChkRestoreSession.IsChecked == true;
         s.NotificationDiscardOlderThan24Hours = ChkDiscardOlder24h.IsChecked == true;
         s.NotificationDndOnFullscreen = ChkDndFullscreen.IsChecked == true;

@@ -473,10 +473,13 @@
                              LostKeyboardFocus="TxtUrl_LostKeyboardFocus"
                              PreviewMouseDown="TxtUrl_PreviewMouseDown"/>
 
-                    <!-- Escudo de Anuncios en la barra -->
-                    <Border Grid.Column="2" Background="#1E293B" CornerRadius="6" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center" ToolTip="Anuncios neutralizados en esta pestaña">
+                    <!-- Escudo de Anuncios interactivo en la barra (Clic abre el Popover de control por sitio de LexShield) -->
+                    <Border x:Name="BorderShieldBadge" Grid.Column="2" Background="#1E293B" BorderBrush="#2A3A52" BorderThickness="1"
+                            CornerRadius="6" Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center"
+                            Cursor="Hand" MouseLeftButtonDown="BorderShieldBadge_Click"
+                            ToolTip="LexShield: haz clic para configurar la protección en este sitio o activar el modo compatible">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="🛡️" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtShieldIcon" Text="🛡️" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtShieldBadge" Text="0 bloqueados" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
@@ -542,6 +545,100 @@
                     </Button>
                 </Grid>
             </Border>
+
+            <!-- Popover Interactivo de Control por Sitio de LexShield (Airspace-safe) -->
+            <Popup x:Name="PopupShieldPanel" PlacementTarget="{Binding ElementName=BorderShieldBadge}"
+                   Placement="Bottom" VerticalOffset="6" HorizontalOffset="-210"
+                   StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Background="#151520" BorderBrush="#2D2D44" BorderThickness="1.5" CornerRadius="12" Padding="15,13" Width="345">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.72" Color="#000000"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <!-- Encabezado con Dominio, Toggle Maestro del Sitio y Cerrar -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="🛡️ LexShield · " FontWeight="Bold" FontSize="12.5" Foreground="#38BDF8" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtShieldPopupDomain" Text="sitio actual" FontWeight="Bold" FontSize="12.5" Foreground="#FFFFFF"
+                                               VerticalAlignment="Center" MaxWidth="165" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                                <TextBlock x:Name="TxtShieldSiteModeStatus" Text="Protección activa en este sitio" FontSize="10.5" Foreground="#10B981" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkShieldSiteEnabled" Grid.Column="1" Content="Activo" IsChecked="True"
+                                      Foreground="#E4E4E7" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"
+                                      Click="ChkShieldSiteEnabled_Click" Cursor="Hand"/>
+                            <Button Grid.Column="2" Style="{StaticResource LexGhostButton}" Content="✕" Width="26" Height="26" Padding="0"
+                                    Click="BtnCloseShieldPopup_Click" ToolTip="Cerrar"/>
+                        </Grid>
+
+                        <!-- Contadores desglosados por categoría en la pestaña actual -->
+                        <Border Background="#101018" BorderBrush="#252538" BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="En esta pestaña:" FontSize="10.5" FontWeight="Bold" Foreground="#A1A1AA" Margin="0,0,0,5"/>
+                                <Grid Margin="0,1">
+                                    <TextBlock Text="• Red bloqueada:" FontSize="11" Foreground="#D4D4D8"/>
+                                    <TextBlock x:Name="TxtShieldCountNetwork" Text="0" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,1">
+                                    <TextBlock Text="• Stubs VAST / IMA:" FontSize="11" Foreground="#D4D4D8"/>
+                                    <TextBlock x:Name="TxtShieldCountStubs" Text="0" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,1">
+                                    <TextBlock Text="• Popups / redirecciones:" FontSize="11" Foreground="#D4D4D8"/>
+                                    <TextBlock x:Name="TxtShieldCountPopups" Text="0" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,1">
+                                    <TextBlock Text="• Capas invisibles / cosmética:" FontSize="11" Foreground="#D4D4D8"/>
+                                    <TextBlock x:Name="TxtShieldCountOverlays" Text="0" FontSize="11" FontWeight="Bold" Foreground="#38BDF8" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Grid Margin="0,1">
+                                    <TextBlock Text="• Telemetría 204 (silenciada):" FontSize="10.5" Foreground="#9CA3AF"/>
+                                    <TextBlock x:Name="TxtShieldCountTelemetry" Text="0" FontSize="10.5" FontWeight="SemiBold" Foreground="#9CA3AF" HorizontalAlignment="Right"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Módulos por sitio -->
+                        <TextBlock Text="Módulos en este sitio:" FontSize="10.5" FontWeight="Bold" Foreground="#A1A1AA" Margin="0,0,0,5"/>
+                        <StackPanel x:Name="PanelShieldSiteModules" Margin="2,0,0,8">
+                            <CheckBox x:Name="ChkSiteModNetwork" Content="Filtro de red y dominios" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkSiteModStubs" Content="Stubs de anuncios de video (VAST/IMA)" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkSiteModPopups" Content="Anti-popups y redirecciones" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkSiteModOverlays" Content="Anti-capas invisibles" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkSiteModCosmetic" Content="Ocultación cosmética de banners" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkSiteModVideoDefuser" Content="Acelerador genérico de reproductores" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkSiteModAdapter" Content="Adaptador específico del sitio (YT/DM)" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                        </StackPanel>
+
+                        <TextBlock Text="ℹ️ Los cambios de script se aplican al recargar." FontSize="10.5" Foreground="#94A3B8" Margin="0,0,0,8"/>
+
+                        <!-- Acciones rápidas: Modo compatible, Recargar ahora y Copiar diagnóstico -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="6"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="BtnShieldCompatMode" Grid.Column="0" Style="{StaticResource LexSecondaryButton}"
+                                    Content="⚡ Modo compatible" FontSize="11" FontWeight="SemiBold" Padding="8,6"
+                                    Click="BtnShieldCompatMode_Click" ToolTip="Desactiva hooks agresivos (overlays, cosmética y acelerador) en este sitio y recarga"/>
+                            <Button x:Name="BtnShieldReloadNow" Grid.Column="2" Style="{StaticResource LexPrimaryButton}"
+                                    Content="↻ Recargar ahora" FontSize="11" FontWeight="Bold" Padding="8,6"
+                                    Click="BtnShieldReloadNow_Click" ToolTip="Aplicar scripts actualizados y recargar la pestaña"/>
+                        </Grid>
+
+                        <Button x:Name="BtnShieldCopyTabDiag" Style="{StaticResource LexGhostButton}"
+                                Content="📋 Copiar diagnóstico de esta pestaña" FontSize="10.5" Foreground="#93C5FD"
+                                HorizontalAlignment="Stretch" Padding="6,5" Click="BtnShieldCopyTabDiag_Click"/>
+                    </StackPanel>
+                </Border>
+            </Popup>
 
             <!-- Popup Nativo de Traducción de Páginas Web (Nivel Senior, sin banners invasivos) -->
             <Popup x:Name="PopupTranslate" PlacementTarget="{Binding ElementName=PillTranslateIndicator}"
@@ -1856,7 +1953,8 @@
                VerticalOffset="-65" AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade">
             <Border x:Name="ToastNotification"
                     Background="#1E1E2E" BorderBrush="#6366F1" BorderThickness="1.5" CornerRadius="10"
-                    Padding="16,10" Margin="0,0,0,0">
+                    Padding="16,10" Margin="0,0,0,0"
+                    MouseEnter="ToastBorder_MouseEnter" MouseLeave="ToastBorder_MouseLeave">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="20" ShadowDepth="4" Color="#000000" Opacity="0.7"/>
                 </Border.Effect>

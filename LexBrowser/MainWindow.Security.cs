@@ -20,6 +20,8 @@ public partial class MainWindow
     private readonly List<BrowserTab> _stashedOwnerTabs = new();
     private BrowserTab? _stashedOwnerActiveTab;
 
+    public bool IsGuestSessionWindow => _isGuestSession;
+
     private string _pendingSaveOriginUrl = string.Empty;
     private DispatcherTimer? _promptPeekTimer;
     private DispatcherTimer? _clipboardShieldTimer;
@@ -59,7 +61,7 @@ public partial class MainWindow
         catch { }
     }
 
-    public void CopyOrExportShieldLog()
+    public void CopyOrExportShieldLog(bool onlyActiveTab = false)
     {
         if (IsLocked) return;
         if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para exportar el registro de seguridad"))
@@ -69,7 +71,8 @@ public partial class MainWindow
 
         try
         {
-            string dump = ShieldLogger.DumpLog();
+            string? tabFilter = (onlyActiveTab && _activeTab != null) ? $"Tab:{_activeTab.TabId} " : null;
+            string dump = ShieldLogger.DumpLog(tabFilter);
             int count = ShieldLogger.Count;
 
             try
@@ -86,7 +89,8 @@ public partial class MainWindow
             }
             catch { }
 
-            ShowToast($"🛡️ Shield Log copiado ({count} eventos)", "Abrir Log 📄", () =>
+            string scopeLabel = onlyActiveTab ? "de esta pestaña" : $"({count} eventos)";
+            ShowToast($"🛡️ Shield Log {scopeLabel} copiado", "Abrir Log 📄", () =>
             {
                 try
                 {
@@ -557,42 +561,41 @@ public partial class MainWindow
 
     public async Task EnterGuestModeAsync()
     {
-        // Resguardar las pestañas abiertas del propietario para que el invitado no las vea en la barra de pestañas
-        // y para restaurarlas intactas cuando el propietario desbloquee su sesión.
-        if (!_isGuestSession && Tabs.Count > 0)
-        {
-            _stashedOwnerActiveTab = _activeTab;
-            foreach (var ownerTab in Tabs.ToList())
-            {
-                if (!ownerTab.IsGuest && !ownerTab.IsDisposed)
-                {
-                    _stashedOwnerTabs.Add(ownerTab);
-                    if (ownerTab.WebView != null)
-                    {
-                        ownerTab.WebView.Visibility = Visibility.Collapsed;
-                        if (BrowserContainer.Children.Contains(ownerTab.WebView))
-                        {
-                            BrowserContainer.Children.Remove(ownerTab.WebView);
-                        }
-                    }
-                    Tabs.Remove(ownerTab);
-                }
-            }
-            _activeTab = null;
-        }
-
-        _isGuestSession = true;
-        SetLockOverlayVisible(false);
-        PopupNotifications.IsOpen = false;
-        PopupDownloads.IsOpen = false;
-        HideSavePasswordBanner();
-        ApplySettings();
-
         string? launchUrl = !string.IsNullOrWhiteSpace(_initialUrl) ? _initialUrl : null;
         _initialUrl = null;
-        await AddNewTabAsync(launchUrl, isIncognito: true, bypassLockCheck: true);
 
-        ShowToast("👤 Modo Invitado activo: navegas en una sesión aislada sin acceso a las contraseñas ni marcadores del propietario.");
+        // Si esta ventana ya es la ventana dedicada de Invitado, simplemente asegurar que tenga una pestaña activa
+        if (_isGuestSession)
+        {
+            if (Tabs.Count == 0 || !string.IsNullOrWhiteSpace(launchUrl))
+            {
+                await AddNewTabAsync(launchUrl, isIncognito: true, bypassLockCheck: true);
+            }
+            return;
+        }
+
+        // Auditoría LexShield Parte 2 (Sección 9): Abrir el Modo Invitado en una ventana MainWindow dedicada
+        // sin mutar ni vaciar la ventana del propietario.
+        var existingGuestWin = Application.Current?.Windows.OfType<MainWindow>()
+            .FirstOrDefault(w => w != this && w._isGuestSession && w.IsLoaded);
+
+        if (existingGuestWin != null)
+        {
+            if (existingGuestWin.WindowState == WindowState.Minimized)
+                existingGuestWin.WindowState = WindowState.Normal;
+            existingGuestWin.Activate();
+            existingGuestWin.Focus();
+            if (!string.IsNullOrWhiteSpace(launchUrl))
+            {
+                await existingGuestWin.AddNewTabAsync(launchUrl, isIncognito: true, bypassLockCheck: true);
+            }
+            return;
+        }
+
+        var guestWin = new MainWindow(initialUrl: launchUrl, initialTab: null, startInIncognito: true, startInGuest: true);
+        guestWin.Show();
+        guestWin.Activate();
+        guestWin.Focus();
     }
 
     private async void BtnUnlockFromGuest_Click(object sender, RoutedEventArgs e)
@@ -644,21 +647,53 @@ public partial class MainWindow
 
     private async Task<bool> UnlockFromGuestToOwnerAsync()
     {
-        var pinDialog = new PinPromptDialog("Ingresa tu PIN de propietario para salir del Modo Invitado y restaurar tus páginas y contraseñas") { Owner = this };
+        var pinDialog = new PinPromptDialog("Ingresa tu PIN de propietario para salir del Modo Invitado y volver a tu cuenta personal") { Owner = this };
         if (pinDialog.ShowDialog() == true)
         {
-            _isGuestSession = false;
             PasswordManager.MarkSessionUnlocked();
-            ApplySettings();
 
-            DisposeGuestTabsAndRestoreStashedOwnerTabs();
+            var ownerWin = Application.Current?.Windows.OfType<MainWindow>()
+                .FirstOrDefault(w => w != this && !w._isGuestSession);
 
-            if (Tabs.Count == 0)
+            if (ownerWin != null)
             {
-                await RestoreOrInitializeSessionTabsAsync();
+                if (ownerWin.IsLocked)
+                {
+                    await ownerWin.CompleteOverlayUnlockAsync();
+                }
+                if (ownerWin.WindowState == WindowState.Minimized)
+                {
+                    ownerWin.WindowState = WindowState.Normal;
+                }
+                ownerWin.Activate();
+                ownerWin.Focus();
+                ownerWin.ShowToast("🔓 Sesión de propietario desbloqueada.");
+                Close();
+                return true;
             }
 
-            ShowToast("🔓 Sesión de propietario desbloqueada: tus pestañas, marcadores y contraseñas han sido restaurados.");
+            if (_stashedOwnerTabs.Count > 0)
+            {
+                _isGuestSession = false;
+                ApplySettings();
+                DisposeGuestTabsAndRestoreStashedOwnerTabs();
+                if (Tabs.Count == 0)
+                {
+                    await RestoreOrInitializeSessionTabsAsync();
+                }
+                ShowToast("🔓 Sesión de propietario desbloqueada: tus pestañas, marcadores y contraseñas han sido restaurados.");
+                return true;
+            }
+
+            var newOwnerWin = new MainWindow();
+            if (Application.Current != null)
+            {
+                Application.Current.MainWindow = newOwnerWin;
+            }
+            newOwnerWin.Show();
+            newOwnerWin.Activate();
+            newOwnerWin.Focus();
+            Close();
             return true;
         }
         return false;
@@ -666,21 +701,7 @@ public partial class MainWindow
 
     private bool TryUnlockFromGuestMode(string reason)
     {
-        var pinDialog = new PinPromptDialog(reason) { Owner = this };
-        if (pinDialog.ShowDialog() == true)
-        {
-            _isGuestSession = false;
-            PasswordManager.MarkSessionUnlocked();
-            ApplySettings();
-
-            if (_stashedOwnerTabs.Count > 0)
-            {
-                DisposeGuestTabsAndRestoreStashedOwnerTabs();
-            }
-
-            ShowToast("🔓 Sesión de propietario desbloqueada: tus marcadores, historial y bóveda están disponibles.");
-            return true;
-        }
+        _ = UnlockFromGuestToOwnerAsync();
         return false;
     }
 

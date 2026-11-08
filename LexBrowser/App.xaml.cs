@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -152,7 +153,22 @@ public partial class App : Application
         {
             _ = Dispatcher.BeginInvoke(() =>
             {
-                if (MainWindow is MainWindow win)
+                bool isGuestCmd = string.Equals(payload, "CMD:GUEST", StringComparison.OrdinalIgnoreCase);
+                var openWindows = Windows.OfType<MainWindow>().ToList();
+
+                MainWindow? win = null;
+                if (isGuestCmd)
+                {
+                    win = openWindows.FirstOrDefault(w => w.IsGuestSessionWindow) ?? openWindows.FirstOrDefault();
+                }
+                else
+                {
+                    win = openWindows.FirstOrDefault(w => !w.IsGuestSessionWindow && w.IsActive) ??
+                          openWindows.FirstOrDefault(w => !w.IsGuestSessionWindow) ??
+                          openWindows.FirstOrDefault();
+                }
+
+                if (win != null)
                 {
                     if (win.WindowState == WindowState.Minimized)
                         win.WindowState = WindowState.Normal;

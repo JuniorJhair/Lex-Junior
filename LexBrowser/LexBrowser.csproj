@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -8,9 +8,9 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.2.24</Version>
-    <AssemblyVersion>1.2.24.0</AssemblyVersion>
-    <FileVersion>1.2.24.0</FileVersion>
+    <Version>1.2.25</Version>
+    <AssemblyVersion>1.2.25.0</AssemblyVersion>
+    <FileVersion>1.2.25.0</FileVersion>
     <Product>Lex Junior Browser</Product>
     <Company>Lex Junior</Company>
   </PropertyGroup>
@@ -25,6 +25,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 

@@ -17,6 +17,17 @@ public enum TabPinMode
     LogoAndName
 }
 
+public enum ShieldBlockCategory
+{
+    Network,
+    Stub,
+    Popup,
+    Overlay,
+    Cosmetic,
+    Adapter,
+    Telemetry204
+}
+
 public class DetectedMediaItem
 {
     public string Url { get; set; } = "";
@@ -120,6 +131,65 @@ public class BrowserTab : INotifyPropertyChanged
 
     /// <summary>Marca de tiempo UTC del último intento de recuperación de proceso.</summary>
     public DateTime LastCrashRecoveryUtc { get; set; }
+
+    /// <summary>IDs de scripts registrados mediante AddScriptToExecuteOnDocumentCreatedAsync para actualización en caliente.</summary>
+    public string? WebShieldScriptId { get; set; }
+    public string? DailymotionScriptId { get; set; }
+    public string? YouTubeScriptId { get; set; }
+
+    /// <summary>Modo compatible temporal activado para la sesión actual de esta pestaña.</summary>
+    public bool TemporaryCompatMode { get; set; }
+
+    /// <summary>Indica si ya se notificó al script de Dailymotion que inició el flujo de video principal en la navegación actual.</summary>
+    public bool DailymotionRealVideoSignaled { get; set; }
+
+    /// <summary>Seguimiento de recargas manuales consecutivas para ofrecer Modo Compatible si una página falla.</summary>
+    public string? LastReloadHost { get; set; }
+    public List<DateTime> RecentReloadTimesUtc { get; } = new();
+    public HashSet<string> CompatibilityPromptShownDomains { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Contadores desglosados por categoría de bloqueo en la pestaña.</summary>
+    public int BlockedNetworkCount { get; private set; }
+    public int BlockedStubsCount { get; private set; }
+    public int BlockedPopupsCount { get; private set; }
+    public int BlockedOverlaysCount { get; private set; }
+    public int BlockedCosmeticCount { get; private set; }
+    public int BlockedAdapterCount { get; private set; }
+    public int BlockedTelemetry204Count { get; private set; }
+
+    public void RecordShieldBlock(ShieldBlockCategory category)
+    {
+        switch (category)
+        {
+            case ShieldBlockCategory.Network:
+                BlockedNetworkCount++;
+                BlockedAdsCount++;
+                break;
+            case ShieldBlockCategory.Stub:
+                BlockedStubsCount++;
+                BlockedAdsCount++;
+                break;
+            case ShieldBlockCategory.Popup:
+                BlockedPopupsCount++;
+                BlockedAdsCount++;
+                break;
+            case ShieldBlockCategory.Overlay:
+                BlockedOverlaysCount++;
+                BlockedAdsCount++;
+                break;
+            case ShieldBlockCategory.Cosmetic:
+                BlockedCosmeticCount++;
+                BlockedAdsCount++;
+                break;
+            case ShieldBlockCategory.Adapter:
+                BlockedAdapterCount++;
+                BlockedAdsCount++;
+                break;
+            case ShieldBlockCategory.Telemetry204:
+                BlockedTelemetry204Count++;
+                break;
+        }
+    }
 
     /// <summary>Idioma detectado en caché para la navegación actual de la pestaña.</summary>
     public string? DetectedLanguage
@@ -400,9 +470,9 @@ public class BrowserTab : INotifyPropertyChanged
         }
     }
 
-    public BrowserTab(WebView2 webView)
+    public BrowserTab(WebView2? webView = null)
     {
-        WebView = webView;
+        WebView = webView!;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

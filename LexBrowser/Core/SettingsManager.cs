@@ -1,19 +1,24 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using LexBrowser.Core.AdBlock;
 
 namespace LexBrowser.Core;
 
 public class BrowserSettings
 {
+    public int SettingsSchemaVersion { get; set; } = 1;
     public bool ShowFloatingPageButton { get; set; } = true;
     public bool EnableAutoVideoPip { get; set; } = true;
     public bool ShowBookmarksBar { get; set; } = true;
     public bool EnableAdBlocker { get; set; } = true;
-    public bool EnableVideoPlayerDefuser { get; set; } = true;
+    public bool EnableVideoPlayerDefuser { get; set; } = false;
     public bool EnableImaSdkStub { get; set; } = true;
     public bool EnableCosmeticShield { get; set; } = true;
-    public bool EnableWebShieldInSubframes { get; set; } = true;
+    public bool EnableWebShieldInSubframes { get; set; } = false;
+    public bool EnableYouTubeAdBlock { get; set; } = true;
+    public bool EnableDailymotionAdBlock { get; set; } = true;
+    public ShieldSettings Shield { get; set; } = new();
     public bool EnableHistory { get; set; } = true;
     public double FloatingPipWidth { get; set; } = 640;
     public double FloatingPipHeight { get; set; } = 390;
@@ -124,6 +129,7 @@ public static class SettingsManager
         if (tempIsNewer && TryLoadFromFile(tempPath, out var fromTemp))
         {
             Current = fromTemp!;
+            MigrateAndSyncShieldSettings(Current);
             SyncSecurityMarker();
             Save(notify: false);
             return;
@@ -133,7 +139,9 @@ public static class SettingsManager
         if (TryLoadFromFile(path, out var loaded))
         {
             Current = loaded!;
+            bool migrated = MigrateAndSyncShieldSettings(Current);
             SyncSecurityMarker();
+            if (migrated) Save(notify: false);
             return;
         }
 
@@ -142,14 +150,46 @@ public static class SettingsManager
         {
             LogSettingsEvent($"[RECOVERY] settings.json recuperado exitosamente desde {tempPath}");
             Current = recovered!;
+            MigrateAndSyncShieldSettings(Current);
             SyncSecurityMarker();
             Save(notify: false);
             return;
         }
 
-        Current = new BrowserSettings();
+        Current = new BrowserSettings { SettingsSchemaVersion = 2 };
+        MigrateAndSyncShieldSettings(Current);
         SyncSecurityMarker();
         Save(notify: false);
+    }
+
+    public static bool MigrateAndSyncShieldSettings(BrowserSettings settings)
+    {
+        bool migrated = false;
+        settings.Shield ??= new ShieldSettings();
+        settings.Shield.Modules ??= new ShieldModulesConfig();
+        settings.Shield.Adapters ??= new ShieldAdaptersConfig();
+        settings.Shield.Sites ??= new System.Collections.Generic.Dictionary<string, SiteShieldProfile>(StringComparer.OrdinalIgnoreCase);
+
+        if (settings.SettingsSchemaVersion < 2)
+        {
+            // Migración a esquema v2 (Auditoría LexShield):
+            // Desactivar por defecto el desarmador genérico de reproductor y la inyección en subframes
+            // para evitar reinicios de velocidad en YouTube/Dailymotion y roturas de iframes de terceros.
+            settings.EnableVideoPlayerDefuser = false;
+            settings.EnableWebShieldInSubframes = false;
+            settings.SettingsSchemaVersion = 2;
+            migrated = true;
+        }
+
+        settings.Shield.Enabled = settings.EnableAdBlocker;
+        settings.Shield.Modules.Cosmetic = settings.EnableCosmeticShield;
+        settings.Shield.Modules.Subframes = settings.EnableWebShieldInSubframes;
+        settings.Shield.Modules.VideoDefuser = settings.EnableVideoPlayerDefuser;
+        settings.Shield.Adapters.ImaStub = settings.EnableImaSdkStub;
+        settings.Shield.Adapters.YouTube = settings.EnableYouTubeAdBlock;
+        settings.Shield.Adapters.Dailymotion = settings.EnableDailymotionAdBlock;
+        ShieldLogger.DiagnosticMode = settings.Shield.DiagnosticMode;
+        return migrated;
     }
 
     private static void SyncSecurityMarker()
@@ -288,6 +328,9 @@ public static class SettingsManager
                     }
                     catch { }
                 }
+
+                Current.SettingsSchemaVersion = Math.Max(2, Current.SettingsSchemaVersion);
+                MigrateAndSyncShieldSettings(Current);
 
                 string json = JsonSerializer.Serialize(Current, JsonOptions);
 

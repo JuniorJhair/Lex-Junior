@@ -102,7 +102,9 @@ public static class DailymotionOptimizer
     // ─────────────────────────────────────────────────────────────────
     let _isDefusingAd = false;
     let _originalMuted = null;
+    let _originalPlaybackRate = 1.0;
     let _observer = null;
+    let _listenersAttached = false;
 
     function isDynamicAdPresent() {
         const dynamicAdSelectors = [
@@ -120,16 +122,30 @@ public static class DailymotionOptimizer
         return false;
     }
 
+    function shutdownDefuser() {
+        try {
+            if (_observer) {
+                try { _observer.disconnect(); } catch(_) {}
+                _observer = null;
+            }
+            if (_listenersAttached) {
+                _listenersAttached = false;
+                document.removeEventListener('play', checkAndDefuseAd, true);
+                document.removeEventListener('timeupdate', checkAndDefuseAd, true);
+                document.removeEventListener('loadedmetadata', checkAndDefuseAd, true);
+            }
+        } catch(_) {}
+    }
+
     function checkAndDefuseAd() {
         try {
-            // A. Salto automático instantáneo si aparece botón interactivo de saltar
+            // A. Salto automático instantáneo si aparece botón interactivo de saltar anuncio
             const skipSelectors = [
                 '.dmp_SkipButton',
-                'button[class*=""skip"" i]',
-                'button[class*=""Skip"" i]',
+                'button[class*=""dmp_Skip"" i]',
                 '.videoAdUiSkipButton',
                 '.videoAdUiAction',
-                '[data-testid*=""skip"" i]'
+                '[data-testid*=""skip-ad"" i]'
             ];
             for (const sel of skipSelectors) {
                 const btn = document.querySelector(sel);
@@ -149,23 +165,20 @@ public static class DailymotionOptimizer
                 const src = video.currentSrc || video.src || '';
 
                 // PROTECCIÓN TOTAL DEL CONTENIDO PRINCIPAL:
-                // Si la duración supera los 90 segundos, ES EL VIDEO REAL. Nunca acelerar.
+                // Si la duración supera los 90 segundos, ES EL VIDEO REAL. Nunca acelerar ni pisar la velocidad elegida por el usuario.
                 if (duration && !isNaN(duration) && duration > 90) {
-                    if (video.playbackRate !== 1.0) {
-                        try { video.playbackRate = 1.0; } catch(_) {}
-                    }
                     if (_isDefusingAd) {
                         _isDefusingAd = false;
+                        try { video.playbackRate = _originalPlaybackRate || 1.0; } catch(_) {}
                         if (_originalMuted !== null) {
                             try { video.muted = _originalMuted; } catch(_) {}
                             _originalMuted = null;
                         }
                     }
 
-                    // Si el video principal ya reprodujo más de 5 segundos, suspender el observer para 0% uso de CPU
-                    if (video.currentTime > 5 && _observer) {
-                        try { _observer.disconnect(); } catch(_) {}
-                        _observer = null;
+                    // Si el video principal ya reprodujo más de 5 segundos, apagar el observer y los listeners de timeupdate para 0% CPU
+                    if (video.currentTime > 5 && !isAdActive) {
+                        shutdownDefuser();
                     }
                     continue;
                 }
@@ -184,6 +197,9 @@ public static class DailymotionOptimizer
                     if (!_isDefusingAd) {
                         _isDefusingAd = true;
                         _originalMuted = video.muted;
+                        if (video.playbackRate > 0 && video.playbackRate <= 2.0) {
+                            _originalPlaybackRate = video.playbackRate;
+                        }
                     }
 
                     // Silenciar y acelerar al máximo (16x) saltando al final para consumir el comercial
@@ -191,9 +207,9 @@ public static class DailymotionOptimizer
                     try { video.playbackRate = 16.0; } catch(_) {}
                     try { video.currentTime = duration; } catch(_) {}
                 } else if (_isDefusingAd) {
-                    // El comercial concluyó: restaurar parámetros para el video real
+                    // El comercial concluyó: restaurar parámetros originales para el video real
                     _isDefusingAd = false;
-                    try { video.playbackRate = 1.0; } catch(_) {}
+                    try { video.playbackRate = _originalPlaybackRate || 1.0; } catch(_) {}
                     if (_originalMuted !== null) {
                         try { video.muted = _originalMuted; } catch(_) {}
                         _originalMuted = null;
@@ -206,9 +222,20 @@ public static class DailymotionOptimizer
     // ─────────────────────────────────────────────────────────────────
     // 3. OBSERVADOR Y VIGILANCIA DE REPRODUCTOR
     // ─────────────────────────────────────────────────────────────────
+    function attachListeners() {
+        if (_listenersAttached) return;
+        _listenersAttached = true;
+        try {
+            document.addEventListener('play', checkAndDefuseAd, true);
+            document.addEventListener('timeupdate', checkAndDefuseAd, true);
+            document.addEventListener('loadedmetadata', checkAndDefuseAd, true);
+        } catch(_) {}
+    }
+
     function setupObserver() {
         try {
-            if (!_observer) {
+            attachListeners();
+            if (!_observer && (document.documentElement || document.body)) {
                 _observer = new MutationObserver(checkAndDefuseAd);
                 _observer.observe(document.documentElement || document.body, {
                     childList: true,
@@ -222,10 +249,15 @@ public static class DailymotionOptimizer
     }
 
     try {
-        document.addEventListener('play', checkAndDefuseAd, true);
-        document.addEventListener('timeupdate', checkAndDefuseAd, true);
-        document.addEventListener('loadedmetadata', checkAndDefuseAd, true);
+        attachListeners();
         document.addEventListener('loadstart', setupObserver, true);
+        if (window.chrome && window.chrome.webview) {
+            window.chrome.webview.addEventListener('message', (ev) => {
+                if (ev && ev.data && ev.data.action === 'dm_real_video_detected' && !_isDefusingAd) {
+                    shutdownDefuser();
+                }
+            });
+        }
     } catch(_) {}
 
     if (document.readyState === 'loading') {

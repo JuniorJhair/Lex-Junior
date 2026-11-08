@@ -246,7 +246,15 @@ public partial class MainWindow : Window
         }
         catch { }
 
-        if (!_isGuestSession && SettingsManager.Current.RestorePreviousSession)
+        bool isLastOwnerWindow = false;
+        try
+        {
+            isLastOwnerWindow = Application.Current == null ||
+                                !Application.Current.Windows.OfType<MainWindow>().Any(w => w != this && !w._isGuestSession);
+        }
+        catch { }
+
+        if (!_isGuestSession && isLastOwnerWindow && SettingsManager.Current.RestorePreviousSession)
         {
             SessionManager.SaveSession(Tabs, _activeTab);
         }
@@ -592,7 +600,7 @@ public partial class MainWindow : Window
 
     private Action? _toastActionCallback;
 
-    private void ShowToast(string message, string? actionLabel = null, Action? onAction = null)
+    private void ShowToast(string message, string? actionLabel = null, Action? onAction = null, int durationSeconds = 6)
     {
         if (TxtToastMessage == null || PopupToast == null || ToastNotification == null) return;
 
@@ -612,7 +620,21 @@ public partial class MainWindow : Window
         ToastNotification.Visibility = Visibility.Visible;
         PopupToast.IsOpen = true;
         _toastTimer.Stop();
+        _toastTimer.Interval = TimeSpan.FromSeconds(Math.Clamp(durationSeconds, 3, 25));
         _toastTimer.Start();
+    }
+
+    private void ToastBorder_MouseEnter(object sender, MouseEventArgs e)
+    {
+        _toastTimer.Stop();
+    }
+
+    private void ToastBorder_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (PopupToast != null && PopupToast.IsOpen)
+        {
+            _toastTimer.Start();
+        }
     }
 
     private void ToastAction_Click(object sender, RoutedEventArgs e)
@@ -770,7 +792,11 @@ public partial class MainWindow : Window
         if ((Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.R) || e.Key == Key.F5)
         {
             e.Handled = true;
-            _activeTab?.WebView?.CoreWebView2?.Reload();
+            if (_activeTab != null)
+            {
+                RecordUserReloadAndCheckCompat(_activeTab);
+                _activeTab.WebView?.CoreWebView2?.Reload();
+            }
             return;
         }
 

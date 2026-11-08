@@ -63,7 +63,7 @@ public static class YouTubeOptimizer
                 u.indexOf('/youtubei/v1/next') !== -1
             );
 
-            // 1. Interceptar fetch
+            // 1. Interceptar fetch preservando metadatos de Response (url, redirected)
             const origFetch = window.fetch;
             window.fetch = function(input, init) {
                 const url = (typeof input === 'string') ? input : (input && input.url);
@@ -72,12 +72,18 @@ public static class YouTubeOptimizer
                 return p.then(function(res) {
                     return res.clone().json().then(function(json) {
                         const body = JSON.stringify(cleanPlayerPayload(json));
-                        return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+                        const synthetic = new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+                        try {
+                            Object.defineProperty(synthetic, 'url', { value: res.url, configurable: true });
+                            Object.defineProperty(synthetic, 'redirected', { value: res.redirected, configurable: true });
+                            Object.defineProperty(synthetic, 'type', { value: res.type, configurable: true });
+                        } catch(_) {}
+                        return synthetic;
                     }).catch(function() { return res; });
                 });
             };
 
-            // 2. Interceptar XMLHttpRequest (utilizado por el reproductor base de YouTube)
+            // 2. Interceptar XMLHttpRequest (responseText y response JSON utilizados por el reproductor base de YouTube)
             const origXhrOpen = XMLHttpRequest.prototype.open;
             XMLHttpRequest.prototype.open = function(method, url) {
                 this.__lex_url = url;
@@ -89,7 +95,8 @@ public static class YouTubeOptimizer
                 Object.defineProperty(XMLHttpRequest.prototype, 'responseText', {
                     get: function() {
                         const raw = origResponseTextDesc.get.call(this);
-                        if (isPlayerEndpoint(this.__lex_url) && typeof raw === 'string' && raw.includes('adPlacements')) {
+                        if (isPlayerEndpoint(this.__lex_url) && typeof raw === 'string' &&
+                            (raw.includes('adPlacements') || raw.includes('playerAds') || raw.includes('adSlots'))) {
                             try {
                                 return JSON.stringify(cleanPlayerPayload(JSON.parse(raw)));
                             } catch(_) {}
@@ -100,17 +107,25 @@ public static class YouTubeOptimizer
                 });
             }
 
-            // 3. Interceptar JSON.parse para atrapar respuestas de anuncios parseadas directamente
-            const origParse = JSON.parse;
-            JSON.parse = function() {
-                const out = origParse.apply(this, arguments);
-                if (out && typeof out === 'object') {
-                    if (out.adPlacements || out.playerAds || out.adSlots || out.playerResponse) {
-                        return cleanPlayerPayload(out);
-                    }
-                }
-                return out;
-            };
+            const origResponseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
+            if (origResponseDesc && origResponseDesc.get) {
+                Object.defineProperty(XMLHttpRequest.prototype, 'response', {
+                    get: function() {
+                        const raw = origResponseDesc.get.call(this);
+                        if (!isPlayerEndpoint(this.__lex_url) || !raw) return raw;
+                        try {
+                            if (typeof raw === 'string' && (raw.includes('adPlacements') || raw.includes('playerAds') || raw.includes('adSlots'))) {
+                                return JSON.stringify(cleanPlayerPayload(JSON.parse(raw)));
+                            }
+                            if (typeof raw === 'object') {
+                                return cleanPlayerPayload(raw);
+                            }
+                        } catch(_) {}
+                        return raw;
+                    },
+                    configurable: true
+                });
+            }
         } catch(_) {}
     }
 
@@ -124,55 +139,27 @@ public static class YouTubeOptimizer
         try {
             dialog.removeAttribute('opened');
             dialog.setAttribute('aria-hidden', 'true');
-            dialog.style.display = 'none';
-            dialog.style.pointerEvents = 'none';
         } catch(_) {}
     };
 
     const clearYouTubePopups = () => {
         if (!isYouTube) return;
         const enforcement = document.querySelector('ytd-enforcement-message-view-model');
-        if (enforcement) {
-            const dialog = enforcement.closest('tp-yt-paper-dialog, ytd-modal-with-backdrop-renderer');
-            if (dialog) closePolymerDialog(dialog);
-            enforcement.remove();
-            document.querySelectorAll('tp-yt-iron-overlay-backdrop').forEach(b => {
-                b.classList.remove('opened');
-                b.removeAttribute('opened');
-                b.style.pointerEvents = 'none';
-                b.style.display = 'none';
-            });
-            const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
-            if (player && typeof player.playVideo === 'function') player.playVideo();
-        }
-        const feedback = document.querySelector('tp-yt-paper-dialog #feedback');
-        if (feedback) {
-            const dialog = feedback.closest('tp-yt-paper-dialog');
-            if (dialog) {
-                closePolymerDialog(dialog);
-                feedback.remove();
-            }
-        }
-        // Cerrar cualquier tp-yt-paper-dialog que haya quedado abierto pero vacío (huérfano tras limpiar su contenido)
-        const openDialogs = document.querySelectorAll('tp-yt-paper-dialog:not([aria-hidden=""true""]), tp-yt-paper-dialog[opened]');
-        for (let i = 0; i < openDialogs.length; i++) {
-            const d = openDialogs[i];
-            if (d.children.length === 0 || d.querySelector('ytd-enforcement-message-view-model')) {
-                closePolymerDialog(d);
-            }
-        }
-        // Neutralizar backdrops huérfanos cuando no exista un diálogo legítimo visible en pantalla
-        const openBackdrops = document.querySelectorAll('tp-yt-iron-overlay-backdrop.opened, tp-yt-iron-overlay-backdrop[opened]');
-        for (let i = 0; i < openBackdrops.length; i++) {
-            const b = openBackdrops[i];
-            const validDialog = document.querySelector('tp-yt-paper-dialog[opened]:not([aria-hidden=""true""]), ytd-modal-with-backdrop-renderer[opened]');
-            const isLegitOpen = validDialog && validDialog.children.length > 0 && validDialog.offsetWidth > 0 && !validDialog.querySelector('ytd-enforcement-message-view-model');
-            if (!isLegitOpen) {
-                b.classList.remove('opened');
-                b.removeAttribute('opened');
-                b.style.display = 'none';
-                b.style.pointerEvents = 'none';
-            }
+        if (!enforcement) return;
+
+        const dialog = enforcement.closest('tp-yt-paper-dialog, ytd-modal-with-backdrop-renderer');
+        if (dialog) closePolymerDialog(dialog);
+        enforcement.remove();
+
+        document.querySelectorAll('tp-yt-iron-overlay-backdrop').forEach(b => {
+            b.classList.remove('opened');
+            b.removeAttribute('opened');
+            b.style.display = 'none';
+        });
+
+        const player = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
+        if (player && typeof player.playVideo === 'function') {
+            try { player.playVideo(); } catch(_) {}
         }
     };
 
@@ -476,9 +463,17 @@ public static class YouTubeOptimizer
         ['play', 'pause', 'ended', 'loadedmetadata', 'durationchange', 'emptied'].forEach(evt =>
             el.addEventListener(evt, () => { if (window.__lexScheduleSync) window.__lexScheduleSync(); }));
     };
+    const pruneWeakRefs = (arr, maxLen) => {
+        if (arr.length < maxLen) return;
+        for (let i = arr.length - 1; i >= 0; i--) {
+            if (!arr[i].deref()) arr.splice(i, 1);
+        }
+        if (arr.length >= maxLen) arr.splice(0, arr.length - Math.floor(maxLen / 2));
+    };
     const trackMedia = (el) => {
         if (!el || lexSeen.has(el)) return;
         lexSeen.add(el);
+        pruneWeakRefs(lexRefs, 128);
         lexRefs.push(new WeakRef(el));
         listenMedia(el);
     };
@@ -496,7 +491,10 @@ public static class YouTubeOptimizer
         const origAttach = Element.prototype.attachShadow;
         Element.prototype.attachShadow = function(init) {
             const root = origAttach.call(this, init);   // captura también roots 'closed'
-            try { lexShadowRoots.push(new WeakRef(root)); } catch(_) {}
+            try {
+                pruneWeakRefs(lexShadowRoots, 256);
+                lexShadowRoots.push(new WeakRef(root));
+            } catch(_) {}
             return root;
         };
     } catch(_) {}

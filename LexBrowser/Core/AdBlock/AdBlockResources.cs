@@ -45,9 +45,9 @@ public static class AdBlockResources
         string full = uri.AbsoluteUri;
 
         // 0. Dailymotion Canary Script (Anti-AdBlock Bypass de Brave: @@||dailymotion.com/nativeads.js^)
-        if ((host.EndsWith("dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
-             (!string.IsNullOrEmpty(originHost) && originHost.EndsWith("dailymotion.com", StringComparison.OrdinalIgnoreCase))) &&
-            (path.EndsWith("nativeads.js", StringComparison.OrdinalIgnoreCase) || path.Contains("/nativeads.")))
+        if ((PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
+             (!string.IsNullOrEmpty(originHost) && PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com"))) &&
+            (path.EndsWith("nativeads.js", StringComparison.OrdinalIgnoreCase) || path.Contains("/nativeads.", StringComparison.OrdinalIgnoreCase)))
         {
             responseBytes = DailymotionCanaryBytes;
             contentType = "Content-Type: application/javascript; charset=utf-8";
@@ -58,30 +58,53 @@ public static class AdBlockResources
         // Controlado por el interruptor independiente EnableImaSdkStub en Configuración.
         // Excepción: Dailymotion cuenta con su propio módulo aislado (DailymotionOptimizer) que
         // requiere el SDK original para validar el ciclo de reproducción y acelerar/saltar los anuncios sin congelar el reproductor.
-        bool isDailymotion = (!string.IsNullOrEmpty(originHost) &&
-                             (originHost.Equals("dailymotion.com", StringComparison.OrdinalIgnoreCase) ||
-                              originHost.EndsWith(".dailymotion.com", StringComparison.OrdinalIgnoreCase))) ||
+        bool isDailymotion = PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
+                             PublicSuffix.HostMatchesDomain(host, "dmcdn.net") ||
+                             (!string.IsNullOrEmpty(originHost) && PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com")) ||
                              full.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase);
 
         if (!isDailymotion &&
             SettingsManager.Current?.EnableImaSdkStub != false &&
-            host.EndsWith("googleapis.com", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/ima3.js", StringComparison.OrdinalIgnoreCase))
+            PublicSuffix.HostMatchesDomain(host, "googleapis.com") &&
+            path.EndsWith("/ima3.js", StringComparison.OrdinalIgnoreCase))
         {
             responseBytes = GoogleImaShimBytes;
             contentType = "Content-Type: application/javascript; charset=utf-8";
             return true;
         }
 
+        // Jamás devolver XML VMAP/VAST en navegaciones de documentos principales o subframes ni en dominios de Google/YouTube
+        bool isGoogleOrYouTubeContent =
+            PublicSuffix.HostMatchesDomain(host, "youtube.com") ||
+            PublicSuffix.HostMatchesDomain(host, "youtu.be") ||
+            PublicSuffix.HostMatchesDomain(host, "googlevideo.com") ||
+            PublicSuffix.HostMatchesDomain(host, "google.com") ||
+            PublicSuffix.HostMatchesDomain(host, "gstatic.com") ||
+            (!string.IsNullOrEmpty(originHost) &&
+             (PublicSuffix.HostMatchesDomain(originHost, "youtube.com") ||
+              PublicSuffix.HostMatchesDomain(originHost, "youtu.be") ||
+              PublicSuffix.HostMatchesDomain(originHost, "google.com")));
+
+        bool xmlStubContext = resourceContext is null
+            or CoreWebView2WebResourceContext.XmlHttpRequest
+            or CoreWebView2WebResourceContext.Fetch
+            or CoreWebView2WebResourceContext.Other
+            or CoreWebView2WebResourceContext.Media;
+
         // 2. VMAP / VAST Empty XML para reproductores de streaming (Fluid Player, VideoJS, JWPlayer, Dailymotion VMAP)
         // Al responder '0 anuncios en VAST/VMAP' con 200 OK, el reproductor inicia inmediatamente el video principal
         // sin reproducir comerciales pre-roll ni contar hacia atrás el reloj de espera.
-        bool isVmap = full.Contains("format=vmap", StringComparison.OrdinalIgnoreCase) ||
-                      full.Contains("output=vmap", StringComparison.OrdinalIgnoreCase) ||
-                      full.Contains("type=vmap", StringComparison.OrdinalIgnoreCase) ||
-                      full.Contains("_VMAP_", StringComparison.OrdinalIgnoreCase) ||
-                      full.Contains("monetization", StringComparison.OrdinalIgnoreCase) ||
-                      path.Contains("/vmap", StringComparison.OrdinalIgnoreCase) ||
-                      path.EndsWith("vmap.xml", StringComparison.OrdinalIgnoreCase);
+        bool isVmap = xmlStubContext &&
+                      !isGoogleOrYouTubeContent &&
+                      (full.Contains("format=vmap", StringComparison.OrdinalIgnoreCase) ||
+                       full.Contains("output=vmap", StringComparison.OrdinalIgnoreCase) ||
+                       full.Contains("type=vmap", StringComparison.OrdinalIgnoreCase) ||
+                       full.Contains("_VMAP_", StringComparison.OrdinalIgnoreCase) ||
+                       (isDailymotion && full.Contains("monetization", StringComparison.OrdinalIgnoreCase)) ||
+                       path.EndsWith("/vmap", StringComparison.OrdinalIgnoreCase) ||
+                       path.Contains("/vmap/", StringComparison.OrdinalIgnoreCase) ||
+                       path.Contains("/vmap.", StringComparison.OrdinalIgnoreCase) ||
+                       path.EndsWith("vmap.xml", StringComparison.OrdinalIgnoreCase));
 
         if (isVmap)
         {
@@ -91,16 +114,16 @@ public static class AdBlockResources
         }
 
         // 3. Stubs para redes publicitarias conocidas de video y popups
-        bool isAdNetwork = host.Contains("adtng.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("trafficjunky.net", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("trafficjunky.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("exoclick.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("magsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("realsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("pemsrv.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("juicyads.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) ||
-                           host.Contains("ero-advertising.com", StringComparison.OrdinalIgnoreCase);
+        bool isAdNetwork = PublicSuffix.HostMatchesDomain(host, "adtng.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "trafficjunky.net") ||
+                           PublicSuffix.HostMatchesDomain(host, "trafficjunky.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "exoclick.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "magsrv.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "realsrv.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "pemsrv.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "juicyads.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "tsyndicate.com") ||
+                           PublicSuffix.HostMatchesDomain(host, "ero-advertising.com");
 
         bool isScriptContext = resourceContext == CoreWebView2WebResourceContext.Script ||
                                path.EndsWith(".js", StringComparison.OrdinalIgnoreCase);
@@ -132,12 +155,16 @@ public static class AdBlockResources
             return true;
         }
 
-        bool isVast = !isDailymotion &&
+        bool isVast = xmlStubContext &&
+                      !isDailymotion &&
+                      !isGoogleOrYouTubeContent &&
                       (full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("format=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("output=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("type=vast", StringComparison.OrdinalIgnoreCase) ||
-                       path.Contains("/vast", StringComparison.OrdinalIgnoreCase) ||
+                       path.EndsWith("/vast", StringComparison.OrdinalIgnoreCase) ||
+                       path.Contains("/vast/", StringComparison.OrdinalIgnoreCase) ||
+                       path.Contains("/vast.", StringComparison.OrdinalIgnoreCase) ||
                        path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase));
 
         if (isVast)
@@ -148,12 +175,12 @@ public static class AdBlockResources
         }
 
         // 4. PopAds / PopCash / Aclib / PopMagic / TSyndicate dummy
-        if (host.Contains("popads.net", StringComparison.OrdinalIgnoreCase) ||
+        if (PublicSuffix.HostMatchesDomain(host, "popads.net") ||
             path.EndsWith("/popads.js", StringComparison.OrdinalIgnoreCase) ||
-            (host.Contains("popcash.net", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/pop.js", StringComparison.OrdinalIgnoreCase)) ||
+            (PublicSuffix.HostMatchesDomain(host, "popcash.net") && path.EndsWith("/pop.js", StringComparison.OrdinalIgnoreCase)) ||
             path.EndsWith("/aclib.js", StringComparison.OrdinalIgnoreCase) ||
             path.EndsWith("/ad-provider.js", StringComparison.OrdinalIgnoreCase) ||
-            (host.Contains("tsyndicate.com", StringComparison.OrdinalIgnoreCase) && path.Contains("video.instant.message.js", StringComparison.OrdinalIgnoreCase)))
+            (PublicSuffix.HostMatchesDomain(host, "tsyndicate.com") && path.Contains("video.instant.message.js", StringComparison.OrdinalIgnoreCase)))
         {
             responseBytes = PopadsDummyBytes;
             contentType = "Content-Type: application/javascript; charset=utf-8";

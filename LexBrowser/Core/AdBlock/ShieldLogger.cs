@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using LexBrowser.UI.Models;
 
 namespace LexBrowser.Core.AdBlock;
 
@@ -35,11 +36,44 @@ public static class ShieldLogger
     private static readonly object SyncLock = new();
 
     /// <summary>
+    /// Cuando está desactivado (valor por defecto), omite eventos ruidosos de tráfico permitido
+    /// (REQUEST_ALLOWED, NAVIGATION_STARTING) para evitar presión de memoria en navegación normal.
+    /// </summary>
+    public static bool DiagnosticMode { get; set; }
+
+    /// <summary>
+    /// Registra un evento asociado a una pestaña, omitiendo automáticamente cualquier registro
+    /// si la pestaña pertenece a Modo Invitado o Modo Incógnito para proteger la privacidad.
+    /// </summary>
+    public static void LogForTab(BrowserTab? tab, string eventType, string sourceDomain, string url, string frame, string reason, string tabName = "")
+    {
+        if (tab != null && (tab.IsGuest || tab.IsIncognito))
+            return;
+
+        string tabLabel = !string.IsNullOrWhiteSpace(tabName)
+            ? tabName
+            : (tab != null ? $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})" : string.Empty);
+
+        Log(eventType, sourceDomain, url, frame, reason, tabLabel, isPrivateOrGuest: false);
+    }
+
+    /// <summary>
     /// Registra un evento de seguridad / bloqueo en el buffer circular.
     /// Sanitiza URLs de tipo data: y cadenas excesivamente largas para no saturar memoria ni el portapapeles.
     /// </summary>
-    public static void Log(string eventType, string sourceDomain, string url, string frame, string reason, string tabName = "")
+    public static void Log(string eventType, string sourceDomain, string url, string frame, string reason, string tabName = "", bool isPrivateOrGuest = false)
     {
+        if (isPrivateOrGuest)
+            return;
+
+        if (!DiagnosticMode &&
+            (string.Equals(eventType, "REQUEST_ALLOWED", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(eventType, "NAVIGATION_STARTING", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(eventType, "SUBFRAME_NAVIGATION_STARTING", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
         string sanitizedUrl = url ?? string.Empty;
         if (sanitizedUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
         {

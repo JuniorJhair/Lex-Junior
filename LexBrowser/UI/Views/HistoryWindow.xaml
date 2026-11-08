@@ -215,10 +215,20 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Buscador instantáneo -->
-                        <Grid Grid.Column="0" Margin="0,0,10,0">
-                            <TextBox x:Name="TxtSearch" Style="{StaticResource DarkInput}" TextChanged="TxtSearch_TextChanged"/>
-                            <TextBlock Text="🔍 Buscar por título, URL o palabra clave..." IsHitTestVisible="False" Foreground="#8B8B96" FontSize="12" Margin="12,7,0,0">
+                        <!-- Buscador instantáneo con icono vectorial y watermark perfectamente centrados -->
+                        <Grid Grid.Column="0" Margin="0,0,10,0" Height="36">
+                            <TextBox x:Name="TxtSearch" Style="{StaticResource DarkInput}"
+                                     Height="36" Padding="32,0,10,0"
+                                     VerticalContentAlignment="Center"
+                                     TextChanged="TxtSearch_TextChanged"/>
+                            <Path Data="M 10,3 A 7,7 0 1 0 10,17 A 7,7 0 1 0 10,3 M 15,15 L 20,20"
+                                  Stroke="#8B8B96" StrokeThickness="1.6"
+                                  Width="14" Height="14" Stretch="Uniform"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center"
+                                  Margin="11,0,0,0" IsHitTestVisible="False"/>
+                            <TextBlock Text="Buscar por título, URL o palabra clave..."
+                                       IsHitTestVisible="False" Foreground="#8B8B96" FontSize="12"
+                                       VerticalAlignment="Center" Margin="33,0,10,0">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>

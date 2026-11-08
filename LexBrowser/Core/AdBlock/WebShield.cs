@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace LexBrowser.Core.AdBlock;
 
 public static class WebShield
@@ -21,15 +23,36 @@ public static class WebShield
     /// </summary>
     public static string InjectedScript => GetInjectedScript(
         EnableVideoPlayerDefuser,
-        SettingsManager.Current?.EnableWebShieldInSubframes ?? true,
+        SettingsManager.Current?.EnableWebShieldInSubframes ?? false,
         SettingsManager.Current?.EnableCosmeticShield ?? true
     );
 
-    public static string GetInjectedScript(bool enableVideoDefuser, bool enableSubframes = true, bool enableCosmetic = true)
+    public static string GetInjectedScript(
+        bool enableVideoDefuser,
+        bool enableSubframes = false,
+        bool enableCosmetic = true,
+        bool enablePopups = true,
+        bool enableOverlays = true,
+        bool enableAntiWall = true)
     {
+        string sitesJson = "{}";
+        try
+        {
+            var sites = SettingsManager.Current?.Shield?.Sites;
+            if (sites != null && sites.Count > 0)
+            {
+                sitesJson = JsonSerializer.Serialize(sites);
+            }
+        }
+        catch { }
+
         string script = BaseScript
             .Replace("const __LEX_ENABLE_SUBFRAME_SHIELD = true;", $"const __LEX_ENABLE_SUBFRAME_SHIELD = {(enableSubframes ? "true" : "false")};")
-            .Replace("const __LEX_ENABLE_COSMETIC_SHIELD = true;", $"const __LEX_ENABLE_COSMETIC_SHIELD = {(enableCosmetic ? "true" : "false")};");
+            .Replace("const __LEX_ENABLE_COSMETIC_SHIELD = true;", $"const __LEX_ENABLE_COSMETIC_SHIELD = {(enableCosmetic ? "true" : "false")};")
+            .Replace("const __LEX_ENABLE_POPUPS_SHIELD = true;", $"const __LEX_ENABLE_POPUPS_SHIELD = {(enablePopups ? "true" : "false")};")
+            .Replace("const __LEX_ENABLE_OVERLAYS_SHIELD = true;", $"const __LEX_ENABLE_OVERLAYS_SHIELD = {(enableOverlays ? "true" : "false")};")
+            .Replace("const __LEX_ENABLE_ANTIWALL_SHIELD = true;", $"const __LEX_ENABLE_ANTIWALL_SHIELD = {(enableAntiWall ? "true" : "false")};")
+            .Replace("const __LEX_SITE_POLICIES = {};", $"const __LEX_SITE_POLICIES = {sitesJson};");
 
         return enableVideoDefuser ? script + VideoPlayerDefuserScript : script;
     }
@@ -45,192 +68,192 @@ public static class WebShield
 
     const __LEX_ENABLE_SUBFRAME_SHIELD = true;
     const __LEX_ENABLE_COSMETIC_SHIELD = true;
+    const __LEX_ENABLE_POPUPS_SHIELD = true;
+    const __LEX_ENABLE_OVERLAYS_SHIELD = true;
+    const __LEX_ENABLE_ANTIWALL_SHIELD = true;
+    const __LEX_SITE_POLICIES = {};
 
-    const hostname = window.location.hostname || '';
+    const hostname = (window.location.hostname || '').toLowerCase();
     const isTopWindow = (window.top === window.self);
 
-    const isYouTube = hostname === 'youtube.com' ||
-                      hostname === 'www.youtube.com' ||
-                      hostname.endsWith('.youtube.com') ||
-                      hostname === 'youtu.be' ||
-                      hostname.endsWith('.youtube-nocookie.com');
+    if (!isTopWindow && !__LEX_ENABLE_SUBFRAME_SHIELD) return;
+
+    const ends = (d) => hostname === d || hostname.endsWith('.' + d);
+
+    const isYouTube = ends('youtube.com') ||
+                      ends('youtu.be') ||
+                      ends('youtube-nocookie.com');
 
     // YouTube cuenta con su propio optimizador aislado y no debe ser intervenido por este escudo genérico
     if (isYouTube) return;
 
-    const isGoogle = hostname === 'google.com' ||
-                     hostname === 'www.google.com' ||
-                     hostname.endsWith('.google.com') ||
-                     hostname.includes('.google.') ||
-                     hostname.startsWith('google.');
+    const isGoogle = ends('google.com') ||
+                     ends('google.com.pe') ||
+                     ends('google.es') ||
+                     ends('google.com.mx') ||
+                     ends('google.com.ar') ||
+                     ends('google.com.co') ||
+                     ends('google.cl') ||
+                     ends('gstatic.com') ||
+                     ends('googleapis.com') ||
+                     ends('googleusercontent.com');
 
-    const isBing = hostname === 'bing.com' ||
-                   hostname === 'www.bing.com' ||
-                   hostname.endsWith('.bing.com');
+    const isBing = ends('bing.com');
 
     const isTrustedSite = isGoogle || isBing ||
-                          hostname.endsWith('dailymotion.com') ||
-                          hostname.endsWith('youtube.com') ||
-                          hostname.endsWith('twitch.tv') ||
-                          hostname.endsWith('vimeo.com') ||
-                          hostname.endsWith('duckduckgo.com') ||
-                          hostname.endsWith('github.com') ||
-                          hostname.endsWith('wikipedia.org') ||
-                          hostname.endsWith('openai.com') ||
-                          hostname.endsWith('chatgpt.com') ||
-                          hostname.endsWith('claude.ai');
+                          ends('dailymotion.com') ||
+                          ends('youtube.com') ||
+                          ends('twitch.tv') ||
+                          ends('vimeo.com') ||
+                          ends('duckduckgo.com') ||
+                          ends('github.com') ||
+                          ends('wikipedia.org') ||
+                          ends('openai.com') ||
+                          ends('chatgpt.com') ||
+                          ends('claude.ai') ||
+                          ends('microsoft.com') ||
+                          ends('live.com') ||
+                          ends('paypal.com');
 
     // Sitios dedicados, motores de búsqueda y plataformas legítimas (preservar respuestas IA, Gemini, widgets y controles nativos)
     if (isTrustedSite) return;
 
+    // Resolver política por sitio en tiempo de ejecución
+    let siteMode = 'Normal';
+    let siteDisabled = [];
+    try {
+        for (const [domain, prof] of Object.entries(__LEX_SITE_POLICIES || {})) {
+            const d = (domain || '').toLowerCase();
+            if (d && ends(d) && prof) {
+                siteMode = prof.Mode || 'Normal';
+                siteDisabled = Array.isArray(prof.Disabled) ? prof.Disabled.map(x => String(x).toLowerCase()) : [];
+                break;
+            }
+        }
+    } catch(_) {}
+
+    if (siteMode.toLowerCase() === 'off') return;
+    const isCompatMode = siteMode.toLowerCase() === 'compat';
+    const isModDisabled = (m) => siteDisabled.includes(m.toLowerCase());
+
+    const activePopups = __LEX_ENABLE_POPUPS_SHIELD && !isModDisabled('popups');
+    const activeCosmetic = !isCompatMode && __LEX_ENABLE_COSMETIC_SHIELD && !isModDisabled('cosmetic');
+    const activeOverlays = !isCompatMode && __LEX_ENABLE_OVERLAYS_SHIELD && !isModDisabled('overlays');
+    const activeAntiWall = !isCompatMode && __LEX_ENABLE_ANTIWALL_SHIELD && !isModDisabled('antiwall');
+
     // ─────────────────────────────────────────────────────────────────
     // 0. SCRIPTLETS DE EMULACIÓN ANTI-ANTI-ADBLOCK & NOTIFICATION DEFUSER
     // ─────────────────────────────────────────────────────────────────
-    try {
-        window.canRunAds = true;
-        window.isAdBlockActive = false;
-        window.adblock = false;
-        window.google_ad_status = 1;
-        window.adsbygoogle = window.adsbygoogle || [];
-        window.adsbygoogle.push = function() { return 0; };
-        window.google_ad_client = 'ca-pub-test';
-        window.PopAds = window.PopAds || {};
-        window.popns = window.popns || {};
-
-        // Emular bibliotecas de popunder para que se desactiven pacíficamente sin romper el reproductor
-        const fakeAclib = {
-            runPop: function() { return false; },
-            runBanner: function() { return false; },
-            runSlider: function() { return false; },
-            runInterstitial: function() { return false; },
-            runVideo: function() { return false; }
-        };
+    if (activeAntiWall) {
         try {
-            window.aclib = fakeAclib;
-            Object.defineProperty(window, 'aclib', {
-                get: function() { return fakeAclib; },
-                set: function() {},
-                configurable: true
-            });
-        } catch(_) {}
+            window.canRunAds = true;
+            window.isAdBlockActive = false;
+            window.adblock = false;
+            window.google_ad_status = 1;
+            window.adsbygoogle = window.adsbygoogle || [];
+            window.adsbygoogle.push = function() { return 0; };
+            window.google_ad_client = 'ca-pub-test';
+            window.PopAds = window.PopAds || {};
+            window.popns = window.popns || {};
 
-        const noop = function() {};
-        const fakePopMagic = {
-            init: noop,
-            pop: noop,
-            capture: noop,
-            click: noop,
-            check: function() { return false; }
-        };
-        try {
-            window.popMagic = fakePopMagic;
-            Object.defineProperty(window, 'popMagic', {
-                get: function() { return fakePopMagic; },
-                set: function() {},
-                configurable: true
-            });
-        } catch(_) {}
-
-        window.popns = {};
-        window._pop = [];
-        window._monetag = {};
-        window.adcash = {};
-
-        // Neutralizar variables globales de inyección VAST en reproductores incrustados (Brave / uBO set-constant)
-        try {
-            const emptyStrDesc = { get: function() { return ''; }, set: function() {}, configurable: true };
-            const emptyArrDesc = { get: function() { return []; }, set: function() {}, configurable: true };
-
-            try { Object.defineProperty(window, 'vastUrl', emptyStrDesc); } catch(_) {}
-            try { Object.defineProperty(window, 'vast_url', emptyStrDesc); } catch(_) {}
-            try { Object.defineProperty(window, 'vastURL', emptyStrDesc); } catch(_) {}
-            try { Object.defineProperty(window, 'vastAds', emptyArrDesc); } catch(_) {}
-            try { Object.defineProperty(window, 'ad_tags', emptyArrDesc); } catch(_) {}
-
-            // Pre-configurar timestamps en localStorage para satisfacer comprobaciones de tiempo de reproductores
+            // Emular bibliotecas de popunder para que se desactiven pacíficamente sin romper el reproductor
+            const fakeAclib = {
+                runPop: function() { return false; },
+                runBanner: function() { return false; },
+                runSlider: function() { return false; },
+                runInterstitial: function() { return false; },
+                runVideo: function() { return false; }
+            };
             try {
-                if (window.localStorage) {
-                    const futureTime = (Date.now() + 86400000).toString();
-                    localStorage.setItem('ads-last-seen', futureTime);
-                    localStorage.setItem('ad_last_seen', futureTime);
-                    localStorage.setItem('vast_last_seen', futureTime);
-                }
+                window.aclib = fakeAclib;
+                Object.defineProperty(window, 'aclib', {
+                    get: function() { return fakeAclib; },
+                    set: function() {},
+                    configurable: true
+                });
             } catch(_) {}
-        } catch(_) {}
 
-        // Neutralizar detectores basados en elementos trampa BAB (BlockAdBlock)
-        try {
-            const origGetElem = document.getElementById;
-            document.getElementById = function(id) {
-                if (id === 'babasbmsgx' || (typeof id === 'string' && id.startsWith('bab_'))) {
-                    return null;
-                }
-                return origGetElem.apply(this, arguments);
+            const noop = function() {};
+            const fakePopMagic = {
+                init: noop,
+                pop: noop,
+                capture: noop,
+                click: noop,
+                check: function() { return false; }
             };
-        } catch(_) {}
+            try {
+                window.popMagic = fakePopMagic;
+                Object.defineProperty(window, 'popMagic', {
+                    get: function() { return fakePopMagic; },
+                    set: function() {},
+                    configurable: true
+                });
+            } catch(_) {}
 
-        // Emular y neutralizar ZorDon / Zordon (FuckAdBlock / BlockAdBlock usado por Byse / JWPlayer)
-        try {
-            Object.defineProperty(window, 'ZorDon', {
-                get: function() { return false; },
-                set: function() {},
-                configurable: true
-            });
-            window.Zordon = {
-                on: function(status, cb) {
-                    if (status === false && typeof cb === 'function') {
-                        try { cb(); } catch(_) {}
+            window.popns = {};
+            window._pop = [];
+            window._monetag = {};
+            window.adcash = {};
+
+            // Neutralizar variables globales de inyección VAST en reproductores incrustados (Brave / uBO set-constant)
+            try {
+                const emptyStrDesc = { get: function() { return ''; }, set: function() {}, configurable: true };
+                const emptyArrDesc = { get: function() { return []; }, set: function() {}, configurable: true };
+
+                try { Object.defineProperty(window, 'vastUrl', emptyStrDesc); } catch(_) {}
+                try { Object.defineProperty(window, 'vast_url', emptyStrDesc); } catch(_) {}
+                try { Object.defineProperty(window, 'vastURL', emptyStrDesc); } catch(_) {}
+                try { Object.defineProperty(window, 'vastAds', emptyArrDesc); } catch(_) {}
+                try { Object.defineProperty(window, 'ad_tags', emptyArrDesc); } catch(_) {}
+            } catch(_) {}
+
+            // Neutralizar detectores basados en elementos trampa BAB (BlockAdBlock)
+            try {
+                const origGetElem = document.getElementById;
+                document.getElementById = function(id) {
+                    if (id === 'babasbmsgx' || (typeof id === 'string' && id.startsWith('bab_'))) {
+                        return null;
                     }
-                    return this;
-                },
-                check: function() { return false; },
-                clearEvent: function() { return this; }
-            };
-            const FakeFab = function() {
-                this.on = function(detected, fn) {
-                    if (!detected && typeof fn === 'function') {
-                        try { setTimeout(fn, 10); } catch(_) {}
-                    }
-                    return this;
+                    return origGetElem.apply(this, arguments);
                 };
-                this.check = function() { return false; };
-                this.clearEvent = function() { return this; };
-                this.setOption = function() { return this; };
-            };
-            window.BlockAdBlock = FakeFab;
-            window.FuckAdBlock = FakeFab;
-            window.blockAdBlock = new FakeFab();
-            window.fuckAdBlock = new FakeFab();
-            window.sniffAdBlock = false;
-        } catch(_) {}
+            } catch(_) {}
 
-        // Neutralizar trampa de autodetección por PDF object en Byse / reproductores iframe
-        try {
-            if (navigator && navigator.plugins && typeof navigator.plugins.namedItem === 'function') {
-                const origNamedItem = navigator.plugins.namedItem.bind(navigator.plugins);
-                navigator.plugins.namedItem = function(name) {
-                    if (name === 'Chrome PDF Viewer') return null;
-                    return origNamedItem(name);
-                };
-            }
-        } catch(_) {}
-
-        try {
-            const origSetAttr = HTMLObjectElement.prototype.setAttribute;
-            HTMLObjectElement.prototype.setAttribute = function(name, val) {
-                if (name === 'data' && typeof val === 'string' && val.startsWith('data:application/pdf')) {
-                    const self = this;
-                    setTimeout(function() {
-                        if (typeof self.onload === 'function') {
-                            try { self.onload(); } catch(_) {}
+            // Emular y neutralizar ZorDon / Zordon (FuckAdBlock / BlockAdBlock usado por Byse / JWPlayer)
+            try {
+                Object.defineProperty(window, 'ZorDon', {
+                    get: function() { return false; },
+                    set: function() {},
+                    configurable: true
+                });
+                window.Zordon = {
+                    on: function(status, cb) {
+                        if (status === false && typeof cb === 'function') {
+                            try { cb(); } catch(_) {}
                         }
-                    }, 10);
-                    return;
-                }
-                return origSetAttr.apply(this, arguments);
-            };
-        } catch(_) {}
-    } catch(e) {}
+                        return this;
+                    },
+                    check: function() { return false; },
+                    clearEvent: function() { return this; }
+                };
+                const FakeFab = function() {
+                    this.on = function(detected, fn) {
+                        if (!detected && typeof fn === 'function') {
+                            try { setTimeout(fn, 10); } catch(_) {}
+                        }
+                        return this;
+                    };
+                    this.check = function() { return false; };
+                    this.clearEvent = function() { return this; };
+                    this.setOption = function() { return this; };
+                };
+                window.BlockAdBlock = FakeFab;
+                window.FuckAdBlock = FakeFab;
+                window.blockAdBlock = new FakeFab();
+                window.fuckAdBlock = new FakeFab();
+                window.sniffAdBlock = false;
+            } catch(_) {}
+        } catch(e) {}
+    }
 
 
     // ─────────────────────────────────────────────────────────────────
@@ -239,7 +262,7 @@ public static class WebShield
     try {
         const applyCosmeticStyles = function() {
             try {
-                if (!__LEX_ENABLE_COSMETIC_SHIELD) return;
+                if (!activeCosmetic) return;
                 if (document.getElementById('__lex_cosmetic_shield')) return;
                 const target = document.head || document.documentElement;
                 if (!target) return;
@@ -303,9 +326,6 @@ public static class WebShield
                     .adsbytrafficjunky,
                     .adsbyexoclick,
                     .adsbyjuicyads,
-                    div[class*='banner']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    div[id*='banner']:not(:has(video)):not([class*='player']):not([id*='player']),
-                    [data-zone-id]:not([class*='player']),
                     .ad-container:not(#player):not([class*='player']):not(:has(video)) {
                         display: none !important;
                         visibility: hidden !important;
@@ -392,42 +412,47 @@ public static class WebShield
         }
     };
 
-    try {
-        const originalOpen = window.open;
-        window.open = function(url, target, features) {
-            const urlStr = (typeof url === 'string') ? url : (url && url.toString ? url.toString() : '');
-            const isInsideFrame = (window.self !== window.top);
-            const isSuspicious = isAdOrSuspiciousUrl(urlStr);
+    if (activePopups) {
+        try {
+            const originalOpen = window.open;
+            window.open = function(url, target, features) {
+                const urlStr = (typeof url === 'string') ? url : (url && url.toString ? url.toString() : '');
+                const isInsideFrame = (window.self !== window.top);
+                const isSuspicious = isAdOrSuspiciousUrl(urlStr);
 
-            // 1. Si es detectado como anuncio explícito
-            if (isSuspicious) {
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'ad_blocked', url: urlStr, reason: 'window_open_ad_pattern' });
-                }
-                return createDecoyPopup();
-            }
-
-            // 2. Si proviene de un iframe (común en anime/streaming) y navega hacia un dominio cruzado no OAuth
-            if (isInsideFrame) {
-                const isCrossDomain = urlStr && !urlStr.startsWith(window.location.origin) && !trustedOAuthRegex.test(urlStr);
-                const isBlankPop = !urlStr || urlStr === 'about:blank';
-                if (isCrossDomain || isBlankPop) {
+                // 1. Si es detectado como anuncio explícito
+                if (isSuspicious) {
                     if (window.chrome && window.chrome.webview) {
-                        window.chrome.webview.postMessage({ type: 'ad_blocked', url: urlStr || 'about:blank', reason: 'window_open_iframe_popunder' });
+                        window.chrome.webview.postMessage({ type: 'ad_blocked', category: 'popup', url: urlStr, reason: 'window_open_ad_pattern' });
                     }
                     return createDecoyPopup();
                 }
-            }
 
-            // 3. Ejecución normal. Si el navegador cancela la apertura (e.Handled = true), devolver señuelo para no romper el reproductor
-            try {
-                const win = originalOpen.apply(this, arguments);
-                return win || createDecoyPopup();
-            } catch(err) {
-                return createDecoyPopup();
-            }
-        };
-    } catch(e) {}
+                // 2. Si proviene de un iframe sin gesto directo del usuario o hacia about:blank
+                if (isInsideFrame) {
+                    const hasUserGesture = !!(navigator.userActivation && navigator.userActivation.isActive);
+                    const isCrossDomain = urlStr && !urlStr.startsWith(window.location.origin) && !trustedOAuthRegex.test(urlStr);
+                    const isBlankPop = !urlStr || urlStr === 'about:blank';
+                    if (isBlankPop || (isCrossDomain && !hasUserGesture)) {
+                        if (window.chrome && window.chrome.webview) {
+                            window.chrome.webview.postMessage({ type: 'ad_blocked', category: 'popup', url: urlStr || 'about:blank', reason: 'window_open_iframe_popunder' });
+                        }
+                        return createDecoyPopup();
+                    }
+                }
+
+                // 3. Ejecución normal. Si el navegador cancela la apertura (e.Handled = true), devolver señuelo para no romper el reproductor
+                try {
+                    const win = originalOpen.apply(this, arguments);
+                    return win || createDecoyPopup();
+                } catch(err) {
+                    return createDecoyPopup();
+                }
+            };
+        } catch(e) {}
+    }
+
+    if (!activeOverlays) return;
 
     // 1.2 Defusor de clics simulados en enlaces fantasma (creados en memoria sin contenido visual)
     try {
@@ -438,7 +463,7 @@ public static class WebShield
             const text = (this.innerText || this.textContent || '').trim();
             if ((isDetached || !text) && (this.target === '_blank' || adDomainsRegex.test(href))) {
                 if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'ad_blocked', url: href, reason: 'phantom_anchor' });
+                    window.chrome.webview.postMessage({ type: 'ad_blocked', category: 'overlay', url: href, reason: 'phantom_anchor' });
                 }
                 return; // Neutralizado
             }
@@ -479,7 +504,7 @@ public static class WebShield
         if (['VIDEO', 'AUDIO', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tag)) return false;
 
         // NUNCA borrar el elemento raíz de frameworks SPA
-        if (el.id === 'root' || el.id === 'app' || el.hasAttribute('data-reactroot')) return false;
+        if (el.id === 'root' || el.id === 'app' || el.id === '__next' || el.id === '__nuxt' || el.hasAttribute('data-reactroot')) return false;
 
         // CRÍTICO: Si el elemento CONTIENE un video o iframe dentro de su árbol, NO borrarlo (es el contenedor del reproductor)
         if (el.querySelector('video, audio, iframe')) return false;
@@ -526,7 +551,19 @@ public static class WebShield
         return isExplicitAdName;
     };
 
-    // 1.5 Interceptor en Fase de Captura Pre-Clic (Destrucción inmediata + Click Pass-Through)
+    const neutralizeOverlayElement = (el) => {
+        if (!el) return;
+        try {
+            el.style.setProperty('pointer-events', 'none', 'important');
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            if (el.tagName === 'A' || el.children.length === 0) {
+                el.remove();
+            }
+        } catch(_) {}
+    };
+
+    // 1.5 Interceptor en Fase de Captura Pre-Clic (Neutralización inmediata + Click Pass-Through)
     const handleCaptureClick = (e) => {
         let target = e.target;
         if (!target) return;
@@ -562,11 +599,12 @@ public static class WebShield
             const zi = cs.zIndex || 'auto';
             const elDesc = `${tag}${id}${cls} [${Math.round(r.width)}x${Math.round(r.height)}, z:${zi}]`;
 
-            ghost.remove();
+            neutralizeOverlayElement(ghost);
 
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
                     type: 'ad_blocked',
+                    category: 'overlay',
                     reason: `ghost_overlay_capture -> ${elDesc}`
                 });
             }
@@ -585,10 +623,10 @@ public static class WebShield
         }
     };
 
-    const isKnownMediaSite = hostname.endsWith('dailymotion.com') ||
-                             hostname.endsWith('youtube.com') ||
-                             hostname.endsWith('twitch.tv') ||
-                             hostname.endsWith('vimeo.com');
+    const isKnownMediaSite = ends('dailymotion.com') ||
+                             ends('youtube.com') ||
+                             ends('twitch.tv') ||
+                             ends('vimeo.com');
 
     if (!isKnownMediaSite) {
         window.addEventListener('click', handleCaptureClick, true);
@@ -608,10 +646,11 @@ public static class WebShield
                     const tag = el.tagName || '';
                     const id = el.id ? ('#' + el.id) : '';
                     const cls = (el.className && typeof el.className === 'string') ? ('.' + el.className.trim().split(/\s+/).join('.')) : '';
-                    el.remove();
+                    neutralizeOverlayElement(el);
                     if (window.chrome && window.chrome.webview) {
                         window.chrome.webview.postMessage({
                             type: 'ad_blocked',
+                            category: 'overlay',
                             reason: `ghost_overlay_explicit -> ${tag}${id}${cls} [${Math.round(r.width)}x${Math.round(r.height)}]`
                         });
                     }
@@ -624,10 +663,11 @@ public static class WebShield
                 const a = ghostAnchors[i];
                 if (isGhostOverlay(a)) {
                     const r = a.getBoundingClientRect ? a.getBoundingClientRect() : { width: 0, height: 0 };
-                    a.remove();
+                    neutralizeOverlayElement(a);
                     if (window.chrome && window.chrome.webview) {
                         window.chrome.webview.postMessage({
                             type: 'ad_blocked',
+                            category: 'overlay',
                             reason: `ghost_anchor_scanned -> A [${Math.round(r.width)}x${Math.round(r.height)}]`
                         });
                     }
@@ -635,8 +675,7 @@ public static class WebShield
             }
 
             // 3. Capas trampas colocadas como hermanas sobre contenedores de video o iframes
-            // Excluir plataformas de video legítimas de la remoción de hermanos para preservar controles nativos
-            if (!hostname.endsWith('dailymotion.com') && !hostname.endsWith('youtube.com') && !hostname.endsWith('twitch.tv') && !hostname.endsWith('vimeo.com')) {
+            if (!isKnownMediaSite) {
                 const players = document.querySelectorAll('[class*=player], [id*=player], iframe, video');
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
@@ -645,10 +684,11 @@ public static class WebShield
                         const sib = siblings[j];
                         if (sib !== p && isGhostOverlay(sib)) {
                             const r = sib.getBoundingClientRect ? sib.getBoundingClientRect() : { width: 0, height: 0 };
-                            sib.remove();
+                            neutralizeOverlayElement(sib);
                             if (window.chrome && window.chrome.webview) {
                                 window.chrome.webview.postMessage({
                                     type: 'ad_blocked',
+                                    category: 'overlay',
                                     reason: `player_sibling_overlay_removed -> ${sib.tagName} [${Math.round(r.width)}x${Math.round(r.height)}]`
                                 });
                             }
@@ -671,54 +711,64 @@ public static class WebShield
 ";
 
     /// <summary>
-    /// Desarmador pasivo y no invasivo para reproductores de video (JW Player / Fluid Player).
-    /// Nunca reemplaza window.jwplayer ni modifica setup() para preservar licencias y flujos HLS.
+    /// Desarmador pasivo y acotado para reproductores de video genéricos (JW Player / Fluid Player / Video.js).
+    /// Excluye estrictamente YouTube, Google y Dailymotion, actúa únicamente dentro del contenedor del reproductor
+    /// cuando un anuncio está activo, y restaura la velocidad y el audio originales al finalizar el anuncio.
     /// Solo activo si EnableVideoPlayerDefuser es true.
     /// </summary>
     public const string VideoPlayerDefuserScript = @"
 (function() {
+    const h = (location.hostname || '').toLowerCase();
+    const ends = (d) => h === d || h.endsWith('.' + d);
+    if (ends('youtube.com') || ends('youtu.be') || ends('youtube-nocookie.com') ||
+        ends('google.com') || ends('gstatic.com') || ends('googleusercontent.com') ||
+        ends('dailymotion.com') || ends('twitch.tv') || ends('vimeo.com')) {
+        return;
+    }
+
+    const savedState = new WeakMap();
     let attempts = 0;
 
-    function trySkipPreRoll() {
+    function trySkipPreRoll(e) {
         try {
-            // A. Clic automático en botones de saltar comercial (JW, Fluid, VideoJS, VAST)
-            const skipBtns = document.querySelectorAll(
-                'button[class*=""skip"" i], div[class*=""skip"" i], a[class*=""skip"" i], span[class*=""skip"" i], ' +
-                '.videoAdUiSkipButton, .vast-skip-button, .skip-button, .skip_button, .skip_ad, [class*=""skip-ad"" i], [id*=""skip"" i], ' +
-                '.fluid_ad_countdown, [class*=""countdown"" i]'
-            );
-            for (let i = 0; i < skipBtns.length; i++) {
-                const b = skipBtns[i];
-                if (b && b.offsetParent !== null && typeof b.click === 'function') {
-                    const txt = (b.textContent || '').trim().toLowerCase();
-                    if (!txt.includes('in ') || txt.includes('skip ad in 0') || txt.includes('skip in 0') || txt === 'skip' || txt === 'saltar' || txt === 'skip ad') {
-                        b.click();
-                        break;
-                    }
-                }
-            }
+            const targetVideo = (e && e.target && e.target.tagName === 'VIDEO') ? e.target : null;
+            const videos = targetVideo ? [targetVideo] : document.querySelectorAll('video');
 
-            // B. Fast-forward pasivo si un anuncio corto (<= 90s) está reproduciendo
-            const videos = document.querySelectorAll('video');
             for (let i = 0; i < videos.length; i++) {
                 const v = videos[i];
                 if (!v) continue;
-                const dur = v.duration;
-                if (dur && !isNaN(dur) && dur > 0 && dur <= 90) {
-                    const hasAdMarker = document.querySelector(
-                        '[class*=""ad-"" i], [class*=""ad_"" i], [class*=""vast"" i], ' +
-                        '.videoAdUi, [id*=""ad-"" i], [id*=""ad_"" i], .skip_button, .skip_ad, [class*=""fluid"" i], ' +
-                        '.fluid_ad_countdown, [class*=""countdown"" i], [class*=""skip"" i], [id*=""skip"" i]'
+
+                const player = v.closest('.jwplayer, .video-js, .fluid_video_wrapper');
+                if (!player) continue;
+
+                const adActive = player.matches('.jw-flag-ads, .vjs-ad-playing') ||
+                                 !!player.querySelector('.videoAdUi, .fluid_ad_countdown, .vast-skip-button');
+
+                if (adActive) {
+                    if (!savedState.has(v)) {
+                        savedState.set(v, { muted: v.muted, rate: v.playbackRate || 1.0 });
+                    }
+                    v.muted = true;
+                    try { v.playbackRate = 16.0; } catch(_) {}
+                    if (isFinite(v.duration) && v.duration > 0 && v.duration <= 90) {
+                        try { v.currentTime = v.duration; } catch(_) {}
+                    }
+
+                    const skipBtns = player.querySelectorAll(
+                        '.jw-skip, .videoAdUiSkipButton, .vast-skip-button, .vjs-skip-button, .fluid_ad_countdown'
                     );
-                    if (hasAdMarker) {
-                        v.muted = true;
-                        try { v.playbackRate = 16.0; } catch(_) {}
-                        try { v.currentTime = dur; } catch(_) {}
+                    for (let j = 0; j < skipBtns.length; j++) {
+                        const btn = skipBtns[j];
+                        if (btn && btn.offsetParent !== null && typeof btn.click === 'function') {
+                            btn.click();
+                            break;
+                        }
                     }
-                } else if (dur && !isNaN(dur) && dur > 90) {
-                    if (v.playbackRate !== 1.0) {
-                        try { v.playbackRate = 1.0; } catch(_) {}
-                    }
+                } else if (savedState.has(v)) {
+                    const st = savedState.get(v);
+                    savedState.delete(v);
+                    v.muted = st.muted;
+                    try { v.playbackRate = st.rate; } catch(_) {}
                 }
             }
         } catch(_) {}
@@ -760,12 +810,8 @@ public static class WebShield
 
     if (document.readyState === 'complete') {
         attachSafePlayerListener();
-        trySkipPreRoll();
     } else {
-        window.addEventListener('load', () => {
-            attachSafePlayerListener();
-            trySkipPreRoll();
-        }, { once: true });
+        window.addEventListener('load', attachSafePlayerListener, { once: true });
     }
 })();
 ";
