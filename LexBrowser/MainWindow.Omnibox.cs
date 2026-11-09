@@ -45,7 +45,10 @@ public partial class MainWindow
             !current.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
             !current.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
         {
-            _ = RefreshOmniboxSuggestionsAsync(current);
+            bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
+            var localHistory = isPrivate ? Array.Empty<HistoryEntry>() : HistoryManager.GetRecentSnapshot(2500);
+            var localBookmarks = isPrivate ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>() : BookmarkManager.Bookmarks.ToArray();
+            _ = RefreshOmniboxSuggestionsAsync(current, localHistory, localBookmarks, skipInitialDebounce: true);
         }
     }
 
@@ -73,6 +76,14 @@ public partial class MainWindow
                 return;
             }
 
+            bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
+            var localHistory = isPrivate
+                ? Array.Empty<HistoryEntry>()
+                : HistoryManager.GetRecentSnapshot(2500);
+            var localBookmarks = isPrivate
+                ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>()
+                : BookmarkManager.Bookmarks.ToArray();
+
             // Verificar que el cambio sea estrictamente una inserción al final del texto antes de autocompletar en línea.
             // Esto evita inversiones o transposiciones de caracteres al editar en medio o escribir rápidamente.
             bool isForwardAppendAtEnd = false;
@@ -86,14 +97,6 @@ public partial class MainWindow
 
             if (!_suppressInlineAutocomplete && isForwardAppendAtEnd && TxtUrl.SelectionLength == 0 && !rawText.EndsWith(' '))
             {
-                bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
-                var localHistory = isPrivate
-                    ? Array.Empty<HistoryEntry>()
-                    : HistoryManager.GetRecentSnapshot(2500);
-                var localBookmarks = isPrivate
-                    ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>()
-                    : BookmarkManager.Bookmarks.ToArray();
-
                 string? match = OmniboxSuggestionService.GetInlineAutocompleteMatch(rawText, localHistory, localBookmarks);
                 if (!string.IsNullOrEmpty(match) &&
                     match.StartsWith(rawText, StringComparison.OrdinalIgnoreCase) &&
@@ -111,7 +114,7 @@ public partial class MainWindow
             }
             _suppressInlineAutocomplete = false;
 
-            _ = RefreshOmniboxSuggestionsAsync(query);
+            _ = RefreshOmniboxSuggestionsAsync(query, localHistory, localBookmarks, skipInitialDebounce: false);
         }
         finally
         {
@@ -119,22 +122,41 @@ public partial class MainWindow
         }
     }
 
-    private async Task RefreshOmniboxSuggestionsAsync(string query)
+    private async Task RefreshOmniboxSuggestionsAsync(
+        string query,
+        IReadOnlyList<HistoryEntry>? localHistory = null,
+        IReadOnlyList<BookmarkItem>? localBookmarks = null,
+        bool skipInitialDebounce = false)
     {
         _omniboxLiveSuggestCts?.Cancel();
         var cts = new CancellationTokenSource();
         _omniboxLiveSuggestCts = cts;
         var token = cts.Token;
 
-        bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
-        var localHistory = isPrivate
-            ? Array.Empty<HistoryEntry>()
-            : HistoryManager.GetRecentSnapshot(2500);
-        var localBookmarks = isPrivate
-            ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>()
-            : BookmarkManager.Bookmarks.ToArray();
+        // Debounce inicial de 60 ms para escritura continua: si el usuario escribe rápido, no saturamos la UI
+        if (!skipInitialDebounce)
+        {
+            try
+            {
+                await Task.Delay(60, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+
+        if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
 
         string engineName = SettingsManager.Current.DefaultSearchEngine;
+        bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
+
+        localHistory ??= isPrivate
+            ? Array.Empty<HistoryEntry>()
+            : HistoryManager.GetRecentSnapshot(2500);
+        localBookmarks ??= isPrivate
+            ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>()
+            : BookmarkManager.Bookmarks.ToArray();
 
         try
         {
@@ -144,16 +166,17 @@ public partial class MainWindow
                 localHistory,
                 localBookmarks,
                 liveGoogleSuggestions: null,
-                searchEngineName: engineName), token);
+                searchEngineName: engineName,
+                cancellationToken: token), token);
 
             if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
             ApplyOmniboxSuggestionsToPopup(initialList);
 
-            // 2. Debounce de 120 ms y consulta al motor de búsqueda configurado (respetando privacidad e incógnito)
+            // 2. Debounce de 100 ms y consulta al motor de búsqueda configurado (respetando privacidad e incógnito)
             if (isPrivate || !SettingsManager.Current.EnableSearchSuggestions)
                 return;
 
-            await Task.Delay(120, token);
+            await Task.Delay(100, token);
             if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
 
             var liveSuggestions = await OmniboxSuggestionService.FetchSearchSuggestionsAsync(query, engineName, token);
@@ -165,22 +188,45 @@ public partial class MainWindow
                 localHistory,
                 localBookmarks,
                 liveGoogleSuggestions: liveSuggestions,
-                searchEngineName: engineName), token);
+                searchEngineName: engineName,
+                cancellationToken: token), token);
 
             if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
             ApplyOmniboxSuggestionsToPopup(combinedList);
         }
+        catch (OperationCanceledException) { }
         catch { }
     }
 
     private void ApplyOmniboxSuggestionsToPopup(List<OmniboxSuggestionItem> items)
     {
-        _omniboxSuggestions.Clear();
-        for (int i = 0; i < items.Count; i++)
+        if (items == null || items.Count == 0)
+        {
+            _omniboxSuggestions.Clear();
+            PopupOmniboxSuggestions.IsOpen = false;
+            return;
+        }
+
+        // Actualización in-situ para reutilizar los contenedores visuales de WPF y evitar destrucción masiva del árbol visual
+        int targetCount = items.Count;
+        for (int i = 0; i < targetCount; i++)
         {
             items[i].IsSelected = (i == 0);
-            _omniboxSuggestions.Add(items[i]);
+            if (i < _omniboxSuggestions.Count)
+            {
+                _omniboxSuggestions[i] = items[i];
+            }
+            else
+            {
+                _omniboxSuggestions.Add(items[i]);
+            }
         }
+
+        while (_omniboxSuggestions.Count > targetCount)
+        {
+            _omniboxSuggestions.RemoveAt(_omniboxSuggestions.Count - 1);
+        }
+
         _selectedOmniboxIndex = 0;
         PopupOmniboxSuggestions.IsOpen = _omniboxSuggestions.Count > 0 && TxtUrl.IsKeyboardFocusWithin;
     }

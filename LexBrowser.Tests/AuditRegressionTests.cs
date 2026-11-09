@@ -175,44 +175,70 @@ public class AuditRegressionTests
     [Fact]
     public void SitePolicy_Resolve_DefaultAndCompatModes()
     {
-        var normal = SitePolicy.Resolve("example.com", temporaryCompatMode: false);
-        Assert.Equal("Normal", normal.Mode);
-        Assert.True(normal.ShieldEnabled);
-        Assert.False(normal.IsCompatMode);
-        Assert.True(normal.Network);
-        Assert.True(normal.Stubs);
-        Assert.True(normal.Popups);
-        Assert.True(normal.Overlays);
-        Assert.True(normal.Cosmetic);
-        Assert.False(normal.VideoDefuser);
-        Assert.False(normal.Subframes);
+        string tempSettingsPath = Path.Combine(Path.GetTempPath(), $"lex_test_settings_{Guid.NewGuid():N}.json");
+        try
+        {
+            SettingsManager.CustomSettingsPath = tempSettingsPath;
+            SettingsManager.Load();
 
-        var compat = SitePolicy.Resolve("example.com", temporaryCompatMode: true);
-        Assert.True(compat.ShieldEnabled);
-        Assert.True(compat.IsCompatMode);
-        Assert.True(compat.Network);
-        Assert.False(compat.Stubs);
-        Assert.False(compat.ImaStub);
-        Assert.True(compat.Popups);
-        Assert.False(compat.Overlays);
-        Assert.False(compat.Cosmetic);
-        Assert.False(compat.VideoDefuser);
+            var normal = SitePolicy.Resolve("example.com", temporaryCompatMode: false);
+            Assert.Equal("Normal", normal.Mode);
+            Assert.True(normal.ShieldEnabled);
+            Assert.False(normal.IsCompatMode);
+            Assert.True(normal.Network);
+            Assert.True(normal.Stubs);
+            Assert.True(normal.Popups);
+            Assert.True(normal.Overlays);
+            Assert.True(normal.Cosmetic);
+            Assert.False(normal.VideoDefuser);
+            Assert.False(normal.Subframes);
+
+            var compat = SitePolicy.Resolve("example.com", temporaryCompatMode: true);
+            Assert.True(compat.ShieldEnabled);
+            Assert.True(compat.IsCompatMode);
+            Assert.True(compat.Network);
+            Assert.False(compat.Stubs);
+            Assert.False(compat.ImaStub);
+            Assert.True(compat.Popups);
+            Assert.False(compat.Overlays);
+            Assert.False(compat.Cosmetic);
+            Assert.False(compat.VideoDefuser);
+        }
+        finally
+        {
+            SettingsManager.CustomSettingsPath = null;
+            SettingsManager.Load();
+            try { if (File.Exists(tempSettingsPath)) File.Delete(tempSettingsPath); } catch { }
+        }
     }
 
     [Fact]
     public void SitePolicy_TryStripTrackingParameters_StripsOnlyTrackingParameters()
     {
-        var uriWithTracking = new Uri("https://example.com/article?utm_source=newsletter&utm_medium=email&fbclid=12345&id=42");
-        Assert.True(SitePolicy.TryStripTrackingParameters(uriWithTracking, out string cleaned));
-        Assert.Equal("https://example.com/article?id=42", cleaned);
+        string tempSettingsPath = Path.Combine(Path.GetTempPath(), $"lex_test_settings_{Guid.NewGuid():N}.json");
+        try
+        {
+            SettingsManager.CustomSettingsPath = tempSettingsPath;
+            SettingsManager.Load();
 
-        // Flujos OAuth y URLs con tokens de autenticación o rutas /callback NUNCA deben alterarse
-        var uriWithOAuth = new Uri("https://auth.example.com/callback?code=abc123xyz&state=state456&utm_campaign=promo");
-        Assert.False(SitePolicy.TryStripTrackingParameters(uriWithOAuth, out _));
+            var uriWithTracking = new Uri("https://example.com/article?utm_source=newsletter&utm_medium=email&fbclid=12345&id=42");
+            Assert.True(SitePolicy.TryStripTrackingParameters(uriWithTracking, out string cleaned));
+            Assert.Equal("https://example.com/article?id=42", cleaned);
 
-        // URL without tracking parameters returns false
-        var cleanUri = new Uri("https://example.com/search?q=csharp&page=1");
-        Assert.False(SitePolicy.TryStripTrackingParameters(cleanUri, out _));
+            // Flujos OAuth y URLs con tokens de autenticación o rutas /callback NUNCA deben alterarse
+            var uriWithOAuth = new Uri("https://auth.example.com/callback?code=abc123xyz&state=state456&utm_campaign=promo");
+            Assert.False(SitePolicy.TryStripTrackingParameters(uriWithOAuth, out _));
+
+            // URL without tracking parameters returns false
+            var cleanUri = new Uri("https://example.com/search?q=csharp&page=1");
+            Assert.False(SitePolicy.TryStripTrackingParameters(cleanUri, out _));
+        }
+        finally
+        {
+            SettingsManager.CustomSettingsPath = null;
+            SettingsManager.Load();
+            try { if (File.Exists(tempSettingsPath)) File.Delete(tempSettingsPath); } catch { }
+        }
     }
 
     [Fact]

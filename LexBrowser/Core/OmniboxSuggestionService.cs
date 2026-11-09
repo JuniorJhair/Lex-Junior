@@ -180,30 +180,40 @@ public static class OmniboxSuggestionService
         return q.Contains('.') && !q.Contains(' ');
     }
 
-    private static void AttachFaviconInBackground(OmniboxSuggestionItem item, string url)
+    private static void AttachFaviconInBackground(OmniboxSuggestionItem item, string url, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(url)) return;
+        if (string.IsNullOrWhiteSpace(url) || cancellationToken.IsCancellationRequested) return;
         _ = Task.Run(async () =>
         {
             try
             {
+                if (cancellationToken.IsCancellationRequested) return;
                 var img = await Engine.FaviconService.ResolveFaviconAsync(url).ConfigureAwait(false);
-                if (img != null)
+                if (img != null && !cancellationToken.IsCancellationRequested)
                 {
                     var disp = System.Windows.Application.Current?.Dispatcher;
                     if (disp != null)
-                        _ = disp.BeginInvoke(() => item.FaviconImage = img);
+                    {
+                        _ = disp.BeginInvoke(() =>
+                        {
+                            if (!cancellationToken.IsCancellationRequested)
+                                item.FaviconImage = img;
+                        });
+                    }
                     else
+                    {
                         item.FaviconImage = img;
+                    }
                 }
             }
             catch { }
-        });
+        }, cancellationToken);
     }
 
     /// <summary>
     /// Construye la lista combinada de sugerencias locales + sugerencias en vivo del motor activo.
     /// Usa los campos precalculados de HistoryEntry y acota el recorrido a las últimas 2500 entradas.
+    /// Soporta cancelación cooperativa inmediata (CancellationToken).
     /// </summary>
     public static List<OmniboxSuggestionItem> BuildSuggestions(
         string? rawInput,
@@ -211,9 +221,13 @@ public static class OmniboxSuggestionService
         IReadOnlyList<BookmarkItem>? bookmarks = null,
         IReadOnlyList<string>? liveGoogleSuggestions = null,
         string searchEngineName = "Google",
-        int maxTotalItems = 9)
+        int maxTotalItems = 9,
+        CancellationToken cancellationToken = default)
     {
         var results = new List<OmniboxSuggestionItem>();
+        if (cancellationToken.IsCancellationRequested)
+            return results;
+
         string query = (rawInput ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(query))
             return results;
@@ -237,6 +251,9 @@ public static class OmniboxSuggestionService
             IsSelected = true
         });
 
+        if (cancellationToken.IsCancellationRequested)
+            return results;
+
         var seenSearchTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { query };
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -249,6 +266,8 @@ public static class OmniboxSuggestionService
 
             for (int i = 0; i < scanLimit; i++)
             {
+                if (cancellationToken.IsCancellationRequested) return results;
+
                 var entry = historyEntries[i];
                 if (entry == null || string.IsNullOrWhiteSpace(entry.Url)) continue;
                 if (entry.ExtractedSearchQuery != null) continue;
@@ -280,6 +299,7 @@ public static class OmniboxSuggestionService
             int visitedCount = 0;
             foreach (var (entry, _) in matchingHistory.OrderByDescending(x => x.score))
             {
+                if (cancellationToken.IsCancellationRequested) return results;
                 if (visitedCount >= 4 || results.Count >= maxTotalItems - 2) break;
                 if (!seenUrls.Add(entry.Url)) continue;
 
@@ -313,7 +333,8 @@ public static class OmniboxSuggestionService
                     HistoryEntryId = entry.Id
                 };
 
-                if (fav == null) AttachFaviconInBackground(item, entry.Url);
+                if (fav == null && !cancellationToken.IsCancellationRequested)
+                    AttachFaviconInBackground(item, entry.Url, cancellationToken);
 
                 results.Add(item);
                 visitedCount++;
@@ -325,6 +346,7 @@ public static class OmniboxSuggestionService
         {
             foreach (var bk in bookmarks)
             {
+                if (cancellationToken.IsCancellationRequested) return results;
                 if (results.Count >= maxTotalItems) break;
                 if (bk == null || string.IsNullOrWhiteSpace(bk.Url)) continue;
 
@@ -357,7 +379,8 @@ public static class OmniboxSuggestionService
                         FaviconImage = bfav
                     };
 
-                    if (bfav == null) AttachFaviconInBackground(item, bk.Url);
+                    if (bfav == null && !cancellationToken.IsCancellationRequested)
+                        AttachFaviconInBackground(item, bk.Url, cancellationToken);
 
                     results.Add(item);
                 }
@@ -371,6 +394,7 @@ public static class OmniboxSuggestionService
             int scanLimit = Math.Min(historyEntries.Count, MaxHistoryScanEntries);
             for (int i = 0; i < scanLimit; i++)
             {
+                if (cancellationToken.IsCancellationRequested) return results;
                 if (recentSearchCount >= 2 || results.Count >= maxTotalItems - 2) break;
                 var entry = historyEntries[i];
                 if (entry == null) continue;
@@ -401,6 +425,7 @@ public static class OmniboxSuggestionService
             int liveCount = 0;
             foreach (string suggestion in liveGoogleSuggestions)
             {
+                if (cancellationToken.IsCancellationRequested) return results;
                 if (liveCount >= 3 || results.Count >= maxTotalItems) break;
                 string cleanSug = suggestion.Trim();
                 if (string.IsNullOrEmpty(cleanSug) || !seenSearchTerms.Add(cleanSug)) continue;

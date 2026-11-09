@@ -891,11 +891,11 @@
 
             <!-- Desplegable Inteligente de Sugerencias del Omnibox (Búsquedas recientes, Autocompletado de Google y Páginas visitadas) -->
             <Popup x:Name="PopupOmniboxSuggestions" PlacementTarget="{Binding ElementName=BorderOmnibox}" Placement="Bottom"
-                   VerticalOffset="4" StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
+                   VerticalOffset="4" StaysOpen="True" AllowsTransparency="True" PopupAnimation="None">
                 <Border Background="#1D1D28" BorderBrush="#34344A" BorderThickness="1.5" CornerRadius="12" Padding="6,6"
                         Width="{Binding ActualWidth, ElementName=BorderOmnibox}" MinWidth="360">
                     <Border.Effect>
-                        <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.78" Color="#000000"/>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="3" Opacity="0.45" Color="#000000"/>
                     </Border.Effect>
                     <ItemsControl x:Name="ItemsOmniboxSuggestions">
                         <ItemsControl.ItemTemplate>
