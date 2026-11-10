@@ -301,6 +301,14 @@ public partial class MainWindow : Window
                 if (tab.OwnerWindow == this && !tab.IsDisposed)
                 {
                     tab.IsDisposed = true;
+                    try { tab.SnifferSession?.Dispose(); tab.SnifferSession = null; } catch { }
+                    try { tab.CorsUnlocker?.Dispose(); tab.CorsUnlocker = null; } catch { }
+                    try { tab.ClearDetectedMedia(); } catch { }
+                    try { tab.ActiveFrames.Clear(); } catch { }
+                    try { tab.RecentReloadTimesUtc.Clear(); } catch { }
+                    try { tab.CompatibilityPromptShownDomains.Clear(); } catch { }
+                    try { tab.FaviconImage = null; } catch { }
+                    try { tab.OwnerWindow = null; } catch { }
                     try { tab.WebView?.CoreWebView2?.Stop(); } catch { }
                     try { tab.WebView?.Dispose(); } catch { }
                 }

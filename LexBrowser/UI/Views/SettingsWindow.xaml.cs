@@ -181,7 +181,9 @@ public partial class SettingsWindow : Window
         s.EnableWebShieldInSubframes = ChkSubframeWebShield.IsChecked == true;
         if (ChkDiagnosticMode != null)
         {
-            ShieldLogger.DiagnosticMode = ChkDiagnosticMode.IsChecked == true;
+            bool diag = ChkDiagnosticMode.IsChecked == true;
+            ShieldLogger.DiagnosticMode = diag;
+            s.Shield.DiagnosticMode = diag;
         }
         UpdateAdBlockerSubTogglesEnabledState();
 

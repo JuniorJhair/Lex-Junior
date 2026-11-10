@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -442,23 +443,39 @@ public partial class MainWindow
             }
             else if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                if (originPolicy.ShieldEnabled && originPolicy.Popups && !isOAuthUrl)
+                string destHost = uri.Host.ToLowerInvariant();
+                bool isSensitiveAuthOrPay = isOAuthUrl ||
+                    ShieldExemptions.IsPaymentOrAuthHost(destHost) ||
+                    ShieldExemptions.IsPaymentOrAuthHost(frameSourceUri?.Host);
+
+                if (originPolicy.ShieldEnabled && originPolicy.Popups && !isSensitiveAuthOrPay)
                 {
                     bool shouldBlock = (originPolicy.Network && AdBlockFilter.ShouldBlock(uri, currentUri?.Host, CoreWebView2WebResourceContext.Document)) ||
                                        AdBlockFilter.IsSuspiciousPopup(uri, currentUri);
                     string blockReason = "AdBlockFilter domain or suspicious pattern";
 
-                    if (!shouldBlock && isFromSubframe && !e.IsUserInitiated)
+                    if (!shouldBlock && isFromSubframe)
                     {
-                        string targetHost = uri.Host.ToLowerInvariant();
+                        string targetHost = destHost;
                         bool matchesMainSite = currentUri != null && PublicSuffix.IsSameRegistrableDomain(targetHost, currentUri.Host);
                         bool matchesFrameSite = frameSourceUri != null && PublicSuffix.IsSameRegistrableDomain(targetHost, frameSourceUri.Host);
+                        bool fromVideoEmbed = ShieldExemptions.IsVideoEmbedUrl(frameSourceUri);
 
-                        if (!matchesMainSite && !matchesFrameSite && !AdBlockFilter.IsTrustedDomain(targetHost))
+                        if (!matchesMainSite && !matchesFrameSite && !AdBlockFilter.IsTrustedDomain(targetHost) &&
+                            (!e.IsUserInitiated || fromVideoEmbed))
                         {
                             shouldBlock = true;
-                            blockReason = "Cross-origin subframe unauthorized popunder";
+                            blockReason = fromVideoEmbed ? "Cross-origin video embed popup hijack" : "Cross-origin subframe unauthorized popunder";
                         }
+                    }
+                    else if (!shouldBlock && !isFromSubframe &&
+                             ShieldExemptions.IsVideoEmbedUrl(currentUri) &&
+                             currentUri != null &&
+                             !PublicSuffix.IsSameRegistrableDomain(destHost, currentUri.Host) &&
+                             !AdBlockFilter.IsTrustedDomain(destHost))
+                    {
+                        shouldBlock = true;
+                        blockReason = "Video embed top-frame cross-origin popup hijack";
                     }
 
                     if (shouldBlock)
@@ -587,15 +604,15 @@ public partial class MainWindow
                     }
                 }
 
-                // Evaluar política del sitio principal de la pestaña (o del originHost si la pestaña aún no tiene host)
+                // Evaluar política del sitio principal de la pestaña (o del originHost si la pestaña aún no tiene host) con caché por revisión
                 string policyHost = (mainTabHost != "unknown" && !string.IsNullOrEmpty(mainTabHost)) ? mainTabHost : originHost;
-                var policy = SitePolicy.Resolve(policyHost, tab.TemporaryCompatMode);
+                var policy = tab.ResolveCachedPolicy(policyHost);
                 if (!policy.ShieldEnabled)
                     return;
 
                 bool isDailymotionContext = PublicSuffix.HostMatchesDomain(mainTabHost, "dailymotion.com") ||
-                                            (!string.IsNullOrEmpty(tab.Url) && tab.Url.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase)) ||
-                                            (!string.IsNullOrEmpty(referer) && referer.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase)) ||
+                                            (Uri.TryCreate(tab.Url, UriKind.Absolute, out var dmTabUri) && PublicSuffix.HostMatchesDomain(dmTabUri.Host, "dailymotion.com")) ||
+                                            (Uri.TryCreate(referer, UriKind.Absolute, out var dmRefUri) && PublicSuffix.HostMatchesDomain(dmRefUri.Host, "dailymotion.com")) ||
                                             PublicSuffix.HostMatchesDomain(uri.Host, "dailymotion.com") ||
                                             PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com");
 
@@ -618,13 +635,21 @@ public partial class MainWindow
 
                 bool shouldBlockNetwork = !isRedirectStub && policy.Network && AdBlockFilter.ShouldBlock(uri, originHost, e.ResourceContext);
 
-                string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
                 if (isRedirectStub || shouldBlockNetwork)
                 {
+                    string tabDesc = ShieldLogger.DiagnosticMode
+                        ? $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})"
+                        : $"Tab:{tab.TabId}";
+
                     int statusCode = 403;
                     string statusReason = "Blocked by LexShield";
                     string contentType = "Content-Type: text/plain";
                     byte[] responseBytes = EmptyResponseBytes;
+
+                    bool isYouTubeApiJson = (PublicSuffix.HostMatchesDomain(uri.Host, "youtube.com") ||
+                                             PublicSuffix.HostMatchesDomain(uri.Host, "youtu.be")) &&
+                                            (uri.AbsolutePath.Contains("/youtubei/", StringComparison.OrdinalIgnoreCase) ||
+                                             uri.AbsolutePath.Contains("/get_midroll_info", StringComparison.OrdinalIgnoreCase));
 
                     if (isRedirectStub)
                     {
@@ -634,6 +659,14 @@ public partial class MainWindow
                         responseBytes = stubBytes;
 
                         ShieldLogger.LogForTab(tab, "REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "AdBlockResources redirect stub (200 OK)", tabDesc);
+                    }
+                    else if (isYouTubeApiJson)
+                    {
+                        statusCode = 200;
+                        statusReason = "OK";
+                        contentType = "Content-Type: application/json; charset=utf-8";
+                        responseBytes = Encoding.UTF8.GetBytes("{}");
+                        ShieldLogger.LogForTab(tab, "REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "YouTube ad JSON stub (200 OK)", tabDesc);
                     }
                     else if (PublicSuffix.HostMatchesDomain(uri.Host, "youtube.com") ||
                              PublicSuffix.HostMatchesDomain(uri.Host, "youtu.be") ||
@@ -648,7 +681,34 @@ public partial class MainWindow
                         ShieldLogger.LogForTab(tab, "REQUEST_BLOCKED_403", originHost, uri.AbsoluteUri, frameDesc, "Blocked ad domain or pattern", tabDesc);
                     }
 
-                    string responseHeaders = $"{contentType}\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: *";
+                    string allowOrigin = "*";
+                    string allowHeaders = "*";
+                    bool withCredentials = false;
+                    try
+                    {
+                        var corsHeaders = e.Request.Headers;
+                        if (corsHeaders.Contains("Origin"))
+                        {
+                            string reqOrigin = corsHeaders.GetHeader("Origin");
+                            if (Uri.TryCreate(reqOrigin, UriKind.Absolute, out var originUri) &&
+                                (originUri.Scheme == Uri.UriSchemeHttp || originUri.Scheme == Uri.UriSchemeHttps))
+                            {
+                                allowOrigin = originUri.GetLeftPart(UriPartial.Authority);
+                                withCredentials = true;
+                                if (corsHeaders.Contains("Access-Control-Request-Headers"))
+                                {
+                                    string reqHdrs = corsHeaders.GetHeader("Access-Control-Request-Headers");
+                                    if (!string.IsNullOrWhiteSpace(reqHdrs) && reqHdrs.IndexOfAny(new[] { '\r', '\n' }) < 0)
+                                        allowHeaders = reqHdrs;
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    string responseHeaders = $"{contentType}\r\nAccess-Control-Allow-Origin: {allowOrigin}\r\n" +
+                        (withCredentials ? "Access-Control-Allow-Credentials: true\r\nVary: Origin\r\n" : "") +
+                        $"Access-Control-Allow-Methods: GET, POST, OPTIONS, HEAD\r\nAccess-Control-Allow-Headers: {allowHeaders}";
 
                     e.Response = core.Environment.CreateWebResourceResponse(
                         new MemoryStream(responseBytes, 0, responseBytes.Length, writable: false, publiclyVisible: true), statusCode, statusReason, responseHeaders);
@@ -685,21 +745,25 @@ public partial class MainWindow
                         });
                     }
 
-                    string reqHost = uri.Host;
-                    string? currentHost = tab.CurrentUri?.Host;
-                    bool isSubframeReq = frameDesc.StartsWith("Subframe", StringComparison.OrdinalIgnoreCase);
+                    if (ShieldLogger.DiagnosticMode)
+                    {
+                        string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+                        string reqHost = uri.Host;
+                        string? currentHost = tab.CurrentUri?.Host;
+                        bool isSubframeReq = frameDesc.StartsWith("Subframe", StringComparison.OrdinalIgnoreCase);
 
-                    if (isSubframeReq && (e.ResourceContext == CoreWebView2WebResourceContext.XmlHttpRequest ||
-                                          e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
-                                          e.ResourceContext == CoreWebView2WebResourceContext.Document))
-                    {
-                        ShieldLogger.LogForTab(tab, "REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "Subframe media/network request", tabDesc);
-                    }
-                    else if (!string.IsNullOrEmpty(currentHost) &&
-                             !PublicSuffix.HostMatchesDomain(reqHost, currentHost) &&
-                             !AdBlockFilter.IsTrustedDomain(reqHost))
-                    {
-                        ShieldLogger.LogForTab(tab, "REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "External third-party resource", tabDesc);
+                        if (isSubframeReq && (e.ResourceContext == CoreWebView2WebResourceContext.XmlHttpRequest ||
+                                              e.ResourceContext == CoreWebView2WebResourceContext.Fetch ||
+                                              e.ResourceContext == CoreWebView2WebResourceContext.Document))
+                        {
+                            ShieldLogger.LogForTab(tab, "REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "Subframe media/network request", tabDesc);
+                        }
+                        else if (!string.IsNullOrEmpty(currentHost) &&
+                                 !PublicSuffix.HostMatchesDomain(reqHost, currentHost) &&
+                                 !AdBlockFilter.IsTrustedDomain(reqHost))
+                        {
+                            ShieldLogger.LogForTab(tab, "REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, "External third-party resource", tabDesc);
+                        }
                     }
                 }
             }
@@ -761,6 +825,7 @@ public partial class MainWindow
             {
                 frame.NavigationStarting += (fs, fe) =>
                 {
+                    if (!ShieldLogger.DiagnosticMode) return;
                     string fTabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
                     ShieldLogger.LogForTab(tab, "SUBFRAME_NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "unknown", fe.Uri, "Subframe", $"IsUserInitiated={fe.IsUserInitiated}, IsRedirected={fe.IsRedirected}", fTabDesc);
                 };
@@ -1182,8 +1247,12 @@ public partial class MainWindow
         core.NavigationStarting += (s, e) =>
         {
             if (tab.IsDisposed) return;
-            string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
-            ShieldLogger.LogForTab(tab, "NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}", tabDesc);
+            string FormatTabDesc() => $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+
+            if (ShieldLogger.DiagnosticMode)
+            {
+                ShieldLogger.LogForTab(tab, "NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}", FormatTabDesc());
+            }
 
             // Redirección hacia Lex PDF Studio si el destino es un documento PDF
             if (PdfStudioService.IsPdfTarget(e.Uri))
@@ -1214,7 +1283,7 @@ public partial class MainWindow
                         AdBlockFilter.ShouldBlock(targetUri, currentUri?.Host, CoreWebView2WebResourceContext.Document))
                     {
                         e.Cancel = true;
-                        ShieldLogger.LogForTab(tab, "NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Blocked ad/malware domain on navigation", tabDesc);
+                        ShieldLogger.LogForTab(tab, "NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Blocked ad/malware domain on navigation", FormatTabDesc());
                         return;
                     }
 
@@ -1227,14 +1296,14 @@ public partial class MainWindow
                             (DateTime.UtcNow - tab.LastNewWindowRequestedTime.Value).TotalMilliseconds < 3500)
                         {
                             e.Cancel = true;
-                            ShieldLogger.LogForTab(tab, "TAB_UNDER_PREVENTED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Script navigation hijacked original tab after new window open", tabDesc);
+                            ShieldLogger.LogForTab(tab, "TAB_UNDER_PREVENTED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Script navigation hijacked original tab after new window open", FormatTabDesc());
                             return;
                         }
 
                         if (AdBlockFilter.IsSuspiciousPopup(targetUri, currentUri))
                         {
                             e.Cancel = true;
-                            ShieldLogger.LogForTab(tab, "NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Suspicious script-initiated cross-origin redirect", tabDesc);
+                            ShieldLogger.LogForTab(tab, "NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Suspicious script-initiated cross-origin redirect", FormatTabDesc());
                             return;
                         }
                     }
@@ -1244,7 +1313,7 @@ public partial class MainWindow
                         SitePolicy.TryStripTrackingParameters(targetUri, out string cleanedUrl))
                     {
                         e.Cancel = true;
-                        ShieldLogger.LogForTab(tab, "TRACKING_PARAMS_STRIPPED", targetUri.Host, cleanedUrl, "MainFrame", "Removed tracking query parameters", tabDesc);
+                        ShieldLogger.LogForTab(tab, "TRACKING_PARAMS_STRIPPED", targetUri.Host, cleanedUrl, "MainFrame", "Removed tracking query parameters", FormatTabDesc());
                         var winClean = tab.OwnerWindow ?? this;
                         _ = winClean.Dispatcher.BeginInvoke(new Action(() =>
                         {
@@ -2392,6 +2461,11 @@ public partial class MainWindow
         tabToClose.CorsUnlocker?.Dispose();
         tabToClose.CorsUnlocker = null;
         tabToClose.ClearDetectedMedia();
+        tabToClose.ActiveFrames.Clear();
+        tabToClose.RecentReloadTimesUtc.Clear();
+        tabToClose.CompatibilityPromptShownDomains.Clear();
+        tabToClose.FaviconImage = null;
+        tabToClose.OwnerWindow = null;
 
         if (tabToClose.PendingNotificationRequest != null)
         {
@@ -2541,6 +2615,18 @@ public partial class MainWindow
 
         var core = tab.WebView.CoreWebView2;
 
+        if (string.IsNullOrEmpty(tab.MediaRuntimeScriptId))
+        {
+            try
+            {
+                tab.MediaRuntimeScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(MediaRuntime.InjectedScript);
+            }
+            catch (Exception ex)
+            {
+                ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "MediaRuntime", "", "Refresh", ex.Message);
+            }
+        }
+
         if (!string.IsNullOrEmpty(tab.YouTubeScriptId))
         {
             try { core.RemoveScriptToExecuteOnDocumentCreated(tab.YouTubeScriptId); } catch { }
@@ -2557,17 +2643,18 @@ public partial class MainWindow
             tab.WebShieldScriptId = null;
         }
 
-        // YouTubeOptimizer contiene utilidades generales de video/PiP y ad-shield para YouTube
-        try
-        {
-            tab.YouTubeScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
-        }
-        catch (Exception ex)
-        {
-            ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "YouTubeOptimizer", "", "Refresh", ex.Message);
-        }
-
         var s = SettingsManager.Current;
+        if (s.EnableAdBlocker && s.EnableYouTubeAdBlock && (s.Shield?.Adapters?.YouTube ?? true))
+        {
+            try
+            {
+                tab.YouTubeScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
+            }
+            catch (Exception ex)
+            {
+                ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "YouTubeOptimizer", "", "Refresh", ex.Message);
+            }
+        }
         if (s.EnableAdBlocker && s.EnableDailymotionAdBlock && (s.Shield?.Adapters?.Dailymotion ?? true))
         {
             try

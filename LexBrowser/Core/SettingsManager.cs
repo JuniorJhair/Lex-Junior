@@ -71,9 +71,16 @@ public class BrowserSettings
 public static class SettingsManager
 {
     private static readonly object _saveLock = new();
+    private static int _settingsRevision;
     private static System.Threading.Timer? _deferredSaveTimer;
     private static volatile bool _deferredSavePending;
     private static volatile bool _deferredSaveNotify;
+
+    /// <summary>Revisión incremental de los ajustes en memoria; permite invalidar cachés por pestaña.</summary>
+    public static int SettingsRevision => System.Threading.Volatile.Read(ref _settingsRevision);
+
+    /// <summary>Incrementa la revisión de ajustes para invalidar cachés dependientes (como la política por sitio).</summary>
+    public static void BumpSettingsRevision() => System.Threading.Interlocked.Increment(ref _settingsRevision);
 
     private static readonly string DefaultSettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -130,6 +137,7 @@ public static class SettingsManager
         {
             Current = fromTemp!;
             MigrateAndSyncShieldSettings(Current);
+        BumpSettingsRevision();
             SyncSecurityMarker();
             Save(notify: false);
             return;
@@ -151,6 +159,7 @@ public static class SettingsManager
             LogSettingsEvent($"[RECOVERY] settings.json recuperado exitosamente desde {tempPath}");
             Current = recovered!;
             MigrateAndSyncShieldSettings(Current);
+        BumpSettingsRevision();
             SyncSecurityMarker();
             Save(notify: false);
             return;
@@ -158,6 +167,7 @@ public static class SettingsManager
 
         Current = new BrowserSettings { SettingsSchemaVersion = 2 };
         MigrateAndSyncShieldSettings(Current);
+        BumpSettingsRevision();
         SyncSecurityMarker();
         Save(notify: false);
     }
@@ -331,6 +341,7 @@ public static class SettingsManager
 
                 Current.SettingsSchemaVersion = Math.Max(2, Current.SettingsSchemaVersion);
                 MigrateAndSyncShieldSettings(Current);
+        BumpSettingsRevision();
 
                 string json = JsonSerializer.Serialize(Current, JsonOptions);
 

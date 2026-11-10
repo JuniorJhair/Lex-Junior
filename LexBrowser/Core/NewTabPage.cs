@@ -489,7 +489,8 @@ public static class NewTabPage
       document.getElementById('date').textContent = n.toLocaleDateString('es-ES', opts);
     }
     tick();
-    setInterval(tick, 1000);
+    setInterval(() => { if (!document.hidden) tick(); }, 10000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 
     function go() {
       const v = document.getElementById('si').value.trim();

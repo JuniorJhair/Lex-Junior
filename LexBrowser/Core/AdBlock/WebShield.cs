@@ -46,15 +46,27 @@ public static class WebShield
         }
         catch { }
 
+        string trustedHostsJson = "[]";
+        try
+        {
+            trustedHostsJson = JsonSerializer.Serialize(ShieldExemptions.BigSites);
+        }
+        catch { }
+
         string script = BaseScript
             .Replace("const __LEX_ENABLE_SUBFRAME_SHIELD = true;", $"const __LEX_ENABLE_SUBFRAME_SHIELD = {(enableSubframes ? "true" : "false")};")
             .Replace("const __LEX_ENABLE_COSMETIC_SHIELD = true;", $"const __LEX_ENABLE_COSMETIC_SHIELD = {(enableCosmetic ? "true" : "false")};")
             .Replace("const __LEX_ENABLE_POPUPS_SHIELD = true;", $"const __LEX_ENABLE_POPUPS_SHIELD = {(enablePopups ? "true" : "false")};")
             .Replace("const __LEX_ENABLE_OVERLAYS_SHIELD = true;", $"const __LEX_ENABLE_OVERLAYS_SHIELD = {(enableOverlays ? "true" : "false")};")
             .Replace("const __LEX_ENABLE_ANTIWALL_SHIELD = true;", $"const __LEX_ENABLE_ANTIWALL_SHIELD = {(enableAntiWall ? "true" : "false")};")
+            .Replace("const __LEX_TRUSTED_HOSTS = [];", $"const __LEX_TRUSTED_HOSTS = {trustedHostsJson};")
             .Replace("const __LEX_SITE_POLICIES = {};", $"const __LEX_SITE_POLICIES = {sitesJson};");
 
-        return enableVideoDefuser ? script + VideoPlayerDefuserScript : script;
+        string defuser = VideoPlayerDefuserScript
+            .Replace("const __LEX_ENABLE_VIDEO_DEFUSER = true;", $"const __LEX_ENABLE_VIDEO_DEFUSER = {(enableVideoDefuser ? "true" : "false")};")
+            .Replace("const __LEX_TRUSTED_HOSTS = [];", $"const __LEX_TRUSTED_HOSTS = {trustedHostsJson};");
+
+        return script + defuser;
     }
 
     /// <summary>
@@ -71,13 +83,11 @@ public static class WebShield
     const __LEX_ENABLE_POPUPS_SHIELD = true;
     const __LEX_ENABLE_OVERLAYS_SHIELD = true;
     const __LEX_ENABLE_ANTIWALL_SHIELD = true;
+    const __LEX_TRUSTED_HOSTS = [];
     const __LEX_SITE_POLICIES = {};
 
     const hostname = (window.location.hostname || '').toLowerCase();
     const isTopWindow = (window.top === window.self);
-
-    if (!isTopWindow && !__LEX_ENABLE_SUBFRAME_SHIELD) return;
-
     const ends = (d) => hostname === d || hostname.endsWith('.' + d);
 
     const isYouTube = ends('youtube.com') ||
@@ -100,34 +110,26 @@ public static class WebShield
 
     const isBing = ends('bing.com');
 
-    const isTrustedSite = isGoogle || isBing ||
-                          ends('dailymotion.com') ||
-                          ends('youtube.com') ||
-                          ends('twitch.tv') ||
-                          ends('vimeo.com') ||
-                          ends('duckduckgo.com') ||
-                          ends('github.com') ||
-                          ends('wikipedia.org') ||
-                          ends('openai.com') ||
-                          ends('chatgpt.com') ||
-                          ends('claude.ai') ||
-                          ends('microsoft.com') ||
-                          ends('live.com') ||
-                          ends('paypal.com') ||
-                          // Aplicaciones web de lienzo / pizarra / diseño (el canvas NO es una capa publicitaria)
-                          ends('miro.com') ||
-                          ends('figma.com') ||
-                          ends('canva.com') ||
-                          ends('excalidraw.com') ||
-                          ends('tldraw.com') ||
-                          ends('notion.so') ||
-                          ends('lucid.app') ||
-                          ends('diagrams.net') ||
-                          ends('draw.io') ||
-                          ends('mural.co');
+    const isTrustedSite = (__LEX_TRUSTED_HOSTS && __LEX_TRUSTED_HOSTS.some(ends)) || isGoogle || isBing;
 
-    // Sitios dedicados, motores de búsqueda y plataformas legítimas (preservar respuestas IA, Gemini, widgets y controles nativos)
+    // Sitios dedicados, motores de búsqueda y plataformas legítimas (Miro, Figma, Canva, Dailymotion, Twitch, etc.)
     if (isTrustedSite) return;
+
+    // Jamás intervenir en iframes sensibles (pagos, bancos, OAuth/SSO o CAPTCHAs)
+    const isSensitiveSubframe =
+        /(paypal|stripe|mercadopago|adyen|braintreepayments|checkout\.com|payu\.com|niubiz|izipay|visa\.com|mastercard\.com|recaptcha|hcaptcha|turnstile|challenges\.cloudflare|arkoselabs|funcaptcha|auth0|okta|accounts\.google|appleid\.apple|login\.microsoftonline|login\.live)/i.test(hostname) ||
+        /(\/oauth|\/auth\/|\/login|\/signin|\/checkout|\/3ds|captcha|turnstile)/i.test(window.location.pathname || '');
+
+    if (!isTopWindow && isSensitiveSubframe) return;
+
+    // Activar automáticamente WebShield dentro de iframes de reproductores embebidos (Streamwish, Vidhide, Dood, AnimeYT, HentaiLA...)
+    const isVideoEmbedContext = !isTopWindow && (
+        /(streamwish|wishfast|wishembed|vidhide|streamtape|dood|d000d|ds2play|filelions|lulustream|luluvdo|mp4upload|uqload|voe\.sx|mixdrop|fastream|hglink|dhcplay|fembed|upstream|vidoza|wolfstream|megacloud|rabbitstream|vidplay|yourupload)/i.test(hostname) ||
+        /^\/(e|v|embed|player)(\/|$|-)/i.test(window.location.pathname || '') ||
+        /\/(videoembed|video_ext)/i.test(window.location.pathname || '')
+    );
+
+    if (!isTopWindow && !__LEX_ENABLE_SUBFRAME_SHIELD && !isVideoEmbedContext) return;
 
     // Resolver política por sitio en tiempo de ejecución
     let siteMode = 'Normal';
@@ -282,8 +284,8 @@ public static class WebShield
 
                 // Selectores de anuncios por 'palabra': el token debe empezar la clase o ir tras espacio, '-' o '_'.
                 // Así 'ad-box' coincide con 'ad-box' y 'top-ad-box', pero NO con 'download-box' ni 'upload-zone'.
-                const PLAYER_SAFE = `:not(:has(video)):not([class*='player']):not([id*='player'])`;
-                const PLAYER_SAFE_LOOSE = `:not(:has(video)):not([class*='player'])`;
+                const PLAYER_SAFE = `:not(:has(video)):not([class*='player']):not([id*='player']):not(canvas):not([role='application']):not([contenteditable='true'])`;
+                const PLAYER_SAFE_LOOSE = `:not(:has(video)):not([class*='player']):not(canvas):not([role='application']):not([contenteditable='true'])`;
                 const adWord = (token, suffix) => {
                     const out = [];
                     for (const attr of ['class', 'id']) {
@@ -384,7 +386,6 @@ public static class WebShield
                lower.includes('?z=') ||
                lower.includes('&z=') ||
                lower.includes('zoneid') ||
-               lower.includes('zoneId') ||
                lower.includes('trkr.') ||
                (lower.includes('click') && lower.includes('track'));
     };
@@ -439,14 +440,14 @@ public static class WebShield
                     return createDecoyPopup();
                 }
 
-                // 2. Si proviene de un iframe sin gesto directo del usuario o hacia about:blank
+                // 2. Si proviene de un iframe sin gesto directo del usuario, hacia about:blank, o popup cross-origin desde un embed de video
                 if (isInsideFrame) {
                     const hasUserGesture = !!(navigator.userActivation && navigator.userActivation.isActive);
                     const isCrossDomain = urlStr && !urlStr.startsWith(window.location.origin) && !trustedOAuthRegex.test(urlStr);
                     const isBlankPop = !urlStr || urlStr === 'about:blank';
-                    if (isBlankPop || (isCrossDomain && !hasUserGesture)) {
+                    if (isBlankPop || (isCrossDomain && (!hasUserGesture || isVideoEmbedContext))) {
                         if (window.chrome && window.chrome.webview) {
-                            window.chrome.webview.postMessage({ type: 'ad_blocked', category: 'popup', url: urlStr || 'about:blank', reason: 'window_open_iframe_popunder' });
+                            window.chrome.webview.postMessage({ type: 'ad_blocked', category: 'popup', url: urlStr || 'about:blank', reason: isVideoEmbedContext ? 'window_open_embed_popunder' : 'window_open_iframe_popunder' });
                         }
                         return createDecoyPopup();
                     }
@@ -784,9 +785,26 @@ public static class WebShield
         else window.addEventListener('load', fn, { once: true });
     };
 
-    const runClear = () => { if (!document.hidden) clearClickjackOverlays(); };
-    onLoaded(() => [600, 3000, 8000].forEach(ms => setTimeout(runClear, ms)));
-    document.addEventListener('visibilitychange', runClear);
+    let lastClearAt = 0;
+    const runClear = () => {
+        if (document.hidden) return;
+        const now = Date.now();
+        if (now - lastClearAt < 500) return;
+        lastClearAt = now;
+        clearClickjackOverlays();
+    };
+    onLoaded(() => {
+        setTimeout(runClear, 600);
+        if (isVideoEmbedContext || document.querySelector('video, iframe')) {
+            setTimeout(runClear, 3000);
+            setTimeout(runClear, 8000);
+        }
+    });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && (isVideoEmbedContext || document.querySelector('video, iframe'))) {
+            runClear();
+        }
+    });
 })();
 ";
 
@@ -798,21 +816,50 @@ public static class WebShield
     /// </summary>
     public const string VideoPlayerDefuserScript = @"
 (function() {
+    if (window.__lex_video_defuser_injected) return;
+    window.__lex_video_defuser_injected = true;
+
+    const __LEX_ENABLE_VIDEO_DEFUSER = true;
+    const __LEX_TRUSTED_HOSTS = [];
+
     const h = (location.hostname || '').toLowerCase();
+    const isTopWindow = (window.top === window.self);
     const ends = (d) => h === d || h.endsWith('.' + d);
+    const isEmbedFrame = !isTopWindow && (
+        /(streamwish|wishfast|wishembed|vidhide|streamtape|dood|d000d|ds2play|filelions|lulustream|luluvdo|mp4upload|uqload|voe\.sx|mixdrop|fastream|hglink|dhcplay|fembed|upstream|vidoza|wolfstream|megacloud|rabbitstream|vidplay|yourupload)/i.test(h) ||
+        /^\/(e|v|embed|player)(\/|$|-)/i.test(window.location.pathname || '') ||
+        /\/(videoembed|video_ext)/i.test(window.location.pathname || '')
+    );
+
+    if (!__LEX_ENABLE_VIDEO_DEFUSER && !isEmbedFrame) return;
+
     if (ends('youtube.com') || ends('youtu.be') || ends('youtube-nocookie.com') ||
         ends('google.com') || ends('gstatic.com') || ends('googleusercontent.com') ||
-        ends('dailymotion.com') || ends('twitch.tv') || ends('vimeo.com')) {
+        (__LEX_TRUSTED_HOSTS && __LEX_TRUSTED_HOSTS.some(ends))) {
         return;
     }
 
     const savedState = new WeakMap();
     let attempts = 0;
+    let timeupdateArmed = false;
+
+    const setTimeupdateArmed = (arm) => {
+        try {
+            if (arm && !timeupdateArmed) {
+                document.addEventListener('timeupdate', trySkipPreRoll, true);
+                timeupdateArmed = true;
+            } else if (!arm && timeupdateArmed) {
+                document.removeEventListener('timeupdate', trySkipPreRoll, true);
+                timeupdateArmed = false;
+            }
+        } catch(_) {}
+    };
 
     function trySkipPreRoll(e) {
         try {
             const targetVideo = (e && e.target && e.target.tagName === 'VIDEO') ? e.target : null;
             const videos = targetVideo ? [targetVideo] : document.querySelectorAll('video');
+            let anyAdPending = false;
 
             for (let i = 0; i < videos.length; i++) {
                 const v = videos[i];
@@ -825,6 +872,7 @@ public static class WebShield
                                  !!player.querySelector('.videoAdUi, .fluid_ad_countdown, .vast-skip-button');
 
                 if (adActive) {
+                    anyAdPending = true;
                     if (!savedState.has(v)) {
                         savedState.set(v, { muted: v.muted, rate: v.playbackRate || 1.0 });
                     }
@@ -850,6 +898,12 @@ public static class WebShield
                     v.muted = st.muted;
                     try { v.playbackRate = st.rate; } catch(_) {}
                 }
+            }
+
+            if (anyAdPending) {
+                setTimeupdateArmed(true);
+            } else if (e && e.type === 'timeupdate') {
+                setTimeupdateArmed(false);
             }
         } catch(_) {}
     }
@@ -878,14 +932,13 @@ public static class WebShield
                 }
             }
         } catch(_) {}
-        if (++attempts < 20) {
-            setTimeout(attachSafePlayerListener, 500);
+        if ((isEmbedFrame || document.querySelector('.jwplayer, video')) && ++attempts < 6) {
+            setTimeout(attachSafePlayerListener, 600);
         }
     };
 
     try {
         document.addEventListener('play', trySkipPreRoll, true);
-        document.addEventListener('timeupdate', trySkipPreRoll, true);
     } catch(_) {}
 
     if (document.readyState === 'complete') {

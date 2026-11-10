@@ -134,8 +134,45 @@ public class BrowserTab : INotifyPropertyChanged
 
     /// <summary>IDs de scripts registrados mediante AddScriptToExecuteOnDocumentCreatedAsync para actualización en caliente.</summary>
     public string? WebShieldScriptId { get; set; }
+    public string? MediaRuntimeScriptId { get; set; }
     public string? DailymotionScriptId { get; set; }
     public string? YouTubeScriptId { get; set; }
+
+    private readonly object _policyCacheLock = new();
+    private string? _cachedPolicyHost;
+    private bool _cachedPolicyTempCompat;
+    private int _cachedPolicyRevision = -1;
+    private LexBrowser.Core.AdBlock.EffectiveSitePolicy _cachedPolicy;
+
+    /// <summary>
+    /// Resuelve la política efectiva de LexShield reutilizando el caché por pestaña mientras no cambien host, modo temporal o revisión de ajustes.
+    /// </summary>
+    public LexBrowser.Core.AdBlock.EffectiveSitePolicy ResolveCachedPolicy(string? host)
+    {
+        string key = host ?? string.Empty;
+        int rev = LexBrowser.Core.SettingsManager.SettingsRevision;
+        bool tempCompat = TemporaryCompatMode;
+
+        lock (_policyCacheLock)
+        {
+            if (_cachedPolicyRevision == rev &&
+                _cachedPolicyTempCompat == tempCompat &&
+                string.Equals(_cachedPolicyHost, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return _cachedPolicy;
+            }
+        }
+
+        var resolved = LexBrowser.Core.AdBlock.SitePolicy.Resolve(host, tempCompat);
+        lock (_policyCacheLock)
+        {
+            _cachedPolicy = resolved;
+            _cachedPolicyHost = key;
+            _cachedPolicyTempCompat = tempCompat;
+            _cachedPolicyRevision = rev;
+        }
+        return resolved;
+    }
 
     /// <summary>Modo compatible temporal activado para la sesión actual de esta pestaña.</summary>
     public bool TemporaryCompatMode { get; set; }

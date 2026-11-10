@@ -251,17 +251,26 @@ public static class AdBlockFilter
         "popunder", "adserver", "adclick", "rotator", "onclickads", "syndication"
     };
 
-    // ── Dominios seguros globales (navegación legítima de usuario) ────────
-    private static readonly HashSet<string> TrustedRootDomains = new(StringComparer.OrdinalIgnoreCase)
+    // ── Dominios seguros globales (navegación legítima de usuario + fuente única BigSites) ────────
+    private static readonly HashSet<string> TrustedRootDomains = CreateTrustedRootDomains();
+
+    private static HashSet<string> CreateTrustedRootDomains()
     {
-        "google.com", "google.com.pe", "google.es", "bing.com", "microsoft.com",
-        "youtube.com", "youtu.be", "youtube-nocookie.com", "wikipedia.org", "github.com", "reddit.com",
-        "twitter.com", "x.com", "facebook.com", "instagram.com", "twitch.tv",
-        "amazon.com", "discord.com", "apple.com", "netflix.com", "spotify.com",
-        "live.com", "microsoftonline.com", "office.com", "paypal.com", "linkedin.com", "mercadolibre.com",
-        "openai.com", "chatgpt.com", "claude.ai", "duckduckgo.com", "vimeo.com", "cloudflare.com",
-        "gstatic.com", "googleapis.com", "googleusercontent.com", "whatsapp.com"
-    };
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "google.com.pe", "google.es", "reddit.com",
+            "twitter.com", "x.com", "facebook.com", "instagram.com",
+            "amazon.com", "discord.com", "netflix.com", "spotify.com",
+            "linkedin.com", "mercadolibre.com", "whatsapp.com"
+        };
+
+        foreach (string domain in ShieldExemptions.BigSites)
+        {
+            set.Add(domain);
+        }
+
+        return set;
+    }
 
     /// <summary>
     /// Devuelve true si el host, o cualquiera de sus dominios padre, está en <paramref name="set"/>.
@@ -308,6 +317,13 @@ public static class AdBlockFilter
             }
             // Permitir todo lo demás de YouTube (watchtime, playback, log_event, player, streams de video)
             return false;
+        }
+
+        // Regla especial de Dailymotion: permitir reproductor, API y streams CDN; bloquear solo servidor de banners dedicado
+        if (PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
+            PublicSuffix.HostMatchesDomain(host, "dmcdn.net"))
+        {
+            return PublicSuffix.HostMatchesDomain(host, "dmads.dailymotion.com");
         }
 
         // Regla especial de Google: Proteger búsquedas, respuestas IA (Gemini / Visión general IA / Lens)

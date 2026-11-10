@@ -5,7 +5,9 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$Notes = "Lanzamiento oficial de Lex Junior Browser v1.0.0 con escudo anti-anuncios nativo, 0 telemetria, amplificador de volumen 300% y detector multimedia bajo demanda.",
 
-    [switch]$PublishToGitHub
+    [switch]$PublishToGitHub,
+
+    [switch]$SkipLocalInstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,11 +17,22 @@ $publishTempDir = Join-Path $distDir "publish_tmp"
 $setupExePath = Join-Path $distDir "LexJuniorSetup.exe"
 
 Write-Host "1. Actualizando version a $Version en LexBrowser.csproj..." -ForegroundColor Cyan
-$csproj = Get-Content -Raw $csprojPath
-$csproj = $csproj -replace "<Version>.*?</Version>", "<Version>$Version</Version>"
+$rawCsproj = [System.IO.File]::ReadAllText($csprojPath, [System.Text.Encoding]::UTF8)
+$csproj = $rawCsproj -replace "<Version>.*?</Version>", "<Version>$Version</Version>"
 $csproj = $csproj -replace "<AssemblyVersion>.*?</AssemblyVersion>", "<AssemblyVersion>$Version.0</AssemblyVersion>"
 $csproj = $csproj -replace "<FileVersion>.*?</FileVersion>", "<FileVersion>$Version.0</FileVersion>"
-Set-Content -Path $csprojPath -Value $csproj -Encoding UTF8
+if ($csproj -ne $rawCsproj) {
+    [System.IO.File]::WriteAllText($csprojPath, ($csproj.TrimEnd() + [Environment]::NewLine), (New-Object System.Text.UTF8Encoding($false)))
+}
+
+$webIndexPath = Join-Path $PSScriptRoot "website\index.html"
+if (Test-Path $webIndexPath) {
+    $webHtml = [System.IO.File]::ReadAllText($webIndexPath, [System.Text.Encoding]::UTF8)
+    $updatedHtml = $webHtml -replace '<span id="hero-release-text">Lanzamiento Oficial v[0-9]+\.[0-9]+\.[0-9]+', "<span id=`"hero-release-text`">Lanzamiento Oficial v$Version"
+    if ($updatedHtml -ne $webHtml) {
+        [System.IO.File]::WriteAllText($webIndexPath, $updatedHtml, (New-Object System.Text.UTF8Encoding($false)))
+    }
+}
 
 if (Test-Path $publishTempDir) { Remove-Item $publishTempDir -Recurse -Force }
 New-Item -ItemType Directory -Path $distDir -Force | Out-Null
@@ -46,6 +59,7 @@ $sizeMb = [Math]::Round((Get-Item $setupExePath).Length / 1MB, 2)
 Write-Host "[OK] Instalador generado exitosamente: $setupExePath ($sizeMb MB)" -ForegroundColor Green
 
 # 2.1 Actualizar accesos directos locales y notificar a Windows Shell
+if (-not $SkipLocalInstall) {
 try {
     Write-Host "Actualizando accesos directos locales con nuevo logo oficial..." -ForegroundColor Cyan
     $wsh = New-Object -ComObject WScript.Shell
@@ -92,6 +106,10 @@ try {
     }
 } catch {
     Write-Host "Nota: No se pudieron actualizar accesos locales: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+}
+else {
+    Write-Host "2.1 [SKIP] Manteniendo instalacion local sin sobrescribir (-SkipLocalInstall)." -ForegroundColor Yellow
 }
 
 if ($PublishToGitHub) {

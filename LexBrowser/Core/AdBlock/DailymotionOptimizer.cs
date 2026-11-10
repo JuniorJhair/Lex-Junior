@@ -94,7 +94,18 @@ public static class DailymotionOptimizer
                 background: transparent !important;
             }
         `;
-        (document.head || document.documentElement).appendChild(style);
+        const attachDmStyle = () => {
+            const t = document.head || document.documentElement;
+            if (!t) return false;
+            if (!document.getElementById('lex-dm-cosmetics')) t.appendChild(style);
+            return true;
+        };
+        if (!attachDmStyle()) {
+            const dmStyleWait = new MutationObserver(() => {
+                if (attachDmStyle()) dmStyleWait.disconnect();
+            });
+            dmStyleWait.observe(document, { childList: true });
+        }
     } catch(_) {}
 
     // ─────────────────────────────────────────────────────────────────
@@ -149,7 +160,7 @@ public static class DailymotionOptimizer
             ];
             for (const sel of skipSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && btn.offsetParent !== null && typeof btn.click === 'function') {
+                if (btn && btn.offsetParent !== null && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && typeof btn.click === 'function') {
                     btn.click();
                     break;
                 }
@@ -165,8 +176,8 @@ public static class DailymotionOptimizer
                 const src = video.currentSrc || video.src || '';
 
                 // PROTECCIÓN TOTAL DEL CONTENIDO PRINCIPAL:
-                // Si la duración supera los 90 segundos, ES EL VIDEO REAL. Nunca acelerar ni pisar la velocidad elegida por el usuario.
-                if (duration && !isNaN(duration) && duration > 90) {
+                // Si supera los 180 segundos (o >90s sin indicador de anuncio), ES EL VIDEO REAL. Nunca acelerar ni pisar velocidad.
+                if (duration && !isNaN(duration) && (duration > 180 || (duration > 90 && !isAdActive))) {
                     if (_isDefusingAd) {
                         _isDefusingAd = false;
                         try { video.playbackRate = _originalPlaybackRate || 1.0; } catch(_) {}
@@ -183,8 +194,8 @@ public static class DailymotionOptimizer
                     continue;
                 }
 
-                // Es anuncio solo si tiene duración corta confirmada (<= 90s) y coincide con indicadores publicitarios
-                const isShortDuration = duration && !isNaN(duration) && duration > 0 && duration <= 90;
+                // Es anuncio solo si tiene duración corta confirmada (<=90s o <=180s con ad activo) y coincide con indicadores publicitarios
+                const isShortDuration = duration && !isNaN(duration) && duration > 0 && (duration <= 90 || (isAdActive && duration <= 180));
                 const isAdSource = (isAdActive ||
                                     src.includes('/ad/') ||
                                     src.includes('googleads') ||

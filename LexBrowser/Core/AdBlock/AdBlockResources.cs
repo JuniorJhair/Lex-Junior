@@ -56,14 +56,16 @@ public static class AdBlockResources
 
         // 1. Google IMA SDK (ima3.js) - evita la pantalla negra en reproductores con ad-bidding.
         // Controlado por el interruptor independiente EnableImaSdkStub en Configuración.
-        // Excepción: Dailymotion cuenta con su propio módulo aislado (DailymotionOptimizer) que
-        // requiere el SDK original para validar el ciclo de reproducción y acelerar/saltar los anuncios sin congelar el reproductor.
+        // Excepción: Dailymotion y los sitios grandes de ShieldExemptions quedan exentos para no romper reproductores ni servicios legítimos.
         bool isDailymotion = PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
                              PublicSuffix.HostMatchesDomain(host, "dmcdn.net") ||
                              (!string.IsNullOrEmpty(originHost) && PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com")) ||
                              full.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase);
 
+        bool isExemptBigSite = !string.IsNullOrEmpty(originHost) && ShieldExemptions.IsBigSite(originHost);
+
         if (!isDailymotion &&
+            !isExemptBigSite &&
             SettingsManager.Current?.EnableImaSdkStub != false &&
             PublicSuffix.HostMatchesDomain(host, "googleapis.com") &&
             path.EndsWith("/ima3.js", StringComparison.OrdinalIgnoreCase))
@@ -73,7 +75,7 @@ public static class AdBlockResources
             return true;
         }
 
-        // Jamás devolver XML VMAP/VAST en navegaciones de documentos principales o subframes ni en dominios de Google/YouTube
+        // Jamás devolver XML VMAP/VAST en navegaciones de documentos principales o subframes ni en sitios grandes exentos
         bool isGoogleOrYouTubeContent =
             PublicSuffix.HostMatchesDomain(host, "youtube.com") ||
             PublicSuffix.HostMatchesDomain(host, "youtu.be") ||
@@ -96,6 +98,7 @@ public static class AdBlockResources
         // sin reproducir comerciales pre-roll ni contar hacia atrás el reloj de espera.
         bool isVmap = xmlStubContext &&
                       !isGoogleOrYouTubeContent &&
+                      (isDailymotion || !isExemptBigSite) &&
                       (full.Contains("format=vmap", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("output=vmap", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("type=vmap", StringComparison.OrdinalIgnoreCase) ||
@@ -158,6 +161,7 @@ public static class AdBlockResources
         bool isVast = xmlStubContext &&
                       !isDailymotion &&
                       !isGoogleOrYouTubeContent &&
+                      !isExemptBigSite &&
                       (full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("format=vast", StringComparison.OrdinalIgnoreCase) ||
                        full.Contains("output=vast", StringComparison.OrdinalIgnoreCase) ||
