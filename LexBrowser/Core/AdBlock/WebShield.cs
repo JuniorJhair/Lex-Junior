@@ -113,7 +113,18 @@ public static class WebShield
                           ends('claude.ai') ||
                           ends('microsoft.com') ||
                           ends('live.com') ||
-                          ends('paypal.com');
+                          ends('paypal.com') ||
+                          // Aplicaciones web de lienzo / pizarra / diseño (el canvas NO es una capa publicitaria)
+                          ends('miro.com') ||
+                          ends('figma.com') ||
+                          ends('canva.com') ||
+                          ends('excalidraw.com') ||
+                          ends('tldraw.com') ||
+                          ends('notion.so') ||
+                          ends('lucid.app') ||
+                          ends('diagrams.net') ||
+                          ends('draw.io') ||
+                          ends('mural.co');
 
     // Sitios dedicados, motores de búsqueda y plataformas legítimas (preservar respuestas IA, Gemini, widgets y controles nativos)
     if (isTrustedSite) return;
@@ -471,12 +482,29 @@ public static class WebShield
         };
     } catch(e) {}
 
+    // Elementos que JAMÁS son una capa publicitaria trampa: lienzos (canvas), gráficos vectoriales,
+    // objetos embebidos y áreas de edición/aplicación (Miro, Figma, Excalidraw, Google Maps, editores...).
+    const NEVER_OVERLAY_TAGS = ['CANVAS', 'SVG', 'OBJECT', 'EMBED'];
+    const isNeverOverlay = (el) => {
+        try {
+            if (!el) return false;
+            const tag = String(el.tagName || '').toUpperCase();
+            if (NEVER_OVERLAY_TAGS.includes(tag)) return true;
+            if (el.isContentEditable) return true;
+            const role = el.getAttribute ? (el.getAttribute('role') || '').toLowerCase() : '';
+            if (role === 'application') return true;
+            if (el.querySelector && el.querySelector('canvas')) return true;
+        } catch(_) {}
+        return false;
+    };
+
     // 1.3 Verificador de Controles Legítimos y Elementos con Significado Visual
     const isControlOrMeaningful = (el) => {
         if (!el) return false;
-        const tag = el.tagName || '';
+        const tag = String(el.tagName || '').toUpperCase();
         if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'LABEL', 'VIDEO', 'AUDIO'].includes(tag)) return true;
         if (tag === 'SVG' || el.closest('svg')) return true;
+        if (isNeverOverlay(el)) return true;
 
         // Si tiene texto visible legítimo
         const text = (el.innerText || el.textContent || '').trim();
@@ -497,26 +525,61 @@ public static class WebShield
         return false;
     };
 
-    // 1.4 Verificador Heurístico Fino de Capas Fantasma / Overlays Trampa sobre Video
-    const isGhostOverlay = (el) => {
-        if (!el || el === document.body || el === document.documentElement) return false;
-        const tag = el.tagName || '';
-        if (['VIDEO', 'AUDIO', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tag)) return false;
+    // Evidencia de capa trampa: debajo de la capa (en el mismo punto) debe haber un reproductor,
+    // un video o un iframe. Un lienzo o panel transparente sin nada de eso debajo NO es una trampa publicitaria.
+    const PLAYER_HINT_REGEX = /(player|video|plyr|jwplayer|jw-|vjs|video-js|fluid|embed|stream)/i;
+    const hasTrapTargetBeneath = (el, px, py) => {
+        try {
+            let x = px;
+            let y = py;
+            if (typeof x !== 'number' || typeof y !== 'number') {
+                const r = el.getBoundingClientRect();
+                x = r.left + r.width / 2;
+                y = r.top + r.height / 2;
+            }
+            x = Math.min(Math.max(x, 0), Math.max(0, window.innerWidth - 1));
+            y = Math.min(Math.max(y, 0), Math.max(0, window.innerHeight - 1));
+
+            const stack = document.elementsFromPoint(x, y);
+            const startIdx = stack.indexOf(el) + 1;
+            for (let i = startIdx; i < stack.length; i++) {
+                const s = stack[i];
+                if (!s || s === el || s === document.body || s === document.documentElement) continue;
+                if (s.contains(el)) continue; // ancestros de la capa: no cuentan como 'debajo'
+                const t = String(s.tagName || '').toUpperCase();
+                if (t === 'VIDEO' || t === 'IFRAME') return true;
+                const idClass = ((s.id || '') + ' ' + (typeof s.className === 'string' ? s.className : '')).toLowerCase();
+                if (idClass && PLAYER_HINT_REGEX.test(idClass)) return true;
+            }
+        } catch(_) {}
+        return false;
+    };
+
+    // 1.4 Clasificador Heurístico Fino de Capas Fantasma / Overlays Trampa sobre Video
+    // Devuelve: null (no es trampa) | 'hard' (anuncio explícito o enlace fantasma: ocultar y eliminar)
+    //           | 'soft' (capa transparente sobre un reproductor: solo pointer-events:none, sin borrar el nodo)
+    const classifyGhost = (el, px, py) => {
+        if (!el || el === document.body || el === document.documentElement) return null;
+        const tag = String(el.tagName || '').toUpperCase();
+        if (['VIDEO', 'AUDIO', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'FORM', 'DIALOG'].includes(tag)) return null;
+
+        // Lienzos, SVG, objetos embebidos y áreas de edición/aplicación: nunca son trampas
+        if (isNeverOverlay(el)) return null;
 
         // NUNCA borrar el elemento raíz de frameworks SPA
-        if (el.id === 'root' || el.id === 'app' || el.id === '__next' || el.id === '__nuxt' || el.hasAttribute('data-reactroot')) return false;
+        if (el.id === 'root' || el.id === 'app' || el.id === '__next' || el.id === '__nuxt' || el.hasAttribute('data-reactroot')) return null;
 
         // CRÍTICO: Si el elemento CONTIENE un video o iframe dentro de su árbol, NO borrarlo (es el contenedor del reproductor)
-        if (el.querySelector('video, audio, iframe')) return false;
+        if (el.querySelector('video, audio, iframe')) return null;
 
         // Si contiene controles interactivos legítimos (botones, sliders, svgs, etc.)
-        if (el.querySelector('button, input, select, textarea, svg, [class*=control], [class*=btn]')) return false;
+        if (el.querySelector('button, input, select, textarea, svg, [class*=control], [class*=btn]')) return null;
 
         // Si tiene texto visible legítimo
         const text = (el.innerText || el.textContent || '').trim();
         const style = window.getComputedStyle(el);
         const opacity = parseFloat(style.opacity);
-        if (text.length > 0 && style.visibility !== 'hidden' && opacity > 0.3) return false;
+        if (text.length > 0 && style.visibility !== 'hidden' && opacity > 0.3) return null;
 
         // Verificar estilo visual de trampa (posicionado absoluto/fijo y transparente)
         const isPositioned = (style.position === 'fixed' || style.position === 'absolute');
@@ -528,33 +591,43 @@ public static class WebShield
         const idClass = ((el.id || '') + ' ' + (el.className || '')).toLowerCase();
         const isExplicitAdName = /(first-click-ad|click-ad|ad-overlay|pop-overlay|popup-overlay|interads|pop-under|banner-overlay)/.test(idClass);
 
-        if (!isPositioned && !isExplicitAdName) return false;
-        if (!isTransparent && !isExplicitAdName) return false;
+        if (!isPositioned && !isExplicitAdName) return null;
+        if (!isTransparent && !isExplicitAdName) return null;
 
         // Caso 1: Enlace fantasma (<a> transparente o con target=_blank o apuntando a ad/cross-origin)
         const anchor = (tag === 'A') ? el : el.querySelector('a');
         if (anchor) {
             const href = (anchor.href || '').toLowerCase();
             const isAdLink = adDomainsRegex.test(href) || isAdOrSuspiciousUrl(href) || anchor.target === '_blank';
-            if (isAdLink || !text) return true;
+            if (isAdLink || !text) return 'hard';
         }
 
-        // Caso 2: Capa trampantojo sobre reproductor o ventana con z-index alto
+        // Anuncio con nombre explícito
+        if (isExplicitAdName) return 'hard';
+
+        // Caso 2: Capa transparente grande con z-index alto SOBRE un reproductor/video/iframe.
+        // Se exige evidencia de que hay algo debajo que la capa está tapando.
         const zIndex = parseInt(style.zIndex, 10);
         const rect = el.getBoundingClientRect();
         const isLargeCoverage = (rect.width > 200 && rect.height > 150);
 
-        if (isLargeCoverage && (zIndex >= 10 || isNaN(zIndex) || isExplicitAdName) && isTransparent && !text) {
-            return true;
+        if (isLargeCoverage && (zIndex >= 10 || isNaN(zIndex)) && isTransparent && !text) {
+            if (hasTrapTargetBeneath(el, px, py)) return 'soft';
         }
 
-        return isExplicitAdName;
+        return null;
     };
 
-    const neutralizeOverlayElement = (el) => {
+    const isGhostOverlay = (el, px, py) => classifyGhost(el, px, py) !== null;
+
+    const neutralizeOverlayElement = (el, mode) => {
         if (!el) return;
         try {
+            // Siempre: dejar de capturar clics para que lleguen al elemento de debajo
             el.style.setProperty('pointer-events', 'none', 'important');
+            // Modo suave: no ocultar ni borrar el nodo (reversible y sin riesgo en falsos positivos)
+            if (mode === 'soft') return;
+
             el.style.setProperty('display', 'none', 'important');
             el.style.setProperty('visibility', 'hidden', 'important');
             if (el.tagName === 'A' || el.children.length === 0) {
@@ -568,16 +641,19 @@ public static class WebShield
         let target = e.target;
         if (!target) return;
 
-        // Si es un control legítimo o contiene texto/iconos reales, permitir inmediatamente
+        // Si es un control legítimo, un lienzo o contiene texto/iconos reales, permitir inmediatamente
         if (isControlOrMeaningful(target)) {
             return;
         }
 
         let ghost = null;
+        let ghostMode = null;
         let curr = target;
         for (let i = 0; i < 5 && curr && curr !== document.body; i++) {
-            if (isGhostOverlay(curr)) {
+            const mode = classifyGhost(curr, e.clientX, e.clientY);
+            if (mode) {
                 ghost = curr;
+                ghostMode = mode;
                 break;
             }
             curr = curr.parentElement;
@@ -597,9 +673,9 @@ public static class WebShield
             const id = ghost.id ? ('#' + ghost.id) : '';
             const cls = (ghost.className && typeof ghost.className === 'string') ? ('.' + ghost.className.trim().split(/\s+/).join('.')) : '';
             const zi = cs.zIndex || 'auto';
-            const elDesc = `${tag}${id}${cls} [${Math.round(r.width)}x${Math.round(r.height)}, z:${zi}]`;
+            const elDesc = `${tag}${id}${cls} [${Math.round(r.width)}x${Math.round(r.height)}, z:${zi}, ${ghostMode}]`;
 
-            neutralizeOverlayElement(ghost);
+            neutralizeOverlayElement(ghost, ghostMode);
 
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
@@ -641,12 +717,13 @@ public static class WebShield
             const explicitAds = document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads], [id*=popunder], [class*=popunder]');
             for (let i = 0; i < explicitAds.length; i++) {
                 const el = explicitAds[i];
-                if (isGhostOverlay(el)) {
+                const mode = classifyGhost(el);
+                if (mode) {
                     const r = el.getBoundingClientRect ? el.getBoundingClientRect() : { width: 0, height: 0 };
                     const tag = el.tagName || '';
                     const id = el.id ? ('#' + el.id) : '';
                     const cls = (el.className && typeof el.className === 'string') ? ('.' + el.className.trim().split(/\s+/).join('.')) : '';
-                    neutralizeOverlayElement(el);
+                    neutralizeOverlayElement(el, mode);
                     if (window.chrome && window.chrome.webview) {
                         window.chrome.webview.postMessage({
                             type: 'ad_blocked',
@@ -661,9 +738,10 @@ public static class WebShield
             const ghostAnchors = document.querySelectorAll('a[target=_blank]');
             for (let i = 0; i < ghostAnchors.length; i++) {
                 const a = ghostAnchors[i];
-                if (isGhostOverlay(a)) {
+                const mode = classifyGhost(a);
+                if (mode) {
                     const r = a.getBoundingClientRect ? a.getBoundingClientRect() : { width: 0, height: 0 };
-                    neutralizeOverlayElement(a);
+                    neutralizeOverlayElement(a, mode);
                     if (window.chrome && window.chrome.webview) {
                         window.chrome.webview.postMessage({
                             type: 'ad_blocked',
@@ -682,9 +760,11 @@ public static class WebShield
                     const siblings = p.parentElement ? p.parentElement.children : [];
                     for (let j = 0; j < siblings.length; j++) {
                         const sib = siblings[j];
-                        if (sib !== p && isGhostOverlay(sib)) {
+                        if (sib === p) continue;
+                        const mode = classifyGhost(sib);
+                        if (mode) {
                             const r = sib.getBoundingClientRect ? sib.getBoundingClientRect() : { width: 0, height: 0 };
-                            neutralizeOverlayElement(sib);
+                            neutralizeOverlayElement(sib, mode);
                             if (window.chrome && window.chrome.webview) {
                                 window.chrome.webview.postMessage({
                                     type: 'ad_blocked',
@@ -816,4 +896,3 @@ public static class WebShield
 })();
 ";
 }
-

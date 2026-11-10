@@ -8,9 +8,9 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.2.25</Version>
-    <AssemblyVersion>1.2.25.0</AssemblyVersion>
-    <FileVersion>1.2.25.0</FileVersion>
+    <Version>1.2.26</Version>
+    <AssemblyVersion>1.2.26.0</AssemblyVersion>
+    <FileVersion>1.2.26.0</FileVersion>
     <Product>Lex Junior Browser</Product>
     <Company>Lex Junior</Company>
   </PropertyGroup>
