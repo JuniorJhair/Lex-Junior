@@ -76,8 +76,20 @@ try {
 
     try {
         Copy-Item $setupExePath $exeFile -Force -ErrorAction SilentlyContinue
-        Write-Host "[OK] Binario instalado localmente actualizado en $exeFile" -ForegroundColor Green
-    } catch { }
+        $copiedOk = $false
+        if (Test-Path -LiteralPath $exeFile) {
+            $srcHash = (Get-FileHash -LiteralPath $setupExePath -Algorithm SHA256).Hash
+            $dstHash = (Get-FileHash -LiteralPath $exeFile -Algorithm SHA256).Hash
+            $copiedOk = ($srcHash -eq $dstHash)
+        }
+        if ($copiedOk) {
+            Write-Host "[OK] Binario instalado localmente actualizado en $exeFile" -ForegroundColor Green
+        } else {
+            Write-Host "[AVISO] No se actualizo el binario local (esta en uso). Cierra Lex Junior y vuelve a ejecutar, o usa Actualizar desde la app." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[AVISO] No se actualizo el binario local (esta en uso). Cierra Lex Junior y vuelve a ejecutar, o usa Actualizar desde la app." -ForegroundColor Yellow
+    }
 
     $deskPath = [Environment]::GetFolderPath('Desktop')
     $deskFile = Join-Path $deskPath 'Lex Junior Browser.lnk'

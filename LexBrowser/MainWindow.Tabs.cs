@@ -30,6 +30,112 @@ namespace LexBrowser;
 public partial class MainWindow
 {
     private static readonly byte[] EmptyResponseBytes = Array.Empty<byte>();
+    private bool _fullScreenChromeActive = false;
+    private readonly Dictionary<BrowserTab, double> _preFullScreenZoomByTab = new();
+
+    private void ApplyFullScreenChrome(bool enter)
+    {
+        if (enter == _fullScreenChromeActive) return;
+        _fullScreenChromeActive = enter;
+
+        var targetTab = _activeTab;
+
+        if (enter)
+        {
+            if (targetTab?.WebView != null && !_preFullScreenZoomByTab.ContainsKey(targetTab))
+            {
+                try { _preFullScreenZoomByTab[targetTab] = targetTab.WebView.ZoomFactor; }
+                catch { _preFullScreenZoomByTab[targetTab] = 1.0; }
+            }
+
+            _savedWindowState = WindowState;
+            _savedResizeMode = ResizeMode;
+
+            // Colapsar barras superiores completamente
+            RowHeader.Height = new GridLength(0);
+            RowNavBar.Height = new GridLength(0);
+            RowBookmarksBar.Height = new GridLength(0);
+            RowInfoBar.Height = new GridLength(0);
+            RowProgressBar.Height = new GridLength(0);
+
+            // Eliminar WindowChrome durante fullscreen para evitar bordes negros o franjas de taskbar
+            WindowChrome.SetWindowChrome(this, null);
+
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Normal;
+            WindowState = WindowState.Maximized;
+            UpdateWindowMargin();
+        }
+        else
+        {
+            // Restaurar barras del navegador (Auditoría E7: mantener barra en modo invitado)
+            RowHeader.Height = new GridLength(42);
+            RowNavBar.Height = new GridLength(50);
+            bool showBar = SettingsManager.Current.ShowBookmarksBar || _isGuestSession;
+            RowBookmarksBar.Height = showBar ? new GridLength(34) : new GridLength(0);
+            RowBookmarksGrid.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
+            RowInfoBar.Height = GridLength.Auto;
+            RowProgressBar.Height = new GridLength(2);
+
+            // Restaurar WindowChrome normal
+            WindowChrome.SetWindowChrome(this, AppWindowChrome);
+
+            ResizeMode = _savedResizeMode;
+
+            if (_savedWindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Normal;
+                WindowState = WindowState.Maximized;
+            }
+            else
+            {
+                WindowState = _savedWindowState;
+            }
+
+            UpdateWindowMargin();
+
+            if (targetTab != null && !targetTab.IsDisposed && targetTab.WebView != null)
+            {
+                bool hasPreZoom = false;
+                double preFullScreenZoom = 1.0;
+                bool isStillFs = targetTab.WebView.CoreWebView2?.ContainsFullScreenElement == true;
+                if (!isStillFs && _preFullScreenZoomByTab.Remove(targetTab, out preFullScreenZoom))
+                {
+                    hasPreZoom = true;
+                }
+
+                try
+                {
+                    if (hasPreZoom)
+                    {
+                        targetTab.WebView.ZoomFactor = preFullScreenZoom;
+                    }
+                    GetController(targetTab.WebView)?.NotifyParentWindowPositionChanged();
+                    UpdateZoomIndicatorUI(showFloating: false);
+                }
+                catch { }
+
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    await Task.Delay(150);
+                    var core = targetTab.WebView?.CoreWebView2;
+                    if (!targetTab.IsDisposed && targetTab.WebView != null && core != null && !core.ContainsFullScreenElement)
+                    {
+                        try
+                        {
+                            if (hasPreZoom && Math.Abs(targetTab.WebView.ZoomFactor - preFullScreenZoom) > 0.01)
+                            {
+                                targetTab.WebView.ZoomFactor = preFullScreenZoom;
+                            }
+                            GetController(targetTab.WebView)?.NotifyParentWindowPositionChanged();
+                            UpdateZoomIndicatorUI(showFloating: false);
+                        }
+                        catch { }
+                    }
+                });
+            }
+        }
+    }
 
     private static bool IsSafeHttpUrl(string? url)
     {
@@ -293,86 +399,19 @@ public partial class MainWindow
         }
 
         // 1. MANEJO DE PANTALLA COMPLETA REAL DE LAPTOP (CERO FRANJAS VACÍAS Y RESTABLECIMIENTO DE ZOOM)
-        double preFullScreenZoom = 1.0;
         core.ContainsFullScreenElementChanged += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
             win.Dispatcher.Invoke(() =>
             {
-                if (core.ContainsFullScreenElement)
+                bool enterFs = core.ContainsFullScreenElement;
+                if (win._activeTab == tab)
                 {
-                    try { preFullScreenZoom = tab.WebView.ZoomFactor; } catch { preFullScreenZoom = 1.0; }
-                    win._savedWindowState = win.WindowState;
-                    win._savedResizeMode = win.ResizeMode;
-
-                    // Colapsar barras superiores completamente
-                    win.RowHeader.Height = new GridLength(0);
-                    win.RowNavBar.Height = new GridLength(0);
-                    win.RowBookmarksBar.Height = new GridLength(0);
-                    win.RowInfoBar.Height = new GridLength(0);
-                    win.RowProgressBar.Height = new GridLength(0);
-
-                    // Eliminar WindowChrome durante fullscreen para evitar bordes negros o franjas de taskbar
-                    WindowChrome.SetWindowChrome(win, null);
-
-                    win.ResizeMode = ResizeMode.NoResize;
-                    win.WindowState = WindowState.Normal;
-                    win.WindowState = WindowState.Maximized;
-                    win.UpdateWindowMargin();
+                    win.ApplyFullScreenChrome(enterFs);
                 }
-                else
+                else if (!enterFs && win._preFullScreenZoomByTab.Remove(tab, out double bgZoom))
                 {
-                    // Restaurar barras del navegador (Auditoría E7: mantener barra en modo invitado)
-                    win.RowHeader.Height = new GridLength(42);
-                    win.RowNavBar.Height = new GridLength(50);
-                    bool showBar = SettingsManager.Current.ShowBookmarksBar || win._isGuestSession;
-                    win.RowBookmarksBar.Height = showBar ? new GridLength(34) : new GridLength(0);
-                    win.RowBookmarksGrid.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
-                    win.RowInfoBar.Height = GridLength.Auto;
-                    win.RowProgressBar.Height = new GridLength(2);
-
-                    // Restaurar WindowChrome normal
-                    WindowChrome.SetWindowChrome(win, win.AppWindowChrome);
-
-                    win.ResizeMode = win._savedResizeMode;
-
-                    if (win._savedWindowState == WindowState.Maximized)
-                    {
-                        win.WindowState = WindowState.Normal;
-                        win.WindowState = WindowState.Maximized;
-                    }
-                    else
-                    {
-                        win.WindowState = win._savedWindowState;
-                    }
-
-                    win.UpdateWindowMargin();
-
-                    try
-                    {
-                        tab.WebView.ZoomFactor = preFullScreenZoom;
-                        GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
-                        win.UpdateZoomIndicatorUI(showFloating: false);
-                    }
-                    catch { }
-
-                    _ = win.Dispatcher.InvokeAsync(async () =>
-                    {
-                        await Task.Delay(150);
-                        if (!tab.IsDisposed && tab.WebView != null && core != null && !core.ContainsFullScreenElement)
-                        {
-                            try
-                            {
-                                if (Math.Abs(tab.WebView.ZoomFactor - preFullScreenZoom) > 0.01)
-                                {
-                                    tab.WebView.ZoomFactor = preFullScreenZoom;
-                                }
-                                GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
-                                win.UpdateZoomIndicatorUI(showFloating: false);
-                            }
-                            catch { }
-                        }
-                    });
+                    try { tab.WebView.ZoomFactor = bgZoom; } catch { }
                 }
             });
         };
@@ -1614,6 +1653,7 @@ public partial class MainWindow
             }
 
             _activeTab = tab;
+            ApplyFullScreenChrome(tab.WebView?.CoreWebView2?.ContainsFullScreenElement == true);
 
             if (tab?.WebView != null)
             {
@@ -2458,6 +2498,7 @@ public partial class MainWindow
         }
 
         StopSnifferSessionForTab(tabToClose);
+        _preFullScreenZoomByTab.Remove(tabToClose);
         tabToClose.CorsUnlocker?.Dispose();
         tabToClose.CorsUnlocker = null;
         tabToClose.ClearDetectedMedia();

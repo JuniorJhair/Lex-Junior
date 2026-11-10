@@ -598,10 +598,23 @@ public static class InstallerService
         {
             try
             {
-                if (proc.Id != currentPid)
+                if (proc.Id != currentPid && !proc.HasExited)
                 {
-                    proc.Kill(entireProcessTree: true);
-                    proc.WaitForExit(3000);
+                    try
+                    {
+                        if (proc.MainWindowHandle != IntPtr.Zero)
+                        {
+                            proc.CloseMainWindow();
+                        }
+                    }
+                    catch { }
+
+                    bool exited = proc.WaitForExit(10000);
+                    if (!exited && !proc.HasExited)
+                    {
+                        proc.Kill(entireProcessTree: true);
+                        proc.WaitForExit(3000);
+                    }
                 }
             }
             catch { }

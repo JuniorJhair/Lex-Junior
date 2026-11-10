@@ -139,11 +139,65 @@ public static class YouTubeOptimizer
     // ─────────────────────────────────────────────────────────────────
     const closePolymerDialog = (dialog) => {
         if (!dialog) return;
+        try {
+            const activeEl = document.activeElement;
+            if (activeEl && typeof activeEl.blur === 'function' && dialog.contains(activeEl)) {
+                activeEl.blur();
+            }
+        } catch(_) {}
         try { if (typeof dialog.cancel === 'function') dialog.cancel(); } catch(_) {}
         try { if (typeof dialog.close === 'function') dialog.close(); } catch(_) {}
+        try { dialog.opened = false; } catch(_) {}
+        try { dialog.removeAttribute('opened'); } catch(_) {}
+    };
+
+    let desyncPending = false;
+    const releaseDesyncedDialogs = () => {
         try {
-            dialog.removeAttribute('opened');
-            dialog.setAttribute('aria-hidden', 'true');
+            const initial = document.querySelectorAll('tp-yt-paper-dialog');
+            let hasCandidate = false;
+            for (let i = 0; i < initial.length; i++) {
+                const d = initial[i];
+                if (d && d.opened === true && !d.hasAttribute('opened')) {
+                    hasCandidate = true;
+                    break;
+                }
+            }
+            if (!hasCandidate || desyncPending) return;
+
+            desyncPending = true;
+            setTimeout(() => {
+                desyncPending = false;
+                try {
+                    const dialogs = document.querySelectorAll('tp-yt-paper-dialog');
+                    let fixed = 0;
+                    for (let i = 0; i < dialogs.length; i++) {
+                        const d = dialogs[i];
+                        if (!d || d.hasAttribute('opened') || d.opened !== true) continue;
+                        try {
+                            const activeEl = document.activeElement;
+                            if (activeEl && typeof activeEl.blur === 'function' && d.contains(activeEl)) {
+                                activeEl.blur();
+                            }
+                        } catch(_) {}
+                        try {
+                            d.opened = false;
+                            fixed++;
+                        } catch(_) {}
+                    }
+
+                    if (fixed > 0 && window.chrome && window.chrome.webview) {
+                        try {
+                            window.chrome.webview.postMessage({
+                                type: 'ad_blocked',
+                                category: 'adapter',
+                                url: window.location.href,
+                                reason: 'dialog_opened_desync'
+                            });
+                        } catch(_) {}
+                    }
+                } catch(_) {}
+            }, 120);
         } catch(_) {}
     };
 
@@ -165,6 +219,8 @@ public static class YouTubeOptimizer
         if (player && typeof player.playVideo === 'function') {
             try { player.playVideo(); } catch(_) {}
         }
+
+        releaseDesyncedDialogs();
     };
 
     // ─────────────────────────────────────────────────────────────────
@@ -313,18 +369,48 @@ public static class YouTubeOptimizer
     document.addEventListener('pause', () => {
         const now = Date.now();
         if ((now - lastYtNavigationTime < 4500) && (now - lastUserInteractionTime > 800)) {
+            const path = window.location.pathname || '';
+            if (!path.startsWith('/watch') && !path.startsWith('/shorts')) return;
+            if (document.hidden) return;
+
             const moviePlayer = document.querySelector('#movie_player') || document.querySelector('.html5-video-player');
             const video = document.querySelector('video');
-            if (video && !moviePlayer?.classList?.contains('ad-showing')) {
-                setTimeout(() => {
-                    if (video.paused && (Date.now() - lastUserInteractionTime > 800)) {
+            if (!video || moviePlayer?.classList?.contains('ad-showing')) return;
+
+            const rect = video.getBoundingClientRect();
+            if (!rect || rect.width <= 0 || rect.height <= 0) return;
+
+            setTimeout(() => {
+                const curPath = window.location.pathname || '';
+                if (!curPath.startsWith('/watch') && !curPath.startsWith('/shorts')) return;
+                if (document.hidden) return;
+                const r2 = video.getBoundingClientRect();
+                if (!r2 || r2.width <= 0 || r2.height <= 0) return;
+
+                if (video.paused && !moviePlayer?.classList?.contains('ad-showing') && (Date.now() - lastUserInteractionTime > 800)) {
+                    let didResume = false;
+                    try {
+                        if (moviePlayer && typeof moviePlayer.playVideo === 'function') {
+                            moviePlayer.playVideo();
+                            didResume = true;
+                        } else {
+                            video.play().catch(() => {});
+                            didResume = true;
+                        }
+                    } catch(_) {}
+
+                    if (didResume && window.chrome && window.chrome.webview) {
                         try {
-                            if (moviePlayer && typeof moviePlayer.playVideo === 'function') moviePlayer.playVideo();
-                            else video.play().catch(() => {});
+                            window.chrome.webview.postMessage({
+                                type: 'ad_blocked',
+                                category: 'adapter',
+                                url: window.location.href,
+                                reason: 'pause_guardian_resume: ' + curPath
+                            });
                         } catch(_) {}
                     }
-                }, 120);
-            }
+                }
+            }, 120);
         }
     }, true);
 
@@ -373,10 +459,11 @@ public static class YouTubeOptimizer
             const obs = new MutationObserver(() => {
                 if (scheduled) return;
                 scheduled = true;
-                requestAnimationFrame(() => { scheduled = false; clearYouTubePopups(); });
+                requestAnimationFrame(() => { scheduled = false; clearYouTubePopups(); releaseDesyncedDialogs(); });
             });
             obs.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['opened', 'aria-hidden'] });
             clearYouTubePopups();
+            releaseDesyncedDialogs();
             return obs;
         });
     };
@@ -384,7 +471,6 @@ public static class YouTubeOptimizer
     ['yt-navigate-finish', 'yt-page-data-updated'].forEach(evt =>
         document.addEventListener(evt, () => {
             lastYtNavigationTime = Date.now();
-            lastUserInteractionTime = 0;
             skipYouTubeAds();
             clearYouTubePopups();
             armYouTubeObservers();
