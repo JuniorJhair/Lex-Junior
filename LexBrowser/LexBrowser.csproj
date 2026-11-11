@@ -8,15 +8,18 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.0.1</Version>
-    <AssemblyVersion>2.0.1.0</AssemblyVersion>
-    <FileVersion>2.0.1.0</FileVersion>
+    <Version>2.1.0</Version>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
+    <FileVersion>2.1.0.0</FileVersion>
     <Product>Lex Junior Browser</Product>
     <Company>Lex Junior</Company>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <PackageReference Include="System.Speech" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite.Core" Version="8.0.11" />
+    <PackageReference Include="SQLitePCLRaw.bundle_winsqlite3" Version="2.1.11" />
     <Resource Include="Assets\logo.png" />
     <Resource Include="Assets\logo_web.png" />
     <Resource Include="Assets\app.ico" />

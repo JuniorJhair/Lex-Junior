@@ -131,9 +131,19 @@ public class BrowserTab : INotifyPropertyChanged
 
     /// <summary>Marca de tiempo UTC del último intento de recuperación de proceso.</summary>
     public DateTime LastCrashRecoveryUtc { get; set; }
+    private bool _isSuspendedByLex;
+    public DateTime LastDeactivatedUtc { get; set; }
+    public DateTime NextSuspendAttemptUtc { get; set; }
+    public bool HasCaptureDevicePermission { get; set; }
+    public bool IsSuspendedByLex
+    {
+        get => _isSuspendedByLex;
+        set => SetField(ref _isSuspendedByLex, value);
+    }
 
     /// <summary>IDs de scripts registrados mediante AddScriptToExecuteOnDocumentCreatedAsync para actualización en caliente.</summary>
     public string? WebShieldScriptId { get; set; }
+    public string? CookieBannerScriptId { get; set; }
     public string? MediaRuntimeScriptId { get; set; }
     public string? DailymotionScriptId { get; set; }
     public string? YouTubeScriptId { get; set; }

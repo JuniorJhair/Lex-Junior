@@ -21,6 +21,7 @@ public partial class MainWindow
     private BrowserTab? _stashedOwnerActiveTab;
 
     public bool IsGuestSessionWindow => _isGuestSession;
+    internal bool IsPrivateImportRestricted => _isGuestSession || (_activeTab?.IsIncognito == true);
 
     private string _pendingSaveOriginUrl = string.Empty;
     private DispatcherTimer? _promptPeekTimer;

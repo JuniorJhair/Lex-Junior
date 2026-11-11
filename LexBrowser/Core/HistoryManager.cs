@@ -221,4 +221,16 @@ public static class HistoryManager
 
     public static string GetHistoryFileSizeFormatted() => _store.GetFileSizeFormatted();
     public static int GetTotalCount() => _store.GetTotalCount();
+
+    public static (int Imported, int Duplicates, int Skipped, string? Warning) ImportEntries(
+        IEnumerable<(string Url, string Title, DateTime VisitedAt)> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var staged = entries.ToList();
+        if (!SettingsManager.Current.EnableHistory)
+        {
+            return (0, 0, staged.Count, "El historial está desactivado en la configuración de Lex Junior.");
+        }
+        return _store.ImportEntries(staged);
+    }
 }

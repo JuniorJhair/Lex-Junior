@@ -542,6 +542,104 @@ public sealed class PasswordVaultStore
         }
     }
 
+    private sealed class DomainUserKeyComparer : IEqualityComparer<(string BaseDomain, string Username)>
+    {
+        public static readonly DomainUserKeyComparer Instance = new();
+
+        public bool Equals((string BaseDomain, string Username) x, (string BaseDomain, string Username) y) =>
+            string.Equals(x.BaseDomain, y.BaseDomain, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(x.Username, y.Username, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string BaseDomain, string Username) obj) =>
+            HashCode.Combine(
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.BaseDomain ?? string.Empty),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Username ?? string.Empty));
+    }
+
+    public (int Imported, int Duplicates, int Skipped, string? Error) ImportCredentials(
+        IEnumerable<(string Url, string Username, string Password)> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var staged = entries.ToList();
+        if (staged.Count == 0) return (0, 0, 0, null);
+
+        int imported = 0, duplicates = 0, skipped = 0;
+        bool saved = false;
+
+        lock (_lock)
+        {
+            var existingKeys = new HashSet<(string BaseDomain, string Username)>(DomainUserKeyComparer.Instance);
+            foreach (var cred in _credentials)
+            {
+                string existingBase = ExtractBaseDomain(cred.Domain);
+                if (string.IsNullOrWhiteSpace(existingBase)) existingBase = cred.Domain;
+                existingKeys.Add((existingBase, cred.Username.Trim()));
+            }
+
+            int originalCount = _credentials.Count;
+            foreach (var (rawUrl, rawUser, rawPass) in staged)
+            {
+                if (string.IsNullOrWhiteSpace(rawUrl) || string.IsNullOrEmpty(rawPass))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string trimmedUrl = rawUrl.Trim();
+                if (Uri.TryCreate(trimmedUrl, UriKind.Absolute, out var uri) &&
+                    uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string baseDomain = ExtractBaseDomain(trimmedUrl);
+                if (string.IsNullOrWhiteSpace(baseDomain))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string originHost = ExtractHost(trimmedUrl);
+                if (string.IsNullOrWhiteSpace(originHost)) originHost = baseDomain;
+                string cleanUser = (rawUser ?? string.Empty).Trim();
+
+                if (!existingKeys.Add((baseDomain, cleanUser)))
+                {
+                    duplicates++;
+                    continue;
+                }
+
+                _credentials.Add(new SavedCredential
+                {
+                    Domain = baseDomain,
+                    OriginHost = originHost,
+                    Username = cleanUser,
+                    Password = rawPass,
+                    UpdatedAtUtc = DateTime.UtcNow
+                });
+                imported++;
+            }
+
+            if (imported > 0)
+            {
+                saved = SaveInternal();
+                if (!saved)
+                {
+                    _credentials.RemoveRange(originalCount, _credentials.Count - originalCount);
+                    return (0, duplicates, skipped, LastError ?? "No se pudo guardar la bóveda de contraseñas.");
+                }
+            }
+        }
+
+        if (imported > 0 && saved)
+        {
+            VaultChanged?.Invoke();
+        }
+
+        return (imported, duplicates, skipped, null);
+    }
+
     private static SavedCredential CloneCredential(SavedCredential src) => new()
     {
         Id = src.Id,
@@ -562,6 +660,9 @@ public static class PasswordManager
     );
 
     public static PasswordVaultStore Store { get; } = new(DefaultVaultPath);
+
+    public static (int Imported, int Duplicates, int Skipped, string? Error) ImportCredentials(
+        IEnumerable<(string Url, string Username, string Password)> entries) => Store.ImportCredentials(entries);
 
     // Indica si el usuario ya desbloqueó la sesión en el proceso actual
     public static bool IsUnlockedInCurrentProcess { get; set; } = false;

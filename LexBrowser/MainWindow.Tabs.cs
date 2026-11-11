@@ -32,6 +32,230 @@ public partial class MainWindow
     private static readonly byte[] EmptyResponseBytes = Array.Empty<byte>();
     private bool _fullScreenChromeActive = false;
     private readonly Dictionary<BrowserTab, double> _preFullScreenZoomByTab = new();
+    private DispatcherTimer? _suspensionTimer;
+    private bool _isSuspensionTickRunning;
+    private bool _isWindowClosing;
+
+    private TabSuspensionCandidate BuildSuspensionCandidate(BrowserTab tab)
+    {
+        var core = tab.WebView?.CoreWebView2;
+        bool isPlayingAudio = false;
+        bool isFullScreen = false;
+        bool alreadySuspended = tab.IsSuspendedByLex;
+        if (core != null && !tab.IsDisposed)
+        {
+            try { isPlayingAudio = core.IsDocumentPlayingAudio; } catch { }
+            try { isFullScreen = core.ContainsFullScreenElement; } catch { }
+            try { alreadySuspended = alreadySuspended || core.IsSuspended; } catch { }
+        }
+
+        string? origin = NotificationPermissionManager.NormalizeOrigin(tab.Url ?? tab.CurrentUri?.AbsoluteUri);
+        bool hasNotificationPermission = false;
+        if (!string.IsNullOrEmpty(origin))
+        {
+            var notifMode = NotificationPermissionManager.GetSiteMode(origin, tab.IsIncognito);
+            hasNotificationPermission = notifMode is SiteNotificationMode.Allow
+                or SiteNotificationMode.Silent
+                or SiteNotificationMode.Digest;
+        }
+
+        bool isFloatingTarget = _pipWindow?.IsVisible == true && _pipWindow.TargetTab == tab;
+        bool isPipSource = _nativePipSourceTab == tab;
+
+        return new TabSuspensionCandidate(
+            IsActive: _activeTab == tab || tab.IsSelected,
+            IsPinned: tab.IsPinned,
+            IsNewTab: tab.IsNewTab,
+            IsLazyLoaded: tab.IsLazyLoaded,
+            IsLoading: tab.IsLoading,
+            IsDisposed: tab.IsDisposed,
+            IsPlayingAudio: isPlayingAudio,
+            HasActiveMedia: tab.HasActiveMedia || tab.MediaIsPlaying,
+            IsPipSource: isPipSource,
+            IsFloatingTarget: isFloatingTarget,
+            IsSnifferActive: tab.IsMediaSnifferActive,
+            IsFullScreen: isFullScreen,
+            HasNotificationPermission: hasNotificationPermission,
+            HasCaptureDevicePermission: tab.HasCaptureDevicePermission,
+            AlreadySuspended: alreadySuspended,
+            LastDeactivatedUtc: tab.LastDeactivatedUtc,
+            NextAttemptUtc: tab.NextSuspendAttemptUtc);
+    }
+
+    private void RescheduleSuspensionTimer()
+    {
+        if (_isWindowClosing)
+        {
+            _suspensionTimer?.Stop();
+            return;
+        }
+
+        int idleMinutes = SettingsManager.Current.TabSuspensionMinutes;
+        if (idleMinutes <= 0 || Tabs.Count == 0)
+        {
+            _suspensionTimer?.Stop();
+            return;
+        }
+
+        bool suspendPinned = SettingsManager.Current.SuspendPinnedTabs;
+        DateTime nowUtc = DateTime.UtcNow;
+        DateTime? minEligible = null;
+
+        for (int i = 0; i < Tabs.Count; i++)
+        {
+            var candidate = BuildSuspensionCandidate(Tabs[i]);
+            DateTime? eligible = TabSuspensionPolicy.NextEligibleUtc(in candidate, idleMinutes, suspendPinned, nowUtc);
+            if (eligible.HasValue && (!minEligible.HasValue || eligible.Value < minEligible.Value))
+            {
+                minEligible = eligible.Value;
+            }
+        }
+
+        if (!minEligible.HasValue)
+        {
+            _suspensionTimer?.Stop();
+            return;
+        }
+
+        TimeSpan delay = minEligible.Value - nowUtc;
+        if (delay < TimeSpan.FromSeconds(30))
+        {
+            delay = TimeSpan.FromSeconds(30);
+        }
+
+        if (_suspensionTimer == null)
+        {
+            _suspensionTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher);
+            _suspensionTimer.Tick += SuspensionTimer_Tick;
+        }
+        else
+        {
+            _suspensionTimer.Stop();
+        }
+
+        _suspensionTimer.Interval = delay;
+        _suspensionTimer.Start();
+    }
+
+    private async void SuspensionTimer_Tick(object? sender, EventArgs e)
+    {
+        _suspensionTimer?.Stop();
+        if (_isWindowClosing || _isSuspensionTickRunning) return;
+        _isSuspensionTickRunning = true;
+
+        try
+        {
+            int idleMinutes = SettingsManager.Current.TabSuspensionMinutes;
+            if (idleMinutes <= 0) return;
+
+            bool suspendPinned = SettingsManager.Current.SuspendPinnedTabs;
+            var snapshot = Tabs.ToList();
+
+            foreach (var tab in snapshot)
+            {
+                if (_isWindowClosing) break;
+                var candidate = BuildSuspensionCandidate(tab);
+                if (TabSuspensionPolicy.CanSuspend(in candidate, idleMinutes, suspendPinned, DateTime.UtcNow))
+                {
+                    await TrySuspendTabAsync(tab);
+                }
+            }
+        }
+        finally
+        {
+            _isSuspensionTickRunning = false;
+            if (!_isWindowClosing)
+            {
+                RescheduleSuspensionTimer();
+            }
+        }
+    }
+
+    private async Task TrySuspendTabAsync(BrowserTab tab)
+    {
+        var webView = tab.WebView;
+        var core = webView?.CoreWebView2;
+        if (core == null || tab.IsDisposed) return;
+
+        CoreWebView2Controller? controller = null;
+        bool forcedHidden = false;
+        try
+        {
+            // WebView2 requiere IsVisible == false para suspender; aseguramos el controlador si sigue visible.
+            controller = GetController(webView);
+            if (controller != null && controller.IsVisible)
+            {
+                controller.IsVisible = false;
+                forcedHidden = true;
+            }
+
+            bool ok = await core.TrySuspendAsync();
+            if (!ok)
+            {
+                if (forcedHidden && controller != null && !tab.IsDisposed &&
+                    (_activeTab == tab || webView!.Visibility == Visibility.Visible))
+                {
+                    controller.IsVisible = true;
+                }
+                tab.NextSuspendAttemptUtc = DateTime.UtcNow.AddMinutes(5);
+                return;
+            }
+
+            tab.IsSuspendedByLex = true;
+            // Carrera: el usuario pudo seleccionar la pestaña mientras se suspendía
+            if (_activeTab == tab || tab.IsDisposed)
+            {
+                ResumeTab(tab);
+            }
+            else
+            {
+                core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (forcedHidden && controller != null && !tab.IsDisposed &&
+                (_activeTab == tab || webView!.Visibility == Visibility.Visible))
+            {
+                try { controller.IsVisible = true; } catch { }
+            }
+            tab.NextSuspendAttemptUtc = DateTime.UtcNow.AddMinutes(10);
+            ShieldLogger.LogForTab(tab, "TAB_SUSPEND_ERROR", tab.CurrentUri?.Host ?? "unknown", "", "Suspend", ex.Message);
+        }
+    }
+
+    private void ResumeTab(BrowserTab tab)
+    {
+        bool shouldResume = tab.IsSuspendedByLex;
+        var core = tab.WebView?.CoreWebView2;
+        if (!shouldResume && core != null && !tab.IsDisposed)
+        {
+            try { shouldResume = core.IsSuspended; } catch { }
+        }
+        if (!shouldResume) return;
+
+        tab.IsSuspendedByLex = false;
+        try
+        {
+            if (core != null && core.IsSuspended)
+            {
+                core.Resume();
+            }
+
+            if (tab.WebView != null && tab.WebView.Visibility == Visibility.Visible)
+            {
+                var controller = GetController(tab.WebView);
+                if (controller != null && !controller.IsVisible)
+                {
+                    controller.IsVisible = true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ShieldLogger.LogForTab(tab, "TAB_RESUME_ERROR", tab.CurrentUri?.Host ?? "unknown", "", "Resume", ex.Message);
+        }
+    }
 
     private void ApplyFullScreenChrome(bool enter)
     {
@@ -170,6 +394,7 @@ public partial class MainWindow
                 Tabs.Add(tab);
         }
 
+        ResumeTab(tab);
         ReinsertWebViewToContainer(tab);
         SelectTab(tab, force: true);
     }
@@ -193,6 +418,10 @@ public partial class MainWindow
         }
 
         webView.Visibility = (_activeTab == tab) ? Visibility.Visible : Visibility.Collapsed;
+        if (_activeTab == tab || tab.IsSelected)
+        {
+            ResumeTab(tab);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -820,6 +1049,72 @@ public partial class MainWindow
             NotificationManager.HandleNotificationReceived(tab, e);
         };
 
+        // 3.1c Menú contextual bajo demanda para "Leer texto seleccionado" (Windows SAPI local)
+        core.ContextMenuRequested += (s, e) =>
+        {
+            if (tab.IsDisposed || !SettingsManager.Current.EnableReadAloud) return;
+
+            bool hasSelection = e.ContextMenuTarget != null &&
+                                e.ContextMenuTarget.HasSelection &&
+                                !string.IsNullOrWhiteSpace(e.ContextMenuTarget.SelectionText);
+            bool isSpeaking = ReadAloudService.IsSpeaking;
+            if (!hasSelection && !isSpeaking) return;
+
+            try
+            {
+                int insertIndex = e.MenuItems.Count;
+                for (int i = 0; i < e.MenuItems.Count; i++)
+                {
+                    if (string.Equals(e.MenuItems[i].Name, "copy", StringComparison.OrdinalIgnoreCase))
+                    {
+                        insertIndex = i + 1;
+                        break;
+                    }
+                }
+
+                if (hasSelection)
+                {
+                    string selectedText = e.ContextMenuTarget!.SelectionText ?? string.Empty;
+                    string ownerId = tab.TabId.ToString();
+                    var readItem = core.Environment.CreateContextMenuItem(
+                        "Leer texto seleccionado",
+                        null,
+                        CoreWebView2ContextMenuItemKind.Command);
+                    readItem.CustomItemSelected += (_, _) =>
+                    {
+                        var win = tab.OwnerWindow ?? this;
+                        _ = win.Dispatcher.InvokeAsync(async () =>
+                        {
+                            try
+                            {
+                                string lang = await TranslationService.DetectPageLanguageAsync(core);
+                                ReadAloudService.Speak(selectedText, lang, ownerId);
+                            }
+                            catch (Exception ex)
+                            {
+                                ShieldLogger.Log("READ_ALOUD_TRIGGER_ERROR", "local", "", "ContextMenu", ex.Message);
+                            }
+                        });
+                    };
+                    e.MenuItems.Insert(insertIndex++, readItem);
+                }
+
+                if (isSpeaking)
+                {
+                    var stopItem = core.Environment.CreateContextMenuItem(
+                        "Detener lectura",
+                        null,
+                        CoreWebView2ContextMenuItemKind.Command);
+                    stopItem.CustomItemSelected += (_, _) => ReadAloudService.Stop();
+                    e.MenuItems.Insert(insertIndex, stopItem);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShieldLogger.Log("READ_ALOUD_MENU_ERROR", "local", "", "ContextMenu", ex.Message);
+            }
+        };
+
         // 3.2 Recuperación automática acotada si el proceso de renderizado de la pestaña falla inesperadamente
         core.ProcessFailed += (s, e) =>
         {
@@ -832,6 +1127,9 @@ public partial class MainWindow
                     if (tab.IsDisposed) return;
 
                     var now = DateTime.UtcNow;
+                    win.ResumeTab(tab);
+                    tab.NextSuspendAttemptUtc = default;
+
                     if ((now - tab.LastCrashRecoveryUtc).TotalSeconds > 30)
                     {
                         tab.CrashRecoveryAttempts = 0;
@@ -848,6 +1146,7 @@ public partial class MainWindow
                     {
                         win.OfferCompatibilityModeToast(tab, "La pestaña falló varias veces seguidas. Se detuvo la recarga automática.");
                     }
+                    win.RescheduleSuspensionTimer();
                 });
             }
         };
@@ -890,6 +1189,13 @@ public partial class MainWindow
             tab.CorsUnlocker?.Dispose();
             tab.CorsUnlocker = null;
 
+            if (!string.IsNullOrEmpty(e.Uri) &&
+                Uri.TryCreate(e.Uri, UriKind.Absolute, out var nextNavUri) &&
+                !string.Equals(nextNavUri.Host, tab.CurrentUri?.Host, StringComparison.OrdinalIgnoreCase))
+            {
+                tab.HasCaptureDevicePermission = false;
+            }
+
             if (tab.PendingNotificationRequest != null)
             {
                 tab.PendingNotificationRequest.Resolve(CoreWebView2PermissionState.Default, savesInProfile: false);
@@ -924,6 +1230,15 @@ public partial class MainWindow
                             : CoreWebView2MemoryUsageTargetLevel.Low;
                     }
                     catch { }
+                }
+
+                if (!isPlayingAudio)
+                {
+                    if (!tab.IsSelected && tab.LastDeactivatedUtc != default)
+                    {
+                        tab.LastDeactivatedUtc = DateTime.UtcNow;
+                    }
+                    win.RescheduleSuspensionTimer();
                 }
             });
         };
@@ -1286,6 +1601,7 @@ public partial class MainWindow
         core.NavigationStarting += (s, e) =>
         {
             if (tab.IsDisposed) return;
+            ReadAloudService.StopIfOwner(tab.TabId.ToString());
             string FormatTabDesc() => $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
 
             if (ShieldLogger.DiagnosticMode)
@@ -1416,6 +1732,14 @@ public partial class MainWindow
             {
                 if (tab.IsDisposed) return;
                 tab.IsLoading = false;
+                if (win._activeTab != tab)
+                {
+                    if (tab.LastDeactivatedUtc == default)
+                    {
+                        tab.LastDeactivatedUtc = DateTime.UtcNow;
+                    }
+                    win.RescheduleSuspensionTimer();
+                }
                 tab.CanGoBack = core.CanGoBack;
                 tab.CanGoForward = core.CanGoForward;
                 if (win._activeTab == tab)
@@ -1507,6 +1831,22 @@ public partial class MainWindow
                     win.UpdateSecurityIndicatorUI();
                     win.UpdateCurrentTabBookmarkUI();
                     win.UpdateMediaSnifferUI();
+                    win.UpdateNavigationButtons();
+                }
+            });
+        };
+
+        core.HistoryChanged += (s, e) =>
+        {
+            var win = tab.OwnerWindow ?? this;
+            _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+            {
+                if (tab.IsDisposed) return;
+                tab.CanGoBack = core.CanGoBack;
+                tab.CanGoForward = core.CanGoForward;
+                if (win._activeTab == tab)
+                {
+                    win.UpdateNavigationButtons();
                 }
             });
         };
@@ -1594,6 +1934,10 @@ public partial class MainWindow
         try
         {
             var previousTab = _activeTab;
+            if (previousTab != null && previousTab != tab && !previousTab.IsDisposed)
+            {
+                previousTab.LastDeactivatedUtc = DateTime.UtcNow;
+            }
 
             if (SettingsManager.Current.EnableAutoVideoPip && previousTab != null && previousTab != tab && !previousTab.IsDisposed)
             {
@@ -1667,6 +2011,7 @@ public partial class MainWindow
                 }
 
                 tab.WebView.Visibility = Visibility.Visible;
+                ResumeTab(tab);
                 try
                 {
                     GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
@@ -1709,6 +2054,7 @@ public partial class MainWindow
             UpdateNotificationPermissionUI();
             _ = UpdateTranslateIndicatorUIAsync(tab);
             FocusOmniboxIfNewTab(tab);
+            RescheduleSuspensionTimer();
         }
         catch (Exception ex)
         {
@@ -2248,6 +2594,7 @@ public partial class MainWindow
             _pipWindow.HideAndDetach();
         }
 
+        ResumeTab(tab);
         Tabs.Remove(tab);
         if (BrowserContainer.Children.Contains(tab.WebView))
         {
@@ -2260,6 +2607,7 @@ public partial class MainWindow
             int nextIndex = Math.Clamp(index, 0, Tabs.Count - 1);
             SelectTab(Tabs[nextIndex], force: true);
         }
+        RescheduleSuspensionTimer();
 
         var newWin = new MainWindow(null, tab, tab.IsIncognito, _isGuestSession)
         {
@@ -2324,6 +2672,7 @@ public partial class MainWindow
             Tabs.Move(oldIndex, targetIndex);
         }
         UpdateTabWidths();
+        RescheduleSuspensionTimer();
     }
 
     private void MoveToPinnedSection(BrowserTab tab)
@@ -2489,6 +2838,7 @@ public partial class MainWindow
     {
         if (tabToClose.IsDisposed) return;
         tabToClose.IsDisposed = true;
+        ReadAloudService.StopIfOwner(tabToClose.TabId.ToString());
 
         if (_nativePipSourceTab == tabToClose)
         {
@@ -2533,6 +2883,7 @@ public partial class MainWindow
         bool wasActive = (_activeTab == tabToClose);
 
         Tabs.Remove(tabToClose);
+        RescheduleSuspensionTimer();
 
         if (_pipWindow.TargetTab == tabToClose)
         {
@@ -2552,6 +2903,7 @@ public partial class MainWindow
             SelectTab(Tabs[nextIndex]);
         }
 
+        if (tabToClose.IsSuspendedByLex) { ResumeTab(tabToClose); }
         try { tabToClose.WebView?.CoreWebView2?.Stop(); } catch { }
 
         if (BrowserContainer.Children.Contains(tabToClose.WebView))
@@ -2683,6 +3035,11 @@ public partial class MainWindow
             try { core.RemoveScriptToExecuteOnDocumentCreated(tab.WebShieldScriptId); } catch { }
             tab.WebShieldScriptId = null;
         }
+        if (!string.IsNullOrEmpty(tab.CookieBannerScriptId))
+        {
+            try { core.RemoveScriptToExecuteOnDocumentCreated(tab.CookieBannerScriptId); } catch { }
+            tab.CookieBannerScriptId = null;
+        }
 
         var s = SettingsManager.Current;
         if (s.EnableAdBlocker && s.EnableYouTubeAdBlock && (s.Shield?.Adapters?.YouTube ?? true))
@@ -2717,6 +3074,18 @@ public partial class MainWindow
             catch (Exception ex)
             {
                 ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "WebShield", "", "Refresh", ex.Message);
+            }
+        }
+
+        if (s.EnableCookieBannerHiding)
+        {
+            try
+            {
+                tab.CookieBannerScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(CookieBannerShield.InjectedScript);
+            }
+            catch (Exception ex)
+            {
+                ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "CookieBannerShield", "", "Refresh", ex.Message);
             }
         }
     }

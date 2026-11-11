@@ -386,6 +386,10 @@
                                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="#38BDF8"/>
                                             <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
                                         </MultiDataTrigger>
+                                        <!-- Pestaña suspendida para ahorro de RAM -->
+                                        <DataTrigger Binding="{Binding IsSuspendedByLex}" Value="True">
+                                            <Setter TargetName="TabBorder" Property="Opacity" Value="0.6"/>
+                                        </DataTrigger>
                                     </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -612,6 +616,7 @@
                             <CheckBox x:Name="ChkSiteModPopups" Content="Anti-popups y redirecciones" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
                             <CheckBox x:Name="ChkSiteModOverlays" Content="Anti-capas invisibles" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
                             <CheckBox x:Name="ChkSiteModCosmetic" Content="Ocultación cosmética de banners" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
+                            <CheckBox x:Name="ChkSiteModCookieBanners" Content="Ocultar avisos de cookies" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
                             <CheckBox x:Name="ChkSiteModVideoDefuser" Content="Acelerador genérico de reproductores" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
                             <CheckBox x:Name="ChkSiteModAdapter" Content="Adaptador específico del sitio (YT/DM)" Foreground="#E4E4E7" FontSize="11" Margin="0,2" Click="ChkShieldSiteModule_Click" Cursor="Hand"/>
                         </StackPanel>

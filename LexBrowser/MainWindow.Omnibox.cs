@@ -386,6 +386,7 @@ public partial class MainWindow
 
         if (_activeTab.WebView.CoreWebView2 != null)
         {
+            ResumeTab(_activeTab);
             _activeTab.WebView.CoreWebView2.Navigate(finalNavUrl);
             _activeTab.WebView.Focus();
         }

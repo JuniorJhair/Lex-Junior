@@ -428,6 +428,94 @@ public sealed class HistoryStore : IDisposable
         return host;
     }
 
+    private static long ToUtcTicks(DateTime dt) =>
+        (dt.Kind == DateTimeKind.Local ? dt.ToUniversalTime() : dt).Ticks;
+
+    private static long ToUtcSecondBucket(DateTime dt) =>
+        ToUtcTicks(dt) / TimeSpan.TicksPerSecond;
+
+    private sealed class UrlSecondKeyComparer : IEqualityComparer<(string Url, long SecondBucket)>
+    {
+        public static readonly UrlSecondKeyComparer Instance = new();
+
+        public bool Equals((string Url, long SecondBucket) x, (string Url, long SecondBucket) y) =>
+            x.SecondBucket == y.SecondBucket && string.Equals(x.Url, y.Url, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Url, long SecondBucket) obj) =>
+            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Url ?? string.Empty), obj.SecondBucket);
+    }
+
+    public (int Imported, int Duplicates, int Skipped, string? Warning) ImportEntries(
+        IEnumerable<(string Url, string Title, DateTime VisitedAt)> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var staged = entries.ToList();
+        if (!_isEnabled())
+        {
+            return (0, 0, staged.Count, "El historial está desactivado en la configuración de Lex Junior.");
+        }
+
+        if (staged.Count == 0) return (0, 0, 0, null);
+
+        int imported = 0, duplicates = 0, skipped = 0;
+        lock (_lock)
+        {
+            var seen = new HashSet<(string Url, long SecondBucket)>(UrlSecondKeyComparer.Instance);
+            foreach (var existing in _entries)
+            {
+                if (!string.IsNullOrEmpty(existing.Url))
+                {
+                    seen.Add((existing.Url, ToUtcSecondBucket(existing.VisitedAt)));
+                }
+            }
+
+            foreach (var (rawUrl, rawTitle, rawVisitedAt) in staged)
+            {
+                if (!TryNormalize(rawUrl, rawTitle, out string normalizedUrl, out string cleanTitle) ||
+                    !Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                DateTime visitedAt = rawVisitedAt == default ? _clock() : rawVisitedAt;
+                var key = (normalizedUrl, ToUtcSecondBucket(visitedAt));
+                if (!seen.Add(key))
+                {
+                    duplicates++;
+                    continue;
+                }
+
+                _entries.Add(new HistoryEntry
+                {
+                    Url = normalizedUrl,
+                    Title = cleanTitle,
+                    Domain = ExtractRootDomain(normalizedUrl),
+                    VisitedAt = visitedAt
+                });
+                imported++;
+            }
+
+            if (imported > 0)
+            {
+                _entries.Sort(static (a, b) => ToUtcTicks(a.VisitedAt).CompareTo(ToUtcTicks(b.VisitedAt)));
+                if (_entries.Count > _maxEntries)
+                {
+                    _entries.RemoveRange(0, _entries.Count - _maxEntries);
+                }
+                RebuildSnapshotUnderLock();
+            }
+        }
+
+        if (imported > 0)
+        {
+            MarkDirtyNow();
+        }
+
+        return (imported, duplicates, skipped, null);
+    }
+
     public void Dispose()
     {
         if (_disposed) return;

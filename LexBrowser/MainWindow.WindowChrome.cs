@@ -409,6 +409,19 @@ public partial class MainWindow
             ChkSiteModPopups.IsChecked = policy.Popups;
             ChkSiteModOverlays.IsChecked = policy.Overlays;
             ChkSiteModCosmetic.IsChecked = policy.Cosmetic;
+            if (ChkSiteModCookieBanners != null)
+            {
+                SiteShieldProfile? cookieProfile = null;
+                if (hasSite && SettingsManager.Current.Shield?.Sites != null)
+                {
+                    SettingsManager.Current.Shield.Sites.TryGetValue(domain!, out cookieProfile);
+                }
+                ChkSiteModCookieBanners.IsChecked =
+                    SettingsManager.Current.EnableCookieBannerHiding &&
+                    policy.ShieldEnabled &&
+                    !policy.IsCompatMode &&
+                    (cookieProfile?.CookieBanners ?? true);
+            }
             ChkSiteModVideoDefuser.IsChecked = policy.VideoDefuser;
             ChkSiteModAdapter.IsChecked = policy.Adapter;
         }
@@ -448,6 +461,10 @@ public partial class MainWindow
         profile.Popups = ChkSiteModPopups.IsChecked == true;
         profile.Overlays = ChkSiteModOverlays.IsChecked == true;
         profile.Cosmetic = ChkSiteModCosmetic.IsChecked == true;
+        if (ChkSiteModCookieBanners != null)
+        {
+            profile.CookieBanners = ChkSiteModCookieBanners.IsChecked == true;
+        }
         profile.VideoDefuser = ChkSiteModVideoDefuser.IsChecked == true;
         profile.Adapter = ChkSiteModAdapter.IsChecked == true;
         SettingsManager.Save();

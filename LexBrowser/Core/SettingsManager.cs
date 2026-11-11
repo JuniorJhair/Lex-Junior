@@ -37,6 +37,14 @@ public class BrowserSettings
     public bool EnableExternalFaviconService { get; set; } = true;
     public bool RestorePreviousSession { get; set; } = true;
 
+    // Ahorro de recursos, avisos de cookies y lector en voz alta
+    public int TabSuspensionMinutes { get; set; } = 15;
+    public bool SuspendPinnedTabs { get; set; } = false;
+    public bool EnableCookieBannerHiding { get; set; } = true;
+    public bool EnableReadAloud { get; set; } = true;
+    public int ReadAloudRate { get; set; } = 0;
+    public string ReadAloudVoiceName { get; set; } = "";
+
     // Guardador de Contraseñas y Bloqueo Inteligente del Navegador (0% CPU en reposo)
     public bool EnablePasswordManager { get; set; } = true;
     // Modos: "None" (Sin contraseña), "SmartSession" (Solo al prender PC o tras bloquear/suspender Windows),

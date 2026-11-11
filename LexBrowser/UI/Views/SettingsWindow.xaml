@@ -336,6 +336,121 @@
                                 </Grid>
                             </StackPanel>
                         </Border>
+
+                        <!-- Tarjeta: Ahorro de recursos -->
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="🔋 Ahorro de recursos" FontWeight="SemiBold" FontSize="14" Foreground="#F4F4F5" Margin="0,0,0,4"/>
+                                <TextBlock Text="Suspende automáticamente las pestañas en segundo plano tras un tiempo sin uso, manteniendo su estado sin recargarlas al volver."
+                                           FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="170"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="Suspender pestañas inactivas después de" FontSize="12.5" FontWeight="Medium" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Libera RAM y CPU sin afectar pestañas con audio, notificaciones o pantalla completa" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="CmbTabSuspensionMinutes" Grid.Column="1" Height="30" SelectionChanged="GeneralCombos_SelectionChanged" Style="{StaticResource LexComboBox}">
+                                        <ComboBoxItem Content="Desactivado" Tag="0"/>
+                                        <ComboBoxItem Content="5 minutos" Tag="5"/>
+                                        <ComboBoxItem Content="15 minutos" Tag="15"/>
+                                        <ComboBoxItem Content="30 minutos" Tag="30"/>
+                                        <ComboBoxItem Content="60 minutos" Tag="60"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <CheckBox x:Name="ChkSuspendPinnedTabs" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                    <StackPanel>
+                                        <TextBlock Text="Suspender también pestañas fijadas" FontWeight="SemiBold" FontSize="12.5" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Por defecto las pestañas fijadas permanecen activas (recomendado para correo o mensajería)" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tarjeta: Avisos de cookies -->
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="🍪 Avisos de cookies" FontWeight="SemiBold" FontSize="14" Foreground="#F4F4F5" Margin="0,0,0,4"/>
+                                <CheckBox x:Name="ChkCookieBannerHiding" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click" Margin="0,4,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Ocultar avisos y carteles de cookies" FontWeight="SemiBold" FontSize="12.5" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Oculta visualmente banners de consentimiento conocidos (OneTrust, Cookiebot, Didomi, etc.) y libera el scroll sin pulsar Aceptar ni Rechazar." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tarjeta: Lector en voz alta -->
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="🗣️ Lector en voz alta" FontWeight="SemiBold" FontSize="14" Foreground="#F4F4F5" Margin="0,0,0,4"/>
+                                <CheckBox x:Name="ChkEnableReadAloud" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click" Margin="0,4,0,12">
+                                    <StackPanel>
+                                        <TextBlock Text="Habilitar 'Leer texto seleccionado' en el menú contextual" FontWeight="SemiBold" FontSize="12.5" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Lee el texto que selecciones usando las voces locales de Windows sin conexión ni servicios externos." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </CheckBox>
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="170"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="Velocidad de lectura" FontSize="12.5" FontWeight="Medium" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Escala nativa de síntesis de voz de Windows (-5 a +5)" FontSize="11" Foreground="#8B8B96" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="CmbReadAloudRate" Grid.Column="1" Height="30" SelectionChanged="GeneralCombos_SelectionChanged" Style="{StaticResource LexComboBox}">
+                                        <ComboBoxItem Content="-5 (Muy lenta)" Tag="-5"/>
+                                        <ComboBoxItem Content="-4" Tag="-4"/>
+                                        <ComboBoxItem Content="-3 (Lenta)" Tag="-3"/>
+                                        <ComboBoxItem Content="-2" Tag="-2"/>
+                                        <ComboBoxItem Content="-1" Tag="-1"/>
+                                        <ComboBoxItem Content="0 (Normal)" Tag="0"/>
+                                        <ComboBoxItem Content="+1" Tag="1"/>
+                                        <ComboBoxItem Content="+2" Tag="2"/>
+                                        <ComboBoxItem Content="+3 (Rápida)" Tag="3"/>
+                                        <ComboBoxItem Content="+4" Tag="4"/>
+                                        <ComboBoxItem Content="+5 (Muy rápida)" Tag="5"/>
+                                    </ComboBox>
+                                </Grid>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="220"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="Voz preferida" FontSize="12.5" FontWeight="Medium" Foreground="#F4F4F5"/>
+                                        <TextBlock Text="Automática selecciona la voz según el idioma de la página" FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <ComboBox x:Name="CmbReadAloudVoice" Grid.Column="1" Height="30" SelectionChanged="GeneralCombos_SelectionChanged" Style="{StaticResource LexComboBox}">
+                                        <ComboBoxItem Content="Automática (por idioma)" Tag=""/>
+                                    </ComboBox>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Tarjeta: Importar datos de otro navegador -->
+                        <Border x:Name="CardBrowserImport" Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="📥 Importar datos de otro navegador" FontWeight="SemiBold" FontSize="14" Foreground="#F4F4F5"/>
+                                    <TextBlock Text="Trae tus marcadores, historial y contraseñas desde Chrome, Edge, Brave, Opera o archivos CSV." FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <Button x:Name="BtnOpenImportWizard" Grid.Column="1" Content="📥 Importar datos de otro navegador…"
+                                        Style="{StaticResource LexPrimaryButton}" FontSize="11.5" FontWeight="Bold" Padding="12,7"
+                                        Click="BtnOpenImportWizard_Click" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
                     </StackPanel>
 
                     <!-- SECCIÓN: BUSCADOR -->

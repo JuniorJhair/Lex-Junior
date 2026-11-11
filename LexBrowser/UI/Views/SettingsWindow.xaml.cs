@@ -50,6 +50,14 @@ public partial class SettingsWindow : Window
         _core = core;
         InitializeComponent();
 
+        Loaded += (_, _) =>
+        {
+            if (CardBrowserImport != null && Owner is MainWindow mw && mw.IsPrivateImportRestricted)
+            {
+                CardBrowserImport.Visibility = Visibility.Collapsed;
+            }
+        };
+
         var ver = typeof(SettingsWindow).Assembly.GetName().Version;
         if (TxtSettingsVersionBadge != null && ver != null)
         {
@@ -79,6 +87,31 @@ public partial class SettingsWindow : Window
         ChkEnableHistory.IsChecked = s.EnableHistory;
         if (ChkEnableSearchSuggestions != null) ChkEnableSearchSuggestions.IsChecked = s.EnableSearchSuggestions;
         if (ChkEnableExternalFavicons != null) ChkEnableExternalFavicons.IsChecked = s.EnableExternalFaviconService;
+        if (CmbTabSuspensionMinutes != null) SetComboByTag(CmbTabSuspensionMinutes, s.TabSuspensionMinutes.ToString());
+        if (ChkSuspendPinnedTabs != null) ChkSuspendPinnedTabs.IsChecked = s.SuspendPinnedTabs;
+        if (ChkCookieBannerHiding != null) ChkCookieBannerHiding.IsChecked = s.EnableCookieBannerHiding;
+        if (ChkEnableReadAloud != null) ChkEnableReadAloud.IsChecked = s.EnableReadAloud;
+        if (CmbReadAloudRate != null) SetComboByTag(CmbReadAloudRate, Math.Clamp(s.ReadAloudRate, -5, 5).ToString());
+        if (CmbReadAloudVoice != null)
+        {
+            while (CmbReadAloudVoice.Items.Count > 1)
+                CmbReadAloudVoice.Items.RemoveAt(CmbReadAloudVoice.Items.Count - 1);
+
+            foreach (var (voiceName, displayLabel) in ReadAloudService.GetAvailableVoices())
+            {
+                CmbReadAloudVoice.Items.Add(new ComboBoxItem
+                {
+                    Content = displayLabel,
+                    Tag = voiceName
+                });
+            }
+
+            SetComboByTag(CmbReadAloudVoice, s.ReadAloudVoiceName ?? string.Empty);
+            if (CmbReadAloudVoice.SelectedIndex < 0 && CmbReadAloudVoice.Items.Count > 0)
+            {
+                CmbReadAloudVoice.SelectedIndex = 0;
+            }
+        }
 
         TxtSettingsHistoryStorage.Text = $"Espacio ocupado: {HistoryManager.GetHistoryFileSizeFormatted()}";
         if (TxtSettingsVaultSummary != null)
@@ -198,6 +231,9 @@ public partial class SettingsWindow : Window
         s.NotificationDndOnFullscreen = ChkDndFullscreen.IsChecked == true;
         if (ChkEnableSearchSuggestions != null) s.EnableSearchSuggestions = ChkEnableSearchSuggestions.IsChecked == true;
         if (ChkEnableExternalFavicons != null) s.EnableExternalFaviconService = ChkEnableExternalFavicons.IsChecked == true;
+        if (ChkSuspendPinnedTabs != null) s.SuspendPinnedTabs = ChkSuspendPinnedTabs.IsChecked == true;
+        if (ChkCookieBannerHiding != null) s.EnableCookieBannerHiding = ChkCookieBannerHiding.IsChecked == true;
+        if (ChkEnableReadAloud != null) s.EnableReadAloud = ChkEnableReadAloud.IsChecked == true;
 
         bool wantsHistory = ChkEnableHistory.IsChecked == true;
         if (!wantsHistory && s.EnableHistory)
@@ -403,6 +439,50 @@ public partial class SettingsWindow : Window
         }
 
         SettingsManager.Save();
+    }
+
+    private void GeneralCombos_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializing) return;
+        var s = SettingsManager.Current;
+
+        if (CmbTabSuspensionMinutes?.SelectedItem is ComboBoxItem suspItem &&
+            int.TryParse(suspItem.Tag?.ToString(), out int suspMins))
+        {
+            s.TabSuspensionMinutes = Math.Max(0, suspMins);
+        }
+
+        if (CmbReadAloudRate?.SelectedItem is ComboBoxItem rateItem &&
+            int.TryParse(rateItem.Tag?.ToString(), out int rate))
+        {
+            s.ReadAloudRate = Math.Clamp(rate, -5, 5);
+        }
+
+        if (CmbReadAloudVoice?.SelectedItem is ComboBoxItem voiceItem)
+        {
+            s.ReadAloudVoiceName = voiceItem.Tag?.ToString() ?? string.Empty;
+        }
+
+        SettingsManager.Save();
+    }
+
+    private void BtnOpenImportWizard_Click(object sender, RoutedEventArgs e)
+    {
+        if (Owner is MainWindow mw && mw.IsPrivateImportRestricted)
+        {
+            MessageBox.Show(
+                "La importación de datos no está disponible en Modo Invitado ni en navegación Incógnito.",
+                "Modo privado",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var wizard = new ImportWizardWindow
+        {
+            Owner = this
+        };
+        wizard.ShowDialog();
     }
 
     private void FilterSites_Checked(object sender, RoutedEventArgs e)

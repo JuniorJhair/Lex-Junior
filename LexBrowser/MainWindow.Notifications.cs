@@ -418,6 +418,16 @@ public partial class MainWindow
     {
         if (tab.IsDisposed) return;
 
+        if (e.PermissionKind == CoreWebView2PermissionKind.Camera ||
+            e.PermissionKind == CoreWebView2PermissionKind.Microphone)
+        {
+            if (e.State != CoreWebView2PermissionState.Deny)
+            {
+                tab.HasCaptureDevicePermission = true;
+            }
+            return;
+        }
+
         if (e.PermissionKind != CoreWebView2PermissionKind.Notifications)
         {
             return;

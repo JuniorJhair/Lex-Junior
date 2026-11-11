@@ -281,6 +281,9 @@ public partial class MainWindow : Window
             DownloadManager.DownloadsChanged -= OnDownloadsChanged;
             NotificationManager.OnNotificationsChanged -= UpdateNotificationBadge;
             DownloadManager.Flush();
+            ReadAloudService.Stop();
+            _isWindowClosing = true;
+            _suspensionTimer?.Stop();
             _nativePipTimer?.Stop();
             _undoBookmarkTimer.Stop();
             _toastTimer.Stop();
@@ -309,6 +312,10 @@ public partial class MainWindow : Window
                     try { tab.CompatibilityPromptShownDomains.Clear(); } catch { }
                     try { tab.FaviconImage = null; } catch { }
                     try { tab.OwnerWindow = null; } catch { }
+                    if (tab.IsSuspendedByLex)
+                    {
+                        ResumeTab(tab);
+                    }
                     try { tab.WebView?.CoreWebView2?.Stop(); } catch { }
                     try { tab.WebView?.Dispose(); } catch { }
                 }
@@ -325,6 +332,7 @@ public partial class MainWindow : Window
 
             if (remainingWindows == 0)
             {
+                try { ReadAloudService.Dispose(); } catch { }
                 try { SingleInstanceIpc.Release(); } catch { }
                 try { Application.Current.Shutdown(); } catch { }
             }
@@ -604,6 +612,7 @@ public partial class MainWindow : Window
         }
 
         UpdateNotificationBadge();
+        RescheduleSuspensionTimer();
     }
 
     private Action? _toastActionCallback;

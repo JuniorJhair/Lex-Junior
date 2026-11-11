@@ -71,6 +71,73 @@ public static class BookmarkManager
         catch { }
     }
 
+    public static (int Imported, int Duplicates, int Skipped) ImportBookmarks(IEnumerable<BookmarkItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        var staged = items.ToList();
+        if (staged.Count == 0) return (0, 0, 0);
+
+        (int Imported, int Duplicates, int Skipped) ExecuteCore()
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var existing in Bookmarks)
+            {
+                if (!string.IsNullOrWhiteSpace(existing.Url))
+                {
+                    seen.Add(existing.Url.Trim().TrimEnd('/'));
+                }
+            }
+
+            int imported = 0, duplicates = 0, skipped = 0;
+            foreach (var item in staged)
+            {
+                if (item == null || string.IsNullOrWhiteSpace(item.Url))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string trimmedUrl = item.Url.Trim();
+                if (!Uri.TryCreate(trimmedUrl, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                string dedupKey = trimmedUrl.TrimEnd('/');
+                if (!seen.Add(dedupKey))
+                {
+                    duplicates++;
+                    continue;
+                }
+
+                Bookmarks.Add(new BookmarkItem
+                {
+                    Title = string.IsNullOrWhiteSpace(item.Title) ? uri.Host : item.Title.Trim(),
+                    Url = trimmedUrl,
+                    FaviconUrl = item.FaviconUrl ?? string.Empty
+                });
+                imported++;
+            }
+
+            if (imported > 0)
+            {
+                Save();
+            }
+
+            return (imported, duplicates, skipped);
+        }
+
+        var app = System.Windows.Application.Current;
+        if (app != null && !app.Dispatcher.CheckAccess())
+        {
+            return app.Dispatcher.Invoke(ExecuteCore);
+        }
+
+        return ExecuteCore();
+    }
+
     public static bool IsBookmarked(string url)
     {
         if (string.IsNullOrWhiteSpace(url)) return false;

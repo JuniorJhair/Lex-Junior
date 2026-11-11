@@ -56,6 +56,7 @@ public sealed class SiteShieldProfile
     public bool Popups { get => IsModuleEnabled(SitePolicy.ModPopups); set => SetModuleEnabled(SitePolicy.ModPopups, value); }
     public bool Overlays { get => IsModuleEnabled(SitePolicy.ModOverlays); set => SetModuleEnabled(SitePolicy.ModOverlays, value); }
     public bool Cosmetic { get => IsModuleEnabled(SitePolicy.ModCosmetic); set => SetModuleEnabled(SitePolicy.ModCosmetic, value); }
+    public bool CookieBanners { get => IsModuleEnabled(SitePolicy.ModCookieBanners); set => SetModuleEnabled(SitePolicy.ModCookieBanners, value); }
     public bool VideoDefuser { get => IsModuleEnabled(SitePolicy.ModVideoDefuser); set => SetModuleEnabled(SitePolicy.ModVideoDefuser, value); }
     public bool Adapter { get => IsModuleEnabled(SitePolicy.ModAdapter); set => SetModuleEnabled(SitePolicy.ModAdapter, value); }
 }
@@ -114,6 +115,7 @@ public static class SitePolicy
     public const string ModPopups = "Popups";
     public const string ModOverlays = "Overlays";
     public const string ModCosmetic = "Cosmetic";
+    public const string ModCookieBanners = "CookieBanners";
     public const string ModAntiWall = "AntiWall";
     public const string ModSubframes = "Subframes";
     public const string ModVideoDefuser = "VideoDefuser";
