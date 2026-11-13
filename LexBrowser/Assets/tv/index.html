@@ -3,9 +3,173 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lex TV — Televisión en Vivo</title>
+  <title>Lex TV — Inicio</title>
   <link rel="stylesheet" href="./tv.css" />
-  <script defer src="./tv.js"></script>
+  <script defer src="./index.js"></script>
+  <style>
+    .hub-container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 30px 20px 60px;
+      overflow-y: auto;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .hero {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .hero h1 {
+      font-size: 28px;
+      margin: 0 0 10px;
+      color: var(--text);
+    }
+    .hero p {
+      font-size: 15px;
+      color: var(--muted);
+      max-width: 620px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+      width: 100%;
+      margin-bottom: 40px;
+    }
+    .mode-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+    }
+    .mode-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--accent);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    .mode-card-icon {
+      font-size: 38px;
+      margin-bottom: 16px;
+    }
+    .mode-card h2 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      color: var(--text);
+    }
+    .mode-card p {
+      margin: 0 0 20px;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 13px;
+      flex-grow: 1;
+    }
+    .mode-card .btn-card {
+      align-self: flex-start;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+    .mode-card .btn-card:hover {
+      background: var(--accent-hover);
+    }
+    .hub-footer {
+      text-align: center;
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      width: 100%;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .hub-footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .hub-footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* Modal de Términos Obligatorios */
+    .terms-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .terms-modal {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+    }
+    .terms-head {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .terms-head h2 {
+      margin: 0;
+      font-size: 18px;
+      color: var(--text);
+    }
+    .terms-body {
+      padding: 20px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+    .terms-body strong {
+      color: var(--text);
+    }
+    .terms-body p {
+      margin: 0 0 12px;
+    }
+    .terms-foot {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--panel-2);
+      border-radius: 0 0 12px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .terms-chk-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+    }
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -13,245 +177,82 @@
       <span class="brand-dot" aria-hidden="true"></span>
       <span class="brand-name">Lex TV</span>
       <nav class="section-nav" aria-label="Secciones">
-        <a href="index.html" class="nav-tab active" aria-current="page">TV en vivo</a>
-        <a href="cine.html" class="nav-tab">Cine</a>
+        <a href="index.html" class="nav-tab active" aria-current="page">Inicio</a>
+        <a href="tv.html" class="nav-tab">TV en vivo</a>
+        <a href="vod.html" class="nav-tab">VOD</a>
+        <a href="legal.html" class="nav-tab">Aviso Legal</a>
+        <a href="como-funciona.html" class="nav-tab">Cómo funciona</a>
       </nav>
-      <span id="codecPill" class="codec-pill" title="Códecs detectados en WebView2">Codecs: detectando…</span>
-    </div>
-
-    <div class="toolbar">
-      <select id="sourceSelect" class="ctrl" aria-label="Fuente de canales">
-        <option value="catalog">Catálogo iptv-org</option>
-        <option value="favorites">★ Favoritos</option>
-      </select>
-
-      <input id="searchInput" class="ctrl search" type="search" placeholder="Buscar canal, país o #número…" autocomplete="off" />
-
-      <select id="langSelect" class="ctrl" aria-label="Idioma">
-        <option value="all">Idioma: Todos</option>
-        <option value="es">Español</option>
-        <option value="en">Inglés</option>
-      </select>
-
-      <select id="categorySelect" class="ctrl" aria-label="Categoría">
-        <option value="all">Categoría: Todas</option>
-      </select>
-
-      <label class="chk-label" title="Ocultar canales marcados temporalmente como caídos">
-        <input id="hideDeadChk" type="checkbox" checked />
-        <span>Ocultar caídos</span>
-      </label>
-
-      <button id="btnAddList" class="btn btn-primary" type="button">+ Mi lista M3U</button>
-      <button id="btnRemoveList" class="btn hidden" type="button" title="Eliminar lista seleccionada">Quitar lista</button>
-      <button id="btnSources" class="btn" type="button" title="Estado de fuentes multi-nivel">Fuentes</button>
-      <button id="btnRefresh" class="btn" type="button" title="Actualizar catálogo">Actualizar</button>
-      <button id="btnDiag" class="btn" type="button" title="Diagnóstico de compatibilidad (Ctrl+Shift+D)">Diagnóstico</button>
-      <button id="btnClearCache" class="btn" type="button" title="Borrar caché de catálogo y fallos">Borrar caché</button>
     </div>
   </header>
 
-  <main class="layout">
-    <aside class="sidebar">
-      <div class="sidebar-head">
-        <span id="channelCountLabel">Cargando catálogo…</span>
-        <span id="catalogAgeLabel" class="muted"></span>
-      </div>
-      <div id="animSubfilters" class="anim-subfilters hidden" role="region" aria-label="Subfiltros de Animación">
-        <span class="anim-label">Animación:</span>
-        <button id="btnAnimLangEs" class="anim-pill active" type="button" data-lang="es">Español</button>
-        <button id="btnAnimLangJp" class="anim-pill" type="button" data-lang="jp">Japonés</button>
-        <button id="btnAnimLangEn" class="anim-pill" type="button" data-lang="en">Inglés</button>
-        <button id="btnAnimLangAll" class="anim-pill" type="button" data-lang="all">Todos</button>
-        <span class="divider-v"></span>
-        <label class="chk-label inline-chk" title="Mostrar únicamente canales con alta probabilidad de emitir anime">
-          <input id="chkAnimeOnly" type="checkbox" />
-          <span>Anime (Aprox)</span>
-        </label>
-        <select id="animCountrySelect" class="ctrl ctrl-sm" aria-label="País de animación">
-          <option value="all">País: Todos</option>
-        </select>
-      </div>
-      <div id="channelViewport" class="channel-viewport" tabindex="0" aria-label="Lista de canales">
-        <div id="channelSpacer" class="channel-spacer">
-          <div id="channelItems" class="channel-items"></div>
-        </div>
-      </div>
-      <footer class="sidebar-foot">
-        Lex TV reproduce enlaces públicos de <span class="mono">iptv-org</span> y listas M3U agregadas por el usuario. El usuario es responsable del contenido de sus listas propias.
-      </footer>
-    </aside>
-
-    <section class="stage">
-      <div class="player-head">
-        <div class="now-playing">
-          <span id="nowNumber" class="now-num">--</span>
-          <div class="now-meta">
-            <div id="nowTitle" class="now-title">Selecciona un canal para comenzar</div>
-            <div id="nowSub" class="now-sub">Usa las flechas ↑/↓ o escribe el número del canal para hacer zapping.</div>
-          </div>
-        </div>
-        <div class="player-actions">
-          <span id="engineBadge" class="engine-badge hidden"></span>
-          <button id="btnAltSource" class="btn hidden" type="button" title="Cambiar entre fuentes disponibles">Fuente 1/1</button>
-          <button id="btnFavCurrent" class="btn hidden" type="button" title="Agregar o quitar de favoritos">☆ Favorito</button>
-          <button id="btnVlcTop" class="btn hidden" type="button" title="Abrir stream en VLC Media Player">Abrir en VLC</button>
-        </div>
-      </div>
-
-      <div id="videoWrap" class="video-wrap">
-        <video id="videoEl" controls autoplay playsinline></video>
-        <div id="zapOsd" class="zap-osd hidden"></div>
-        <div id="codecWarn" class="codec-warn hidden">
-          <span id="codecWarnText"></span>
-          <button id="btnWarnVlc" class="btn btn-sm" type="button">Abrir en VLC</button>
-        </div>
-        <div id="statusOverlay" class="status-overlay">
-          <div class="status-card">
-            <div id="statusIcon" class="status-icon">📺</div>
-            <h2 id="statusTitle">Listo para reproducir</h2>
-            <p id="statusDetail">Elige cualquier canal de la lista izquierda o escribe un número de canal.</p>
-            <div id="statusActions" class="status-actions hidden">
-              <button id="btnRetry" class="btn btn-primary" type="button">Reintentar</button>
-              <button id="btnNextAlt" class="btn hidden" type="button">Probar otra fuente</button>
-              <button id="btnOverlayVlc" class="btn" type="button">Abrir en VLC</button>
-            </div>
-          </div>
-        </div>
-      </div>
+  <main class="hub-container">
+    <section class="hero">
+      <h1>Lex TV — Reproductor Multimedia Personal</h1>
+      <p>
+        Reproductor y organizador local bajo demanda. 100 % privado, sin telemetría y con 0 % de consumo en segundo plano. Selecciona un modo para comenzar:
+      </p>
     </section>
+
+    <section class="cards-grid">
+      <!-- Tarjeta 1: IPTV en vivo -->
+      <a href="tv.html" class="mode-card" id="cardIptv">
+        <div class="mode-card-icon">📺</div>
+        <h2>IPTV en vivo</h2>
+        <p>
+          Sintoniza canales de televisión en directo agregando tus propias listas M3U o M3U8. Conmutación rápida sin solapamiento, favoritos locales y filtros automáticos.
+        </p>
+        <button type="button" class="btn-card">Abrir TV en vivo →</button>
+      </a>
+
+      <!-- Tarjeta 2: Películas y series (VOD) -->
+      <a href="vod.html" class="mode-card" id="cardVod">
+        <div class="mode-card-icon">🎬</div>
+        <h2>Películas y series (VOD)</h2>
+        <p>
+          Organizador de biblioteca de video bajo demanda. Detección automática de temporadas y episodios, control de reproducción sobre HTML5, pistas de audio y subtítulos.
+        </p>
+        <button type="button" class="btn-card">Abrir Cine VOD →</button>
+      </a>
+    </section>
+
+    <footer class="hub-footer">
+      <p>
+        Lex TV es un reproductor multimedia y organizador de fuentes del propio usuario. Lex TV no incluye ni aloja contenidos de terceros.<br />
+        <a href="legal.html">Aviso Legal y Derechos de Autor</a> ·
+        <a href="como-funciona.html">Cómo Funciona</a> ·
+        Responsable: Junior Pacherrez (<span class="mono">juniorpacherrez.31@gmail.com</span>)
+      </p>
+    </footer>
   </main>
 
-  <div id="addModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="addModalTitle">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h3 id="addModalTitle">Agregar lista IPTV propia (.m3u / .m3u8)</h3>
-        <button id="btnCloseAddModal" class="btn btn-sm" type="button" aria-label="Cerrar">✕</button>
+  <!-- Modal obligatorio de términos en primer arranque -->
+  <div id="termsOverlay" class="terms-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="termsTitle">
+    <div class="terms-modal">
+      <div class="terms-head">
+        <h2 id="termsTitle">Términos de Uso y Responsabilidad del Usuario</h2>
       </div>
-      <div class="modal-body">
-        <label class="field">
-          <span>Nombre de la lista</span>
-          <input id="plNameInput" class="ctrl" type="text" maxlength="60" placeholder="Ej: Mis canales HD" />
-        </label>
-        <label class="field">
-          <span>URL pública (.m3u / .m3u8, solo http/https)</span>
-          <input id="plUrlInput" class="ctrl" type="url" placeholder="https://ejemplo.com/lista.m3u" />
-        </label>
-        <div class="divider">o subir / pegar archivo local (máx. 10 MB)</div>
-        <div class="file-row">
-          <input id="plFileInput" type="file" accept=".m3u,.m3u8,.txt" />
-          <span id="plFileInfo" class="muted"></span>
-        </div>
-        <label class="field">
-          <span>Contenido M3U</span>
-          <textarea id="plTextInput" class="ctrl textarea" rows="5" placeholder="#EXTM3U&#10;#EXTINF:-1,Mi Canal&#10;https://..."></textarea>
-        </label>
-        <p class="legal-note">
-          Aviso: solo se admiten enlaces públicos http/https; las URLs locales o privadas y esquemas no HTTP son descartados por seguridad. El usuario es responsable del origen y derechos de las listas cargadas.
+      <div class="terms-body">
+        <p><strong>Bienvenido a Lex TV.</strong> Antes de utilizar esta aplicación, debes leer y aceptar los siguientes términos:</p>
+        <p>
+          <strong>1. Reproductor de fuentes propias:</strong> Lex TV es un software cliente y reproductor multimedia local bajo demanda. <strong>Lex TV no incluye, no aloja, no distribuye, no transmite ni recomienda</strong> listas de reproducción, canales ni contenidos protegidos por derechos de autor.
         </p>
-        <div id="addModalError" class="form-error hidden"></div>
-        <div id="addModalInfo" class="form-info hidden"></div>
+        <p>
+          <strong>2. Responsabilidad exclusiva:</strong> Cada usuario es el único responsable del origen y la legalidad de las listas M3U/M3U8 o flujos de video que decida importar o reproducir en la aplicación.
+        </p>
+        <p>
+          <strong>3. Privacidad y consumo cero:</strong> Lex TV no envía tus listas ni historial a ningún servidor externo. Con la pestaña cerrada, el consumo es de 0 % CPU, 0 RAM y 0 red.
+        </p>
+        <p>
+          <strong>4. Aviso y retirada:</strong> Los titulares de derechos de autor pueden solicitar la inclusión de cualquier flujo o dominio en la lista de denegación técnica contactando a <strong>juniorpacherrez.31@gmail.com</strong>.
+        </p>
       </div>
-      <div class="modal-foot">
-        <button id="btnCancelAdd" class="btn" type="button">Cancelar</button>
-        <button id="btnSubmitAdd" class="btn btn-primary" type="button">Importar lista</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="diagModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="diagModalTitle">
-    <div class="modal-card modal-wide">
-      <div class="modal-head">
-        <h3 id="diagModalTitle">Diagnóstico secuencial de canales (Lex TV)</h3>
-        <button id="btnCloseDiag" class="btn btn-sm" type="button" aria-label="Cerrar">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="diag-controls">
-          <label class="inline-field">
-            <span>Cantidad (1–300):</span>
-            <input id="diagCountInput" class="ctrl ctrl-num" type="number" min="1" max="300" value="100" />
-          </label>
-          <select id="diagScopeSelect" class="ctrl">
-            <option value="filtered">Lista filtrada actual</option>
-            <option value="es">Catálogo en Español</option>
-            <option value="all">Todo el catálogo</option>
-          </select>
-          <button id="btnDiagRun" class="btn btn-primary" type="button">Iniciar</button>
-          <button id="btnDiagStop" class="btn hidden" type="button">Detener</button>
-        </div>
-
-        <div class="diag-stats">
-          <span id="diagProgressText">Listo. Prueba 1 canal a la vez (máx. 10 s por canal, oculto y silenciado).</span>
-          <div class="diag-pills">
-            <span class="pill pill-ok">OK: <b id="diagOk">0</b></span>
-            <span class="pill pill-warn">Geo/Auth: <b id="diagAuth">0</b></span>
-            <span class="pill pill-bad">Muertos: <b id="diagDead">0</b></span>
-            <span class="pill pill-codec">Códec: <b id="diagCodec">0</b></span>
-            <span class="pill">Timeout/Otro: <b id="diagOther">0</b></span>
-          </div>
-        </div>
-
-        <div class="diag-table-wrap">
-          <table class="diag-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Canal</th>
-                <th>Estado</th>
-                <th>Causa</th>
-                <th>Motor</th>
-                <th>ms</th>
-              </tr>
-            </thead>
-            <tbody id="diagTableBody"></tbody>
-          </table>
-        </div>
-        <div id="diagSaveMsg" class="form-info hidden"></div>
-      </div>
-      <div class="modal-foot">
-        <button id="btnDiagJson" class="btn" type="button" disabled>Exportar JSON</button>
-        <button id="btnDiagCsv" class="btn" type="button" disabled>Exportar CSV</button>
-        <button id="btnDiagSave" class="btn" type="button" disabled>Guardar en disco</button>
-        <button id="btnDiagApply" class="btn btn-primary" type="button" disabled>Aplicar resultados al caché</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="sourcesModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sourcesModalTitle">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h3 id="sourcesModalTitle">Fuentes de Canales Multi-Nivel</h3>
-        <button id="btnCloseSources" class="btn btn-sm" type="button" aria-label="Cerrar">✕</button>
-      </div>
-      <div class="modal-body">
-        <p class="muted" style="margin-bottom:12px;">Lex TV fusiona fuentes oficiales, curadas y comunitarias sin duplicados, asignando prioridad por nivel.</p>
-        <div id="sourcesList" class="sources-list" style="display:flex; flex-direction:column; gap:10px;">
-          <div class="source-card" style="padding:10px; border:1px solid var(--border); border-radius:6px; background:rgba(255,255,255,0.02);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>Nivel 1: Oficiales Verificados (legalFree)</strong>
-              <span id="srcTier1Count" class="ch-badge badge-tier1">3 canales</span>
-            </div>
-            <p class="muted" style="font-size:11px; margin-top:4px;">Transmisiones oficiales de dominio público con garantía de persistencia.</p>
-          </div>
-          <div class="source-card" style="padding:10px; border:1px solid var(--border); border-radius:6px; background:rgba(255,255,255,0.02);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>Nivel 2: Free-TV Curada</strong>
-              <span id="srcTier2Count" class="ch-badge badge-tier2">2,203 canales</span>
-            </div>
-            <p class="muted" style="font-size:11px; margin-top:4px;">Lista global mantenida comunitariamente con indicadores de calidad y geo-bloqueo.</p>
-          </div>
-          <div class="source-card" style="padding:10px; border:1px solid var(--border); border-radius:6px; background:rgba(255,255,255,0.02);">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>Nivel 3: iptv-org Comunitario</strong>
-              <span id="srcTier3Count" class="ch-badge badge-tier3">7,546 canales</span>
-            </div>
-            <p class="muted" style="font-size:11px; margin-top:4px;">Catálogo masivo abierto con cobertura global por país e idioma.</p>
-          </div>
-        </div>
-      </div>
-      <div class="modal-foot">
-        <button id="btnRefreshSources" class="btn btn-primary" type="button">Actualizar fuentes ahora</button>
-        <button id="btnCloseSourcesFoot" class="btn" type="button">Cerrar</button>
+      <div class="terms-foot">
+        <label class="terms-chk-label">
+          <input type="checkbox" id="chkAcceptTerms" />
+          <span>He leído y acepto los términos de uso</span>
+        </label>
+        <button type="button" id="btnAcceptTerms" class="btn btn-primary" disabled>Comenzar</button>
       </div>
     </div>
   </div>

@@ -965,13 +965,13 @@
 
             <!-- Botones a la derecha: Lex TV, Página Flotante, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,8,0">
-                <!-- Botón Lex TV (IPTV bajo demanda) -->
+                <!-- Botón Lex TV (Reproductor bajo demanda: IPTV y VOD) -->
                 <Button x:Name="BtnLiveTv" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
-                        ToolTip="Lex TV: TV en vivo (IPTV bajo demanda, 0% consumo al cerrar)" Click="BtnLiveTv_Click">
-                    <Border Background="#252536" CornerRadius="8" Padding="8,4">
+                        ToolTip="Lex TV: Reproductor bajo demanda (IPTV y VOD, 0% consumo al cerrar)" Click="BtnLiveTv_Click">
+                    <Border Background="#252536" CornerRadius="8" Padding="7,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="📺" FontSize="11" VerticalAlignment="Center"/>
-                            <TextBlock Text="TV" Margin="4,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
+                            <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>

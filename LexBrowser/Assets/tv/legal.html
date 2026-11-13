@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lex TV — Términos y Aviso Legal</title>
+  <link rel="stylesheet" href="./tv.css" />
+  <style>
+    .legal-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 30px 20px 60px;
+      line-height: 1.6;
+      overflow-y: auto;
+      height: 100%;
+    }
+    .legal-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .legal-card h2 {
+      margin-top: 0;
+      color: var(--accent);
+      font-size: 18px;
+    }
+    .contact-box {
+      background: var(--panel-2);
+      border-left: 4px solid var(--accent);
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin: 15px 0;
+    }
+    .contact-box p {
+      margin: 4px 0;
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+      text-decoration: none;
+      padding: 8px 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+    .back-btn:hover {
+      background: var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">Lex TV</span>
+      <nav class="section-nav" aria-label="Secciones">
+        <a href="index.html" class="nav-tab">Inicio</a>
+        <a href="tv.html" class="nav-tab">TV en vivo</a>
+        <a href="vod.html" class="nav-tab">VOD</a>
+        <a href="legal.html" class="nav-tab active" aria-current="page">Aviso Legal</a>
+        <a href="como-funciona.html" class="nav-tab">Cómo funciona</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-container">
+    <a href="index.html" class="back-btn">← Volver al inicio</a>
+
+    <h1>Aviso Legal y Condiciones de Uso</h1>
+    <p class="muted">Última actualización: Noviembre de 2026 · Versión de términos: 1.0</p>
+
+    <div class="legal-card">
+      <h2>1. Naturaleza del Software y Modelo Legal</h2>
+      <p>
+        <strong>Lex TV</strong> es una herramienta de software cliente, reproductor multimedia y organizador local desarrollado dentro del navegador Lex Junior.
+      </p>
+      <p>
+        <strong>Lex TV NO es un servicio de transmisión (streaming), NO es un proveedor de contenidos, NO aloja, NO distribuye, NO transmite, NO provee y NO recomienda</strong> listas de canales, películas, series ni ningún tipo de material protegido por derechos de autor o propiedad intelectual.
+      </p>
+      <p>
+        La aplicación se entrega vacía y opera al <strong>100 % bajo demanda del usuario</strong>. Es responsabilidad exclusiva del usuario disponer de las autorizaciones, licencias o derechos necesarios sobre las fuentes, listas M3U/M3U8 o enlaces de transmisión que decida cargar o reproducir localmente en su equipo.
+      </p>
+    </div>
+
+    <div class="legal-card">
+      <h2>2. Responsable de la Aplicación y Contacto</h2>
+      <p>Para cualquier consulta legal, duda técnica o notificación relacionada con el software, los datos del responsable son:</p>
+      <div class="contact-box">
+        <p><strong>Responsable:</strong> Junior Pacherrez</p>
+        <p><strong>Correo electrónico de contacto:</strong> <span class="mono">juniorpacherrez.31@gmail.com</span></p>
+        <p><strong>Ubicación del software:</strong> Aplicación de escritorio local (WPF / .NET 8 / WebView2)</p>
+      </div>
+    </div>
+
+    <div class="legal-card">
+      <h2>3. Procedimiento de Notificación y Retirada (Notice and Takedown)</h2>
+      <p>
+        Aunque Lex TV no distribuye ni enlaza contenidos de terceros por defecto, el software cuenta con un mecanismo técnico de lista de denegación (<strong>TvDenylist</strong>) para deshabilitar preventivamente el acceso técnico a cualquier enlace o dominio que sea objeto de una reclamación formal o fundada de infracción de derechos de autor.
+      </p>
+      <p>
+        Si usted es titular de derechos de autor o su representante legal debidamente autorizado y considera que un recurso accesible a través de internet infringe sus derechos, puede remitir una notificación a <strong>juniorpacherrez.31@gmail.com</strong> incluyendo:
+      </p>
+      <ol>
+        <li>Identificación clara de la obra protegida por derechos de autor supuestamente infringida.</li>
+        <li>La URL o identificador específico del flujo o dominio objeto de la reclamación para su inclusión en la denylist.</li>
+        <li>Información de contacto suficiente (nombre, organización, correo electrónico, teléfono o dirección).</li>
+        <li>Una declaración de buena fe de que el uso del material no está autorizado por el titular de los derechos, su agente o la ley.</li>
+        <li>Firma física o electrónica del titular o persona facultada para actuar en su nombre.</li>
+      </ol>
+      <p>
+        Tras la verificación de la reclamación, la URL o dominio será incorporado a la lista de bloqueo permanente del software.
+      </p>
+    </div>
+
+    <div class="legal-card">
+      <h2>4. Privacidad, Seguridad y Recursos del Sistema</h2>
+      <p>
+        Lex TV se rige por un principio de <strong>cero telemetría</strong>. No se recopilan, no se analizan y no se transmiten a servidores externos las listas agregadas por el usuario, los nombres de canales, el historial de reproducción ni los diagnósticos.
+      </p>
+      <p>
+        Cuando la pestaña de Lex TV está cerrada, el consumo del sistema es exactamente <strong>0 % de CPU, 0 MB de memoria RAM adicional, 0 hilos y 0 tráfico de red</strong>.
+      </p>
+    </div>
+  </main>
+</body>
+</html>

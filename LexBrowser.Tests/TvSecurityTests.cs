@@ -128,7 +128,6 @@ public class TvSecurityTests
             Assert.True(TvDenylist.IsDenylisted("https://specific-bad.org/stream.m3u8", out var reason2));
             Assert.Equal(TvDenylist.DefaultDenyMessage, reason2);
 
-            // IsAllowedRemoteUrl también consulta la denylist
             Assert.False(TvUrlGuard.IsAllowedRemoteUrl("https://pirate-stream.com/live.m3u8", out _));
         }
         finally
@@ -174,5 +173,13 @@ public class TvSecurityTests
         {
             try { Directory.Delete(tempDir, true); } catch { }
         }
+    }
+
+    [Fact]
+    public void LexTvLegalInfo_ContainsRequiredContactDetails()
+    {
+        Assert.Equal("Junior Pacherrez", LexTvLegalInfo.ResponsibleName);
+        Assert.Equal("juniorpacherrez.31@gmail.com", LexTvLegalInfo.ContactEmail);
+        Assert.False(string.IsNullOrWhiteSpace(LexTvLegalInfo.LegalDisclaimer));
     }
 }

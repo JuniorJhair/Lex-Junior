@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lex TV — Televisión en Vivo</title>
+  <link rel="stylesheet" href="./tv.css" />
+  <script defer src="./tv.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">Lex TV</span>
+      <nav class="section-nav" aria-label="Secciones">
+        <a href="index.html" class="nav-tab">Inicio</a>
+        <a href="tv.html" class="nav-tab active" aria-current="page">TV en vivo</a>
+        <a href="vod.html" class="nav-tab">VOD</a>
+        <a href="legal.html" class="nav-tab">Aviso Legal</a>
+        <a href="como-funciona.html" class="nav-tab">Cómo funciona</a>
+      </nav>
+      <span id="codecPill" class="codec-pill" title="Códecs detectados en WebView2">Codecs: detectando…</span>
+    </div>
+
+    <div class="toolbar">
+      <select id="sourceSelect" class="ctrl" aria-label="Fuente de canales">
+        <option value="favorites">★ Favoritos</option>
+      </select>
+
+      <input id="searchInput" class="ctrl search" type="search" placeholder="Buscar canal o categoría…" autocomplete="off" />
+
+      <select id="langSelect" class="ctrl" aria-label="Idioma">
+        <option value="all">Idioma: Todos</option>
+        <option value="es">Español</option>
+        <option value="en">Inglés</option>
+      </select>
+
+      <select id="categorySelect" class="ctrl" aria-label="Categoría">
+        <option value="all">Categoría: Todas</option>
+      </select>
+
+      <label class="chk-label" title="Ocultar canales marcados temporalmente como caídos">
+        <input id="hideDeadChk" type="checkbox" checked />
+        <span>Ocultar caídos</span>
+      </label>
+
+      <button id="btnAddList" class="btn btn-primary" type="button">+ Mi lista M3U</button>
+      <button id="btnRemoveList" class="btn hidden" type="button" title="Eliminar lista seleccionada">Quitar lista</button>
+      <button id="btnDiag" class="btn" type="button" title="Diagnóstico de compatibilidad (Ctrl+Shift+D)">Diagnóstico</button>
+      <button id="btnClearCache" class="btn" type="button" title="Borrar marcas de fallo">Limpiar fallos</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span id="channelCountLabel">Cargando listas…</span>
+        <span id="catalogAgeLabel" class="muted"></span>
+      </div>
+      <div id="channelViewport" class="channel-viewport" tabindex="0" aria-label="Lista de canales">
+        <div id="channelSpacer" class="channel-spacer">
+          <div id="channelItems" class="channel-items"></div>
+        </div>
+      </div>
+      <footer class="sidebar-foot">
+        Lex TV reproduce únicamente listas M3U y flujos provistos por el usuario. El usuario es responsable de sus fuentes.
+      </footer>
+    </aside>
+
+    <section class="stage">
+      <div class="player-head">
+        <div class="now-playing">
+          <span id="nowNumber" class="now-num">--</span>
+          <div class="now-meta">
+            <div id="nowTitle" class="now-title">Selecciona un canal para comenzar</div>
+            <div id="nowSub" class="now-sub">Agrega una lista M3U con el botón superior para cargar tus canales.</div>
+          </div>
+        </div>
+        <div class="player-actions">
+          <span id="engineBadge" class="engine-badge hidden"></span>
+          <button id="btnAltSource" class="btn hidden" type="button" title="Cambiar entre fuentes disponibles">Fuente 1/1</button>
+          <button id="btnFavCurrent" class="btn hidden" type="button" title="Agregar o quitar de favoritos">☆ Favorito</button>
+          <button id="btnVlcTop" class="btn hidden" type="button" title="Abrir stream en VLC Media Player">Abrir en VLC</button>
+        </div>
+      </div>
+
+      <div class="player-body">
+        <div id="playerContainer" class="player-container">
+          <video id="player" playsinline preload="none" aria-label="Reproductor de TV"></video>
+
+          <div id="zapBanner" class="zap-banner hidden" aria-live="polite">
+            <span id="zapNumber" class="zap-number">--</span>
+            <div class="zap-text">
+              <span id="zapTitle" class="zap-title">Canal</span>
+              <span id="zapGroup" class="zap-group">Categoría</span>
+            </div>
+          </div>
+
+          <div id="emptyNotice" class="empty-notice">
+            <div class="empty-icon">📺</div>
+            <h3>Sin canales cargados</h3>
+            <p>Lex TV se entrega vacío para respetar tus derechos y privacidad. Haz clic en <strong>+ Mi lista M3U</strong> para importar una lista de canales local o remota.</p>
+          </div>
+
+          <div id="errorOverlay" class="error-overlay hidden" role="alert">
+            <div class="error-card">
+              <div class="error-icon" aria-hidden="true">⚠️</div>
+              <h3 id="errTitle" class="err-title">No se pudo reproducir este canal</h3>
+              <p id="errDetail" class="err-detail">El servidor de origen no respondió a tiempo.</p>
+              <div id="errTechnical" class="err-tech muted mono"></div>
+              <p id="errHint" class="err-hint">Prueba otra fuente o reintenta en unos instantes.</p>
+              <div class="error-actions">
+                <button id="btnRetry" class="btn btn-primary" type="button">Reintentar</button>
+                <button id="btnNextAlt" class="btn hidden" type="button">Probar otra fuente</button>
+                <button id="btnOpenVlc" class="btn" type="button" title="Abrir en VLC Media Player instalado">Abrir en VLC</button>
+                <button id="btnDismissError" class="btn" type="button">Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal para Agregar Lista M3U del usuario -->
+  <div id="addListModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="addListTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="addListTitle">Agregar mi lista M3U / M3U8</h3>
+        <button id="btnCloseAddList" class="btn-close" type="button" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">
+          Importa canales desde una URL pública http/https o un archivo M3U local. Las listas se almacenan exclusivamente en tu equipo.
+        </p>
+
+        <div class="tabs-row">
+          <button id="tabUrl" class="tab-btn active" type="button">Desde URL</button>
+          <button id="tabFile" class="tab-btn" type="button">Desde archivo</button>
+        </div>
+
+        <div id="paneUrl" class="tab-pane active">
+          <label class="form-label" for="txtListNameUrl">Nombre de la lista (opcional):</label>
+          <input id="txtListNameUrl" class="ctrl w-full" type="text" placeholder="Ej: Mis Canales" />
+
+          <label class="form-label" for="txtListUrl">URL de la lista (.m3u / .m3u8):</label>
+          <input id="txtListUrl" class="ctrl w-full" type="url" placeholder="https://ejemplo.com/lista.m3u" />
+        </div>
+
+        <div id="paneFile" class="tab-pane hidden">
+          <label class="form-label" for="txtListNameFile">Nombre de la lista (opcional):</label>
+          <input id="txtListNameFile" class="ctrl w-full" type="text" placeholder="Ej: Mi archivo M3U" />
+
+          <label class="form-label" for="fileInput">Seleccionar archivo M3U:</label>
+          <input id="fileInput" class="ctrl w-full" type="file" accept=".m3u,.m3u8,text/plain" />
+
+          <label class="form-label" for="txtFileContent">O pegar contenido M3U directamente:</label>
+          <textarea id="txtFileContent" class="ctrl w-full mono text-sm" rows="6" placeholder="#EXTM3U&#10;#EXTINF:-1,Canal 1&#10;https://..."></textarea>
+        </div>
+
+        <div id="addListStatus" class="form-status hidden"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="btnCancelAddList" class="btn" type="button">Cancelar</button>
+        <button id="btnConfirmAddList" class="btn btn-primary" type="button">Importar lista</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Diagnóstico -->
+  <div id="diagModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="diagTitle">
+    <div class="modal-card modal-lg">
+      <div class="modal-head">
+        <h3 id="diagTitle">Diagnóstico de compatibilidad</h3>
+        <button id="btnCloseDiag" class="btn-close" type="button" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">Verifica la compatibilidad de códecs y reproduce un canal de prueba de tu lista.</p>
+        <div id="diagResults" class="diag-results mono text-sm"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="btnRunDiag" class="btn btn-primary" type="button">Ejecutar diagnóstico</button>
+        <button id="btnSaveDiag" class="btn" type="button" disabled>Guardar informe</button>
+        <button id="btnCloseDiagFoot" class="btn" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

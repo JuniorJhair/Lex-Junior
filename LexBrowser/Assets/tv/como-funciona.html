@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lex TV — Cómo Funciona y Arquitectura</title>
+  <link rel="stylesheet" href="./tv.css" />
+  <style>
+    .info-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 30px 20px 60px;
+      line-height: 1.6;
+      overflow-y: auto;
+      height: 100%;
+    }
+    .info-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .info-card h2 {
+      margin-top: 0;
+      color: var(--accent);
+      font-size: 18px;
+    }
+    .badge-feature {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      color: var(--ok);
+      margin-right: 6px;
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+      text-decoration: none;
+      padding: 8px 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+    .back-btn:hover {
+      background: var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">Lex TV</span>
+      <nav class="section-nav" aria-label="Secciones">
+        <a href="index.html" class="nav-tab">Inicio</a>
+        <a href="tv.html" class="nav-tab">TV en vivo</a>
+        <a href="vod.html" class="nav-tab">VOD</a>
+        <a href="legal.html" class="nav-tab">Aviso Legal</a>
+        <a href="como-funciona.html" class="nav-tab active" aria-current="page">Cómo funciona</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="info-container">
+    <a href="index.html" class="back-btn">← Volver al inicio</a>
+
+    <h1>Cómo Funciona Lex TV</h1>
+    <p class="muted">Arquitectura técnica, seguridad y respeto a los recursos del usuario.</p>
+
+    <div class="info-card">
+      <h2><span class="badge-feature">0% REPOSO</span> 1. Modelo 100 % Bajo Demanda</h2>
+      <p>
+        A diferencia de los servicios o extensiones tradicionales que ejecutan tareas en segundo plano, Lex TV sólo existe mientras su pestaña se encuentra abierta:
+      </p>
+      <ul>
+        <li><strong>0 hilos y 0 timers en segundo plano:</strong> Al cerrar la pestaña de TV, todos los sockets, streams y memorias intermedias se liberan de forma inmediata (<span class="mono">ReleaseAll</span>).</li>
+        <li><strong>0 telemetría:</strong> Tus listas, canales favoritos, marcas de reproducción y diagnósticos se guardan exclusivamente de manera local en tu equipo (<span class="mono">%LocalAppData%\LexBrowser</span>).</li>
+        <li><strong>Sin dependencias externas obligatorias:</strong> Lex no consulta servidores centrales de seguimiento ni servicios remotos de analítica.</li>
+      </ul>
+    </div>
+
+    <div class="info-card">
+      <h2><span class="badge-feature">SEGURIDAD</span> 2. Protección de Red y Anti-SSRF</h2>
+      <p>
+        Para garantizar la seguridad de tu equipo y de tu red local:
+      </p>
+      <ul>
+        <li><strong>TvUrlGuard:</strong> Bloquea cualquier intento de conexión hacia direcciones IP privadas o reservadas (IPv4: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, CGNAT 100.64.0.0/10, etc.; IPv6: loopback, link-local, ULA fc00::/7, 6to4, Teredo). Esto previene ataques de falsificación de peticiones del lado del servidor (SSRF) y escaneos de tu red interna.</li>
+        <li><strong>Política de Seguridad de Contenido (CSP) estricta:</strong> Todas las páginas de Lex TV operan bajo una CSP unificada que impide la carga de scripts externos no autorizados.</li>
+        <li><strong>Rechazo de flujos cifrados:</strong> Se descartan flujos HLS con claves no nulas (<span class="mono">#EXT-X-KEY</span> con <span class="mono">METHOD != NONE</span>), reproduciendo únicamente transmisiones públicas estándar.</li>
+      </ul>
+    </div>
+
+    <div class="info-card">
+      <h2><span class="badge-feature">USUARIO</span> 3. Gestión de Listas y Contenido</h2>
+      <p>
+        El usuario puede importar sus propias listas de canales o videos:
+      </p>
+      <ul>
+        <li><strong>Listas M3U / M3U8:</strong> Puedes cargar un archivo local o ingresar una URL pública de tu proveedor personal. Lex TV analiza la lista y clasifica los canales respetando exclusivamente los metadatos provistos en el propio archivo.</li>
+        <li><strong>Conmutación de canales (Zapping):</strong> Diseñado con control de sesiones por generación en el servidor virtual, permitiendo cambios inmediatos sin solapamiento de conexiones ni bloqueos HTTP 429.</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>
