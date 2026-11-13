@@ -1634,20 +1634,6 @@ public partial class MainWindow
                 return;
             }
 
-            if (TvStudioService.IsCineShortcut(e.Uri))
-            {
-                e.Cancel = true;
-                var winRef = tab.OwnerWindow ?? this;
-                _ = winRef.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    if (!tab.IsDisposed)
-                    {
-                        tab.WebView?.CoreWebView2?.Navigate(TvStudioService.CineUrl);
-                    }
-                }));
-                return;
-            }
-
             if (TvStudioService.IsTvShortcut(e.Uri))
             {
                 e.Cancel = true;

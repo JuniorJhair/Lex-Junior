@@ -146,8 +146,6 @@ public class TvModuleTests
         Assert.Equal("ch1.pe", list[0].Id);
         Assert.Equal("Canal Siete HD", list[0].Name);
         Assert.Equal("Noticias, Vivo", list[0].Group);
-        Assert.Equal("https://player.example.com/", list[0].Referrer);
-        Assert.Equal("CustomTV/1.0", list[0].UserAgent);
         Assert.Equal("https://img.example.com/7.png", list[0].Logo);
 
         Assert.Equal("Deportes", list[1].Group);
@@ -182,14 +180,10 @@ public class TvModuleTests
         Assert.Equal(1, parsed.SkippedPrivate);
         Assert.Equal(1, parsed.SkippedInvalid);
 
-        // EXTVLCOPT antes de #EXTINF + logo http:// descartado por HTTPS-only
-        Assert.Equal("https://before.example.com/", parsed.Channels[0].Referrer);
-        Assert.Equal("BeforeUA/2", parsed.Channels[0].UserAgent);
+        // Logo http:// descartado por HTTPS-only (no se propagan cabeceras de terceros)
         Assert.Equal("", parsed.Channels[0].Logo);
-
-        // Kodi pipe decodificado y sanitizado
-        Assert.Equal("KodiAgent/3.0", parsed.Channels[1].UserAgent);
-        Assert.Equal("https://kodi.example.org/", parsed.Channels[1].Referrer);
+        Assert.Equal("Canal Before", parsed.Channels[0].Name);
+        Assert.Equal("Canal Kodi Pipe", parsed.Channels[1].Name);
 
         // HLS suelto (#EXT-X-*) sin #EXTINF tratado como canal único cuando hay sourceUrl válida
         string standalone = """
@@ -204,156 +198,14 @@ public class TvModuleTests
         Assert.Equal("https://edge.example.com/live/index.m3u8", hlsRes.Channels[0].Url);
     }
 
-    [Fact]
-    public void TvCatalogService_BuildCatalogFromJson_FiltersLanguagesNsfwBlocklistAndJoinsMetadata()
-    {
-        string channels = """
-            [
-              {"id":"TVPeru.pe","name":"TV Peru","country":"PE","categories":["news"],"is_nsfw":false,"closed":null},
-              {"id":"NewsEn.us","name":"US News","country":"US","categories":["general"],"is_nsfw":false,"closed":null},
-              {"id":"France.fr","name":"France TV","country":"FR","categories":["news"],"is_nsfw":false,"closed":null},
-              {"id":"Blocked.es","name":"Blocked","country":"ES","categories":["movies"],"is_nsfw":false,"closed":null},
-              {"id":"Closed.mx","name":"Closed","country":"MX","categories":["music"],"is_nsfw":false,"closed":"2025-01-01"},
-              {"id":"Adult.us","name":"Adult","country":"US","categories":["general"],"is_nsfw":true,"closed":null}
-            ]
-            """;
-        string feeds = """
-            [
-              {"channel":"TVPeru.pe","id":"HD","name":"HD","is_main":true,"languages":["spa"],"format":"1080p"},
-              {"channel":"NewsEn.us","id":"SD","name":"SD","is_main":true,"languages":["eng"],"format":"720p"},
-              {"channel":"France.fr","id":"SD","name":"SD","is_main":true,"languages":["fra"],"format":"720p"}
-            ]
-            """;
-        string streams = """
-            [
-              {"channel":"TVPeru.pe","feed":"HD","title":"TV Perú HD","url":"https://live.example.pe/tvperu.m3u8","quality":"1080p","labels":["Geo-blocked"],"user_agent":"Agent1","referrer":"https://tvperu.gob.pe/"},
-              {"channel":"NewsEn.us","feed":"SD","title":null,"url":"http://live.example.us/news.m3u8","quality":"","labels":["Not 24/7"],"user_agent":null,"referrer":null},
-              {"channel":"France.fr","feed":"SD","title":"France","url":"https://live.example.fr/fr.m3u8","quality":"720p","labels":[],"user_agent":null,"referrer":null},
-              {"channel":"Blocked.es","feed":null,"title":"Blocked","url":"https://live.example.es/b.m3u8","quality":"720p","labels":[],"user_agent":null,"referrer":null},
-              {"channel":"Closed.mx","feed":null,"title":"Closed","url":"https://live.example.mx/c.m3u8","quality":"720p","labels":[],"user_agent":null,"referrer":null},
-              {"channel":"Adult.us","feed":null,"title":"Adult","url":"https://live.example.us/a.m3u8","quality":"720p","labels":[],"user_agent":null,"referrer":null},
-              {"channel":"null","feed":null,"title":"Orphan","url":"https://live.example.com/orphan.m3u8","quality":"720p","labels":[],"user_agent":null,"referrer":null}
-            ]
-            """;
-        string blocklist = """[{"channel":"Blocked.es","reason":"dmca"}]""";
-        string countries = """
-            [
-              {"code":"PE","name":"Peru","languages":["spa"]},
-              {"code":"US","name":"United States","languages":["eng"]},
-              {"code":"FR","name":"France","languages":["fra"]}
-            ]
-            """;
-        string logos = """[{"channel":"TVPeru.pe","feed":null,"in_use":true,"format":"PNG","url":"https://logos.example.com/tvperu.png"}]""";
 
-        var result = TvCatalogService.BuildCatalogFromJson(channels, streams, feeds, blocklist, countries, logos);
-
-        Assert.Equal(2, result.Count);
-
-        // Español (PE) se ordena primero
-        Assert.Equal(1, result[0].Number);
-        Assert.Equal("TV Perú HD", result[0].Name);
-        Assert.Equal("Español", result[0].Language);
-        Assert.Equal("Noticias", result[0].Group);
-        Assert.Equal("Peru", result[0].CountryName);
-        Assert.Equal("https://logos.example.com/tvperu.png", result[0].Logo);
-        Assert.Equal("Geo-blocked", result[0].Tags);
-        Assert.Equal("https://tvperu.gob.pe/", result[0].Referrer);
-        Assert.Equal("Agent1", result[0].UserAgent);
-
-        Assert.Equal(2, result[1].Number);
-        Assert.Equal("US News", result[1].Name);
-        Assert.Equal("Inglés", result[1].Language);
-        Assert.Equal("Sin categoría", result[1].Group);
-        Assert.Equal("720p", result[1].Quality);
-        Assert.Equal("Not 24/7", result[1].Tags);
-    }
 
     [Fact]
-    public void TvCatalogService_GroupsAlternatesAndMaintainsStableNumbersAcross30Days()
-    {
-        string channels = """
-            [
-              {"id":"ChUS.us","name":"US Channel","country":"US","categories":["news"],"is_nsfw":false,"closed":null},
-              {"id":"ChES.es","name":"Spain Channel","country":"ES","categories":["general"],"is_nsfw":false,"closed":null},
-              {"id":"ChMX.mx","name":"Mexico Channel","country":"MX","categories":["general"],"is_nsfw":false,"closed":null},
-              {"id":"ChPE.pe","name":"Peru Channel","country":"PE","categories":["news"],"is_nsfw":false,"closed":null}
-            ]
-            """;
-        string feeds = """
-            [
-              {"channel":"ChUS.us","id":"HD","name":"HD","is_main":true,"languages":["eng"],"format":"1080p"},
-              {"channel":"ChES.es","id":"HD","name":"HD","is_main":true,"languages":["spa"],"format":"720p"},
-              {"channel":"ChMX.mx","id":"HD","name":"HD","is_main":true,"languages":["spa"],"format":"720p"},
-              {"channel":"ChPE.pe","id":"HD","name":"HD","is_main":true,"languages":["spa"],"format":"1080p"}
-            ]
-            """;
-        string streams = """
-            [
-              {"channel":"ChPE.pe","feed":"HD","title":"Peru","url":"http://slow.example.pe/low.m3u8","quality":"480p"},
-              {"channel":"ChPE.pe","feed":"HD","title":"Peru","url":"http://mid.example.pe/hd.m3u8","quality":"1080p"},
-              {"channel":"ChPE.pe","feed":"HD","title":"Peru","url":"https://best.example.pe/hd.m3u8","quality":"1080p"},
-              {"channel":"ChMX.mx","feed":"HD","title":"Mexico","url":"https://cdn.example.mx/1.m3u8","quality":"720p"},
-              {"channel":"ChES.es","feed":"HD","title":"Spain","url":"https://cdn.example.es/1.m3u8","quality":"720p"},
-              {"channel":"ChUS.us","feed":"HD","title":"USA","url":"https://cdn.example.us/1.m3u8","quality":"1080p"}
-            ]
-            """;
-        string countries = """
-            [
-              {"code":"PE","name":"Peru","languages":["spa"]},
-              {"code":"MX","name":"Mexico","languages":["spa"]},
-              {"code":"ES","name":"Spain","languages":["spa"]},
-              {"code":"US","name":"United States","languages":["eng"]}
-            ]
-            """;
-
-        var list = TvCatalogService.BuildCatalogFromJson(channels, streams, feeds, "[]", countries);
-        Assert.Equal(4, list.Count);
-
-        // Orden inicial: PE -> MX -> ES -> US
-        Assert.Equal("ChPE.pe@HD", list[0].Id);
-        Assert.Equal("ChMX.mx@HD", list[1].Id);
-        Assert.Equal("ChES.es@HD", list[2].Id);
-        Assert.Equal("ChUS.us@HD", list[3].Id);
-
-        // Primaria = mejor calidad con HTTPS preferido; alternativas ordenadas
-        Assert.Equal("https://best.example.pe/hd.m3u8", list[0].Url);
-        Assert.Equal(2, list[0].Alternates.Count);
-        Assert.Equal("http://mid.example.pe/hd.m3u8", list[0].Alternates[0].Url);
-        Assert.Equal("http://slow.example.pe/low.m3u8", list[0].Alternates[1].Url);
-
-        // Refresco estable con retiro de ChMX.mx (#2) y entrada de nuevo canal
-        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        TvCatalogService.AssignStableNumbers(list, null, null, out var map1, out var retired1, t0);
-
-        var refreshed = new List<TvChannel>
-        {
-            new() { Id = "ChPE.pe@HD", Name = "Peru", Language = "Español", Country = "PE" },
-            new() { Id = "ChES.es@HD", Name = "Spain", Language = "Español", Country = "ES" },
-            new() { Id = "ChUS.us@HD", Name = "USA", Language = "Inglés", Country = "US" },
-            new() { Id = "ChNew.co@HD", Name = "Colombia", Language = "Español", Country = "CO" }
-        };
-
-        // Día +5 (< 30d): el número retirado 2 NO se reutiliza -> ChNew recibe 5
-        TvCatalogService.AssignStableNumbers(refreshed, map1, retired1, out var map2, out var retired2, t0.AddDays(5));
-        Assert.Equal(1, refreshed.Single(c => c.Id == "ChPE.pe@HD").Number);
-        Assert.Equal(3, refreshed.Single(c => c.Id == "ChES.es@HD").Number);
-        Assert.Equal(4, refreshed.Single(c => c.Id == "ChUS.us@HD").Number);
-        Assert.Equal(5, refreshed.Single(c => c.Id == "ChNew.co@HD").Number);
-        Assert.True(retired2.ContainsKey(2));
-
-        // Día +36 (31d tras el retiro en día +5): el número 2 expira su retención y queda disponible para otro canal nuevo
-        refreshed.Add(new TvChannel { Id = "ChLater.ar@HD", Name = "Argentina", Language = "Español", Country = "AR" });
-        TvCatalogService.AssignStableNumbers(refreshed, map2, retired2, out _, out var retired3, t0.AddDays(36));
-        Assert.Equal(2, refreshed.Single(c => c.Id == "ChLater.ar@HD").Number);
-        Assert.False(retired3.ContainsKey(2));
-    }
-
-    [Fact]
-    public void TvStreamProxy_RewriteHlsPlaylist_RewritesRelativePathsAndKeysSafely()
+    public void TvStreamProxy_RewriteHlsPlaylist_RewritesRelativePathsSafely()
     {
         string playlist = """
             #EXTM3U
-            #EXT-X-KEY:METHOD=AES-128,URI="keys/secret.key"
+            #EXT-X-KEY:METHOD=NONE
             #EXTINF:4.0,
             720p/seg001.ts
             #EXTINF:4.0,
@@ -361,13 +213,12 @@ public class TvModuleTests
             """;
         var baseUri = new Uri("http://origin.example.com/live/master.m3u8");
 
-        string rewritten = TvStreamProxy.RewriteHlsPlaylist(playlist, baseUri, "https://ref.example.com/", "TvPlayer/2");
+        string rewritten = TvStreamProxy.RewriteHlsPlaylist(playlist, baseUri, "g1_0");
 
-        Assert.Contains("/api/proxy?u=" + Uri.EscapeDataString("http://origin.example.com/live/keys/secret.key"), rewritten);
-        Assert.Contains("/api/proxy?u=" + Uri.EscapeDataString("http://origin.example.com/live/720p/seg001.ts"), rewritten);
-        Assert.Contains("/api/proxy?u=" + Uri.EscapeDataString("https://cdn2.example.com/seg002.ts"), rewritten);
-        Assert.Contains("&r=" + Uri.EscapeDataString("https://ref.example.com/"), rewritten);
-        Assert.Contains("&ua=" + Uri.EscapeDataString("TvPlayer/2"), rewritten);
+        Assert.Contains("/api/proxy?u=" + Uri.EscapeDataString("http://origin.example.com/live/720p/seg001.ts") + "&sid=g1_0", rewritten);
+        Assert.Contains("/api/proxy?u=" + Uri.EscapeDataString("https://cdn2.example.com/seg002.ts") + "&sid=g1_0", rewritten);
+        Assert.DoesNotContain("&r=", rewritten);
+        Assert.DoesNotContain("&ua=", rewritten);
     }
 
     [Fact]
@@ -603,16 +454,7 @@ public class TvModuleTests
         GC.KeepAlive(stream);
     }
 
-    [Fact]
-    public void TvCatalogCachePayload_LegacyJsonWithoutSchemaVersion_DeserializesAsZero()
-    {
-        const string legacyJson = """{"UpdatedUtc":"2026-11-12T06:00:00Z","Channels":[{"Id":"ch1@hd","Number":1,"Name":"Canal 1","Url":"https://example.com/live.m3u8"}]}""";
-        var parsed = JsonSerializer.Deserialize<TvCatalogCachePayload>(legacyJson);
 
-        Assert.NotNull(parsed);
-        Assert.Equal(0, parsed!.SchemaVersion);
-        Assert.Single(parsed.Channels);
-    }
 
     [Fact]
     public async Task TvSessions_EnterNewGen_CancelsStreamsOfPriorGen_Within500Ms()
@@ -645,7 +487,7 @@ public class TvModuleTests
         TvSessions.Enter(2);
 
         // Petición con g1_0 habiendo avanzado a gen 2 -> 410 stale sin abrir upstream
-        var res = await TvStreamProxy.FetchAsync("https://example.com/live/ch1.m3u8", null, null, null, "g1_0", CancellationToken.None);
+        var res = await TvStreamProxy.FetchAsync("https://example.com/live/ch1.m3u8", null, "g1_0", CancellationToken.None);
 
         Assert.Equal(410, res.StatusCode);
         Assert.Equal("stale", res.ExtraHeaders["X-Lex-Error-Class"]);

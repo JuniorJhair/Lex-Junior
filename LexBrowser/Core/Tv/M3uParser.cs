@@ -14,7 +14,7 @@ public sealed class M3uParseResult
     public bool IsStandaloneHlsManifest { get; set; }
 }
 
-/// <summary>Lector de listas M3U/M3U8 extendidas para listas del usuario (Kodi pipe, EXTVLCOPT antes/después, contadores de descarte).</summary>
+/// <summary>Lector de listas M3U/M3U8 provistas por el usuario. No propaga cabeceras de terceros.</summary>
 public static class M3uParser
 {
     public const int MaxChannels = 50000;
@@ -32,8 +32,6 @@ public static class M3uParser
 
         var seenUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         TvChannel? current = null;
-        string pendingReferrer = "";
-        string pendingAgent = "";
         bool sawExtX = false;
 
         foreach (string raw in text.Split('\n'))
@@ -44,7 +42,7 @@ public static class M3uParser
 
             if (line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase))
             {
-                // Ignorar metadatos EPG como url-tvg / x-tvg-url intencionalmente
+                // Ignorar metadatos de cabecera
                 continue;
             }
 
@@ -56,12 +54,6 @@ public static class M3uParser
 
             if (line.StartsWith("#EXTINF", StringComparison.OrdinalIgnoreCase))
             {
-                if (current != null)
-                {
-                    // #EXTINF anterior sin URL -> limpiar opciones huérfanas
-                    pendingReferrer = "";
-                    pendingAgent = "";
-                }
                 current = ParseInfo(line, source);
                 continue;
             }
@@ -73,26 +65,16 @@ public static class M3uParser
                 continue;
             }
 
-            if (line.StartsWith("#EXTVLCOPT:", StringComparison.OrdinalIgnoreCase))
-            {
-                string opt = line.Substring(11);
-                int eq = opt.IndexOf('=');
-                if (eq > 0)
-                {
-                    string key = opt.Substring(0, eq).Trim().ToLowerInvariant();
-                    string val = TvUrlGuard.SanitizeHeaderValue(opt.Substring(eq + 1), key == "http-referrer" ? 400 : 240);
-                    if (key == "http-referrer") pendingReferrer = val;
-                    else if (key == "http-user-agent") pendingAgent = val;
-                }
-                continue;
-            }
-
             if (line[0] == '#') continue;
             if (current == null) continue;
 
-            var (rawUrlPart, pipeRef, pipeUa) = SplitKodiPipeOptions(line);
-            string effRef = pendingReferrer.Length > 0 ? pendingReferrer : pipeRef;
-            string effUa = pendingAgent.Length > 0 ? pendingAgent : pipeUa;
+            // Limpiar posibles sufijos pipe de Kodi (|Referer=...) sin usarlos
+            string rawUrlPart = line;
+            int pipe = rawUrlPart.IndexOf('|');
+            if (pipe > 0)
+            {
+                rawUrlPart = rawUrlPart.Substring(0, pipe).Trim();
+            }
 
             if (ClassifyUrl(rawUrlPart, out var safeUri, outcome))
             {
@@ -103,8 +85,6 @@ public static class M3uParser
                 else
                 {
                     current.Url = safeUri.AbsoluteUri;
-                    current.Referrer = effRef;
-                    current.UserAgent = effUa;
                     if (current.Name.Length == 0) current.Name = safeUri.Host;
                     if (current.Id.Length == 0) current.Id = "u:" + current.Url;
                     outcome.Channels.Add(current);
@@ -112,8 +92,6 @@ public static class M3uParser
             }
 
             current = null;
-            pendingReferrer = "";
-            pendingAgent = "";
         }
 
         if (outcome.Channels.Count == 0 && sawExtX &&
@@ -132,35 +110,6 @@ public static class M3uParser
         }
 
         return outcome;
-    }
-
-    private static (string Url, string Referrer, string UserAgent) SplitKodiPipeOptions(string line)
-    {
-        int pipe = line.IndexOf('|');
-        if (pipe <= 0) return (line.Trim(), "", "");
-
-        string urlPart = line.Substring(0, pipe).Trim();
-        string queryPart = line.Substring(pipe + 1).Trim();
-        string referrer = "";
-        string userAgent = "";
-
-        foreach (string pair in queryPart.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            int eq = pair.IndexOf('=');
-            if (eq <= 0) continue;
-            string key = pair.Substring(0, eq).Trim().ToLowerInvariant();
-            string rawVal = pair.Substring(eq + 1).Trim();
-            string decoded;
-            try { decoded = Uri.UnescapeDataString(rawVal.Replace('+', ' ')); }
-            catch { decoded = rawVal; }
-
-            if (key is "referer" or "referrer")
-                referrer = TvUrlGuard.SanitizeHeaderValue(decoded, 400);
-            else if (key is "user-agent" or "useragent")
-                userAgent = TvUrlGuard.SanitizeHeaderValue(decoded, 240);
-        }
-
-        return (urlPart, referrer, userAgent);
     }
 
     private static bool ClassifyUrl(string rawUrl, out Uri? safeUri, M3uParseResult outcome)

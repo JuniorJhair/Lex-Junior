@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
@@ -42,9 +43,10 @@ public sealed record TvProbeResult(
     string ErrorMessage = "");
 
 /// <summary>
-/// Proxy HTTP/HTTPS seguro para la pestaña de TV: evita contenido mixto (https -> http),
-/// CORS e inyecta Referer y User-Agent por canal. Reescribe playlists HLS (.m3u8),
-/// reenvía Range/206, clasifica errores de proxy vs upstream y limita conexiones concurrentes.
+/// Proxy HTTP/HTTPS seguro para Lex TV: evita contenido mixto,
+/// reescribe playlists HLS (.m3u8), rechaza streams cifrados no soportados,
+/// reenvía Range/206, clasifica errores y limita conexiones por generación.
+/// No propaga cabeceras de terceros ni referers externos.
 /// </summary>
 public static class TvStreamProxy
 {
@@ -52,8 +54,10 @@ public static class TvStreamProxy
     private const int MaxM3u8Bytes = 4 * 1024 * 1024;
     private const int MaxProbeBytes = 4096;
     private const int MaxProbeCacheEntries = 256;
+    private const int MaxImageBytes = 2 * 1024 * 1024;
     private static readonly TimeSpan ProbeTtl = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan ImageTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan ReadIdleTimeout = TimeSpan.FromSeconds(30);
 
     private static readonly Regex UriAttrRegex =
@@ -63,6 +67,7 @@ public static class TvStreamProxy
         new(() => TvUrlGuard.CreatePinnedHttpClient(timeout: TimeSpan.FromSeconds(45)));
 
     private static readonly SemaphoreSlim UpstreamGate = new(MaxConcurrentUpstream, MaxConcurrentUpstream);
+    private static readonly SemaphoreSlim ImageGate = new(6, 6);
     private static int _activeUpstreamConnections;
     private static long _nextStreamToken;
     private static readonly object ActiveStreamsLock = new();
@@ -73,7 +78,7 @@ public static class TvStreamProxy
         new(StringComparer.Ordinal);
     private static readonly LinkedList<string> ProbeLru = new();
 
-    /// <summary>Contador diagnóstico de conexiones/streams upstream actualmente abiertos por el proxy.</summary>
+    /// <summary>Contador diagnóstico de conexiones upstream abiertas por el proxy.</summary>
     public static int ActiveUpstreamConnections => Volatile.Read(ref _activeUpstreamConnections);
 
     internal static HttpClient Http => ProxyHttp.Value;
@@ -129,7 +134,7 @@ public static class TvStreamProxy
         }
     }
 
-    /// <summary>Aborta de inmediato streams progresivos pertenecientes a una sesión de reproductor anterior.</summary>
+    /// <summary>Aborta de inmediato streams pertenecientes a una sesión anterior.</summary>
     public static int AbortSession(string? sessionId)
     {
         List<OwnedNetworkStream> targets;
@@ -170,25 +175,14 @@ public static class TvStreamProxy
         return new OwnedNetworkStream(inner, owner, lease, sessionId ?? "", gen, genToken);
     }
 
-    public static Task<TvProxyResult> FetchAsync(
-        string? rawUrl,
-        string? referrer,
-        string? userAgent,
-        CancellationToken ct)
-        => FetchAsync(rawUrl, referrer, userAgent, null, null, ct);
+    public static Task<TvProxyResult> FetchAsync(string? rawUrl, CancellationToken ct)
+        => FetchAsync(rawUrl, null, null, ct);
 
-    public static Task<TvProxyResult> FetchAsync(
-        string? rawUrl,
-        string? referrer,
-        string? userAgent,
-        string? rangeHeader,
-        CancellationToken ct)
-        => FetchAsync(rawUrl, referrer, userAgent, rangeHeader, null, ct);
+    public static Task<TvProxyResult> FetchAsync(string? rawUrl, string? rangeHeader, CancellationToken ct)
+        => FetchAsync(rawUrl, rangeHeader, null, ct);
 
     public static async Task<TvProxyResult> FetchAsync(
         string? rawUrl,
-        string? referrer,
-        string? userAgent,
         string? rangeHeader,
         string? sessionId,
         CancellationToken ct)
@@ -258,7 +252,7 @@ public static class TvStreamProxy
         try
         {
             Uri finalUri;
-            (resp, finalUri) = await SendWithRetryAsync(targetUri, referrer, userAgent, rangeHeader, linkedToken).ConfigureAwait(false);
+            (resp, finalUri) = await SendWithRetryAsync(targetUri, rangeHeader, linkedToken).ConfigureAwait(false);
 
             int status = (int)resp.StatusCode;
             string reason = resp.ReasonPhrase ?? "OK";
@@ -277,8 +271,14 @@ public static class TvStreamProxy
                 resp.Dispose();
                 lease.Dispose();
 
+                if (HasNonNoneEncryption(body))
+                {
+                    return ProxyErrorResult(422, "Unprocessable Entity", "encrypted",
+                        "Este método de reproducción (flujo cifrado) no está soportado.");
+                }
+
                 string rewritten = body.Contains("#EXTM3U", StringComparison.OrdinalIgnoreCase)
-                    ? RewriteHlsPlaylist(body, finalUri, referrer, userAgent, sessionId)
+                    ? RewriteHlsPlaylist(body, finalUri, sessionId)
                     : body;
 
                 byte[] bytes = Encoding.UTF8.GetBytes(rewritten);
@@ -320,21 +320,84 @@ public static class TvStreamProxy
     }
 
     /// <summary>
+    /// Descarga y sirve imágenes de logotipos o portadas bajo estricto control de origen,
+    /// concurrencia máx. 6, límite de 2 MB y timeout de 8 s, validando Content-Type: image/*.
+    /// </summary>
+    public static async Task<TvProxyResult> FetchImageAsync(string? rawUrl, CancellationToken ct)
+    {
+        if (!TvUrlGuard.IsAllowedRemoteUrl(rawUrl, out var targetUri) || targetUri == null)
+            return ProxyErrorResult(400, "Bad Request", "blocked", "URL de imagen no permitida o privada.");
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(ImageTimeout);
+        var token = timeoutCts.Token;
+
+        bool gotSlot = false;
+        try
+        {
+            gotSlot = await ImageGate.WaitAsync(ImageTimeout, token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return ProxyErrorResult(504, "Gateway Timeout", "timeout", "Tiempo de espera agotado en cola de imágenes.");
+        }
+
+        if (!gotSlot)
+            return ProxyErrorResult(429, "Too Many Requests", "upstream", "Límite de concurrencia de imágenes alcanzado.");
+
+        try
+        {
+            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(Http, targetUri, null, token).ConfigureAwait(false);
+            using (resp)
+            {
+                if (!resp.IsSuccessStatusCode)
+                    return UpstreamErrorResult((int)resp.StatusCode, resp.ReasonPhrase ?? "Error", "Error al obtener imagen.");
+
+                string contentType = resp.Content.Headers.ContentType?.MediaType ?? "";
+                if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ProxyErrorResult(415, "Unsupported Media Type", "blocked", "El recurso no es una imagen válida.");
+                }
+
+                if (resp.Content.Headers.ContentLength is long cl && cl > MaxImageBytes)
+                {
+                    return ProxyErrorResult(413, "Payload Too Large", "blocked", "La imagen excede el límite de 2 MB.");
+                }
+
+                await using var inStream = await resp.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+                using var bounded = new BoundedReadStream(inStream, MaxImageBytes);
+                var ms = new MemoryStream();
+                await bounded.CopyToAsync(ms, token).ConfigureAwait(false);
+                ms.Position = 0;
+
+                var res = new TvProxyResult(200, "OK", contentType, ms);
+                res.ExtraHeaders["Cache-Control"] = "public, max-age=86400";
+                return res;
+            }
+        }
+        catch (Exception ex)
+        {
+            var (cls, status, msg) = TvUrlGuard.ClassifyException(ex);
+            return ProxyErrorResult(status, status == 504 ? "Gateway Timeout" : "Bad Gateway", cls, msg);
+        }
+        finally
+        {
+            try { ImageGate.Release(); } catch { }
+        }
+    }
+
+    /// <summary>
     /// Sondea hasta 4 KB (máx. 8 s) para clasificar el formato real del stream sin descargar el video completo.
     /// Cachea el resultado durante 10 minutos en una LRU de hasta 256 entradas.
     /// </summary>
-    public static async Task<TvProbeResult> ProbeAsync(
-        string? rawUrl,
-        string? referrer,
-        string? userAgent,
-        CancellationToken ct)
+    public static async Task<TvProbeResult> ProbeAsync(string? rawUrl, CancellationToken ct)
     {
         if (!TvUrlGuard.IsAllowedRemoteUrl(rawUrl, out var targetUri) || targetUri == null)
         {
             return new TvProbeResult("unknown", 502, "", "blocked", "URL privada o no permitida.");
         }
 
-        string cacheKey = $"{targetUri.AbsoluteUri}\n{TvUrlGuard.SanitizeHeaderValue(referrer, 400)}\n{TvUrlGuard.SanitizeHeaderValue(userAgent, 240)}";
+        string cacheKey = targetUri.AbsoluteUri;
         if (TryGetCachedProbe(cacheKey, out var cached))
             return cached;
 
@@ -344,7 +407,7 @@ public static class TvStreamProxy
         try
         {
             var (resp, finalUri) = await TvUrlGuard.GetWithSafeRedirectsAsync(
-                Http, targetUri, referrer, userAgent, null, timeoutCts.Token).ConfigureAwait(false);
+                Http, targetUri, null, timeoutCts.Token).ConfigureAwait(false);
 
             using (resp)
             {
@@ -369,6 +432,15 @@ public static class TvStreamProxy
                     if (total >= 1024) break;
                 }
 
+                string previewText = Encoding.UTF8.GetString(buf, 0, total);
+                if (HasNonNoneEncryption(previewText))
+                {
+                    var encFail = new TvProbeResult("unknown", 422, contentType, "encrypted",
+                        "Este método de reproducción (flujo cifrado) no está soportado.");
+                    StoreCachedProbe(cacheKey, encFail);
+                    return encFail;
+                }
+
                 var kind = TvStreamSniffer.Classify(buf.AsSpan(0, total));
                 if (kind == TvStreamKind.Unknown && LooksLikeHlsManifest(finalUri, contentType))
                     kind = TvStreamKind.Hls;
@@ -389,6 +461,36 @@ public static class TvStreamProxy
         }
     }
 
+    /// <summary>
+    /// Detecta si un manifiesto HLS contiene etiquetas de cifrado no nulo (#EXT-X-KEY o #EXT-X-SESSION-KEY con METHOD != NONE).
+    /// </summary>
+    public static bool HasNonNoneEncryption(string? manifest)
+    {
+        if (string.IsNullOrEmpty(manifest)) return false;
+        foreach (string raw in manifest.Split('\n'))
+        {
+            string line = raw.Trim();
+            if (line.StartsWith("#EXT-X-KEY:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("#EXT-X-SESSION-KEY:", StringComparison.OrdinalIgnoreCase))
+            {
+                int idx = line.IndexOf("METHOD=", StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    string methodPart = line.Substring(idx + 7).TrimStart();
+                    int comma = methodPart.IndexOf(',');
+                    string method = (comma >= 0 ? methodPart.Substring(0, comma) : methodPart).Trim().Trim('"');
+                    if (!method.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                else
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public static Dictionary<string, string> BuildForwardHeaders(HttpResponseMessage resp)
     {
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -407,8 +509,6 @@ public static class TvStreamProxy
 
     private static async Task<(HttpResponseMessage Response, Uri FinalUri)> SendWithRetryAsync(
         Uri targetUri,
-        string? referrer,
-        string? userAgent,
         string? rangeHeader,
         CancellationToken ct)
     {
@@ -417,7 +517,7 @@ public static class TvStreamProxy
             try
             {
                 var (resp, finalUri) = await TvUrlGuard.GetWithSafeRedirectsAsync(
-                    Http, targetUri, referrer, userAgent, rangeHeader, ct).ConfigureAwait(false);
+                    Http, targetUri, rangeHeader, ct).ConfigureAwait(false);
 
                 int code = (int)resp.StatusCode;
                 if (attempt == 0 && (code == 429 || code == 503))
@@ -437,7 +537,7 @@ public static class TvStreamProxy
         }
 
         return await TvUrlGuard.GetWithSafeRedirectsAsync(
-            Http, targetUri, referrer, userAgent, rangeHeader, ct).ConfigureAwait(false);
+            Http, targetUri, rangeHeader, ct).ConfigureAwait(false);
     }
 
     private static bool IsPreFirstByteTransient(Exception ex)
@@ -504,16 +604,13 @@ public static class TvStreamProxy
     }
 
     /// <summary>
-    /// Convierte URLs relativas/absolutas dentro de un manifiesto .m3u8 hacia /api/proxy,
-    /// preservando Referer/User-Agent y descartando destinos privados/no-HTTP.
+    /// Convierte URLs dentro de un manifiesto .m3u8 hacia /api/proxy,
+    /// descartando destinos privados o no-HTTP. No inyecta ni propaga cabeceras de terceros.
     /// </summary>
-    public static string RewriteHlsPlaylist(string content, Uri baseUri, string? referrer, string? userAgent)
-        => RewriteHlsPlaylist(content, baseUri, referrer, userAgent, null);
-
-    public static string RewriteHlsPlaylist(string content, Uri baseUri, string? referrer, string? userAgent, string? sessionId)
+    public static string RewriteHlsPlaylist(string content, Uri baseUri, string? sessionId = null)
     {
         if (string.IsNullOrEmpty(content)) return "";
-        string suffix = BuildHeaderQuerySuffix(referrer, userAgent, sessionId);
+        string suffix = BuildSessionQuerySuffix(sessionId);
         var sb = new StringBuilder(content.Length + 512);
 
         foreach (string raw in content.Split('\n'))
@@ -548,19 +645,13 @@ public static class TvStreamProxy
         return sb.ToString();
     }
 
-    public static string BuildProxyPath(string targetUrl, string? referrer, string? userAgent)
-        => $"/api/proxy?u={Uri.EscapeDataString(targetUrl)}{BuildHeaderQuerySuffix(referrer, userAgent, null)}";
+    public static string BuildProxyPath(string targetUrl, string? sessionId = null)
+        => $"/api/proxy?u={Uri.EscapeDataString(targetUrl)}{BuildSessionQuerySuffix(sessionId)}";
 
-    private static string BuildHeaderQuerySuffix(string? referrer, string? userAgent, string? sessionId)
+    private static string BuildSessionQuerySuffix(string? sessionId)
     {
-        string r = TvUrlGuard.SanitizeHeaderValue(referrer, 400);
-        string ua = TvUrlGuard.SanitizeHeaderValue(userAgent, 240);
         string sid = TvUrlGuard.SanitizeHeaderValue(sessionId, 24);
-        var sb = new StringBuilder();
-        if (r.Length > 0) sb.Append("&r=").Append(Uri.EscapeDataString(r));
-        if (ua.Length > 0) sb.Append("&ua=").Append(Uri.EscapeDataString(ua));
-        if (sid.Length > 0) sb.Append("&sid=").Append(Uri.EscapeDataString(sid));
-        return sb.ToString();
+        return sid.Length > 0 ? $"&sid={Uri.EscapeDataString(sid)}" : "";
     }
 
     private static string? ToProxyPath(string rawRef, Uri baseUri, string suffix)
@@ -623,10 +714,6 @@ public static class TvStreamProxy
         }
     }
 
-    /// <summary>
-    /// Envuélve el stream HTTP con timeout de inactividad de 30 s, liberación automática en EOF (read == 0)
-    /// o error (dado que ManagedIStream de WebView2 no invoca Dispose()), y cancelación inmediata por generación.
-    /// </summary>
     private sealed class OwnedNetworkStream : Stream
     {
         private readonly Stream _inner;
@@ -786,7 +873,6 @@ public static class TvSessions
         }
     }
 
-    // Devuelve null si la generacion es obsoleta (responder 410 sin abrir upstream).
     public static GenState? Enter(int gen)
     {
         lock (Lock)

@@ -6,26 +6,24 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using LexBrowser.Core.Tv.Cine;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 
 namespace LexBrowser.Core.Tv;
 
 /// <summary>
-/// Servidor virtual https://tv.lex.local/ para Lex TV (IPTV bajo demanda).
-/// Sigue el mismo patrón de aislamiento y 0% costo en reposo que PdfStudioService.
+/// Servidor virtual https://tv.lex.local/ para Lex TV (reproductor bajo demanda de listas del propio usuario).
+/// Aplica CSP unificada estricta, aislamiento de origen y 0% de costo en reposo.
 /// </summary>
 public static class TvStudioService
 {
     public const string HostName = "tv.lex.local";
     public const string VirtualOrigin = "https://tv.lex.local/";
     public const string HomeUrl = "https://tv.lex.local/index.html";
-    public const string CineUrl = "https://tv.lex.local/cine.html";
-    private const string TvHtmlCsp =
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src https: data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'";
-    private const string CineHtmlCsp =
-        "default-src 'self'; script-src 'self'; style-src 'self'; img-src https: data: blob: https://image.tmdb.org https://s4.anilist.co; media-src 'self' blob: https://archive.org https://*.archive.org https://upload.wikimedia.org; connect-src 'self' https://biskyt.github.io https://api.themoviedb.org https://graphql.anilist.co; object-src 'none'; frame-ancestors 'none'";
+
+    public const string HtmlContentSecurityPolicy =
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none';";
+
     private const string AllowedCorsOrigin = "https://tv.lex.local";
     private const int MaxJsonBodyBytes = 24 * 1024 * 1024;
 
@@ -35,11 +33,6 @@ public static class TvStudioService
         WriteIndented = false
     };
 
-    private static readonly JsonSerializerOptions JsonInOptions = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     private static string? _cachedTvFolder;
 
     public static void ReleaseAll()
@@ -47,12 +40,7 @@ public static class TvStudioService
         TvSessions.AbortAll();
         TvStreamProxy.AbortSession(null);
         TvUserStateStore.Shared.ReleaseMemoryCache();
-        TvCatalogService.Shared.ReleaseMemoryCache();
         TvStreamProxy.ClearProbeCache();
-        TvCineService.Shared.ReleaseMemoryCache();
-        TvCineStateStore.Shared.ReleaseMemoryCache();
-        TvMultiSourceService.Shared.ReleaseMemoryCache();
-        Vod.Providers.VodProviderManager.Shared.ReleaseMemoryCache();
     }
 
     public static bool IsTvUrl(string? url)
@@ -69,15 +57,6 @@ public static class TvStudioService
                s.Equals(HostName, StringComparison.OrdinalIgnoreCase) ||
                s.StartsWith(VirtualOrigin, StringComparison.OrdinalIgnoreCase) ||
                s.StartsWith("http://" + HostName, StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static bool IsCineShortcut(string? rawInput)
-    {
-        if (string.IsNullOrWhiteSpace(rawInput)) return false;
-        string s = rawInput.Trim();
-        return s.Equals("lex://cine", StringComparison.OrdinalIgnoreCase) ||
-               s.Equals("lex:cine", StringComparison.OrdinalIgnoreCase) ||
-               s.Equals(CineUrl, StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsValidTvOriginOrReferer(string? originHeader, string? refererHeader)
@@ -133,7 +112,7 @@ public static class TvStudioService
 
         string path = uri.AbsolutePath.TrimStart('/');
 
-        // 1. Endpoints API y proxy de streams (requieren origen interno tv.lex.local)
+        // 1. Endpoints API y proxy (requieren origen interno tv.lex.local)
         if (path.StartsWith("api/", StringComparison.OrdinalIgnoreCase))
         {
             string? originHeader = null;
@@ -175,7 +154,7 @@ public static class TvStudioService
             return true;
         }
 
-        // 2. Recursos estáticos (index.html, tv.css, tv.js, vendor/*)
+        // 2. Recursos estáticos (index.html, tv.css, tv.js, legal.html, vendor/*)
         if (string.IsNullOrEmpty(path)) path = "index.html";
         if (path.Contains("..", StringComparison.Ordinal) || path.Contains(':', StringComparison.Ordinal))
         {
@@ -193,6 +172,8 @@ public static class TvStudioService
         string contentType = path.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ? "text/html; charset=utf-8" :
                              path.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ? "application/javascript; charset=utf-8" :
                              path.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ? "text/css; charset=utf-8" :
+                             path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" :
+                             path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" :
                              "application/octet-stream";
 
         bool isVendor = path.StartsWith("vendor/", StringComparison.OrdinalIgnoreCase);
@@ -205,10 +186,8 @@ public static class TvStudioService
         hdr.Append("Referrer-Policy: same-origin\r\n");
         hdr.Append("X-Frame-Options: DENY\r\n");
         hdr.Append("Cache-Control: ").Append(cacheControl);
-        if (path.Equals("index.html", StringComparison.OrdinalIgnoreCase))
-            hdr.Append("\r\nContent-Security-Policy: ").Append(TvHtmlCsp);
-        else if (path.Equals("cine.html", StringComparison.OrdinalIgnoreCase))
-            hdr.Append("\r\nContent-Security-Policy: ").Append(CineHtmlCsp);
+        if (path.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            hdr.Append("\r\nContent-Security-Policy: ").Append(HtmlContentSecurityPolicy);
 
         e.Response = env.CreateWebResourceResponse(new MemoryStream(bytes, writable: false), 200, "OK", hdr.ToString());
         return true;
@@ -228,36 +207,9 @@ public static class TvStudioService
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
             var q = HttpUtility.ParseQueryString(uri.Query);
 
-            // Delegar a endpoints modulares VOD (TMDB, AniList, Add-ons)
-            if (await Vod.Bridge.VodBridgeController.TryHandleVodApiAsync(env, e, uri, path, body, deferral, cts.Token).ConfigureAwait(false))
-                return;
-
-            if (path.Equals("api/sources", StringComparison.OrdinalIgnoreCase))
-            {
-                var statuses = TvMultiSourceService.Shared.GetSourcesStatus();
-                e.Response = CreateJsonResponse(env, 200, "OK", new { sources = statuses });
-                return;
-            }
-
-            if (path.Equals("api/sources/refresh", StringComparison.OrdinalIgnoreCase))
-            {
-                string srcId = q["id"] ?? "";
-                if (srcId.Equals("legalFree", StringComparison.OrdinalIgnoreCase))
-                    await TvMultiSourceService.Shared.GetTier1ChannelsAsync(true, cts.Token).ConfigureAwait(false);
-                else if (srcId.Equals("Free-TV", StringComparison.OrdinalIgnoreCase))
-                    await TvMultiSourceService.Shared.GetTier2ChannelsAsync(true, cts.Token).ConfigureAwait(false);
-                else
-                    await TvCatalogService.Shared.GetCatalogAsync(true, cts.Token).ConfigureAwait(false);
-
-                var statuses = TvMultiSourceService.Shared.GetSourcesStatus();
-                e.Response = CreateJsonResponse(env, 200, "OK", new { sources = statuses });
-                return;
-            }
-
             if (path.Equals("api/proxy", StringComparison.OrdinalIgnoreCase))
             {
-                // Mantener continuación en el hilo UI de WPF (sin ConfigureAwait(false)) para crear WebResourceResponse COM
-                var proxyRes = await TvStreamProxy.FetchAsync(q["u"], q["r"], q["ua"], rangeHeader, q["sid"], cts.Token);
+                var proxyRes = await TvStreamProxy.FetchAsync(q["u"], rangeHeader, q["sid"], cts.Token);
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(proxyRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
@@ -269,6 +221,22 @@ public static class TvStudioService
                     hdrSb.Append("\r\n").Append(kv.Key).Append(": ").Append(kv.Value);
                 }
                 e.Response = env.CreateWebResourceResponse(proxyRes.ContentStream, proxyRes.StatusCode, proxyRes.ReasonPhrase, hdrSb.ToString());
+                return;
+            }
+
+            if (path.Equals("api/image", StringComparison.OrdinalIgnoreCase))
+            {
+                var imgRes = await TvStreamProxy.FetchImageAsync(q["u"], cts.Token);
+                var hdrSb = new StringBuilder();
+                hdrSb.Append("Content-Type: ").Append(imgRes.ContentType).Append("\r\n");
+                hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
+                hdrSb.Append("X-Content-Type-Options: nosniff\r\n");
+                hdrSb.Append("Cache-Control: public, max-age=86400");
+                foreach (var kv in imgRes.ExtraHeaders)
+                {
+                    hdrSb.Append("\r\n").Append(kv.Key).Append(": ").Append(kv.Value);
+                }
+                e.Response = env.CreateWebResourceResponse(imgRes.ContentStream, imgRes.StatusCode, imgRes.ReasonPhrase, hdrSb.ToString());
                 return;
             }
 
@@ -288,7 +256,7 @@ public static class TvStudioService
 
             if (path.Equals("api/probe", StringComparison.OrdinalIgnoreCase))
             {
-                var probe = await TvStreamProxy.ProbeAsync(q["u"], q["r"], q["ua"], cts.Token);
+                var probe = await TvStreamProxy.ProbeAsync(q["u"], cts.Token);
                 e.Response = CreateJsonResponse(env, 200, "OK", new
                 {
                     kind = probe.Kind,
@@ -302,35 +270,19 @@ public static class TvStudioService
 
             if (path.Equals("api/catalog", StringComparison.OrdinalIgnoreCase))
             {
-                bool refresh = q["refresh"] == "1";
-                var cat = await TvCatalogService.Shared.GetCatalogAsync(refresh, cts.Token);
                 var prefs = TvUserStateStore.Shared.GetPrefsSnapshot();
                 var summaries = TvUserStateStore.Shared.GetPlaylistSummaries();
-                var channelsToReturn = cat.Channels;
-
-                if (q["multi"] == "1")
-                {
-                    try
-                    {
-                        var t1 = await TvMultiSourceService.Shared.GetTier1ChannelsAsync(refresh, cts.Token);
-                        var t2 = await TvMultiSourceService.Shared.GetTier2ChannelsAsync(refresh, cts.Token);
-                        channelsToReturn = TvMultiSourceService.MergeChannels(t1, t2, cat.Channels);
-                    }
-                    catch { }
-                }
 
                 e.Response = CreateJsonResponse(env, 200, "OK", new
                 {
-                    cat.UpdatedUtc,
-                    cat.FromCache,
-                    cat.IsStaleFallback,
-                    cat.Error,
-                    channels = channelsToReturn,
+                    channels = Array.Empty<TvChannel>(),
                     playlists = summaries,
                     prefs = new
                     {
                         favorites = prefs.Favorites,
-                        deadStreams = prefs.DeadStreams
+                        deadStreams = prefs.DeadStreams,
+                        acceptedTermsVersion = prefs.AcceptedTermsVersion,
+                        acceptedTermsUtc = prefs.AcceptedTermsUtc
                     }
                 });
                 return;
@@ -364,7 +316,7 @@ public static class TvStudioService
                 string name = doc.RootElement.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
                 string url = doc.RootElement.TryGetProperty("url", out var uEl) ? (uEl.GetString() ?? "") : "";
                 string effectiveName = string.IsNullOrWhiteSpace(name) ? "Mi lista IPTV" : name.Trim();
-                var parsed = await TvCatalogService.Shared.ImportPlaylistDetailedFromUrlAsync(url, effectiveName, cts.Token);
+                var parsed = await TvPlaylistService.Shared.ImportPlaylistDetailedFromUrlAsync(url, effectiveName, cts.Token);
                 var added = TvUserStateStore.Shared.AddOrUpdatePlaylist(effectiveName, url.Trim(), parsed.Channels);
                 e.Response = CreateJsonResponse(env, 200, "OK", new
                 {
@@ -445,9 +397,30 @@ public static class TvStudioService
                 return;
             }
 
+            if (path.Equals("api/terms/status", StringComparison.OrdinalIgnoreCase))
+            {
+                bool accepted = TvUserStateStore.Shared.HasAcceptedTerms(1);
+                var prefs = TvUserStateStore.Shared.GetPrefsSnapshot();
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    accepted,
+                    version = prefs.AcceptedTermsVersion,
+                    acceptedUtc = prefs.AcceptedTermsUtc
+                });
+                return;
+            }
+
+            if (path.Equals("api/terms/accept", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                int version = doc.RootElement.TryGetProperty("version", out var vEl) ? vEl.GetInt32() : 1;
+                TvUserStateStore.Shared.AcceptTerms(version);
+                e.Response = CreateJsonResponse(env, 200, "OK", new { ok = true, version });
+                return;
+            }
+
             if (path.Equals("api/cache/clear", StringComparison.OrdinalIgnoreCase))
             {
-                TvCatalogService.Shared.ClearAllCache();
                 TvStreamProxy.ClearProbeCache();
                 TvUserStateStore.Shared.ClearDead();
                 e.Response = CreateJsonResponse(env, 200, "OK", new { ok = true });
@@ -483,120 +456,6 @@ public static class TvStudioService
                 string fullPath = Path.Combine(dir, fileName);
                 File.WriteAllText(fullPath, body);
                 e.Response = CreateJsonResponse(env, 200, "OK", new { path = fullPath });
-                return;
-            }
-
-            // Endpoints Cine (VOD)
-            if (path.Equals("api/cine/catalog", StringComparison.OrdinalIgnoreCase))
-            {
-                bool refresh = q["refresh"] == "1";
-                var catRes = await TvCineService.Shared.GetCatalogAsync(refresh, cts.Token);
-                var stateSnapshot = TvCineStateStore.Shared.GetSnapshot();
-                e.Response = CreateJsonResponse(env, 200, "OK", new
-                {
-                    catRes.UpdatedUtc,
-                    catRes.FromCache,
-                    catRes.IsStaleFallback,
-                    catRes.Error,
-                    items = catRes.Index,
-                    stats = catRes.Stats,
-                    state = stateSnapshot
-                });
-                return;
-            }
-
-            if (path.Equals("api/cine/title", StringComparison.OrdinalIgnoreCase))
-            {
-                string id = q["id"] ?? "";
-                var title = await TvCineService.Shared.GetTitleDetailAsync(id, cts.Token);
-                if (title == null)
-                {
-                    e.Response = CreateJsonResponse(env, 404, "Not Found", new { error = "Título no encontrado." });
-                    return;
-                }
-                e.Response = CreateJsonResponse(env, 200, "OK", new { title });
-                return;
-            }
-
-            if (path.Equals("api/cine/filter", StringComparison.OrdinalIgnoreCase))
-            {
-                TvCineFilterQuery filterQuery = new();
-                if (!string.IsNullOrWhiteSpace(body))
-                {
-                    try
-                    {
-                        filterQuery = JsonSerializer.Deserialize<TvCineFilterQuery>(body, JsonInOptions) ?? new();
-                    }
-                    catch { }
-                }
-                var filtered = TvCineService.Shared.Filter(filterQuery);
-                e.Response = CreateJsonResponse(env, 200, "OK", new { items = filtered, total = filtered.Count });
-                return;
-            }
-
-            if (path.Equals("api/cine/progress", StringComparison.OrdinalIgnoreCase))
-            {
-                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-                var root = doc.RootElement;
-                string id = root.TryGetProperty("id", out var idEl) ? (idEl.GetString() ?? "") : "";
-                double pos = root.TryGetProperty("positionSec", out var posEl) ? posEl.GetDouble() : 0.0;
-                double dur = root.TryGetProperty("durationSec", out var durEl) ? durEl.GetDouble() : 0.0;
-                string sName = root.TryGetProperty("seriesName", out var snEl) ? (snEl.GetString() ?? "") : "";
-                string epId = root.TryGetProperty("episodeId", out var epEl) ? (epEl.GetString() ?? "") : "";
-
-                TvCineStateStore.Shared.UpdateProgress(id, pos, dur, sName, epId);
-                e.Response = CreateJsonResponse(env, 200, "OK", new { ok = true });
-                return;
-            }
-
-            if (path.Equals("api/cine/action", StringComparison.OrdinalIgnoreCase))
-            {
-                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-                var root = doc.RootElement;
-                string action = root.TryGetProperty("action", out var aEl) ? (aEl.GetString() ?? "") : "";
-                string id = root.TryGetProperty("id", out var idEl) ? (idEl.GetString() ?? "") : "";
-                string kind = root.TryGetProperty("kind", out var kEl) ? (kEl.GetString() ?? "dead") : "dead";
-                string reason = root.TryGetProperty("reason", out var rEl) ? (rEl.GetString() ?? "") : "";
-
-                switch (action.ToLowerInvariant())
-                {
-                    case "favorite":
-                        TvCineStateStore.Shared.ToggleFavorite(id);
-                        break;
-                    case "watchlist":
-                        TvCineStateStore.Shared.ToggleWatchlist(id);
-                        break;
-                    case "watched":
-                        TvCineStateStore.Shared.ToggleWatched(id);
-                        break;
-                    case "unavailable":
-                        TvCineStateStore.Shared.MarkUnavailable(id, kind, reason);
-                        break;
-                    case "clear_unavailable":
-                        if (!string.IsNullOrWhiteSpace(id))
-                            TvCineStateStore.Shared.ClearUnavailable(id);
-                        else
-                            TvCineStateStore.Shared.ClearAllUnavailable();
-                        break;
-                    default:
-                        e.Response = CreateJsonResponse(env, 400, "Bad Request", new { error = "Acción no reconocida." });
-                        return;
-                }
-                e.Response = CreateJsonResponse(env, 200, "OK", new { state = TvCineStateStore.Shared.GetSnapshot() });
-                return;
-            }
-
-            if (path.Equals("api/cine/state", StringComparison.OrdinalIgnoreCase))
-            {
-                e.Response = CreateJsonResponse(env, 200, "OK", new { state = TvCineStateStore.Shared.GetSnapshot() });
-                return;
-            }
-
-            if (path.Equals("api/cine/cache/clear", StringComparison.OrdinalIgnoreCase))
-            {
-                TvCineService.Shared.ClearCacheFiles();
-                TvCineStateStore.Shared.ClearAllUnavailable();
-                e.Response = CreateJsonResponse(env, 200, "OK", new { ok = true });
                 return;
             }
 
@@ -713,4 +572,3 @@ public static class TvStudioService
         return env.CreateWebResourceResponse(new MemoryStream(bytes, writable: false), code, reason, headers);
     }
 }
-

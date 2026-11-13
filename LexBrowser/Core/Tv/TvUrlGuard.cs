@@ -26,11 +26,12 @@ public sealed class TvProxyErrorException : Exception
 
 /// <summary>
 /// Validaciones de seguridad para URLs, DNS SSRF (ConnectCallback), redirecciones y límites de descarga.
+/// Protege la red interna bloqueando todos los rangos privados y locales IPv4 e IPv6.
 /// </summary>
 public static class TvUrlGuard
 {
     public const int MaxPlaylistBytes = 20 * 1024 * 1024;
-    public const int MaxCatalogBytes = 80 * 1024 * 1024;
+    public const string DefaultUserAgent = "LexBrowser/2.1 (Windows NT 10.0; Win64; x64) LexTv/1.0";
 
     public static bool IsAllowedRemoteUrl(string? url, out Uri? uri)
     {
@@ -40,42 +41,7 @@ public static class TvUrlGuard
         if (u.Scheme != Uri.UriSchemeHttp && u.Scheme != Uri.UriSchemeHttps) return false;
         if (!string.IsNullOrEmpty(u.UserInfo)) return false;
         if (IsPrivateOrLocalHost(u.Host)) return false;
-        uri = u;
-        return true;
-    }
-
-    public static bool IsAllowedCatalogHost(string? host)
-    {
-        if (string.IsNullOrWhiteSpace(host)) return false;
-        string h = host.Trim().ToLowerInvariant();
-        return h == "iptv-org.github.io" || h == "biskyt.github.io" || h == "raw.githubusercontent.com";
-    }
-
-    public static bool IsAllowedCineCatalogHost(string? host)
-    {
-        if (string.IsNullOrWhiteSpace(host)) return false;
-        string h = host.Trim().ToLowerInvariant();
-        return h == "biskyt.github.io" || h == "raw.githubusercontent.com";
-    }
-
-    public static bool IsAllowedCineVideoHost(string? host)
-    {
-        if (string.IsNullOrWhiteSpace(host)) return false;
-        string h = host.Trim().ToLowerInvariant();
-        if (h == "archive.org" || h.EndsWith(".archive.org", StringComparison.Ordinal)) return true;
-        if (h == "upload.wikimedia.org") return true;
-        return false;
-    }
-
-    public static bool IsAllowedCineMediaUrl(string? url, out Uri? uri)
-    {
-        uri = null;
-        if (string.IsNullOrWhiteSpace(url) || url.Length > 2048) return false;
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u)) return false;
-        if (u.Scheme != Uri.UriSchemeHttps) return false; // Solo HTTPS estricto para Cine VOD
-        if (!string.IsNullOrEmpty(u.UserInfo)) return false;
-        if (IsPrivateOrLocalHost(u.Host)) return false;
-        if (!IsAllowedCineVideoHost(u.Host)) return false;
+        if (TvDenylist.IsDenylisted(u.AbsoluteUri, out _)) return false;
         uri = u;
         return true;
     }
@@ -101,18 +67,45 @@ public static class TvUrlGuard
         if (ip.AddressFamily == AddressFamily.InterNetworkV6)
         {
             if (ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6Multicast) return true;
+            if (ip.Equals(IPAddress.IPv6Any)) return true;
+
             byte[] b6 = ip.GetAddressBytes();
-            return (b6[0] & 0xFE) == 0xFC || ip.Equals(IPAddress.IPv6Any);
+            if ((b6[0] & 0xFE) == 0xFC) return true; // Unique Local fc00::/7
+
+            // 64:ff9b::/96 (IPv4/IPv6 translation)
+            if (b6[0] == 0x00 && b6[1] == 0x64 && b6[2] == 0xff && b6[3] == 0x9b &&
+                b6[4] == 0 && b6[5] == 0 && b6[6] == 0 && b6[7] == 0 &&
+                b6[8] == 0 && b6[9] == 0 && b6[10] == 0 && b6[11] == 0)
+                return true;
+
+            // 2002::/16 (6to4)
+            if (b6[0] == 0x20 && b6[1] == 0x02) return true;
+
+            // 2001::/32 (Teredo)
+            if (b6[0] == 0x20 && b6[1] == 0x01 && b6[2] == 0x00 && b6[3] == 0x00) return true;
+
+            // 2001:db8::/32 (Documentation)
+            if (b6[0] == 0x20 && b6[1] == 0x01 && b6[2] == 0x0d && b6[3] == 0xb8) return true;
+
+            return false;
         }
 
         byte[] b = ip.GetAddressBytes();
         if (b.Length != 4) return true;
-        return b[0] == 0 || b[0] == 10 || b[0] == 127 ||
-               (b[0] == 169 && b[1] == 254) ||
-               (b[0] == 172 && b[1] >= 16 && b[1] <= 31) ||
-               (b[0] == 192 && b[1] == 168) ||
-               (b[0] == 100 && b[1] >= 64 && b[1] <= 127) ||
-               b[0] >= 224;
+
+        return b[0] == 0 ||                                              // 0.0.0.0/8
+               b[0] == 10 ||                                             // 10.0.0.0/8
+               b[0] == 127 ||                                            // 127.0.0.0/8
+               (b[0] == 169 && b[1] == 254) ||                           // 169.254.0.0/16
+               (b[0] == 172 && b[1] >= 16 && b[1] <= 31) ||              // 172.16.0.0/12
+               (b[0] == 192 && b[1] == 168) ||                           // 192.168.0.0/16
+               (b[0] == 100 && b[1] >= 64 && b[1] <= 127) ||             // 100.64.0.0/10
+               (b[0] == 192 && b[1] == 0 && b[2] == 0) ||                // 192.0.0.0/24
+               (b[0] == 192 && b[1] == 0 && b[2] == 2) ||                // 192.0.2.0/24
+               (b[0] == 198 && (b[1] == 18 || b[1] == 19)) ||            // 198.18.0.0/15
+               (b[0] == 198 && b[1] == 51 && b[2] == 100) ||             // 198.51.100.0/24
+               (b[0] == 203 && b[1] == 0 && b[2] == 113) ||              // 203.0.113.0/24
+               b[0] >= 224;                                              // Multicast & Reserved
     }
 
     /// <summary>Quita caracteres de control (evita inyección CRLF en cabeceras).</summary>
@@ -255,25 +248,13 @@ public static class TvUrlGuard
         return ("upstream", 502, SanitizeHeaderValue(ex.Message, 160));
     }
 
-    /// <summary>Sobrecarga compatible sin Range.</summary>
-    public static Task<(HttpResponseMessage Response, Uri FinalUri)> GetWithSafeRedirectsAsync(
-        HttpClient client,
-        Uri initialUri,
-        string? referrer,
-        string? userAgent,
-        CancellationToken ct,
-        int maxRedirects = 5)
-        => GetWithSafeRedirectsAsync(client, initialUri, referrer, userAgent, null, ct, maxRedirects);
-
     /// <summary>
     /// Ejecuta GET validando cada salto de redirección (hasta 5) para impedir redirecciones a hosts locales/privados,
-    /// reenviando Range si aplica.
+    /// usando siempre el User-Agent estándar de Lex TV y reenviando Range si aplica.
     /// </summary>
     public static async Task<(HttpResponseMessage Response, Uri FinalUri)> GetWithSafeRedirectsAsync(
         HttpClient client,
         Uri initialUri,
-        string? referrer,
-        string? userAgent,
         string? rangeHeader,
         CancellationToken ct,
         int maxRedirects = 5)
@@ -281,14 +262,11 @@ public static class TvUrlGuard
         Uri current = initialUri;
         for (int hop = 0; hop <= maxRedirects; hop++)
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, current);
-            string cleanUa = SanitizeHeaderValue(userAgent, 240);
-            req.Headers.TryAddWithoutValidation("User-Agent",
-                cleanUa.Length > 0 ? cleanUa : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) LexJunior/2.1");
+            if (TvDenylist.IsDenylisted(current.AbsoluteUri, out var denyReason))
+                throw new TvProxyErrorException("blocked", 403, denyReason ?? "Fuente deshabilitada tras una reclamación.");
 
-            string cleanRef = SanitizeHeaderValue(referrer, 500);
-            if (cleanRef.Length > 0 && IsAllowedRemoteUrl(cleanRef, out var refUri) && refUri != null)
-                req.Headers.Referrer = refUri;
+            using var req = new HttpRequestMessage(HttpMethod.Get, current);
+            req.Headers.TryAddWithoutValidation("User-Agent", DefaultUserAgent);
 
             string cleanRange = SanitizeHeaderValue(rangeHeader, 80);
             if (cleanRange.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase))

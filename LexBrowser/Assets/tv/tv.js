@@ -30,6 +30,16 @@ function classifyFailure(ctx) {
     };
   }
 
+  if (errorClass === 'encrypted') {
+    return {
+      category: 'restricted',
+      title: 'Flujo cifrado no soportado',
+      detail: 'Este método de reproducción (flujo cifrado) no está soportado.',
+      persistKind: 'restricted',
+      hint: 'Lex TV reproduce contenido público no cifrado provisto por el usuario.'
+    };
+  }
+
   if (status === 404 || status === 410) {
     return {
       category: 'offline',
@@ -331,11 +341,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       `Codecs: H.264 ${mark(state.codecs.h264)} · AAC ${mark(state.codecs.aac)} · HEVC ${mark(state.codecs.hevc)} · AC-3 ${mark(state.codecs.ac3)}`;
   }
 
-  function buildProxyUrl(url, referrer, userAgent, sid) {
+  function buildProxyUrl(url, referrerOrSid, userAgent, sid) {
+    const effectiveSid = (typeof sid !== 'undefined' ? sid : (typeof userAgent === 'undefined' ? referrerOrSid : sid));
     let q = `/api/proxy?u=${encodeURIComponent(url)}`;
-    if (referrer) q += `&r=${encodeURIComponent(referrer)}`;
-    if (userAgent) q += `&ua=${encodeURIComponent(userAgent)}`;
-    if (sid) q += `&sid=${encodeURIComponent(String(sid))}`;
+    if (effectiveSid) q += `&sid=${encodeURIComponent(String(effectiveSid))}`;
     return q;
   }
 
@@ -357,10 +366,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     return data;
   }
 
-  async function probeStream(url, referrer, userAgent) {
-    let q = `/api/probe?u=${encodeURIComponent(url)}`;
-    if (referrer) q += `&r=${encodeURIComponent(referrer)}`;
-    if (userAgent) q += `&ua=${encodeURIComponent(userAgent)}`;
+  async function probeStream(url) {
+    const q = `/api/probe?u=${encodeURIComponent(url)}`;
     try {
       const resp = await fetch(q);
       if (!resp.ok) return { kind: 'unknown', status: resp.status, errorClass: '', errorMessage: '' };
@@ -1153,14 +1160,13 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
         const logoBox = document.createElement('div');
         logoBox.className = 'ch-logo-box';
-        if (ch.logo && ch.logo.startsWith('https://')) {
+        if (ch.logo && (ch.logo.startsWith('https://') || ch.logo.startsWith('http://'))) {
           const img = document.createElement('img');
           img.className = 'ch-logo';
           img.loading = 'lazy';
           img.decoding = 'async';
-          img.referrerPolicy = 'no-referrer';
           img.alt = '';
-          img.src = ch.logo;
+          img.src = `/api/image?u=${encodeURIComponent(ch.logo)}`;
           img.addEventListener('error', () => {
             logoBox.textContent = (ch.name || 'TV').slice(0, 2).toUpperCase();
           });

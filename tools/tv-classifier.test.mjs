@@ -103,5 +103,13 @@ const { classifyFailure, pickEngineKind, buildHlsConfig } = require('../LexBrows
   assert.equal(cfg.manifestLoadPolicy.default.errorRetry.shouldRetry(null, null, { response: { code: 500 } }), true);
 }
 
+// 8. Encrypted stream rejected
+{
+  const enc = classifyFailure({ status: 422, errorClass: 'encrypted' });
+  assert.equal(enc.category, 'restricted');
+  assert.equal(enc.persistKind, 'restricted');
+  assert.match(enc.detail, /cifrado/);
+}
+
 console.log('tv-classifier.test.mjs: ALL TESTS PASSED');
 

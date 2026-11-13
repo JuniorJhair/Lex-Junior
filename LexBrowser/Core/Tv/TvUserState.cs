@@ -38,6 +38,8 @@ public sealed class TvPrefsData
 {
     public List<string> Favorites { get; set; } = new();
     public Dictionary<string, TvDeadMark> DeadStreams { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public int AcceptedTermsVersion { get; set; }
+    public DateTime? AcceptedTermsUtc { get; set; }
 }
 
 public sealed class TvPlaylistsData
@@ -50,12 +52,14 @@ public sealed class TvUserStateData
     public List<TvUserPlaylist> Playlists { get; set; } = new();
     public List<string> Favorites { get; set; } = new();
     public Dictionary<string, TvDeadMark> DeadStreams { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public int AcceptedTermsVersion { get; set; }
+    public DateTime? AcceptedTermsUtc { get; set; }
 }
 
 /// <summary>
-/// Persistencia separada bajo demanda: tv_prefs.json (favoritos + marcas tipificadas/LRU con debounce 500 ms)
-/// y tv_playlists.json (listas propias hasta 200 000 canales). Migra tv_user_state.json -> .bak.
-/// Sin timers persistentes ni datos en RAM tras ReleaseMemoryCache().
+/// Persistencia bajo demanda del usuario: tv_prefs.json (favoritos, términos aceptados y fallos tipificados)
+/// y tv_playlists.json (listas propias de canales M3U del usuario).
+/// Elimina cachés de terceros en el primer arranque y libera memoria al cerrar TV.
 /// </summary>
 public sealed class TvUserStateStore
 {
@@ -89,6 +93,40 @@ public sealed class TvUserStateStore
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "LexBrowser");
 
+    /// <summary>
+    /// Limpia cachés de catálogos y fuentes de terceros generados en versiones anteriores.
+    /// Preserva siempre las listas y preferencias del usuario (tv_playlists.json y tv_prefs.json).
+    /// </summary>
+    public static void CleanupThirdPartyCaches()
+    {
+        try
+        {
+            string dir = GetDefaultDirectory();
+            if (!Directory.Exists(dir)) return;
+
+            string[] obsoleteFiles = [
+                "tv_catalog.json",
+                "tv_catalog.etag",
+                "tv_cine_catalog.json",
+                "sources_tier1.m3u",
+                "sources_tier2.m3u",
+                "vod_addons.json",
+                "vod_tmdb_cache.json",
+                "vod_anilist_cache.json"
+            ];
+
+            foreach (var file in obsoleteFiles)
+            {
+                string full = Path.Combine(dir, file);
+                if (File.Exists(full))
+                {
+                    try { File.Delete(full); } catch { }
+                }
+            }
+        }
+        catch { }
+    }
+
     public TvUserStateData GetSnapshot()
     {
         lock (_lock)
@@ -106,7 +144,9 @@ public sealed class TvUserStateStore
                     Channels = p.Channels.ToList()
                 }).ToList(),
                 Favorites = prefs.Favorites.ToList(),
-                DeadStreams = new Dictionary<string, TvDeadMark>(prefs.DeadStreams, StringComparer.OrdinalIgnoreCase)
+                DeadStreams = new Dictionary<string, TvDeadMark>(prefs.DeadStreams, StringComparer.OrdinalIgnoreCase),
+                AcceptedTermsVersion = prefs.AcceptedTermsVersion,
+                AcceptedTermsUtc = prefs.AcceptedTermsUtc
             };
         }
     }
@@ -119,8 +159,31 @@ public sealed class TvUserStateStore
             return new TvPrefsData
             {
                 Favorites = prefs.Favorites.ToList(),
-                DeadStreams = new Dictionary<string, TvDeadMark>(prefs.DeadStreams, StringComparer.OrdinalIgnoreCase)
+                DeadStreams = new Dictionary<string, TvDeadMark>(prefs.DeadStreams, StringComparer.OrdinalIgnoreCase),
+                AcceptedTermsVersion = prefs.AcceptedTermsVersion,
+                AcceptedTermsUtc = prefs.AcceptedTermsUtc
             };
+        }
+    }
+
+    public bool HasAcceptedTerms(int minVersion = 1)
+    {
+        lock (_lock)
+        {
+            var prefs = EnsurePrefsLoaded();
+            return prefs.AcceptedTermsVersion >= minVersion;
+        }
+    }
+
+    public void AcceptTerms(int version = 1)
+    {
+        lock (_lock)
+        {
+            var prefs = EnsurePrefsLoaded();
+            prefs.AcceptedTermsVersion = version;
+            prefs.AcceptedTermsUtc = DateTime.UtcNow;
+            _prefsDirty = false;
+            SaveJsonAtomic(_prefsPath, prefs);
         }
     }
 
@@ -387,8 +450,6 @@ public sealed class TvUserStateStore
                 CountryName = ch.CountryName,
                 Logo = ch.Logo,
                 Quality = ch.Quality,
-                Referrer = ch.Referrer,
-                UserAgent = ch.UserAgent,
                 Tags = ch.Tags,
                 Source = playlistName,
                 Alternates = ch.Alternates?.ToList() ?? new List<TvStreamAlternate>()
@@ -406,6 +467,7 @@ public sealed class TvUserStateStore
             return _prefsCache;
         }
 
+        CleanupThirdPartyCaches();
         MigrateLegacyIfNeeded();
 
         try
@@ -439,6 +501,7 @@ public sealed class TvUserStateStore
     {
         if (_playlistsCache != null) return _playlistsCache;
 
+        CleanupThirdPartyCaches();
         MigrateLegacyIfNeeded();
 
         try
@@ -481,7 +544,9 @@ public sealed class TvUserStateStore
                 var prefs = new TvPrefsData
                 {
                     Favorites = legacy.Favorites ?? new(),
-                    DeadStreams = new Dictionary<string, TvDeadMark>(StringComparer.OrdinalIgnoreCase)
+                    DeadStreams = new Dictionary<string, TvDeadMark>(StringComparer.OrdinalIgnoreCase),
+                    AcceptedTermsVersion = legacy.AcceptedTermsVersion,
+                    AcceptedTermsUtc = legacy.AcceptedTermsUtc
                 };
 
                 DateTime now = DateTime.UtcNow;
