@@ -584,24 +584,37 @@ public static class TvStudioService
                 string connId = "xc_" + Guid.NewGuid().ToString("N")[..10];
                 string cleanName = string.IsNullOrWhiteSpace(name) ? "Mi IPTV Xtream" : name.Trim();
 
-                // 1. Obtener canales en vivo
-                var channels = await TvXtreamService.Shared.FetchLiveChannelsAsync(serverUrl, username, password, connId, cleanName, cts.Token);
+                // 1. Obtener canales en vivo (independiente de catálogos VOD)
+                var channels = new List<TvChannel>();
+                try
+                {
+                    channels = await TvXtreamService.Shared.FetchLiveChannelsAsync(serverUrl, username, password, connId, cleanName, cts.Token);
+                }
+                catch { }
 
                 // 2. Registrar en TvUserStateStore como playlist para que aparezca en el selector
                 TvUserStateStore.Shared.AddOrUpdatePlaylist(cleanName, $"xtream://{connId}", channels);
 
-                // 3. Importar VOD y Series si se solicitó
+                // 3. Importar VOD y Series si se solicitó (independientes entre sí)
                 int vodCount = 0;
                 int seriesCount = 0;
                 if (syncVod)
                 {
-                    var movies = await TvXtreamService.Shared.FetchVodMoviesAsync(serverUrl, username, password, connId, cts.Token);
-                    vodCount = movies.Count;
-                    if (movies.Count > 0) TvVodStore.Shared.ImportItems(movies);
+                    try
+                    {
+                        var movies = await TvXtreamService.Shared.FetchVodMoviesAsync(serverUrl, username, password, connId, cts.Token);
+                        vodCount = movies.Count;
+                        if (movies.Count > 0) TvVodStore.Shared.ImportItems(movies);
+                    }
+                    catch { }
 
-                    var series = await TvXtreamService.Shared.FetchSeriesAsync(serverUrl, username, password, connId, cts.Token);
-                    seriesCount = series.Count;
-                    if (series.Count > 0) TvVodStore.Shared.ImportItems(series);
+                    try
+                    {
+                        var series = await TvXtreamService.Shared.FetchSeriesAsync(serverUrl, username, password, connId, cts.Token);
+                        seriesCount = series.Count;
+                        if (series.Count > 0) TvVodStore.Shared.ImportItems(series);
+                    }
+                    catch { }
                 }
 
                 // 4. Guardar conexión en TvXtreamStore

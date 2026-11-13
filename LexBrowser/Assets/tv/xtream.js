@@ -144,7 +144,7 @@
 
   function checkHttpWarning() {
     const val = (els.server.value || '').trim().toLowerCase();
-    if (val.startsWith('http://')) {
+    if (val.startsWith('http://') || (val.length > 0 && !val.startsWith('https://'))) {
       els.httpAlert.classList.remove('hidden');
     } else {
       els.httpAlert.classList.add('hidden');
@@ -170,7 +170,8 @@
       return;
     }
 
-    if (serverUrl.toLowerCase().startsWith('http://') && !els.confirmHttp.checked) {
+    const isHttp = serverUrl.toLowerCase().startsWith('http://') || !serverUrl.toLowerCase().startsWith('https://');
+    if (isHttp && !els.confirmHttp.checked) {
       els.formError.textContent = 'Debes aceptar la advertencia de conexión HTTP no cifrada antes de continuar.';
       els.formError.classList.remove('hidden');
       return;

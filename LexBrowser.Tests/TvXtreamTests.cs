@@ -292,4 +292,310 @@ public sealed class TvXtreamTests
         Assert.False(validUserInfo);
         Assert.Contains("No incluyas usuario", errorUserInfo);
     }
+
+    // 12. Fallback de compatibilidad: servidor que responde 400 Action not found y valida con get_live_categories
+    [Fact]
+    public async Task AuthenticateAsync_ServerReturns400ActionNotFound_FallsBackToGetLiveCategoriesSuccessfully()
+    {
+        string categoriesJson = @"[
+            {""category_id"": 10, ""category_name"": ""Noticias Internacionales"", ""parent_id"": 0},
+            {""category_id"": 20, ""category_name"": ""Deportes en Vivo"", ""parent_id"": 0}
+        ]";
+
+        using var handler = new MockHttpHandler(req =>
+        {
+            string q = req.RequestUri?.Query ?? "";
+            if (!q.Contains("action="))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(@"{""message"":""Action not found""}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            if (q.Contains("action=get_live_categories"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(categoriesJson, Encoding.UTF8, "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var result = await service.AuthenticateAsync("https://stream.ejemplo.invalid", "usuario_test", "clave_test", CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.UserInfo);
+        Assert.Equal("usuario_test", result.UserInfo.Username);
+        Assert.Equal("Active", result.UserInfo.Status);
+        Assert.Equal(1, result.UserInfo.Auth);
+    }
+
+    // 13. Fallback de compatibilidad: credenciales incorrectas en fallback rechazan autenticación
+    [Fact]
+    public async Task AuthenticateAsync_Fallback_InvalidCredentials_RejectsAuthentication()
+    {
+        using var handler = new MockHttpHandler(req =>
+        {
+            string q = req.RequestUri?.Query ?? "";
+            if (!q.Contains("action="))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(@"{""message"":""Action not found""}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            // Credenciales incorrectas: responde 404 (o 401)
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var result = await service.AuthenticateAsync("https://stream.ejemplo.invalid", "usuario_malo", "clave_mala", CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("rechazada", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // 14. Fallback de compatibilidad: HTTP 200 con JSON malformado es rechazado con error claro
+    [Fact]
+    public async Task AuthenticateAsync_Fallback_Http200WithMalformedJson_ReturnsError()
+    {
+        using var handler = new MockHttpHandler(req =>
+        {
+            string q = req.RequestUri?.Query ?? "";
+            if (!q.Contains("action="))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(@"{""message"":""Action not found""}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("<html><body>502 Bad Gateway Nginx</body></html>", Encoding.UTF8, "text/html")
+            };
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var result = await service.AuthenticateAsync("https://stream.ejemplo.invalid", "usuario_test", "clave_test", CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.NotNull(result.ErrorMessage);
+    }
+
+    // 15. Fallback de compatibilidad: cuenta válida sin categorías (array vacío [])
+    [Fact]
+    public async Task AuthenticateAsync_Fallback_EmptyCategoriesArray_AuthenticatesSuccessfully()
+    {
+        using var handler = new MockHttpHandler(req =>
+        {
+            string q = req.RequestUri?.Query ?? "";
+            if (!q.Contains("action="))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(@"{""message"":""Action not found""}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var result = await service.AuthenticateAsync("https://stream.ejemplo.invalid", "usuario_test", "clave_test", CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.UserInfo);
+        Assert.Equal("Active", result.UserInfo.Status);
+    }
+
+    // 16. Fallback a get_vod_categories si el servidor solo soporta VOD y responde Action not found a live
+    [Fact]
+    public async Task AuthenticateAsync_Fallback_LiveNotSupportedButVodSupported_AuthenticatesSuccessfully()
+    {
+        string vodCategoriesJson = @"[{""category_id"": 5, ""category_name"": ""Acción""}]";
+
+        using var handler = new MockHttpHandler(req =>
+        {
+            string q = req.RequestUri?.Query ?? "";
+            if (!q.Contains("action="))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(@"{""message"":""Action not found""}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            if (q.Contains("action=get_live_categories"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(@"{""message"":""Action not found""}", Encoding.UTF8, "application/json")
+                };
+            }
+
+            if (q.Contains("action=get_vod_categories"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(vodCategoriesJson, Encoding.UTF8, "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var result = await service.AuthenticateAsync("https://stream.ejemplo.invalid", "usuario_test", "clave_test", CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.NotNull(result.UserInfo);
+        Assert.Equal("Active", result.UserInfo.Status);
+    }
+
+    // 17. Aislamiento de catálogos: TV en vivo disponible pero VOD no disponible
+    [Fact]
+    public async Task FetchCatalogs_LiveAvailableVodUnavailable_LoadsLiveChannelsGracefully()
+    {
+        string liveStreamsJson = @"[{""num"": 1, ""name"": ""Canal Test"", ""stream_id"": ""100"", ""category_id"": ""1""}]";
+
+        using var handler = new MockHttpHandler(req =>
+        {
+            string q = req.RequestUri?.Query ?? "";
+            if (q.Contains("action=get_live_streams"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(liveStreamsJson, Encoding.UTF8, "application/json")
+                };
+            }
+
+            if (q.Contains("action=get_vod_streams"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var liveChannels = await service.FetchLiveChannelsAsync("https://stream.ejemplo.invalid", "u", "p", "c1", "MiTV", CancellationToken.None);
+        var vodMovies = await service.FetchVodMoviesAsync("https://stream.ejemplo.invalid", "u", "p", "c1", CancellationToken.None);
+
+        Assert.Single(liveChannels);
+        Assert.Equal("Canal Test", liveChannels[0].Name);
+        Assert.Empty(vodMovies);
+    }
+
+    // 18. Aislamiento de catálogos: VOD disponible pero TV en vivo no disponible
+    [Fact]
+    public async Task FetchCatalogs_VodAvailableLiveUnavailable_LoadsVodGracefully()
+    {
+        string vodStreamsJson = @"[{""name"": ""Pelicula Test"", ""stream_id"": ""500"", ""container_extension"": ""mp4"", ""category_id"": ""1""}]";
+
+        using var handler = new MockHttpHandler(req =>
+        {
+            string q = req.RequestUri?.Query ?? "";
+            if (q.Contains("action=get_live_streams"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            }
+
+            if (q.Contains("action=get_vod_streams"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(vodStreamsJson, Encoding.UTF8, "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[]", Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var liveChannels = await service.FetchLiveChannelsAsync("https://stream.ejemplo.invalid", "u", "p", "c1", "MiTV", CancellationToken.None);
+        var vodMovies = await service.FetchVodMoviesAsync("https://stream.ejemplo.invalid", "u", "p", "c1", CancellationToken.None);
+
+        Assert.Empty(liveChannels);
+        Assert.Single(vodMovies);
+        Assert.Equal("Pelicula Test", vodMovies[0].Title);
+    }
+
+    // 19. Manejo de timeout al conectar
+    [Fact]
+    public async Task AuthenticateAsync_Timeout_ReturnsGracefulTimeoutError()
+    {
+        using var handler = new MockHttpHandler(req =>
+        {
+            throw new TaskCanceledException("The operation was canceled due to timeout.");
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var result = await service.AuthenticateAsync("https://stream.ejemplo.invalid", "u", "p", CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("Tiempo de espera agotado", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // 20. Manejo de servidor desconectado
+    [Fact]
+    public async Task AuthenticateAsync_ServerDisconnected_ReturnsGracefulConnectionError()
+    {
+        using var handler = new MockHttpHandler(req =>
+        {
+            throw new HttpRequestException("Connection refused", new System.Net.Sockets.SocketException((int)System.Net.Sockets.SocketError.ConnectionRefused));
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new TvXtreamService(injectedClient: client);
+
+        var result = await service.AuthenticateAsync("https://stream.ejemplo.invalid", "u", "p", CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Contains("No se pudo conectar", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // 21. Normalización de URL sin esquema http/https
+    [Theory]
+    [InlineData("tv.m3uts.xyz", "http://tv.m3uts.xyz/")]
+    [InlineData("servidor.ejemplo.invalid:8080", "http://servidor.ejemplo.invalid:8080/")]
+    [InlineData("https://seguro.ejemplo.invalid", "https://seguro.ejemplo.invalid/")]
+    public void ValidateServerUrl_AutoAddsHttpSchemeIfMissing(string input, string expected)
+    {
+        var (isValid, uri, _, error) = TvXtreamService.ValidateServerUrl(input);
+        Assert.True(isValid);
+        Assert.Null(error);
+        Assert.NotNull(uri);
+        Assert.Equal(expected, uri.AbsoluteUri);
+    }
 }

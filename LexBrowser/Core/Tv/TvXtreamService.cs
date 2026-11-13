@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,26 +16,45 @@ namespace LexBrowser.Core.Tv;
 /// Valida la red, resuelve DNS anti-SSRF, protege y redacta credenciales y
 /// devuelve flujos seguros para TV en vivo y VOD (películas y series).
 /// </summary>
-public sealed class TvXtreamService
+public sealed class TvXtreamService : IDisposable
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(20);
 
     private readonly Func<string, CancellationToken, Task<IPAddress[]>>? _customResolver;
-    private readonly HttpClient? _injectedClient;
+    private readonly HttpClient _client;
+    private readonly bool _ownsClient;
 
     public static TvXtreamService Shared { get; } = new();
 
     public TvXtreamService(Func<string, CancellationToken, Task<IPAddress[]>>? resolver = null, HttpClient? injectedClient = null)
     {
         _customResolver = resolver;
-        _injectedClient = injectedClient;
+        if (injectedClient != null)
+        {
+            _client = injectedClient;
+            _ownsClient = false;
+        }
+        else
+        {
+            _client = TvUrlGuard.CreatePinnedHttpClient(_customResolver, DefaultTimeout);
+            _ownsClient = true;
+        }
     }
 
-    private HttpClient GetClient() => _injectedClient ?? TvUrlGuard.CreatePinnedHttpClient(_customResolver, DefaultTimeout);
+    private HttpClient GetClient() => _client;
+
+    public void Dispose()
+    {
+        if (_ownsClient)
+        {
+            _client.Dispose();
+        }
+    }
 
     /// <summary>
     /// Valida sintaxis, protocolo y seguridad del servidor Xtream.
     /// Rechaza esquemas no HTTP/HTTPS, credenciales en la URL, y hosts locales o privados.
+    /// Antepone http:// automáticamente si el usuario ingresó únicamente el host/dominio.
     /// </summary>
     public static (bool IsValid, Uri? Uri, bool IsHttpWarning, string? Error) ValidateServerUrl(string? serverUrl)
     {
@@ -42,6 +62,11 @@ public sealed class TvXtreamService
             return (false, null, false, "La URL del servidor no puede estar vacía.");
 
         string trimmed = serverUrl.Trim();
+        if (!trimmed.Contains("://"))
+        {
+            trimmed = "http://" + trimmed;
+        }
+
         if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
             return (false, null, false, "URL inválida.");
 
@@ -62,7 +87,76 @@ public sealed class TvXtreamService
     }
 
     /// <summary>
-    /// Autentica con el servidor Xtream Codes mediante /player_api.php?username={u}&password={p}.
+    /// Comprueba si el cuerpo de respuesta de un error HTTP 400 contiene específicamente 'Action not found'.
+    /// </summary>
+    public static bool IsActionNotFoundError(string? responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody)) return false;
+
+        if (responseBody.Contains("Action not found", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(responseBody);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                if (doc.RootElement.TryGetProperty("message", out var msgEl) &&
+                    msgEl.GetString()?.Equals("Action not found", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    return true;
+                }
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Determina si una respuesta JSON corresponde a una lista de categorías válida de Xtream Codes.
+    /// Valida que sea un array JSON de objetos (o un array vacío representativo de cuenta sin contenido).
+    /// </summary>
+    public static bool IsValidCategoriesResponse(string? json, out bool isEmpty)
+    {
+        isEmpty = false;
+        if (string.IsNullOrWhiteSpace(json)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Array) return false;
+
+            int len = root.GetArrayLength();
+            if (len == 0)
+            {
+                isEmpty = true;
+                return true;
+            }
+
+            foreach (var item in root.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object)
+                {
+                    if (item.TryGetProperty("category_id", out _) || item.TryGetProperty("category_name", out _))
+                        return true;
+                }
+            }
+
+            return root[0].ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Autentica con el servidor Xtream Codes.
+    /// 1. Intenta la solicitud tradicional mediante /player_api.php?username={u}&password={p} sin acción.
+    /// 2. Si responde HTTP 400 específicamente con 'Action not found', ejecuta la operación de compatibilidad
+    ///    consultando get_live_categories (o get_vod_categories) para paneles que exigen action obligatoria.
     /// Redacta credenciales de cualquier excepción para evitar filtraciones en logs o UI.
     /// </summary>
     public async Task<TvXtreamAuthResult> AuthenticateAsync(string serverUrl, string username, string password, CancellationToken ct)
@@ -91,32 +185,213 @@ public sealed class TvXtreamService
 
         try
         {
-            using var client = GetClient();
+            var client = GetClient();
             var (response, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(targetUrl), rangeHeader: null, ct).ConfigureAwait(false);
             using (response)
             {
-                if (!response.IsSuccessStatusCode)
+                // Flujo 1: Servidor tradicional que responde 2xx
+                if (response.IsSuccessStatusCode)
+                {
+                    string json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    return ParseAuthResponse(json, val.IsHttpWarning, username, password);
+                }
+
+                // Flujo 2: Servidor que exige action obligatoria (HTTP 400 con "Action not found")
+                if (response.StatusCode == HttpStatusCode.BadRequest)
+                {
+                    string errBody = "";
+                    try
+                    {
+                        errBody = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    }
+                    catch { }
+
+                    if (IsActionNotFoundError(errBody))
+                    {
+                        return await AuthenticateWithActionFallbackAsync(cleanBase, username, password, val.IsHttpWarning, ct).ConfigureAwait(false);
+                    }
+
+                    return new TvXtreamAuthResult
+                    {
+                        Success = false,
+                        ErrorMessage = "El servidor rechazó la solicitud (código 400 Bad Request)."
+                    };
+                }
+
+                // Otros códigos HTTP claramente diferenciados
+                if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
                 {
                     return new TvXtreamAuthResult
                     {
                         Success = false,
-                        ErrorMessage = $"El servidor respondió con código {(int)response.StatusCode} {response.ReasonPhrase}."
+                        ErrorMessage = $"Autenticación rechazada por el servidor: credenciales inválidas (código {(int)response.StatusCode})."
                     };
                 }
 
-                string json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                return ParseAuthResponse(json, val.IsHttpWarning, username, password);
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return new TvXtreamAuthResult
+                    {
+                        Success = false,
+                        ErrorMessage = "El servidor no encontró el endpoint solicitado (código 404). Verifica que la URL del servidor sea correcta."
+                    };
+                }
+
+                return new TvXtreamAuthResult
+                {
+                    Success = false,
+                    ErrorMessage = $"El servidor respondió con código {(int)response.StatusCode} {response.ReasonPhrase}."
+                };
             }
         }
         catch (Exception ex)
         {
             string redacted = TvXtreamSecurity.Redact(ex.Message, username, password);
+            if (ex is TimeoutException or TaskCanceledException)
+            {
+                return new TvXtreamAuthResult
+                {
+                    Success = false,
+                    ErrorMessage = "Tiempo de espera agotado al conectar con el servidor Xtream."
+                };
+            }
+            if (ex is SocketException or HttpRequestException)
+            {
+                return new TvXtreamAuthResult
+                {
+                    Success = false,
+                    ErrorMessage = $"No se pudo conectar con el servidor Xtream ({redacted})."
+                };
+            }
+
             return new TvXtreamAuthResult
             {
                 Success = false,
                 ErrorMessage = $"Error al conectar con el servidor: {redacted}"
             };
         }
+    }
+
+    /// <summary>
+    /// Operación de compatibilidad para servidores Xtream que exigen obligatoriamente el parámetro 'action'.
+    /// Consulta get_live_categories (o get_vod_categories) y valida rigurosamente la respuesta JSON.
+    /// </summary>
+    private async Task<TvXtreamAuthResult> AuthenticateWithActionFallbackAsync(
+        string cleanBase,
+        string username,
+        string password,
+        bool isHttpWarning,
+        CancellationToken ct)
+    {
+        // 1. Probar con get_live_categories
+        string liveCatUrl = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username.Trim())}&password={Uri.EscapeDataString(password.Trim())}&action=get_live_categories";
+
+        try
+        {
+            var client = GetClient();
+            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(liveCatUrl), rangeHeader: null, ct).ConfigureAwait(false);
+            using (resp)
+            {
+                if (resp.IsSuccessStatusCode)
+                {
+                    string json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    if (IsValidCategoriesResponse(json, out _))
+                    {
+                        return CreateActionAuthResult(cleanBase, username, isHttpWarning);
+                    }
+                }
+                else if (resp.StatusCode == HttpStatusCode.NotFound || resp.StatusCode == HttpStatusCode.Unauthorized || resp.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    return new TvXtreamAuthResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Autenticación rechazada: usuario o contraseña incorrectos."
+                    };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (ex is TimeoutException or TaskCanceledException)
+            {
+                return new TvXtreamAuthResult
+                {
+                    Success = false,
+                    ErrorMessage = "Tiempo de espera agotado al conectar con el servidor Xtream."
+                };
+            }
+        }
+
+        // 2. Si get_live_categories no devolvió categorías válidas, intentar con get_vod_categories
+        string vodCatUrl = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username.Trim())}&password={Uri.EscapeDataString(password.Trim())}&action=get_vod_categories";
+
+        try
+        {
+            var client = GetClient();
+            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(vodCatUrl), rangeHeader: null, ct).ConfigureAwait(false);
+            using (resp)
+            {
+                if (resp.IsSuccessStatusCode)
+                {
+                    string json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                    if (IsValidCategoriesResponse(json, out _))
+                    {
+                        return CreateActionAuthResult(cleanBase, username, isHttpWarning);
+                    }
+
+                    return new TvXtreamAuthResult
+                    {
+                        Success = false,
+                        ErrorMessage = "El servidor devolvió una respuesta que no es JSON válido (respuesta malformada)."
+                    };
+                }
+                else if (resp.StatusCode == HttpStatusCode.NotFound || resp.StatusCode == HttpStatusCode.Unauthorized || resp.StatusCode == HttpStatusCode.Forbidden)
+                {
+                    return new TvXtreamAuthResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Autenticación rechazada: usuario o contraseña incorrectos."
+                    };
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (ex is TimeoutException or TaskCanceledException)
+            {
+                return new TvXtreamAuthResult
+                {
+                    Success = false,
+                    ErrorMessage = "Tiempo de espera agotado al conectar con el servidor Xtream."
+                };
+            }
+        }
+
+        return new TvXtreamAuthResult
+        {
+            Success = false,
+            ErrorMessage = "El servidor no respondió con categorías válidas ni soporta las acciones estándar de Xtream Codes."
+        };
+    }
+
+    private static TvXtreamAuthResult CreateActionAuthResult(string cleanBase, string username, bool isHttpWarning)
+    {
+        return new TvXtreamAuthResult
+        {
+            Success = true,
+            UserInfo = new TvXtreamUserInfo
+            {
+                Username = username.Trim(),
+                Status = "Active",
+                Auth = 1,
+                ExpDate = null
+            },
+            ServerInfo = new TvXtreamServerInfo
+            {
+                Url = cleanBase
+            },
+            IsHttpWarning = isHttpWarning
+        };
     }
 
     public static TvXtreamAuthResult ParseAuthResponse(string json, bool isHttpWarning, string? username = null, string? password = null)
@@ -222,7 +497,7 @@ public sealed class TvXtreamService
         string json;
         try
         {
-            using var client = GetClient();
+            var client = GetClient();
             var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
             using (resp)
             {
@@ -230,9 +505,9 @@ public sealed class TvXtreamService
                 json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             }
         }
-        catch (Exception ex)
+        catch
         {
-            throw TvXtreamSecurity.RedactException(ex, username, password);
+            return new List<TvChannel>();
         }
 
         return ParseLiveStreams(json, categories, connId, connName);
@@ -301,7 +576,7 @@ public sealed class TvXtreamService
         string json;
         try
         {
-            using var client = GetClient();
+            var client = GetClient();
             var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
             using (resp)
             {
@@ -370,7 +645,7 @@ public sealed class TvXtreamService
         string json;
         try
         {
-            using var client = GetClient();
+            var client = GetClient();
             var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
             using (resp)
             {
@@ -393,7 +668,7 @@ public sealed class TvXtreamService
             try
             {
                 string infoUrl = $"{serverUrl.TrimEnd('/')}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_series_info&series_id={Uri.EscapeDataString(s.SeriesId)}";
-                using var client = GetClient();
+                var client = GetClient();
                 var (infoResp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(infoUrl), null, ct).ConfigureAwait(false);
                 using (infoResp)
                 {
@@ -512,7 +787,7 @@ public sealed class TvXtreamService
 
         try
         {
-            using var client = GetClient();
+            var client = GetClient();
             var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
             using (resp)
             {
