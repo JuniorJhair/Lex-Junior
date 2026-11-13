@@ -561,6 +561,11 @@ public partial class MainWindow
         }
         catch { }
 
+        if (!tab.IsIncognito && !tab.IsGuest)
+        {
+            _ = ResetStaleCapturePermissionsOnceAsync(core);
+        }
+
         // Atajos F12, Ctrl+Shift+I (DevTools), Ctrl+Shift+L (Shield Logger) y control de Zoom cuando el foco está sobre el WebView
         tab.WebView.PreviewKeyDown += (s, e) =>
         {

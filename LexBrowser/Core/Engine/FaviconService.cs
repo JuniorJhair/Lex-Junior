@@ -86,6 +86,27 @@ public static class FaviconService
         string domain = ExtractDomain(pageUrl);
         if (string.IsNullOrEmpty(domain)) return null;
 
+        // Favicon nativo de alta resolución para Lex TV (tv.lex.local)
+        if (string.Equals(domain, "tv.lex.local", StringComparison.OrdinalIgnoreCase))
+        {
+            if (_cache.TryGetValue("tv.lex.local", out var tvCached)) return tvCached;
+            try
+            {
+                string tvIconPath = Path.Combine(Tv.TvStudioService.GetTvAssetsFolder(), "favicon.png");
+                if (File.Exists(tvIconPath))
+                {
+                    using var ms = new MemoryStream(File.ReadAllBytes(tvIconPath));
+                    var img = CreateFrozenBitmapFromMemory(ms);
+                    if (img != null)
+                    {
+                        StoreInCache("tv.lex.local", img);
+                        return img;
+                    }
+                }
+            }
+            catch { }
+        }
+
         // 1. Revisar caché en memoria (solo si no es incógnito)
         if (!isIncognito && _cache.TryGetValue(domain, out var cached))
         {

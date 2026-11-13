@@ -1369,18 +1369,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   let addSourceMode = 'm3u';
 
   function setAddSourceMode(mode) {
-    addSourceMode = mode;
-    if (mode === 'xtream') {
-      els.tabModeXtream.classList.add('active');
-      els.tabModeM3u.classList.remove('active');
-      els.panelModeXtream.classList.remove('hidden');
-      els.panelModeM3u.classList.add('hidden');
-    } else {
-      els.tabModeM3u.classList.add('active');
-      els.tabModeXtream.classList.remove('active');
-      els.panelModeM3u.classList.remove('hidden');
-      els.panelModeXtream.classList.add('hidden');
-    }
+    addSourceMode = 'm3u';
+    if (els.panelModeM3u) els.panelModeM3u.classList.remove('hidden');
     updateSubmitAddState();
   }
 
@@ -1389,13 +1379,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       els.btnSubmitAdd.disabled = true;
       return;
     }
-    if (addSourceMode === 'xtream') {
-      const srv = (els.xcServerInput.value || '').trim().toLowerCase();
-      if (srv.startsWith('http://') && !els.chkConfirmHttp.checked) {
-        els.btnSubmitAdd.disabled = true;
-        return;
-      }
-    }
     els.btnSubmitAdd.disabled = false;
   }
 
@@ -1403,8 +1386,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     els.addModalError.classList.add('hidden');
     els.addModalInfo.classList.add('hidden');
     els.chkLegalAuth.checked = false;
-    els.chkConfirmHttp.checked = false;
-    els.xcHttpAlert.classList.add('hidden');
     setAddSourceMode('m3u');
     els.btnSubmitAdd.disabled = true;
     els.addModal.classList.remove('hidden');
@@ -1430,73 +1411,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (!els.chkLegalAuth.checked) {
       els.addModalError.textContent = 'Debes confirmar que cuentas con autorización para utilizar las fuentes.';
       els.addModalError.classList.remove('hidden');
-      return;
-    }
-
-    if (addSourceMode === 'xtream') {
-      const name = (els.xcNameInput.value || '').trim();
-      const serverUrl = (els.xcServerInput.value || '').trim();
-      const username = (els.xcUserInput.value || '').trim();
-      const password = (els.xcPassInput.value || '').trim();
-      const saveCredentials = !!els.chkXcSaveCreds.checked;
-      const syncVod = !!els.chkXcSyncVod.checked;
-
-      if (!serverUrl || !username || !password) {
-        els.addModalError.textContent = 'Ingresa la URL del servidor, usuario y contraseña.';
-        els.addModalError.classList.remove('hidden');
-        return;
-      }
-
-      if (serverUrl.toLowerCase().startsWith('http://') && !els.chkConfirmHttp.checked) {
-        els.addModalError.textContent = 'Debes confirmar la advertencia de conexión HTTP no cifrada antes de continuar.';
-        els.addModalError.classList.remove('hidden');
-        return;
-      }
-
-      els.btnSubmitAdd.disabled = true;
-      try {
-        els.addModalInfo.textContent = 'Conectando con el servidor Xtream Codes…';
-        els.addModalInfo.classList.remove('hidden');
-
-        const res = await apiJson('/api/xtream/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name,
-            serverUrl,
-            username,
-            password,
-            saveCredentials,
-            syncVod,
-            confirmedAuthorized: true
-          })
-        });
-
-        await loadCatalog();
-        if (res.connectionId) {
-          const match = state.playlists.find((p) => p.sourceUrl === `xtream://${res.connectionId}`);
-          if (match) {
-            state.activeSourceId = match.id;
-            renderSourceSelect();
-            await onSourceChange();
-          }
-        }
-
-        let summary = `Conectado a ${res.name || 'Xtream'}: ${res.liveCount || 0} canales en vivo`;
-        if (res.vodCount) summary += `, ${res.vodCount} películas`;
-        if (res.seriesCount) summary += `, ${res.seriesCount} series`;
-        summary += '.';
-
-        els.addModalInfo.textContent = summary;
-        els.addModalInfo.classList.remove('hidden');
-        setTimeout(closeAddModal, 1200);
-      } catch (err) {
-        els.addModalInfo.classList.add('hidden');
-        els.addModalError.textContent = err.message;
-        els.addModalError.classList.remove('hidden');
-      } finally {
-        updateSubmitAddState();
-      }
       return;
     }
 
@@ -1836,15 +1750,17 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     els.btnCancelAdd.addEventListener('click', closeAddModal);
     els.btnSubmitAdd.addEventListener('click', submitAddSource);
 
-    els.tabModeM3u.addEventListener('click', () => setAddSourceMode('m3u'));
-    els.tabModeXtream.addEventListener('click', () => setAddSourceMode('xtream'));
+    if (els.tabModeM3u) els.tabModeM3u.addEventListener('click', () => setAddSourceMode('m3u'));
+    if (els.tabModeXtream) els.tabModeXtream.addEventListener('click', () => setAddSourceMode('xtream'));
     els.chkLegalAuth.addEventListener('change', updateSubmitAddState);
-    els.chkConfirmHttp.addEventListener('change', updateSubmitAddState);
-    els.xcServerInput.addEventListener('input', () => {
-      const val = (els.xcServerInput.value || '').trim().toLowerCase();
-      els.xcHttpAlert.classList.toggle('hidden', !val.startsWith('http://'));
-      updateSubmitAddState();
-    });
+    if (els.chkConfirmHttp) els.chkConfirmHttp.addEventListener('change', updateSubmitAddState);
+    if (els.xcServerInput) {
+      els.xcServerInput.addEventListener('input', () => {
+        const val = (els.xcServerInput.value || '').trim().toLowerCase();
+        if (els.xcHttpAlert) els.xcHttpAlert.classList.toggle('hidden', !val.startsWith('http://'));
+        updateSubmitAddState();
+      });
+    }
 
     els.plFileInput.addEventListener('change', async () => {
       els.addModalError.classList.add('hidden');

@@ -1064,10 +1064,10 @@
                 <!-- Botón Lex TV (Reproductor bajo demanda: IPTV y VOD) -->
                 <Button x:Name="BtnLiveTv" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
                         ToolTip="Lex TV: Reproductor bajo demanda (IPTV y VOD, 0% consumo al cerrar)" Click="BtnLiveTv_Click">
-                    <Border Background="#252536" CornerRadius="8" Padding="10,4,12,4">
+                    <Border Background="#252536" CornerRadius="8" Padding="10,4,16,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center" Margin="0,0,2,0"/>
+                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                         </StackPanel>
                     </Border>
                 </Button>

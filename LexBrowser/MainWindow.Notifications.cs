@@ -415,6 +415,39 @@ public partial class MainWindow
         }
     }
 
+    private static bool _capturePermMigrationRunning;
+
+    private async Task ResetStaleCapturePermissionsOnceAsync(CoreWebView2 core)
+    {
+        if (SettingsManager.Current.CapturePermissionsMigrationV1Done || _capturePermMigrationRunning) return;
+        _capturePermMigrationRunning = true;
+        try
+        {
+            var list = await core.Profile.GetNonDefaultPermissionSettingsAsync();
+            int reset = 0;
+            foreach (var s in list)
+            {
+                if (s.PermissionState != CoreWebView2PermissionState.Deny) continue;
+                if (s.PermissionKind != CoreWebView2PermissionKind.Microphone &&
+                    s.PermissionKind != CoreWebView2PermissionKind.Camera) continue;
+                try
+                {
+                    await core.Profile.SetPermissionStateAsync(s.PermissionKind, s.PermissionOrigin, CoreWebView2PermissionState.Default);
+                    reset++;
+                }
+                catch { }
+            }
+            SettingsManager.Current.CapturePermissionsMigrationV1Done = true;
+            SettingsManager.Save(notify: false);
+            ShieldLogger.Log("CAPTURE_PERMISSION_MIGRATION", "local", "", "Profile", $"Reset {reset} stale Deny entries (mic/camera)");
+        }
+        catch (Exception ex)
+        {
+            ShieldLogger.Log("CAPTURE_PERMISSION_MIGRATION_ERROR", "local", "", "Profile", ex.Message);
+        }
+        finally { _capturePermMigrationRunning = false; }
+    }
+
     private void HandleCorePermissionRequested(BrowserTab tab, CoreWebView2 core, CoreWebView2PermissionRequestedEventArgs e)
     {
         if (tab.IsDisposed) return;
@@ -433,6 +466,8 @@ public partial class MainWindow
         if (e.PermissionKind == CoreWebView2PermissionKind.Camera ||
             e.PermissionKind == CoreWebView2PermissionKind.Microphone)
         {
+            ShieldLogger.Log("CAPTURE_PERMISSION_REQUESTED", host, uriStr, "MainFrame", $"{e.PermissionKind} state={e.State} userInitiated={e.IsUserInitiated}", tabDesc);
+
             bool isSafeOrigin = false;
 
             try

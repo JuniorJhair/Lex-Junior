@@ -551,6 +551,14 @@ public partial class MainWindow
         PopupSitePermissions.IsOpen = true;
     }
 
+    private static bool OriginMatchesUri(string? origin, Uri uri)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var o)) return false;
+        return string.Equals(o.Scheme, uri.Scheme, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(o.Host, uri.Host, StringComparison.OrdinalIgnoreCase)
+            && o.Port == uri.Port;
+    }
+
     private static CoreWebView2PermissionState ResolvePermissionState(
         IReadOnlyList<CoreWebView2PermissionSetting>? settings,
         CoreWebView2PermissionKind kind,
@@ -558,11 +566,14 @@ public partial class MainWindow
     {
         if (settings == null || settings.Count == 0) return CoreWebView2PermissionState.Default;
 
-        string host = uri.Host;
-        var match = settings.FirstOrDefault(s => s.PermissionKind == kind &&
-            s.PermissionOrigin.Contains(host, StringComparison.OrdinalIgnoreCase));
+        var matches = settings
+            .Where(s => s.PermissionKind == kind && OriginMatchesUri(s.PermissionOrigin, uri))
+            .ToList();
 
-        return match?.PermissionState ?? CoreWebView2PermissionState.Default;
+        if (matches.Count == 0) return CoreWebView2PermissionState.Default;
+        if (matches.Any(s => s.PermissionState == CoreWebView2PermissionState.Deny)) return CoreWebView2PermissionState.Deny;
+        if (matches.Any(s => s.PermissionState == CoreWebView2PermissionState.Allow)) return CoreWebView2PermissionState.Allow;
+        return CoreWebView2PermissionState.Default;
     }
 
     private static void SetComboPermissionState(ComboBox? cmb, CoreWebView2PermissionState state)
@@ -620,6 +631,19 @@ public partial class MainWindow
             }
             catch { }
         }
+
+        try
+        {
+            var existing = await core.Profile.GetNonDefaultPermissionSettingsAsync();
+            foreach (var s in existing)
+            {
+                if (s.PermissionKind == kind && OriginMatchesUri(s.PermissionOrigin, uri))
+                {
+                    try { await core.Profile.SetPermissionStateAsync(kind, s.PermissionOrigin, state); } catch { }
+                }
+            }
+        }
+        catch { }
     }
 
     private async void CmbPerm_SelectionChanged(object sender, SelectionChangedEventArgs e)

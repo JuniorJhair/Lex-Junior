@@ -36,6 +36,7 @@ public class BrowserSettings
     public bool EnableSearchSuggestions { get; set; } = true;
     public bool EnableExternalFaviconService { get; set; } = true;
     public bool RestorePreviousSession { get; set; } = true;
+    public bool CapturePermissionsMigrationV1Done { get; set; } = false;
 
     // Ahorro de recursos, avisos de cookies y lector en voz alta
     public int TabSuspensionMinutes { get; set; } = 15;

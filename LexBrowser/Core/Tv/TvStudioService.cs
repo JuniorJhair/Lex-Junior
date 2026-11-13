@@ -176,6 +176,7 @@ public static class TvStudioService
                              path.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ? "text/css; charset=utf-8" :
                              path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ? "image/svg+xml" :
                              path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" :
+                             path.EndsWith(".ico", StringComparison.OrdinalIgnoreCase) ? "image/x-icon" :
                              "application/octet-stream";
 
         bool isVendor = path.StartsWith("vendor/", StringComparison.OrdinalIgnoreCase);

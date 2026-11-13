@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lex TV — Xtream Codes</title>
+  <link rel="stylesheet" href="./tv.css" />
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <link rel="shortcut icon" href="./favicon.ico" />
+  <script defer src="./xtream.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">Lex TV</span>
+      <nav class="section-nav" aria-label="Secciones">
+        <a href="index.html" class="nav-tab">Inicio</a>
+        <a href="tv.html" class="nav-tab">TV en vivo</a>
+        <a href="vod.html" class="nav-tab">VOD</a>
+        <a href="xtream.html" class="nav-tab active" aria-current="page">Xtream Codes</a>
+        <a href="legal.html" class="nav-tab">Aviso Legal</a>
+        <a href="como-funciona.html" class="nav-tab">Cómo funciona</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="hub-container xtream-main">
+    <section class="hero">
+      <h1>Lex TV — Conexión Xtream Codes</h1>
+      <p>
+        Conecta tu servidor IPTV personal mediante credenciales Xtream Codes. Los canales en vivo se sincronizan en TV en vivo y el catálogo de películas y series en Cine VOD.
+      </p>
+    </section>
+
+    <div class="xtream-layout">
+      <!-- Panel de Conexión -->
+      <section class="xtream-card form-card">
+        <div class="card-head">
+          <span class="card-icon">⚡</span>
+          <div>
+            <h2>Conectar Nuevo Servidor</h2>
+            <p class="muted">Ingresa los datos de tu proveedor personal</p>
+          </div>
+        </div>
+
+        <form id="formXtream" class="xtream-form" onsubmit="return false;">
+          <label class="field">
+            <span>Nombre de la conexión (opcional)</span>
+            <input id="xcNameInput" class="ctrl" type="text" maxlength="60" placeholder="Ej: Mi IPTV Personal" />
+          </label>
+
+          <label class="field">
+            <span>URL del servidor</span>
+            <input id="xcServerInput" class="ctrl" type="url" required placeholder="https://tu-servidor.com:8080" />
+          </label>
+
+          <div id="xcHttpAlert" class="alert-warning hidden">
+            ⚠️ El servidor especificado utiliza HTTP no cifrado. Las credenciales se transmitirían sin cifrar en la red.
+            <label class="legal-check-row mt-8">
+              <input type="checkbox" id="chkConfirmHttp" />
+              <span>Acepto conectar por HTTP sin cifrar bajo mi responsabilidad.</span>
+            </label>
+          </div>
+
+          <div class="grid-2col">
+            <label class="field">
+              <span>Usuario</span>
+              <input id="xcUserInput" class="ctrl" type="text" required placeholder="usuario" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Contraseña</span>
+              <input id="xcPassInput" class="ctrl" type="password" required placeholder="contraseña" autocomplete="off" />
+            </label>
+          </div>
+
+          <label class="legal-check-row">
+            <input type="checkbox" id="chkXcSaveCreds" checked />
+            <span>Recordar credenciales protegidas en este equipo (Windows DPAPI)</span>
+          </label>
+
+          <label class="legal-check-row">
+            <input type="checkbox" id="chkXcSyncVod" checked />
+            <span>Importar también películas y series a Cine VOD</span>
+          </label>
+
+          <!-- Aviso legal obligatorio -->
+          <p class="legal-note mt-12">
+            «Declaro que tengo autorización para acceder y visualizar el contenido de las fuentes que agrego. Soy responsable del uso que hago de ellas. Lex es únicamente una herramienta de reproducción y organización de fuentes proporcionadas por el usuario».
+          </p>
+
+          <label class="legal-check-row mt-8">
+            <input type="checkbox" id="chkLegalAuth" />
+            <span class="bold-white">Confirmo que tengo autorización expresa para acceder a este servidor.</span>
+          </label>
+
+          <div id="formError" class="form-error hidden"></div>
+          <div id="formInfo" class="form-info hidden"></div>
+
+          <button id="btnConnect" type="button" class="btn-primary mt-12 w-full">
+            ⚡ Conectar e Importar
+          </button>
+        </form>
+      </section>
+
+      <!-- Panel de Conexiones Activas -->
+      <section class="xtream-card list-card">
+        <div class="card-head">
+          <span class="card-icon">📡</span>
+          <div>
+            <h2>Mis Conexiones Activas</h2>
+            <p class="muted">Servidores configurados localmente</p>
+          </div>
+        </div>
+
+        <div id="connectionsList" class="connections-list">
+          <div class="empty-state">
+            <p class="muted">Cargando conexiones…</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="hub-footer">
+      <p>
+        Lex TV no aloja ni distribuye contenidos protegidos. Las credenciales se protegen localmente mediante Windows DPAPI.<br />
+        <a href="legal.html">Aviso Legal</a> · <a href="como-funciona.html">Cómo Funciona</a>
+      </p>
+    </footer>
+  </main>
+</body>
+</html>
+
