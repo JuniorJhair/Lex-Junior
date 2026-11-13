@@ -77,6 +77,7 @@ public sealed class HistoryStore : IDisposable
                         foreach (var item in list)
                         {
                             if (item == null || string.IsNullOrWhiteSpace(item.Url)) continue;
+                            if (Tv.TvStudioService.IsTvUrl(item.Url)) continue;
                             // Filtrar o desenvolver URLs internas del visor PDF que pudieran haberse guardado antes
                             if (Pdf.PdfStudioService.TryUnwrapInternalViewerUrl(item.Url, out string? unwrappedPdf))
                             {
@@ -166,6 +167,11 @@ public sealed class HistoryStore : IDisposable
             if (string.IsNullOrWhiteSpace(externalPdfWebUrl))
                 return false;
             trimmed = externalPdfWebUrl;
+        }
+
+        if (Tv.TvStudioService.IsTvUrl(trimmed))
+        {
+            return false;
         }
 
         normalizedUrl = trimmed;

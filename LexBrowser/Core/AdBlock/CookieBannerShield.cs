@@ -50,7 +50,7 @@ public static class CookieBannerShield
     const __LEX_PAYMENT_AUTH_HOSTS = [];
 
     const hostname = (window.location.hostname || '').toLowerCase();
-    if (!hostname || hostname === 'pdf.lex.local') return;
+    if (!hostname || hostname === 'pdf.lex.local' || hostname === 'tv.lex.local') return;
 
     const ends = (d) => hostname === d || hostname.endsWith('.' + d);
 

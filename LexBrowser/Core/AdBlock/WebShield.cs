@@ -96,6 +96,7 @@ public static class WebShield
 
     // YouTube cuenta con su propio optimizador aislado y no debe ser intervenido por este escudo genérico
     if (isYouTube) return;
+    if (!hostname || hostname === 'tv.lex.local' || hostname === 'pdf.lex.local') return;
 
     const isGoogle = ends('google.com') ||
                      ends('google.com.pe') ||

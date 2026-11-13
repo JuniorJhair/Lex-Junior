@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using LexBrowser.Core.Pdf;
+using LexBrowser.Core.Tv;
 
 namespace LexBrowser.Core;
 
@@ -22,6 +23,12 @@ public static class OmniboxInputResolver
         if (PdfStudioService.IsPdfTarget(input))
         {
             return PdfStudioService.GetViewerUrl(input);
+        }
+
+        // 1b. Acceso directo a Lex TV (IPTV bajo demanda)
+        if (TvStudioService.IsTvShortcut(input))
+        {
+            return TvStudioService.HomeUrl;
         }
 
         // 2. Esquemas explícitos ya presentes

@@ -474,6 +474,15 @@ public static class NewTabPage
           </svg>
         </div>X
       </a>
+      <a class=""quick-link"" href=""https://tv.lex.local/index.html"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <rect x=""2"" y=""6"" width=""20"" height=""14"" rx=""3"" fill=""#6366F1""/>
+            <path d=""M8 3l4 3 4-3"" stroke=""#38BDF8"" stroke-width=""2"" fill=""none"" stroke-linecap=""round""/>
+            <polygon points=""10,10 16,13 10,16"" fill=""#FFFFFF""/>
+          </svg>
+        </div>TV en vivo
+      </a>
     </div>
   </div>
 
@@ -495,6 +504,10 @@ public static class NewTabPage
     function go() {
       const v = document.getElementById('si').value.trim();
       if (!v) return;
+      if (/^lex:(?:\/\/)?tv$/i.test(v)) {
+        window.location.href = 'https://tv.lex.local/index.html';
+        return;
+      }
       if (/^(https?|file|about|view-source|data):/i.test(v)) {
         window.location.href = v;
       } else if (/^[a-zA-Z]:[\\\/]/i.test(v)) {

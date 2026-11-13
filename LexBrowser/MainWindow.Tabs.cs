@@ -20,6 +20,7 @@ using LexBrowser.Core.Engine;
 using LexBrowser.Core.Interop;
 using LexBrowser.Core.Notifications;
 using LexBrowser.Core.Pdf;
+using LexBrowser.Core.Tv;
 using LexBrowser.UI.Models;
 using LexBrowser.UI.Views;
 using Microsoft.Web.WebView2.Core;
@@ -828,9 +829,12 @@ public partial class MainWindow
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Ping);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Other);
         core.AddWebResourceRequestedFilter("https://pdf.lex.local/*", CoreWebView2WebResourceContext.All);
+        core.AddWebResourceRequestedFilter("https://tv.lex.local/*", CoreWebView2WebResourceContext.All);
         core.WebResourceRequested += (s, e) =>
         {
             if (PdfStudioService.TryHandleWebResourceRequest(core.Environment, e))
+                return;
+            if (TvStudioService.TryHandleWebResourceRequest(core.Environment, e))
                 return;
 
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri))
@@ -1625,6 +1629,39 @@ public partial class MainWindow
                 return;
             }
 
+            if (TvStudioService.IsTvUrl(e.Uri))
+            {
+                return;
+            }
+
+            if (TvStudioService.IsCineShortcut(e.Uri))
+            {
+                e.Cancel = true;
+                var winRef = tab.OwnerWindow ?? this;
+                _ = winRef.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!tab.IsDisposed)
+                    {
+                        tab.WebView?.CoreWebView2?.Navigate(TvStudioService.CineUrl);
+                    }
+                }));
+                return;
+            }
+
+            if (TvStudioService.IsTvShortcut(e.Uri))
+            {
+                e.Cancel = true;
+                var winRef = tab.OwnerWindow ?? this;
+                _ = winRef.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!tab.IsDisposed)
+                    {
+                        tab.WebView?.CoreWebView2?.Navigate(TvStudioService.HomeUrl);
+                    }
+                }));
+                return;
+            }
+
             // Filtro de seguridad y anti-secuestro de pestaña (Tab-under / Reverse Popunder)
             if (SettingsManager.Current.EnableAdBlocker && Uri.TryCreate(e.Uri, UriKind.Absolute, out var targetUri))
             {
@@ -1763,7 +1800,8 @@ public partial class MainWindow
                     win.RequestDomMediaScan(tab);
                 }
 
-                if (e.IsSuccess && !tab.IsIncognito && !tab.IsGuest && !tab.IsNewTab && !string.IsNullOrWhiteSpace(core.Source))
+                if (e.IsSuccess && !tab.IsIncognito && !tab.IsGuest && !tab.IsNewTab &&
+                    !string.IsNullOrWhiteSpace(core.Source) && !TvStudioService.IsTvUrl(core.Source))
                 {
                     HistoryManager.AddEntry(core.Source, core.DocumentTitle);
                 }
@@ -1864,7 +1902,8 @@ public partial class MainWindow
                 else
                 {
                     tab.Title = string.IsNullOrWhiteSpace(core.DocumentTitle) ? "Nueva pestaña" : core.DocumentTitle;
-                    if (!tab.IsIncognito && !tab.IsGuest && !string.IsNullOrWhiteSpace(core.Source))
+                    if (!tab.IsIncognito && !tab.IsGuest &&
+                        !string.IsNullOrWhiteSpace(core.Source) && !TvStudioService.IsTvUrl(core.Source))
                     {
                         HistoryManager.UpdateTitle(core.Source, tab.Title);
                     }
@@ -2884,6 +2923,15 @@ public partial class MainWindow
 
         Tabs.Remove(tabToClose);
         RescheduleSuspensionTimer();
+
+        if (TvStudioService.IsTvUrl(tabToClose.Url))
+        {
+            bool anyTvOpen = Application.Current?.Windows
+                .OfType<MainWindow>()
+                .Any(w => w.Tabs.Any(t => !t.IsDisposed && TvStudioService.IsTvUrl(t.Url))) == true;
+            if (!anyTvOpen)
+                TvStudioService.ReleaseAll();
+        }
 
         if (_pipWindow.TargetTab == tabToClose)
         {

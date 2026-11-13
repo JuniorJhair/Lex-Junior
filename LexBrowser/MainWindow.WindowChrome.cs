@@ -15,6 +15,7 @@ using Microsoft.Web.WebView2.Wpf;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
 using LexBrowser.Core.Interop;
+using LexBrowser.Core.Tv;
 using LexBrowser.UI.Models;
 using LexBrowser.UI.Views;
 
@@ -855,6 +856,22 @@ public partial class MainWindow
         {
             System.Diagnostics.Debug.WriteLine($"[History] Error al abrir historial: {ex}");
         }
+    }
+
+    private async void BtnLiveTv_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (IsLocked) return;
+
+        var existingTv = Tabs.FirstOrDefault(t => !t.IsDisposed && TvStudioService.IsTvUrl(t.Url));
+        if (existingTv != null)
+        {
+            SelectTab(existingTv, force: true);
+            return;
+        }
+
+        var tvTab = await AddNewTabAsync(TvStudioService.HomeUrl, isIncognito: _isGuestSession ? false : (_activeTab?.IsIncognito ?? false));
+        SelectTab(tvTab, force: true);
     }
 
     private void BtnSettings_Click(object sender, RoutedEventArgs e)
