@@ -979,101 +979,40 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     });
   }
 
-  function scoreAnime(ch) {
-    if (!ch) return 0;
-    let score = 0;
-    const name = (ch.name || '').toLowerCase();
-    const group = (ch.group || '').toLowerCase();
-    const lang = (ch.language || '').toLowerCase();
-    const tags = (ch.tags || '').toLowerCase();
-
-    const animeKeywords = ['anime', 'manga', 'otaku', 'toei', 'crunchyroll', 'animax', 'funimation', 'retro anime', 'aniverse'];
-    for (const kw of animeKeywords) {
-      if (name.includes(kw)) score += 5;
-      if (group.includes(kw) || tags.includes(kw)) score += 3;
-    }
-
-    if (lang === 'jpn' || lang === 'ja' || (ch.country || '').toLowerCase() === 'jp') {
-      if (group.includes('animat') || group.includes('animac') || group.includes('kids')) score += 4;
-      else score += 2;
-    }
-
-    const franchises = [
-      'dragon ball', 'naruto', 'one piece', 'pokemon', 'pokémon', 'digimon',
-      'sailor moon', 'doraemon', 'shin chan', 'yugioh', 'yu-gi-oh', 'bleach',
-      'inuyasha', 'ranma', 'saint seiya', 'caballeros del zodiaco', 'capitan tsubasa',
-      'supercampeones', 'death note', 'evangelion', 'ghibli', 'conan'
-    ];
-    for (const f of franchises) {
-      if (name.includes(f)) score += 6;
-    }
-
-    return score;
-  }
-
   function applyFilters() {
     const query = (els.searchInput.value || '').trim().toLowerCase();
     const lang = els.langSelect.value;
     const cat = els.categorySelect.value;
     const hideDead = els.hideDeadChk.checked;
 
-    const isAnimCategory = cat !== 'all' && (cat.toLowerCase().includes('animat') || cat.toLowerCase().includes('animac'));
-    if (els.animSubfilters) {
-      els.animSubfilters.classList.toggle('hidden', !isAnimCategory);
-    }
-
-    let baseList;
-    if (state.activeSourceId === 'catalog') {
-      baseList = state.catalog;
-    } else if (state.activeSourceId === 'favorites') {
-      const plChannels = Array.from(state.loadedPlaylists.values()).flatMap((p) => p.channels || []);
-      const all = state.catalog.concat(plChannels);
-      const byId = new Set();
+    let baseList = [];
+    if (state.activeSourceId === 'favorites') {
+      const all = Array.from(state.loadedPlaylists.values()).flatMap((p) => p.channels || []);
+      const seen = new Set();
       baseList = all.filter((c) => {
-        if (!state.favorites.has(c.id) || byId.has(c.id)) return false;
-        byId.add(c.id);
+        if (!state.favorites.has(c.id) && !state.favorites.has(c.url)) return false;
+        const key = c.url || c.id;
+        if (seen.has(key)) return false;
+        seen.add(key);
         return true;
       });
-    } else {
+    } else if (state.activeSourceId !== 'none') {
       const pl = state.loadedPlaylists.get(state.activeSourceId);
       baseList = pl ? (pl.channels || []) : [];
-    }
-
-    if (isAnimCategory && els.animCountrySelect && els.animCountrySelect.options.length <= 1) {
-      const countries = new Set();
-      for (const ch of baseList) {
-        if (ch.group === cat && ch.country) countries.add(ch.country);
-      }
-      const sortedCountries = Array.from(countries).sort();
-      els.animCountrySelect.innerHTML = '<option value="all">País: Todos</option>';
-      for (const c of sortedCountries) {
-        const opt = document.createElement('option');
-        opt.value = c;
-        opt.textContent = c;
-        els.animCountrySelect.appendChild(opt);
-      }
     }
 
     state.filtered = baseList.filter((ch) => {
       if (hideDead && isChannelAllDead(ch)) return false;
 
-      if (isAnimCategory) {
-        if (state.animeOnly && scoreAnime(ch) < 3) return false;
-        if (state.animCountry && state.animCountry !== 'all' && (ch.country || '').toLowerCase() !== state.animCountry.toLowerCase()) return false;
-        if (state.animLang === 'es' && !String(ch.language || '').toLowerCase().includes('español')) return false;
-        if (state.animLang === 'jp' && !String(ch.language || '').toLowerCase().includes('japonés') && String(ch.language || '').toLowerCase() !== 'jpn') return false;
-        if (state.animLang === 'en' && !String(ch.language || '').toLowerCase().includes('inglés') && String(ch.language || '').toLowerCase() !== 'eng') return false;
-      } else {
-        if (lang === 'es' && !String(ch.language || '').toLowerCase().includes('español')) return false;
-        if (lang === 'en' && !String(ch.language || '').toLowerCase().includes('inglés')) return false;
-      }
+      if (lang === 'es' && !String(ch.language || '').toLowerCase().includes('es')) return false;
+      if (lang === 'en' && !String(ch.language || '').toLowerCase().includes('en')) return false;
 
       if (cat !== 'all' && ch.group !== cat) return false;
       if (query) {
         const qNum = query.startsWith('#') ? query.slice(1) : query;
         const matchNum = /^\d+$/.test(qNum) && String(ch.number) === qNum;
         if (!matchNum) {
-          const hay = `${ch.name} ${ch.countryName || ''} ${ch.country || ''} ${ch.group || ''}`.toLowerCase();
+          const hay = `${ch.name} ${ch.group || ''} ${ch.language || ''} ${ch.country || ''}`.toLowerCase();
           if (!hay.includes(query)) return false;
         }
       }
@@ -1106,16 +1045,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const cur = state.activeSourceId;
     els.sourceSelect.innerHTML = '';
 
-    const optCat = document.createElement('option');
-    optCat.value = 'catalog';
-    optCat.textContent = `Catálogo iptv-org (${state.catalog.length})`;
-    els.sourceSelect.appendChild(optCat);
-
-    const optFav = document.createElement('option');
-    optFav.value = 'favorites';
-    optFav.textContent = `★ Favoritos (${state.favorites.size})`;
-    els.sourceSelect.appendChild(optFav);
-
     for (const pl of state.playlists) {
       const opt = document.createElement('option');
       opt.value = pl.id;
@@ -1123,10 +1052,26 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       els.sourceSelect.appendChild(opt);
     }
 
+    const optFav = document.createElement('option');
+    optFav.value = 'favorites';
+    optFav.textContent = `★ Favoritos (${state.favorites.size})`;
+    els.sourceSelect.appendChild(optFav);
+
+    if (state.playlists.length === 0) {
+      const optNone = document.createElement('option');
+      optNone.value = 'none';
+      optNone.textContent = '(Sin listas cargadas)';
+      els.sourceSelect.insertBefore(optNone, optFav);
+    }
+
     const exists = Array.from(els.sourceSelect.options).some((o) => o.value === cur);
-    state.activeSourceId = exists ? cur : 'catalog';
+    if (exists) {
+      state.activeSourceId = cur;
+    } else {
+      state.activeSourceId = state.playlists.length > 0 ? state.playlists[0].id : (state.favorites.size > 0 ? 'favorites' : 'none');
+    }
     els.sourceSelect.value = state.activeSourceId;
-    els.btnRemoveList.classList.toggle('hidden', state.activeSourceId === 'catalog' || state.activeSourceId === 'favorites');
+    els.btnRemoveList.classList.toggle('hidden', state.activeSourceId === 'favorites' || state.activeSourceId === 'none');
   }
 
   let virtualRaf = 0;
@@ -1190,56 +1135,6 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
           qb.className = 'ch-badge';
           qb.textContent = ch.quality;
           nameRow.appendChild(qb);
-        }
-
-        if (ch.tier === 1) {
-          const tb = document.createElement('span');
-          tb.className = 'ch-badge badge-tier1';
-          tb.textContent = 'Oficial';
-          tb.title = ch.provenance || 'Oficial verificado (legalFree)';
-          nameRow.appendChild(tb);
-        } else if (ch.tier === 2) {
-          const tb = document.createElement('span');
-          tb.className = 'ch-badge badge-tier2';
-          tb.textContent = 'Curado';
-          tb.title = ch.provenance || 'Curado (Free-TV)';
-          nameRow.appendChild(tb);
-        } else if (ch.tier === 3) {
-          const tb = document.createElement('span');
-          tb.className = 'ch-badge badge-tier3';
-          tb.textContent = 'Comunitario';
-          tb.title = ch.provenance || 'Comunitario (iptv-org)';
-          nameRow.appendChild(tb);
-        }
-
-        if (ch.isGeoblocked) {
-          const gb = document.createElement('span');
-          gb.className = 'ch-badge badge-geo';
-          gb.textContent = 'Ⓖ';
-          gb.title = 'Transmisión con posible restricción geográfica';
-          nameRow.appendChild(gb);
-        }
-        if (ch.isSd) {
-          const sdb = document.createElement('span');
-          sdb.className = 'ch-badge badge-sd';
-          sdb.textContent = 'Ⓢ';
-          sdb.title = 'Definición estándar (SD)';
-          nameRow.appendChild(sdb);
-        }
-        if (ch.isYouTube || ch.kind === 'external') {
-          const ytb = document.createElement('span');
-          ytb.className = 'ch-badge badge-yt';
-          ytb.textContent = 'Ⓨ';
-          ytb.title = 'Transmisión de YouTube';
-          nameRow.appendChild(ytb);
-        }
-
-        if (scoreAnime(ch) >= 3) {
-          const ab = document.createElement('span');
-          ab.className = 'ch-badge badge-anime';
-          ab.textContent = 'Anime';
-          ab.title = 'Canal de animación o anime';
-          nameRow.appendChild(ab);
         }
 
         if (Array.isArray(ch.alternates) && ch.alternates.length > 0) {
@@ -1319,21 +1214,15 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   }
 
   async function loadCatalog(refresh = false) {
-    els.channelCountLabel.textContent = refresh ? 'Actualizando iptv-org…' : 'Cargando catálogo…';
+    els.channelCountLabel.textContent = 'Cargando listas…';
     try {
-      const data = await apiJson(`/api/catalog?multi=1${refresh ? '&refresh=1' : ''}`);
-      state.catalog = data.channels || [];
+      const data = await apiJson('/api/catalog');
       state.playlists = data.playlists || [];
       state.favorites = new Set(data.prefs?.favorites || []);
       state.deadStreams = data.prefs?.deadStreams || Object.create(null);
 
-      if (data.updatedUtc) {
-        const dt = new Date(data.updatedUtc);
-        els.catalogAgeLabel.textContent = `${data.fromCache ? 'Caché' : 'Actualizado'} ${dt.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}`;
-      }
       renderSourceSelect();
-      renderCategorySelect(state.catalog);
-      applyFilters();
+      await onSourceChange();
     } catch (err) {
       els.channelCountLabel.textContent = `Error: ${err.message}`;
     }
@@ -1341,8 +1230,21 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
   async function onSourceChange() {
     state.activeSourceId = els.sourceSelect.value;
-    els.btnRemoveList.classList.toggle('hidden', state.activeSourceId === 'catalog' || state.activeSourceId === 'favorites');
-    if (state.activeSourceId !== 'catalog' && state.activeSourceId !== 'favorites') {
+    els.btnRemoveList.classList.toggle('hidden', state.activeSourceId === 'favorites' || state.activeSourceId === 'none');
+
+    if (state.activeSourceId === 'favorites') {
+      for (const pl of state.playlists) {
+        if (!state.loadedPlaylists.has(pl.id)) {
+          try {
+            const data = await apiJson(`/api/playlist?id=${encodeURIComponent(pl.id)}`);
+            if (data.playlist) state.loadedPlaylists.set(pl.id, data.playlist);
+          } catch { }
+        }
+      }
+      const all = Array.from(state.loadedPlaylists.values()).flatMap((p) => p.channels || []);
+      const favs = all.filter((c) => state.favorites.has(c.id) || state.favorites.has(c.url));
+      renderCategorySelect(favs);
+    } else if (state.activeSourceId !== 'none') {
       if (!state.loadedPlaylists.has(state.activeSourceId)) {
         els.channelCountLabel.textContent = 'Cargando lista…';
         try {
@@ -1356,7 +1258,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       const pl = state.loadedPlaylists.get(state.activeSourceId);
       renderCategorySelect(pl?.channels || []);
     } else {
-      renderCategorySelect(state.catalog);
+      renderCategorySelect([]);
     }
     applyFilters();
   }
@@ -1865,66 +1767,21 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       els.diagSaveMsg.classList.remove('hidden');
     });
 
-    async function openSourcesModal() {
-      if (els.sourcesModal) els.sourcesModal.classList.remove('hidden');
+    async function checkTermsAccepted() {
       try {
-        const data = await apiJson('/api/sources');
-        if (data) {
-          if (els.srcTier1Count) els.srcTier1Count.textContent = `${data.tier1Count || 0} canales`;
-          if (els.srcTier2Count) els.srcTier2Count.textContent = `${data.tier2Count || 0} canales`;
-          if (els.srcTier3Count) els.srcTier3Count.textContent = `${data.tier3Count || 0} canales`;
+        const resp = await fetch('/api/terms/status');
+        if (resp.ok) {
+          const data = await resp.json();
+          if (!data.accepted) {
+            window.location.href = 'index.html';
+          }
         }
       } catch { }
     }
 
-    function closeSourcesModal() {
-      if (els.sourcesModal) els.sourcesModal.classList.add('hidden');
-    }
-
-    if (els.btnSources) els.btnSources.addEventListener('click', openSourcesModal);
-    if (els.btnCloseSources) els.btnCloseSources.addEventListener('click', closeSourcesModal);
-    if (els.btnCloseSourcesFoot) els.btnCloseSourcesFoot.addEventListener('click', closeSourcesModal);
-    if (els.btnRefreshSources) {
-      els.btnRefreshSources.addEventListener('click', async () => {
-        closeSourcesModal();
-        try { await apiJson('/api/sources/refresh', { method: 'POST' }); } catch { }
-        await loadCatalog(true);
-      });
-    }
-
-    const animPills = [
-      { el: els.btnAnimLangEs, lang: 'es' },
-      { el: els.btnAnimLangJp, lang: 'jp' },
-      { el: els.btnAnimLangEn, lang: 'en' },
-      { el: els.btnAnimLangAll, lang: 'all' }
-    ];
-
-    animPills.forEach(({ el, lang }) => {
-      if (el) {
-        el.addEventListener('click', () => {
-          state.animLang = lang;
-          animPills.forEach(p => p.el?.classList.toggle('active', p.lang === lang));
-          applyFilters();
-        });
-      }
-    });
-
-    if (els.chkAnimeOnly) {
-      els.chkAnimeOnly.addEventListener('change', () => {
-        state.animeOnly = !!els.chkAnimeOnly.checked;
-        applyFilters();
-      });
-    }
-
-    if (els.animCountrySelect) {
-      els.animCountrySelect.addEventListener('change', () => {
-        state.animCountry = els.animCountrySelect.value;
-        applyFilters();
-      });
-    }
-
     window.addEventListener('beforeunload', destroyActivePlayer);
 
+    checkTermsAccepted();
     loadCatalog(false);
     if (new URLSearchParams(window.location.search).get('diag') === '1') {
       openDiagModal();
