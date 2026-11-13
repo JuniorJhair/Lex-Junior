@@ -216,7 +216,7 @@ public static class TvStudioService
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(proxyRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
-                hdrSb.Append("Access-Control-Expose-Headers: X-Lex-Error-Class, X-Lex-Upstream, Content-Range, Accept-Ranges\r\n");
+                hdrSb.Append("Access-Control-Expose-Headers: X-Lex-Error-Class, X-Lex-Upstream, Content-Range, Accept-Ranges, Content-Length\r\n");
                 hdrSb.Append("X-Content-Type-Options: nosniff\r\n");
                 hdrSb.Append("Cache-Control: no-store");
                 foreach (var kv in proxyRes.ExtraHeaders)
@@ -248,7 +248,7 @@ public static class TvStudioService
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(proxyRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
-                hdrSb.Append("Access-Control-Expose-Headers: X-Lex-Error-Class, X-Lex-Upstream, Content-Range, Accept-Ranges\r\n");
+                hdrSb.Append("Access-Control-Expose-Headers: X-Lex-Error-Class, X-Lex-Upstream, Content-Range, Accept-Ranges, Content-Length\r\n");
                 hdrSb.Append("X-Content-Type-Options: nosniff\r\n");
                 hdrSb.Append("Cache-Control: no-store");
                 foreach (var kv in proxyRes.ExtraHeaders)
@@ -261,7 +261,35 @@ public static class TvStudioService
 
             if (path.Equals("api/image", StringComparison.OrdinalIgnoreCase))
             {
-                var imgRes = await TvStreamProxy.FetchImageAsync(q["u"], cts.Token);
+                string? rawTarget = q["u"];
+                string? connId = q["conn"];
+
+                // Si la URL es relativa y se proporcionó connId o existe una conexión en el almacén, resolver contra ServerUrl
+                if (!string.IsNullOrWhiteSpace(rawTarget) &&
+                    !rawTarget.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                    !rawTarget.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? sUrl = null;
+                    if (!string.IsNullOrWhiteSpace(connId))
+                    {
+                        var match = TvXtreamStore.Shared.GetConnection(connId);
+                        if (match != null && !string.IsNullOrWhiteSpace(match.ServerUrl))
+                            sUrl = match.ServerUrl;
+                    }
+                    if (string.IsNullOrEmpty(sUrl))
+                    {
+                        var first = TvXtreamStore.Shared.GetSummaries().FirstOrDefault();
+                        if (first != null && !string.IsNullOrWhiteSpace(first.ServerUrl))
+                            sUrl = first.ServerUrl;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(sUrl))
+                    {
+                        rawTarget = $"{sUrl.TrimEnd('/')}/{rawTarget.TrimStart('/')}";
+                    }
+                }
+
+                var imgRes = await TvStreamProxy.FetchImageAsync(rawTarget, cts.Token);
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(imgRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");

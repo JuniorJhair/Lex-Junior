@@ -598,4 +598,157 @@ public sealed class TvXtreamTests
         Assert.NotNull(uri);
         Assert.Equal(expected, uri.AbsoluteUri);
     }
+
+    // 22. Reconocimiento exclusivo de tv.lex.local como origen interno seguro
+    [Fact]
+    public void InternalTvOrigin_RecognizesOnlyExactTvLexLocalHttps()
+    {
+        Assert.True(TvUrlGuard.IsInternalTvOrigin(new Uri("https://tv.lex.local")));
+        Assert.True(TvUrlGuard.IsInternalTvOrigin(new Uri("https://tv.lex.local/api/xtream/live")));
+
+        // HTTP debe ser rechazado
+        Assert.False(TvUrlGuard.IsInternalTvOrigin(new Uri("http://tv.lex.local/api/xtream/live")));
+        // Puertos no estándar deben ser rechazados
+        Assert.False(TvUrlGuard.IsInternalTvOrigin(new Uri("https://tv.lex.local:8443/api/xtream/live")));
+        // UserInfo debe ser rechazado
+        Assert.False(TvUrlGuard.IsInternalTvOrigin(new Uri("https://admin:123@tv.lex.local/api/xtream/live")));
+        // Otros dominios .local deben ser rechazados
+        Assert.False(TvUrlGuard.IsInternalTvOrigin(new Uri("https://otro.local/api/xtream/live")));
+        Assert.False(TvUrlGuard.IsInternalTvOrigin(new Uri("https://router.local/")));
+    }
+
+    // 23. Validación de rutas virtuales internas de streaming
+    [Theory]
+    [InlineData("https://tv.lex.local/api/xtream/live?conn=c1&id=10", true)]
+    [InlineData("https://tv.lex.local/api/xtream/vod?conn=c1&id=20&ext=mp4", true)]
+    [InlineData("https://tv.lex.local/api/xtream/series?conn=c1&id=30&ext=mkv", true)]
+    [InlineData("https://tv.lex.local/api/other/path", false)]
+    [InlineData("https://otro.local/api/xtream/live?conn=c1&id=10", false)]
+    [InlineData("http://tv.lex.local/api/xtream/live?conn=c1&id=10", false)]
+    [InlineData("http://evil.com/fake", false)]
+    public void IsInternalTvStreamUrl_ValidatesCorrectEndpoints(string url, bool expectedValid)
+    {
+        bool valid = TvUrlGuard.IsInternalTvStreamUrl(url, out var uri);
+        Assert.Equal(expectedValid, valid);
+        if (expectedValid)
+        {
+            Assert.NotNull(uri);
+            Assert.Equal("tv.lex.local", uri.Host);
+        }
+    }
+
+    // 24. Todos los demás dominios .local siguen bloqueados para URLs remotas
+    [Theory]
+    [InlineData("http://printer.local/stream.m3u8")]
+    [InlineData("https://device.local:8080/live")]
+    [InlineData("http://sub.domain.local/vod")]
+    [InlineData("https://tv.lex.local/api/xtream/live")] // No permitido como destino remoto externo
+    public void IsAllowedRemoteUrl_BlocksAllLocalDomains(string url)
+    {
+        bool allowed = TvUrlGuard.IsAllowedRemoteUrl(url, out _);
+        Assert.False(allowed);
+    }
+
+    // 25. Redirecciones remotas hacia dominios .local o IPs privadas se bloquean estrictamente
+    [Fact]
+    public async Task GetWithSafeRedirectsAsync_RedirectToPrivateOrLocal_ThrowsBlockedException()
+    {
+        using var handler = new MockHttpHandler(req =>
+        {
+            var resp = new HttpResponseMessage(HttpStatusCode.Redirect);
+            // Intentar redirigir hacia IP privada o tv.lex.local
+            resp.Headers.Location = new Uri("http://192.168.1.1/movie.mp4");
+            return resp;
+        });
+
+        using var client = new HttpClient(handler);
+        var ex = await Assert.ThrowsAsync<TvProxyErrorException>(async () =>
+        {
+            await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri("https://stream.ejemplo.invalid/test"), null, CancellationToken.None);
+        });
+
+        Assert.Equal("blocked", ex.ErrorClass);
+    }
+
+    // 26. Normalización de rutas relativas de pósteres e imágenes VOD
+    [Theory]
+    [InlineData("http://servidor.com/images/poster.jpg", "http://base.com", "http://servidor.com/images/poster.jpg")]
+    [InlineData("https://tmdb.org/t/p/w500/abc.jpg", "http://base.com", "https://tmdb.org/t/p/w500/abc.jpg")]
+    [InlineData("/images/poster.jpg", "http://tv.m3uts.xyz:80", "http://tv.m3uts.xyz:80/images/poster.jpg")]
+    [InlineData("images/poster.jpg", "http://tv.m3uts.xyz", "http://tv.m3uts.xyz/images/poster.jpg")]
+    [InlineData("poster.png", "https://servidor.com:8080/", "https://servidor.com:8080/poster.png")]
+    public void NormalizePosterUrl_ResolvesCorrectly(string raw, string serverBase, string expected)
+    {
+        string? resolved = TvXtreamService.NormalizePosterUrl(raw, serverBase);
+        Assert.Equal(expected, resolved);
+    }
+
+    // 27. ParseVodStreams aplica la normalización de pósteres con serverUrl
+    [Fact]
+    public void ParseVodStreams_WithServerUrl_ResolvesRelativePosters()
+    {
+        string json = @"[{
+            ""stream_id"": ""42"",
+            ""name"": ""Godzilla Test"",
+            ""container_extension"": ""mp4"",
+            ""stream_icon"": ""/images/godzilla.jpg""
+        }]";
+
+        var categories = new Dictionary<string, string>();
+        var items = TvXtreamService.ParseVodStreams(json, categories, "conn1", "http://tv.m3uts.xyz:80");
+
+        Assert.Single(items);
+        Assert.Equal("http://tv.m3uts.xyz:80/images/godzilla.jpg", items[0].Logo);
+        Assert.StartsWith("https://tv.lex.local/api/xtream/vod", items[0].Url);
+    }
+
+    // 28. Preservación y propagación de encabezados Range y 206 Partial Content
+    [Fact]
+    public void BuildForwardHeaders_PartialContent_PreservesRangeAndAcceptRanges()
+    {
+        var resp = new HttpResponseMessage(HttpStatusCode.PartialContent);
+        resp.Content = new ByteArrayContent(new byte[1024]);
+        resp.Content.Headers.ContentRange = new System.Net.Http.Headers.ContentRangeHeaderValue(0, 1023, 5000000);
+
+        var headers = TvStreamProxy.BuildForwardHeaders(resp);
+
+        Assert.True(headers.ContainsKey("Content-Range"));
+        Assert.Equal("bytes 0-1023/5000000", headers["Content-Range"]);
+        Assert.True(headers.ContainsKey("Content-Length"));
+        Assert.Equal("1024", headers["Content-Length"]);
+        Assert.True(headers.ContainsKey("Accept-Ranges"));
+        Assert.Equal("bytes", headers["Accept-Ranges"]);
+    }
+
+    // 29. Respuesta HTTP 200 sin soporte Range preserva Content-Length sin inyectar Content-Range
+    [Fact]
+    public void BuildForwardHeaders_OkResponse_PreservesContentLength()
+    {
+        var resp = new HttpResponseMessage(HttpStatusCode.OK);
+        resp.Content = new ByteArrayContent(new byte[2048]);
+
+        var headers = TvStreamProxy.BuildForwardHeaders(resp);
+
+        Assert.False(headers.ContainsKey("Content-Range"));
+        Assert.True(headers.ContainsKey("Content-Length"));
+        Assert.Equal("2048", headers["Content-Length"]);
+    }
+
+    // 30. Las URLs virtuales de streaming no exponen credenciales en texto claro
+    [Fact]
+    public void ParseLiveAndVod_DoNotExposeCredentialsInUrl()
+    {
+        string liveJson = @"[{""stream_id"": ""99"", ""name"": ""Canal Test""}]";
+        string vodJson = @"[{""stream_id"": ""88"", ""name"": ""Peli Test"", ""container_extension"": ""mp4""}]";
+
+        var live = TvXtreamService.ParseLiveStreams(liveJson, new(), "conn_secret", "Canales", "http://servidor.com");
+        var vod = TvXtreamService.ParseVodStreams(vodJson, new(), "conn_secret", "http://servidor.com");
+
+        Assert.DoesNotContain("usuario", live[0].Url);
+        Assert.DoesNotContain("clave", live[0].Url);
+        Assert.DoesNotContain("usuario", vod[0].Url);
+        Assert.DoesNotContain("clave", vod[0].Url);
+        Assert.StartsWith("https://tv.lex.local/api/xtream/live", live[0].Url);
+        Assert.StartsWith("https://tv.lex.local/api/xtream/vod", vod[0].Url);
+    }
 }

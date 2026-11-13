@@ -542,6 +542,63 @@ body {
   object-fit: contain;
 }
 
+/* Player Status / Error Overlay */
+.vod-player-status {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  backdrop-filter: blur(4px);
+  padding: 24px;
+}
+
+.vod-player-status.hidden {
+  display: none !important;
+}
+
+.vod-status-card {
+  max-width: 480px;
+  width: 100%;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.vod-status-icon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.vod-status-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.vod-status-desc {
+  font-size: 14px;
+  color: #9ca3af;
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.vod-status-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  width: 100%;
+}
+
 /* Resume Prompt Banner inside player */
 .resume-banner {
   position: absolute;

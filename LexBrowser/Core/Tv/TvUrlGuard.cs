@@ -33,6 +33,48 @@ public static class TvUrlGuard
     public const int MaxPlaylistBytes = 20 * 1024 * 1024;
     public const string DefaultUserAgent = "LexBrowser/2.1 (Windows NT 10.0; Win64; x64) LexTv/1.0";
 
+    /// <summary>Host interno exacto reservado para el WebView2 local de Lex TV.</summary>
+    public const string InternalHost = "tv.lex.local";
+    /// <summary>Origen HTTPS interno exacto de Lex TV.</summary>
+    public const string InternalOrigin = "https://tv.lex.local";
+
+    /// <summary>
+    /// Comprueba si la URI corresponde exclusivamente al origen interno seguro de Lex TV (https://tv.lex.local).
+    /// No admite otros dominios .local, puertos no estándar ni esquemas no seguros (solo HTTPS).
+    /// </summary>
+    public static bool IsInternalTvOrigin(Uri? uri)
+    {
+        if (uri == null || !uri.IsAbsoluteUri) return false;
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(uri.Host, InternalHost, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!uri.IsDefaultPort && uri.Port != 443) return false;
+        if (!string.IsNullOrEmpty(uri.UserInfo)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Comprueba si la URL corresponde a una ruta virtual interna autorizada de streaming de Lex TV
+    /// (/api/xtream/live, /api/xtream/vod, /api/xtream/series).
+    /// No admite orígenes remotos ni otros endpoints que no pertenezcan a tv.lex.local.
+    /// </summary>
+    public static bool IsInternalTvStreamUrl(string? url, out Uri? uri)
+    {
+        uri = null;
+        if (string.IsNullOrWhiteSpace(url) || url.Length > 2048) return false;
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u)) return false;
+        if (!IsInternalTvOrigin(u)) return false;
+
+        string path = u.AbsolutePath.Trim().ToLowerInvariant();
+        if (path.StartsWith("/api/xtream/live", StringComparison.Ordinal) ||
+            path.StartsWith("/api/xtream/vod", StringComparison.Ordinal) ||
+            path.StartsWith("/api/xtream/series", StringComparison.Ordinal))
+        {
+            uri = u;
+            return true;
+        }
+        return false;
+    }
+
     public static bool IsAllowedRemoteUrl(string? url, out Uri? uri)
     {
         uri = null;

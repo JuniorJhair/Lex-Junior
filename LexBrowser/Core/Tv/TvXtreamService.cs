@@ -513,7 +513,29 @@ public sealed class TvXtreamService : IDisposable
         return ParseLiveStreams(json, categories, connId, connName);
     }
 
-    public static List<TvChannel> ParseLiveStreams(string json, Dictionary<string, string> categories, string connId, string connName)
+    public static string? NormalizePosterUrl(string? rawIcon, string? serverBaseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rawIcon)) return null;
+        string icon = rawIcon.Trim();
+        if (icon.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            icon.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return icon;
+        }
+
+        if (!string.IsNullOrWhiteSpace(serverBaseUrl) &&
+            (serverBaseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+             serverBaseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+        {
+            string cleanBase = serverBaseUrl.TrimEnd('/');
+            string cleanIcon = icon.TrimStart('/');
+            return $"{cleanBase}/{cleanIcon}";
+        }
+
+        return icon;
+    }
+
+    public static List<TvChannel> ParseLiveStreams(string json, Dictionary<string, string> categories, string connId, string connName, string? serverUrl = null)
     {
         var list = new List<TvChannel>();
         if (string.IsNullOrWhiteSpace(json)) return list;
@@ -538,6 +560,7 @@ public sealed class TvXtreamService : IDisposable
                     num = parsedNum;
 
                 string? logo = item.TryGetProperty("stream_icon", out var iconEl) ? iconEl.GetString() : null;
+                string normalizedLogo = NormalizePosterUrl(logo, serverUrl) ?? "";
 
                 // URL segura protegida en el host virtual tv.lex.local sin exponer credenciales
                 string secureStreamUrl = $"https://tv.lex.local/api/xtream/live?conn={Uri.EscapeDataString(connId)}&id={Uri.EscapeDataString(streamId)}";
@@ -553,7 +576,7 @@ public sealed class TvXtreamService : IDisposable
                     Name = name,
                     Url = secureStreamUrl,
                     Group = string.IsNullOrWhiteSpace(group) ? "En vivo" : group,
-                    Logo = logo ?? "",
+                    Logo = normalizedLogo,
                     Source = connName,
                     Quality = quality
                 });
@@ -589,10 +612,10 @@ public sealed class TvXtreamService : IDisposable
             return new List<TvVodItem>();
         }
 
-        return ParseVodStreams(json, categories, connId);
+        return ParseVodStreams(json, categories, connId, serverUrl);
     }
 
-    public static List<TvVodItem> ParseVodStreams(string json, Dictionary<string, string> categories, string connId)
+    public static List<TvVodItem> ParseVodStreams(string json, Dictionary<string, string> categories, string connId, string? serverUrl = null)
     {
         var list = new List<TvVodItem>();
         if (string.IsNullOrWhiteSpace(json)) return list;
@@ -613,6 +636,7 @@ public sealed class TvXtreamService : IDisposable
 
                 string ext = item.TryGetProperty("container_extension", out var extEl) ? (extEl.GetString() ?? "mp4") : "mp4";
                 string? logo = item.TryGetProperty("stream_icon", out var iconEl) ? iconEl.GetString() : null;
+                string? normalizedLogo = NormalizePosterUrl(logo, serverUrl);
 
                 string secureUrl = $"https://tv.lex.local/api/xtream/vod?conn={Uri.EscapeDataString(connId)}&id={Uri.EscapeDataString(streamId)}&ext={Uri.EscapeDataString(ext)}";
 
@@ -622,7 +646,7 @@ public sealed class TvXtreamService : IDisposable
                     Title = name,
                     Url = secureUrl,
                     Group = group,
-                    Logo = logo,
+                    Logo = normalizedLogo,
                     IsSeries = false,
                     AddedUtc = DateTime.UtcNow
                 });
@@ -658,7 +682,7 @@ public sealed class TvXtreamService : IDisposable
             return new List<TvVodItem>();
         }
 
-        var seriesList = ParseSeriesList(json, categories);
+        var seriesList = ParseSeriesList(json, categories, serverUrl);
         var result = new List<TvVodItem>();
 
         // Obtener episodios de cada serie (hasta 200 series para balancear tiempo de importación inicial)
@@ -675,7 +699,7 @@ public sealed class TvXtreamService : IDisposable
                     if (infoResp.IsSuccessStatusCode)
                     {
                         string infoJson = await infoResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                        var episodes = ParseSeriesInfoEpisodes(infoJson, s, connId);
+                        var episodes = ParseSeriesInfoEpisodes(infoJson, s, connId, serverUrl);
                         result.AddRange(episodes);
                     }
                 }
@@ -686,7 +710,7 @@ public sealed class TvXtreamService : IDisposable
         return result;
     }
 
-    public static List<TvXtreamSeriesItem> ParseSeriesList(string json, Dictionary<string, string> categories)
+    public static List<TvXtreamSeriesItem> ParseSeriesList(string json, Dictionary<string, string> categories, string? serverUrl = null)
     {
         var list = new List<TvXtreamSeriesItem>();
         if (string.IsNullOrWhiteSpace(json)) return list;
@@ -704,12 +728,13 @@ public sealed class TvXtreamService : IDisposable
 
                 string catId = item.TryGetProperty("category_id", out var cidEl) ? cidEl.ToString() : "";
                 string? cover = item.TryGetProperty("cover", out var covEl) ? covEl.GetString() : null;
+                string? normalizedCover = NormalizePosterUrl(cover, serverUrl);
 
                 list.Add(new TvXtreamSeriesItem
                 {
                     SeriesId = seriesId,
                     Name = name,
-                    Cover = cover,
+                    Cover = normalizedCover,
                     CategoryId = catId
                 });
             }
@@ -719,7 +744,7 @@ public sealed class TvXtreamService : IDisposable
         return list;
     }
 
-    public static List<TvVodItem> ParseSeriesInfoEpisodes(string json, TvXtreamSeriesItem series, string connId)
+    public static List<TvVodItem> ParseSeriesInfoEpisodes(string json, TvXtreamSeriesItem series, string connId, string? serverUrl = null)
     {
         var list = new List<TvVodItem>();
         if (string.IsNullOrWhiteSpace(json)) return list;
@@ -752,6 +777,7 @@ public sealed class TvXtreamService : IDisposable
                     string? epCover = ep.TryGetProperty("info", out var infoEl) && infoEl.TryGetProperty("movie_image", out var miEl)
                         ? miEl.GetString()
                         : series.Cover;
+                    string? normalizedCover = NormalizePosterUrl(epCover, serverUrl);
 
                     string secureUrl = $"https://tv.lex.local/api/xtream/series?conn={Uri.EscapeDataString(connId)}&id={Uri.EscapeDataString(epId)}&ext={Uri.EscapeDataString(ext)}";
                     string displayTitle = !string.IsNullOrWhiteSpace(epTitle)
@@ -764,7 +790,7 @@ public sealed class TvXtreamService : IDisposable
                         Title = displayTitle,
                         Url = secureUrl,
                         Group = series.Name,
-                        Logo = epCover,
+                        Logo = normalizedCover,
                         IsSeries = true,
                         SeriesTitle = series.Name,
                         SeasonNumber = seasonNum,

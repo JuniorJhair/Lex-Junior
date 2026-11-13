@@ -28,13 +28,46 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     activeHls: null,
     progressInterval: null,
     selectedSeries: null,
-    activeSeason: 1
+    activeSeason: 1,
+    activeSid: null,
+    vodSessionSeq: 0
   };
 
   const els = {};
 
   function $(id) {
     return document.getElementById(id);
+  }
+
+  function buildVodPosterUrl(logo, itemUrl) {
+    if (!logo) return null;
+    const trimmed = String(logo).trim();
+    if (!trimmed) return null;
+    if (trimmed.startsWith('/api/image')) return trimmed;
+
+    let connParam = '';
+    if (itemUrl && itemUrl.includes('conn=')) {
+      try {
+        const u = new URL(itemUrl, window.location.origin);
+        const c = u.searchParams.get('conn');
+        if (c) connParam = `&conn=${encodeURIComponent(c)}`;
+      } catch (_) { }
+    }
+
+    return `/api/image?u=${encodeURIComponent(trimmed)}${connParam}`;
+  }
+
+  function showPlayerStatus(title, desc, icon = '⚠️', showRetry = true) {
+    if (!els.vodPlayerStatus) return;
+    if (els.vodStatusTitle) els.vodStatusTitle.textContent = title;
+    if (els.vodStatusDesc) els.vodStatusDesc.textContent = desc;
+    if (els.vodStatusIcon) els.vodStatusIcon.textContent = icon;
+    if (els.btnRetryVod) els.btnRetryVod.classList.toggle('hidden', !showRetry);
+    els.vodPlayerStatus.classList.remove('hidden');
+  }
+
+  function hidePlayerStatus() {
+    if (els.vodPlayerStatus) els.vodPlayerStatus.classList.add('hidden');
   }
 
   async function apiJson(url, opts = {}) {
@@ -122,11 +155,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
       const thumb = document.createElement('div');
       thumb.className = 'resume-thumb';
-      if (item.logo) {
+      const safePoster = buildVodPosterUrl(item.logo, item.url);
+      if (safePoster) {
         const img = document.createElement('img');
-        img.src = item.logo;
+        img.loading = 'lazy';
+        img.src = safePoster;
         img.alt = item.title;
-        img.onerror = () => { thumb.textContent = item.isSeries ? '📺' : '🎬'; };
+        img.onerror = () => {
+          img.remove();
+          thumb.textContent = item.isSeries ? '📺' : '🎬';
+        };
         thumb.appendChild(img);
       } else {
         thumb.textContent = item.isSeries ? '📺' : '🎬';
@@ -244,11 +282,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     const poster = document.createElement('div');
     poster.className = 'vod-card-poster';
-    if (item.logo) {
+    const safePoster = buildVodPosterUrl(item.logo, item.url);
+    if (safePoster) {
       const img = document.createElement('img');
-      img.src = item.logo;
+      img.loading = 'lazy';
+      img.src = safePoster;
       img.alt = item.title;
-      img.onerror = () => { poster.textContent = '🎬'; };
+      img.onerror = () => {
+        img.remove();
+        poster.textContent = '🎬';
+      };
       poster.appendChild(img);
     } else {
       poster.textContent = '🎬';
@@ -286,11 +329,17 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     const poster = document.createElement('div');
     poster.className = 'vod-card-poster';
-    if (logo) {
+    const sampleEp = episodes && episodes.length > 0 ? episodes[0] : null;
+    const safePoster = buildVodPosterUrl(logo, sampleEp ? sampleEp.url : null);
+    if (safePoster) {
       const img = document.createElement('img');
-      img.src = logo;
+      img.loading = 'lazy';
+      img.src = safePoster;
       img.alt = seriesTitle;
-      img.onerror = () => { poster.textContent = '📺'; };
+      img.onerror = () => {
+        img.remove();
+        poster.textContent = '📺';
+      };
       poster.appendChild(img);
     } else {
       poster.textContent = '📺';
@@ -408,14 +457,24 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     state.activeItem = item;
     els.playerTitle.textContent = item.title;
     els.playerOverlay.classList.remove('hidden');
+    hidePlayerStatus();
 
     destroyPlayer();
 
     const video = els.vodVideo;
-    const url = item.url;
+    const sid = `vod_${++state.vodSessionSeq}`;
+    state.activeSid = sid;
+
+    let url = item.url;
+    if (!url.includes('sid=')) {
+      const sep = url.includes('?') ? '&' : '?';
+      url = `${url}${sep}sid=${encodeURIComponent(sid)}`;
+    }
+
     const isHls = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('application/x-mpegurl');
 
     if (isHls && window.Hls && window.Hls.isSupported()) {
+      showPlayerStatus('Conectando...', 'Iniciando reproducción HLS...', '⏳', false);
       const hls = new window.Hls({
         maxBufferLength: 60,
         maxMaxBufferLength: 120,
@@ -426,10 +485,18 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       state.activeHls = hls;
 
       hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        hidePlayerStatus();
         populateSubtitlesFromHls(hls);
         video.play().catch(() => { });
       });
+
+      hls.on(window.Hls.Events.ERROR, (_event, data) => {
+        if (data && data.fatal) {
+          showPlayerStatus('Error de transmisión HLS', data.details || 'Error al cargar manifiesto o segmentos.', '⚠️', true);
+        }
+      });
     } else {
+      showPlayerStatus('Conectando...', 'Solicitando flujo de video al servidor...', '⏳', false);
       video.src = url;
       video.play().catch(() => { });
     }
@@ -442,6 +509,13 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   }
 
   function destroyPlayer() {
+    if (state.activeSid) {
+      try {
+        fetch(`/api/proxy/abort?sid=${encodeURIComponent(state.activeSid)}`, { method: 'POST', keepalive: true }).catch(() => { });
+      } catch (_) { }
+      state.activeSid = null;
+    }
+
     if (state.progressInterval) {
       clearInterval(state.progressInterval);
       state.progressInterval = null;
@@ -465,6 +539,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       }
     }
 
+    hidePlayerStatus();
     els.subSelect.innerHTML = '<option value="none">Subtítulos: Desactivados</option>';
     els.resumeBanner.classList.add('hidden');
     els.btnPlayPause.textContent = '▶';
@@ -605,6 +680,57 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     reader.readAsText(file, 'utf-8');
   }
 
+  async function handleVideoError() {
+    const video = els.vodVideo;
+    const err = video ? video.error : null;
+    let title = 'Error de reproducción';
+    let desc = 'No se pudo reproducir este video.';
+    let icon = '⚠️';
+
+    if (err) {
+      if (err.code === 1) { // MEDIA_ERR_ABORTED
+        title = 'Reproducción cancelada';
+        desc = 'La carga del video fue cancelada.';
+      } else if (err.code === 2) { // MEDIA_ERR_NETWORK
+        title = 'Error de conexión';
+        desc = 'Se interrumpió la conexión de red con el servidor de streaming.';
+      } else if (err.code === 3) { // MEDIA_ERR_DECODE
+        title = 'Formato o códec no compatible';
+        desc = 'El navegador no puede decodificar este contenedor o pista de audio/video.';
+      } else if (err.code === 4) { // MEDIA_ERR_SRC_NOT_SUPPORTED
+        title = 'Fuente no disponible';
+        desc = 'El servidor no pudo entregar el flujo o el formato no es compatible.';
+
+        try {
+          const checkUrl = video.src;
+          if (checkUrl) {
+            const resp = await fetch(checkUrl, { method: 'GET', headers: { 'Range': 'bytes=0-1' } });
+            if (resp.status === 401 || resp.status === 403) {
+              title = 'Acceso rechazado por el servidor';
+              desc = `El proveedor rechazó la conexión (HTTP ${resp.status}). Revisa las credenciales o suscripción.`;
+            } else if (resp.status === 404) {
+              title = 'Fuente no disponible';
+              desc = 'El video o episodio no se encuentra en el servidor (HTTP 404).';
+            } else if (resp.status === 504) {
+              title = 'Tiempo de espera agotado';
+              desc = 'El servidor de video tardó demasiado en responder (HTTP 504).';
+            } else if (resp.status === 502) {
+              const errCls = resp.headers.get('X-Lex-Error-Class') || '';
+              if (errCls === 'blocked') {
+                title = 'Flujo bloqueado por seguridad';
+                desc = 'La dirección solicitada no cumple con las políticas de seguridad de red de Lex TV.';
+              } else {
+                title = 'Error de conexión';
+                desc = 'No se pudo establecer conexión con el servidor de video remoto.';
+              }
+            }
+          }
+        } catch (_) { }
+      }
+    }
+    showPlayerStatus(title, desc, icon, true);
+  }
+
   // --- Keyboard Shortcuts & Scrubber ---
   function wirePlayerEvents() {
     const video = els.vodVideo;
@@ -614,8 +740,54 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       else video.pause();
     });
 
-    video.addEventListener('play', () => { els.btnPlayPause.textContent = '⏸'; });
+    video.addEventListener('play', () => {
+      hidePlayerStatus();
+      els.btnPlayPause.textContent = '⏸';
+    });
     video.addEventListener('pause', () => { els.btnPlayPause.textContent = '▶'; });
+
+    video.addEventListener('loadedmetadata', () => {
+      hidePlayerStatus();
+      const cur = video.currentTime || 0;
+      const dur = video.duration || 0;
+      els.timeDisplay.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+    });
+
+    video.addEventListener('canplay', () => {
+      hidePlayerStatus();
+    });
+
+    video.addEventListener('waiting', () => {
+      showPlayerStatus('Almacenando búfer...', 'Cargando datos del video...', '⏳', false);
+    });
+
+    video.addEventListener('playing', () => {
+      hidePlayerStatus();
+      els.btnPlayPause.textContent = '⏸';
+    });
+
+    video.addEventListener('stalled', () => {
+      if (!video.paused && video.readyState < 3) {
+        showPlayerStatus('Conexión lenta', 'Esperando datos del servidor de streaming...', '⏳', false);
+      }
+    });
+
+    video.addEventListener('error', async () => {
+      await handleVideoError();
+    });
+
+    if (els.btnRetryVod) {
+      els.btnRetryVod.addEventListener('click', () => {
+        hidePlayerStatus();
+        if (state.activeItem) openPlayer(state.activeItem);
+      });
+    }
+
+    if (els.btnCloseVodStatus) {
+      els.btnCloseVodStatus.addEventListener('click', () => {
+        closePlayer();
+      });
+    }
 
     video.addEventListener('timeupdate', () => {
       const cur = video.currentTime || 0;
@@ -895,7 +1067,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       'timeDisplay', 'btnMute', 'volumeSlider', 'subSelect', 'btnLoadLocalSub', 'subFileInput', 'btnFullscreen',
       'importModal', 'importTitle', 'btnCloseImport', 'importGroupInput', 'importUrlInput',
       'importFileInput', 'importTextInput', 'importError', 'importInfo', 'btnCancelImport', 'btnSubmitImport', 'chkVodLegalAuth',
-      'jellyfinModal', 'btnCloseJfModal', 'jfServerUrl', 'jfApiKey', 'jfUserId', 'jfStatus', 'btnJfTest', 'btnJfImport'
+      'jellyfinModal', 'btnCloseJfModal', 'jfServerUrl', 'jfApiKey', 'jfUserId', 'jfStatus', 'btnJfTest', 'btnJfImport',
+      'vodPlayerStatus', 'vodStatusIcon', 'vodStatusTitle', 'vodStatusDesc', 'btnRetryVod', 'btnCloseVodStatus'
     ].forEach((id) => { els[id] = $(id); });
 
     wirePlayerEvents();

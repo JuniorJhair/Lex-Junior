@@ -343,6 +343,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
   function buildProxyUrl(url, referrerOrSid, userAgent, sid) {
     const effectiveSid = (typeof sid !== 'undefined' ? sid : (typeof userAgent === 'undefined' ? referrerOrSid : sid));
+    if (typeof url === 'string' && (url.startsWith('https://tv.lex.local/api/xtream/') || url.startsWith('/api/xtream/'))) {
+      const sep = url.includes('?') ? '&' : '?';
+      return effectiveSid ? `${url}${sep}sid=${encodeURIComponent(String(effectiveSid))}` : url;
+    }
     let q = `/api/proxy?u=${encodeURIComponent(url)}`;
     if (effectiveSid) q += `&sid=${encodeURIComponent(String(effectiveSid))}`;
     return q;

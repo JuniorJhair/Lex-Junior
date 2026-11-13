@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
@@ -11,6 +12,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 
 namespace LexBrowser.Core.Tv;
 
@@ -187,7 +189,27 @@ public static class TvStreamProxy
         string? sessionId,
         CancellationToken ct)
     {
-        if (!TvUrlGuard.IsAllowedRemoteUrl(rawUrl, out var targetUri) || targetUri == null)
+        string? effectiveUrl = rawUrl;
+        if (TvUrlGuard.IsInternalTvStreamUrl(rawUrl, out var internalUri) && internalUri != null)
+        {
+            var internalQ = HttpUtility.ParseQueryString(internalUri.Query);
+            string streamType = internalUri.AbsolutePath.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
+                                internalUri.AbsolutePath.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
+            var resolve = TvXtreamService.ResolveUpstreamStreamUrl(
+                TvXtreamStore.Shared,
+                internalQ["conn"] ?? "",
+                streamType,
+                internalQ["id"] ?? "",
+                internalQ["ext"] ?? "");
+
+            if (!resolve.Success || string.IsNullOrEmpty(resolve.UpstreamUrl))
+            {
+                return UpstreamErrorResult(404, "Not Found", resolve.Error ?? "Flujo Xtream no disponible.");
+            }
+            effectiveUrl = resolve.UpstreamUrl;
+        }
+
+        if (!TvUrlGuard.IsAllowedRemoteUrl(effectiveUrl, out var targetUri) || targetUri == null)
         {
             return ProxyErrorResult(502, "Bad Gateway", "blocked", "URL privada o esquema no permitido.");
         }
@@ -257,6 +279,18 @@ public static class TvStreamProxy
             int status = (int)resp.StatusCode;
             string reason = resp.ReasonPhrase ?? "OK";
             string contentType = resp.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+
+            // Tratamiento de HTTP 416 (Range Not Satisfiable)
+            if (status == 416)
+            {
+                var headers416 = BuildForwardHeaders(resp);
+                resp.Dispose();
+                lease.Dispose();
+                var res416 = new TvProxyResult(416, "Range Not Satisfiable", contentType, Stream.Null);
+                foreach (var kv in headers416)
+                    res416.ExtraHeaders[kv.Key] = kv.Value;
+                return res416;
+            }
 
             if (!resp.IsSuccessStatusCode)
             {
@@ -392,7 +426,27 @@ public static class TvStreamProxy
     /// </summary>
     public static async Task<TvProbeResult> ProbeAsync(string? rawUrl, CancellationToken ct)
     {
-        if (!TvUrlGuard.IsAllowedRemoteUrl(rawUrl, out var targetUri) || targetUri == null)
+        string? targetToProbe = rawUrl;
+        if (TvUrlGuard.IsInternalTvStreamUrl(rawUrl, out var internalUri) && internalUri != null)
+        {
+            var internalQ = HttpUtility.ParseQueryString(internalUri.Query);
+            string streamType = internalUri.AbsolutePath.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
+                                internalUri.AbsolutePath.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
+            var resolve = TvXtreamService.ResolveUpstreamStreamUrl(
+                TvXtreamStore.Shared,
+                internalQ["conn"] ?? "",
+                streamType,
+                internalQ["id"] ?? "",
+                internalQ["ext"] ?? "");
+
+            if (!resolve.Success || string.IsNullOrEmpty(resolve.UpstreamUrl))
+            {
+                return new TvProbeResult("unknown", 404, "", "upstream", resolve.Error ?? "Flujo Xtream no disponible.");
+            }
+            targetToProbe = resolve.UpstreamUrl;
+        }
+
+        if (!TvUrlGuard.IsAllowedRemoteUrl(targetToProbe, out var targetUri) || targetUri == null)
         {
             return new TvProbeResult("unknown", 502, "", "blocked", "URL privada o no permitida.");
         }
@@ -496,13 +550,19 @@ public static class TvStreamProxy
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         if (resp.Content.Headers.ContentLength is long len && len >= 0)
-            headers["Content-Length"] = len.ToString();
+            headers["Content-Length"] = len.ToString(CultureInfo.InvariantCulture);
 
         if (resp.Content.Headers.ContentRange != null)
             headers["Content-Range"] = TvUrlGuard.SanitizeHeaderValue(resp.Content.Headers.ContentRange.ToString(), 120);
 
         if (resp.Headers.AcceptRanges.Count > 0)
+        {
             headers["Accept-Ranges"] = TvUrlGuard.SanitizeHeaderValue(string.Join(", ", resp.Headers.AcceptRanges), 60);
+        }
+        else if (resp.StatusCode == HttpStatusCode.PartialContent || resp.Content.Headers.ContentRange != null)
+        {
+            headers["Accept-Ranges"] = "bytes";
+        }
 
         return headers;
     }

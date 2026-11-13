@@ -105,6 +105,19 @@
     <div class="player-video-container" id="videoContainer">
       <video id="vodVideo" playsinline></video>
 
+      <!-- Player Status Overlay -->
+      <div id="vodPlayerStatus" class="vod-player-status hidden" role="alert">
+        <div class="vod-status-card">
+          <div id="vodStatusIcon" class="vod-status-icon">⚠️</div>
+          <div id="vodStatusTitle" class="vod-status-title">Error de reproducción</div>
+          <div id="vodStatusDesc" class="vod-status-desc">No se pudo cargar el video.</div>
+          <div class="vod-status-actions">
+            <button id="btnRetryVod" class="btn btn-primary" type="button">Reintentar</button>
+            <button id="btnCloseVodStatus" class="btn" type="button">Cerrar</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Player Bottom Bar -->
       <div class="player-bar" id="playerBar">
         <div class="scrubber-container" id="scrubberContainer">
