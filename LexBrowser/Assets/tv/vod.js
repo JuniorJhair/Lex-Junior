@@ -797,9 +797,87 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     }
   }
 
+  // --- Jellyfin / Emby Modal Wiring ---
+  function openJfModal() {
+    els.jfStatus.classList.add('hidden');
+    els.jellyfinModal.classList.remove('hidden');
+  }
+
+  function closeJfModal() {
+    els.jellyfinModal.classList.add('hidden');
+  }
+
+  async function testJfConnection() {
+    const serverUrl = (els.jfServerUrl.value || '').trim();
+    const apiKey = (els.jfApiKey.value || '').trim();
+    if (!serverUrl) {
+      els.jfStatus.textContent = 'Ingresa la URL de tu servidor Jellyfin/Emby.';
+      els.jfStatus.style.color = 'var(--bad)';
+      els.jfStatus.classList.remove('hidden');
+      return;
+    }
+
+    els.btnJfTest.disabled = true;
+    try {
+      const res = await apiJson('/api/jellyfin/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverUrl, apiKey })
+      });
+      if (res.ok) {
+        els.jfStatus.textContent = '✓ Conexión exitosa con el servidor.';
+        els.jfStatus.style.color = 'var(--ok)';
+      } else {
+        els.jfStatus.textContent = '✗ No se pudo conectar al servidor. Verifica la URL y clave.';
+        els.jfStatus.style.color = 'var(--bad)';
+      }
+      els.jfStatus.classList.remove('hidden');
+    } catch (err) {
+      els.jfStatus.textContent = `Error: ${err.message}`;
+      els.jfStatus.style.color = 'var(--bad)';
+      els.jfStatus.classList.remove('hidden');
+    } finally {
+      els.btnJfTest.disabled = false;
+    }
+  }
+
+  async function importJfLibrary() {
+    const serverUrl = (els.jfServerUrl.value || '').trim();
+    const apiKey = (els.jfApiKey.value || '').trim();
+    const userId = (els.jfUserId.value || '').trim();
+    if (!serverUrl) {
+      els.jfStatus.textContent = 'Ingresa la URL del servidor.';
+      els.jfStatus.style.color = 'var(--bad)';
+      els.jfStatus.classList.remove('hidden');
+      return;
+    }
+
+    els.btnJfImport.disabled = true;
+    try {
+      const res = await apiJson('/api/jellyfin/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serverUrl, apiKey, userId })
+      });
+      els.jfStatus.textContent = `✓ Importados ${res.addedCount || 0} títulos de ${res.totalFound || 0} encontrados.`;
+      els.jfStatus.style.color = 'var(--ok)';
+      els.jfStatus.classList.remove('hidden');
+      setTimeout(() => {
+        closeJfModal();
+        loadLibrary();
+      }, 1000);
+    } catch (err) {
+      els.jfStatus.textContent = `Error: ${err.message}`;
+      els.jfStatus.style.color = 'var(--bad)';
+      els.jfStatus.classList.remove('hidden');
+    } finally {
+      els.btnJfImport.disabled = false;
+    }
+  }
+
   function initApp() {
     [
-      'vodSearch', 'vodTypeSelect', 'vodGroupSelect', 'btnOpenImport', 'btnClearLibrary',
+      'vodSearch', 'vodTypeSelect', 'vodGroupSelect', 'btnOpenImport', 'btnOpenJellyfin', 'btnClearLibrary',
       'resumeSection', 'resumeContainer', 'librarySection', 'libraryCountLabel', 'vodGrid',
       'emptyNotice', 'btnEmptyImport',
       'seriesModal', 'seriesModalTitle', 'seasonTabs', 'episodeList', 'btnCloseSeriesModal', 'btnCloseSeriesFoot',
@@ -808,7 +886,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       'scrubberContainer', 'scrubberFill', 'btnPlayPause', 'btnStepBack', 'btnStepForward',
       'timeDisplay', 'btnMute', 'volumeSlider', 'subSelect', 'btnLoadLocalSub', 'subFileInput', 'btnFullscreen',
       'importModal', 'importTitle', 'btnCloseImport', 'importGroupInput', 'importUrlInput',
-      'importFileInput', 'importTextInput', 'importError', 'importInfo', 'btnCancelImport', 'btnSubmitImport'
+      'importFileInput', 'importTextInput', 'importError', 'importInfo', 'btnCancelImport', 'btnSubmitImport',
+      'jellyfinModal', 'btnCloseJfModal', 'jfServerUrl', 'jfApiKey', 'jfUserId', 'jfStatus', 'btnJfTest', 'btnJfImport'
     ].forEach((id) => { els[id] = $(id); });
 
     wirePlayerEvents();
@@ -822,6 +901,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     els.btnCloseImport.addEventListener('click', closeImportModal);
     els.btnCancelImport.addEventListener('click', closeImportModal);
     els.btnSubmitImport.addEventListener('click', submitImport);
+
+    els.btnOpenJellyfin.addEventListener('click', openJfModal);
+    els.btnCloseJfModal.addEventListener('click', closeJfModal);
+    els.btnJfTest.addEventListener('click', testJfConnection);
+    els.btnJfImport.addEventListener('click', importJfLibrary);
 
     els.btnCloseSeriesModal.addEventListener('click', closeSeriesModal);
     els.btnCloseSeriesFoot.addEventListener('click', closeSeriesModal);

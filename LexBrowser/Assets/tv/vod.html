@@ -30,6 +30,7 @@
       </select>
 
       <button id="btnOpenImport" class="btn btn-primary" type="button">+ Importar lista VOD</button>
+      <button id="btnOpenJellyfin" class="btn" type="button" title="Conectar servidor multimedia propio (Jellyfin / Emby)">Jellyfin / Emby</button>
       <button id="btnClearLibrary" class="btn btn-danger" type="button" title="Eliminar todos los contenidos de la biblioteca">Limpiar</button>
     </div>
   </header>
@@ -169,6 +170,42 @@
       <div class="modal-foot">
         <button id="btnCancelImport" class="btn" type="button">Cancelar</button>
         <button id="btnSubmitImport" class="btn btn-primary" type="button">Importar títulos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jellyfin / Emby Modal -->
+  <div id="jellyfinModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="jfTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="jfTitle">Conectar Servidor Propio (Jellyfin / Emby)</h3>
+        <button id="btnCloseJfModal" class="btn" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted">
+          Conecta tu servidor multimedia personal local (solo lectura). Lex TV no envía tus credenciales a servidores externos.
+        </p>
+
+        <label>
+          <span class="muted">URL del Servidor:</span>
+          <input id="jfServerUrl" class="ctrl" type="url" placeholder="http://localhost:8096" />
+        </label>
+
+        <label>
+          <span class="muted">Clave de API / Token (opcional si es público):</span>
+          <input id="jfApiKey" class="ctrl" type="password" placeholder="Tu API Key de Jellyfin" />
+        </label>
+
+        <label>
+          <span class="muted">ID de Usuario (opcional):</span>
+          <input id="jfUserId" class="ctrl" type="text" placeholder="ID de usuario de Jellyfin" />
+        </label>
+
+        <div id="jfStatus" class="muted hidden" style="font-weight: 500;"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="btnJfTest" class="btn" type="button">Probar conexión</button>
+        <button id="btnJfImport" class="btn btn-primary" type="button">Importar biblioteca</button>
       </div>
     </div>
   </div>

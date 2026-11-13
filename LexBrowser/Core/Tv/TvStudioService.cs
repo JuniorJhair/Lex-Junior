@@ -458,6 +458,33 @@ public static class TvStudioService
                 return;
             }
 
+            if (path.Equals("api/jellyfin/test", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string serverUrl = doc.RootElement.TryGetProperty("serverUrl", out var sEl) ? (sEl.GetString() ?? "") : "";
+                string apiKey = doc.RootElement.TryGetProperty("apiKey", out var aEl) ? (aEl.GetString() ?? "") : "";
+                bool ok = await TvJellyfinService.Shared.TestConnectionAsync(serverUrl, apiKey, cts.Token);
+                e.Response = CreateJsonResponse(env, 200, "OK", new { ok });
+                return;
+            }
+
+            if (path.Equals("api/jellyfin/import", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string serverUrl = doc.RootElement.TryGetProperty("serverUrl", out var sEl) ? (sEl.GetString() ?? "") : "";
+                string apiKey = doc.RootElement.TryGetProperty("apiKey", out var aEl) ? (aEl.GetString() ?? "") : "";
+                string userId = doc.RootElement.TryGetProperty("userId", out var uEl) ? (uEl.GetString() ?? "") : "";
+                var items = await TvJellyfinService.Shared.FetchItemsAsync(serverUrl, apiKey, userId, cts.Token);
+                int added = TvVodStore.Shared.ImportItems(items);
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    addedCount = added,
+                    totalFound = items.Count,
+                    libraryCount = TvVodStore.Shared.GetLibrarySnapshot().Count
+                });
+                return;
+            }
+
             if (path.Equals("api/dead/mark", StringComparison.OrdinalIgnoreCase))
             {
                 using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
