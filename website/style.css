@@ -1319,6 +1319,144 @@ section {
   font-weight: 700;
 }
 
+/* ─── Vista 7: Lex TV & Xtream Codes ─── */
+.tv-mockup-wrapper {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 24px 28px;
+  background: radial-gradient(circle at 50% 10%, rgba(99, 102, 241, 0.12), #0B0B10 80%);
+  min-height: 380px;
+}
+
+.tv-mockup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 20px;
+}
+
+.tv-mock-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tv-dot-live {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 10px #10B981;
+}
+
+.tv-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #A5B4FC;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+}
+
+.tv-mock-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.tv-nav-link {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tv-nav-link.active {
+  color: #fff;
+  background: #2563EB;
+}
+
+.tv-mockup-hero {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.tv-mockup-hero h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #F4F4F5;
+  margin-bottom: 4px;
+}
+
+.tv-mockup-hero p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.tv-mockup-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.tv-mock-card {
+  background: #13131E;
+  border: 1px solid #232336;
+  border-radius: 12px;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tv-card-highlight {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1);
+}
+
+.tv-card-icon {
+  font-size: 1.6rem;
+  margin-bottom: 8px;
+}
+
+.tv-mock-card h4 {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin-bottom: 6px;
+}
+
+.tv-mock-card p {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  flex: 1;
+  margin-bottom: 12px;
+}
+
+.tv-card-btn {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #818CF8;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.12);
+  display: inline-block;
+  align-self: flex-start;
+}
+
+.bw-tv-btn {
+  background: rgba(99, 102, 241, 0.18) !important;
+  color: #A5B4FC !important;
+  border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+.bw-tv-btn:hover {
+  background: rgba(99, 102, 241, 0.3) !important;
+  color: #FFFFFF !important;
+}
+
 /* ─── Bento Grid de Características ─── */
 .bento-grid {
   display: grid;
@@ -1614,7 +1752,8 @@ section {
   .telemetry-grid,
   .yt-demo-layout,
   .pip-demo-stage,
-  .incog-grid {
+  .incog-grid,
+  .tv-mockup-cards {
     grid-template-columns: 1fr;
   }
 

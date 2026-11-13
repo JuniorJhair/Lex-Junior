@@ -50,6 +50,12 @@ document.addEventListener('DOMContentLoaded', () => {
       url: 'lex://nueva-pestana',
       ads: '0 bloqueados'
     },
+    'view-tv': {
+      icon: '📺',
+      title: 'Lex TV — Reproductor Multimedia Personal',
+      url: 'http://tv.lex.local/',
+      ads: '0 Telemetría · 0% CPU al cerrar'
+    },
     'view-youtube': {
       icon: '▶',
       title: 'YouTube — Concierto en Vivo 4K',
@@ -106,9 +112,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Botones dentro de la barra del navegador simulado también cambian la vista
+  const mockBtnTv = document.getElementById('mock-btn-tv');
   const mockBtnPip = document.getElementById('mock-btn-pip');
   const mockBtnVol = document.getElementById('mock-btn-vol');
   const mockBtnMedia = document.getElementById('mock-btn-media');
+  if (mockBtnTv) mockBtnTv.addEventListener('click', () => activateView('view-tv'));
   if (mockBtnPip) mockBtnPip.addEventListener('click', () => activateView('view-pip'));
   if (mockBtnVol) mockBtnVol.addEventListener('click', () => activateView('view-youtube'));
   if (mockBtnMedia) mockBtnMedia.addEventListener('click', () => activateView('view-sniffer'));

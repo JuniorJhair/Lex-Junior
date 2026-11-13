@@ -4,18 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lex Junior Browser</title>
-  <meta name="description" content="Descarga Lex Junior Browser para Windows 10/11. Navegador ultraligero que bloquea la mayoría de anuncios molestos, con 0 Telemetría, amplificador de volumen hasta 300% y detector multimedia bajo demanda." />
+  <meta name="description" content="Descarga Lex Junior Browser para Windows 10/11. Navegador ultraligero que bloquea la mayoría de anuncios molestos, con 0 Telemetría, amplificador de volumen hasta 300%, detector multimedia y Lex TV (IPTV, VOD &amp; Xtream Codes)." />
   <link rel="canonical" href="https://juniorjhair.github.io/Lex-Junior/" />
   <meta name="theme-color" content="#0B0B10" />
   <meta property="og:title" content="Lex Junior Browser — El Navegador Ultra-Ligero para Windows" />
-  <meta property="og:description" content="Cero telemetría, escudo nativo que bloquea la gran mayoría de anuncios molestos, amplificador de volumen hasta 300% y descargador multimedia bajo demanda." />
+  <meta property="og:description" content="Cero telemetría, escudo nativo que bloquea la gran mayoría de anuncios molestos, amplificador de volumen hasta 300%, detector multimedia y Lex TV (IPTV, VOD &amp; Xtream Codes)." />
   <meta property="og:url" content="https://juniorjhair.github.io/Lex-Junior/" />
   <meta property="og:image" content="https://juniorjhair.github.io/Lex-Junior/assets/logo.png" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Lex Junior Browser" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Lex Junior Browser — El Navegador Ultra-Ligero para Windows" />
-  <meta name="twitter:description" content="Cero telemetría, escudo nativo que bloquea la gran mayoría de anuncios molestos, amplificador de volumen hasta 300% y descargador multimedia bajo demanda." />
+  <meta name="twitter:description" content="Cero telemetría, escudo nativo que bloquea la gran mayoría de anuncios molestos, amplificador de volumen hasta 300%, detector multimedia y Lex TV (IPTV, VOD &amp; Xtream Codes)." />
   <meta name="twitter:image" content="https://juniorjhair.github.io/Lex-Junior/assets/logo.png" />
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
   <link rel="stylesheet" href="style.css" />
@@ -88,6 +88,7 @@
 
         <div class="hero-trust-badges reveal">
           <div class="trust-item">🛡️ <strong>LexShield</strong> integrado de fábrica</div>
+          <div class="trust-item">📺 <strong>Lex TV</strong> IPTV, VOD &amp; Xtream Codes</div>
           <div class="trust-item">🔑 <strong>Bóveda Cifrada + PIN</strong> y Modo Invitado</div>
           <div class="trust-item">🟢 <strong>0 Telemetría</strong> verificable</div>
           <div class="trust-item">🚀 <strong>Volume Master 300%</strong> nativo</div>
@@ -110,6 +111,7 @@
         <!-- Selector de vistas del navegador -->
         <div class="showcase-tabs reveal" role="tablist">
           <button class="showcase-tab active" data-view="view-newtab">⚡ Nueva Pestaña</button>
+          <button class="showcase-tab" data-view="view-tv">📺 Lex TV &amp; Xtream</button>
           <button class="showcase-tab" data-view="view-youtube">🛡️ YouTube + Volumen 300%</button>
           <button class="showcase-tab" data-view="view-sniffer">📥 Detector Multimedia</button>
           <button class="showcase-tab" data-view="view-pip">🗖 Página Flotante &amp; PiP</button>
@@ -157,6 +159,7 @@
               <div class="bw-shield-pill">🛡️ <span id="mock-ads-count">28 bloqueados</span></div>
             </div>
             <div class="bw-utilities" tabindex="0" role="region" aria-label="Herramientas de barra superior">
+              <div class="bw-util-btn bw-tv-btn" id="mock-btn-tv">📺 Lex TV</div>
               <div class="bw-util-btn" id="mock-btn-pip">🗖 Página Flotante</div>
               <div class="bw-util-btn bw-vol-btn" id="mock-btn-vol">🚀 <span id="mock-vol-badge">240%</span></div>
               <div class="bw-util-btn bw-media-btn" id="mock-btn-media"><span class="dot-green"></span>📥 Multimedia (4)</div>
@@ -394,6 +397,55 @@
                 </div>
               </div>
             </div>
+
+            <!-- VISTA 7: LEX TV (IPTV, VOD & XTREAM CODES) -->
+            <div class="bw-view" id="view-tv">
+              <div class="tv-mockup-wrapper">
+                <div class="tv-mockup-header">
+                  <div class="tv-mock-brand">
+                    <span class="tv-dot-live"></span>
+                    <strong>Lex TV</strong>
+                    <span class="tv-badge">Reproductor Personal</span>
+                  </div>
+                  <div class="tv-mock-nav">
+                    <span class="tv-nav-link active">Inicio</span>
+                    <span class="tv-nav-link">TV en vivo</span>
+                    <span class="tv-nav-link">VOD (Cine)</span>
+                    <span class="tv-nav-link">Xtream Codes</span>
+                  </div>
+                </div>
+
+                <div class="tv-mockup-body">
+                  <div class="tv-mockup-hero">
+                    <h3>Lex TV — Tu Centro Multimedia Bajo Demanda</h3>
+                    <p>100% privado · Sin telemetría · 0% de CPU en segundo plano</p>
+                  </div>
+
+                  <div class="tv-mockup-cards">
+                    <div class="tv-mock-card">
+                      <div class="tv-card-icon">📺</div>
+                      <h4>IPTV en Vivo</h4>
+                      <p>Sintoniza listas M3U/M3U8 con conmutación rápida y favoritos locales.</p>
+                      <span class="tv-card-btn">Abrir TV en vivo →</span>
+                    </div>
+
+                    <div class="tv-mock-card">
+                      <div class="tv-card-icon">🎬</div>
+                      <h4>Películas y Series (VOD)</h4>
+                      <p>Videoteca organizada por temporadas y episodios con control de reproducción.</p>
+                      <span class="tv-card-btn">Abrir Cine VOD →</span>
+                    </div>
+
+                    <div class="tv-mock-card tv-card-highlight">
+                      <div class="tv-card-icon">⚡</div>
+                      <h4>Xtream Codes</h4>
+                      <p>Conexión directa a servidores con protección cifrada de credenciales DPAPI.</p>
+                      <span class="tv-card-btn">Conectar Servidor →</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -464,6 +516,14 @@
             <h3>Bóveda de Contraseñas Cifrada, Bloqueo con PIN &amp; Modo Invitado</h3>
             <p>
               Guarda y autocompleta tus accesos con cifrado nativo de Windows (<code>DPAPI</code>) agrupando rutas inteligentemente por dominio raíz (<code>eTLD+1</code>). Protege tu navegador con un PIN de 6 caracteres (al abrir o por sesión/bloqueo de Windows), permite entrar en <strong>Modo Invitado</strong> sin exponer tus contraseñas, incluye recuperación por pregunta secreta y limpia el portapapeles automáticamente a los <strong>20 segundos</strong> de copiar una clave.
+            </p>
+          </article>
+
+          <article class="bento-card bento-wide reveal">
+            <div class="card-icon">📺</div>
+            <h3>Lex TV · Centro Multimedia Personal (IPTV, VOD &amp; Xtream Codes)</h3>
+            <p>
+              Tu reproductor y organizador de contenidos bajo demanda 100% privado y sin telemetría. Sintoniza televisión en vivo desde tus propias listas <code>M3U</code> o <code>M3U8</code> con conmutación rápida y favoritos locales, organiza tu videoteca <strong>Cine VOD</strong> (películas y series) con detección automática de temporadas y episodios, y conecta tus servidores de <strong>Xtream Codes</strong> con almacenamiento cifrado nativo (<code>DPAPI</code>) y validación anti-SSRF. Compatible opcionalmente con <strong>Jellyfin</strong> y <strong>Emby</strong>. Todo funciona en memoria local con <strong>0% de consumo de procesador en reposo</strong> al cerrar la pestaña.
             </p>
           </article>
         </div>
@@ -583,6 +643,11 @@
           <details class="faq-item reveal">
             <summary>¿Cómo funciona la Bóveda de Contraseñas, el PIN y el Modo Invitado?</summary>
             <p>Tus contraseñas se cifran en tu equipo mediante <strong>Windows DPAPI</strong> (0 servidores externos). Puedes elegir no usar PIN, pedirlo siempre al abrir el navegador, o el <strong>Modo Inteligente por Sesión de Windows</strong> (solo lo pide una vez al encender la PC o si bloqueas tu usuario con <code>Win + L</code>). Si prestas tu PC, otra persona puede elegir <strong>"Entrar como Invitado"</strong> para navegar sin ver ni autocompletar tus contraseñas.</p>
+          </details>
+
+          <details class="faq-item reveal">
+            <summary>¿Qué es Lex TV y cómo funciona con IPTV, VOD y Xtream Codes?</summary>
+            <p><strong>Lex TV</strong> es un reproductor y organizador multimedia personal que funciona 100% bajo demanda. Te permite cargar tus propias listas de canales <code>M3U/M3U8</code>, organizar tu videoteca de películas y series (VOD) y conectar servidores <strong>Xtream Codes</strong> con almacenamiento cifrado nativo en tu equipo (Windows DPAPI). Al cerrar la pestaña de Lex TV, el servidor local y los reproductores se apagan de inmediato consumiendo <strong>0 MB de RAM y 0% de CPU</strong>.</p>
           </details>
 
           <details class="faq-item reveal">
