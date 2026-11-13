@@ -270,6 +270,19 @@ public static class NewTabPage
       color: #EA4335 !important;
     }
 
+    .voice-msg {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #F87171;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      padding: 8px 14px;
+      max-width: 600px;
+      text-align: center;
+      line-height: 1.4;
+    }
+
     .ai-mode-btn {
       display: inline-flex;
       align-items: center;
@@ -404,6 +417,7 @@ public static class NewTabPage
         </button>
         <button class=""search-btn"" onclick=""go()"">Buscar</button>
       </div>
+      <div id=""voice-msg"" class=""voice-msg"" style=""display:none;""></div>
     </div>
 
     <div class=""quick-links"">
@@ -543,35 +557,56 @@ public static class NewTabPage
       }
     }
 
+    function showVoiceMessage(msg) {
+      const el = document.getElementById('voice-msg');
+      if (!el) return;
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function hideVoiceMessage() {
+      const el = document.getElementById('voice-msg');
+      if (el) el.style.display = 'none';
+    }
+
     function startVoiceSearch() {
+      hideVoiceMessage();
       const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const mic = document.getElementById('mic-btn');
       if (!SpeechRec) {
-        alert('Búsqueda por voz no disponible en este dispositivo.');
+        showVoiceMessage('La búsqueda por voz no está disponible en este motor');
+        if (mic) mic.style.display = 'none';
         return;
       }
       try {
         const rec = new SpeechRec();
         rec.lang = 'es-ES';
         rec.interimResults = false;
-        const mic = document.getElementById('mic-btn');
-        mic.classList.add('mic-listening');
+        if (mic) mic.classList.add('mic-listening');
         rec.onresult = function(ev) {
           if (ev.results && ev.results[0] && ev.results[0][0]) {
             const txt = ev.results[0][0].transcript;
             document.getElementById('si').value = txt;
-            mic.classList.remove('mic-listening');
+            if (mic) mic.classList.remove('mic-listening');
             go();
           }
         };
-        rec.onerror = function() {
-          mic.classList.remove('mic-listening');
+        rec.onerror = function(ev) {
+          if (mic) mic.classList.remove('mic-listening');
+          const err = ev && ev.error ? ev.error : '';
+          if (err === 'not-allowed') {
+            showVoiceMessage('El acceso al micrófono está bloqueado. Si usas Windows, verifica que el acceso al micrófono para aplicaciones de escritorio esté activado en Configuración > Privacidad y seguridad > Micrófono.');
+          } else if (err === 'network' || err === 'service-not-allowed') {
+            showVoiceMessage('La búsqueda por voz no está disponible en este motor');
+            if (mic) mic.style.display = 'none';
+          }
         };
         rec.onend = function() {
-          mic.classList.remove('mic-listening');
+          if (mic) mic.classList.remove('mic-listening');
         };
         rec.start();
       } catch (err) {
-        document.getElementById('mic-btn').classList.remove('mic-listening');
+        if (mic) mic.classList.remove('mic-listening');
       }
     }
   </script>

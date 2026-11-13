@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -418,9 +419,84 @@ public partial class MainWindow
     {
         if (tab.IsDisposed) return;
 
+        string uriStr = e.Uri ?? string.Empty;
+        string host = "unknown";
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(uriStr) && Uri.TryCreate(uriStr, UriKind.Absolute, out var parsedUri))
+                host = parsedUri.Host;
+        }
+        catch { }
+
+        string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+
         if (e.PermissionKind == CoreWebView2PermissionKind.Camera ||
             e.PermissionKind == CoreWebView2PermissionKind.Microphone)
         {
+            bool isSafeOrigin = false;
+
+            try
+            {
+                if (Uri.TryCreate(uriStr, UriKind.Absolute, out var reqUri))
+                {
+                    if (reqUri.Scheme == Uri.UriSchemeHttps ||
+                        string.Equals(reqUri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(reqUri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(reqUri.Host, "::1", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(reqUri.Host, "tv.lex.local", StringComparison.OrdinalIgnoreCase))
+                    {
+                        isSafeOrigin = true;
+                    }
+                }
+            }
+            catch { }
+
+            // (a) Origen no seguro (solo https, localhost o tv.lex.local) -> Deny, Handled=true y registro en ShieldLogger
+            if (!isSafeOrigin)
+            {
+                e.State = CoreWebView2PermissionState.Deny;
+                e.SavesInProfile = false;
+                e.Handled = true;
+                ShieldLogger.Log("CAPTURE_PERMISSION_BLOCKED", host, uriStr, "InsecureOrigin",
+                    $"{e.PermissionKind} permission denied because origin is not secure (requires https, localhost, or tv.lex.local)", tabDesc);
+                return;
+            }
+
+            // (c) Incógnito e invitado: no guardar en perfil permanente
+            if (tab.IsIncognito || tab.IsGuest)
+            {
+                e.SavesInProfile = false;
+            }
+
+            // (b) Si Windows lo bloquea para aplicaciones de escritorio -> ShowToast informativo y continuar flujo normal
+            bool isBlockedByWindows = e.PermissionKind == CoreWebView2PermissionKind.Microphone
+                ? WindowsPrivacy.IsMicrophoneBlocked()
+                : WindowsPrivacy.IsCameraBlocked();
+
+            if (isBlockedByWindows)
+            {
+                string deviceName = e.PermissionKind == CoreWebView2PermissionKind.Microphone ? "el micrófono" : "la cámara";
+                string settingsUri = e.PermissionKind == CoreWebView2PermissionKind.Microphone ? "ms-settings:privacy-microphone" : "ms-settings:privacy-webcam";
+
+                ShowToast(
+                    $"Windows está bloqueando {deviceName} para aplicaciones de escritorio. Actívalo en Privacidad y seguridad.",
+                    "Abrir ajustes",
+                    () =>
+                    {
+                        try
+                        {
+                            Process.Start(new ProcessStartInfo
+                            {
+                                FileName = settingsUri,
+                                UseShellExecute = true
+                            });
+                        }
+                        catch { }
+                    }
+                );
+            }
+
+            // (d) En el resto no pongas Handled. Mantén HasCaptureDevicePermission.
             if (e.State != CoreWebView2PermissionState.Deny)
             {
                 tab.HasCaptureDevicePermission = true;
@@ -432,16 +508,6 @@ public partial class MainWindow
         {
             return;
         }
-
-        string uriStr = e.Uri ?? string.Empty;
-        string host = "unknown";
-        try
-        {
-            if (!string.IsNullOrWhiteSpace(uriStr)) host = new Uri(uriStr).Host;
-        }
-        catch { }
-
-        string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
 
         bool isCrossOriginOrSubframe = false;
         try
