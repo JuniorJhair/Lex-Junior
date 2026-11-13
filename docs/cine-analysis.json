@@ -1,0 +1,420 @@
+{
+  "catalogSizeMb": "1.33",
+  "totalItems": 909,
+  "moviesCount": 909,
+  "seriesCount": 0,
+  "episodeCount": 0,
+  "fieldTypes": {
+    "id": [
+      "string"
+    ],
+    "kind": [
+      "string"
+    ],
+    "title": [
+      "string"
+    ],
+    "group": [
+      "string"
+    ],
+    "url": [
+      "string"
+    ],
+    "logo": [
+      "string"
+    ],
+    "languages": [
+      "array"
+    ],
+    "countries": [
+      "array"
+    ],
+    "license": [
+      "string"
+    ],
+    "page": [
+      "string"
+    ],
+    "description": [
+      "string"
+    ],
+    "source": [
+      "string"
+    ],
+    "legal": [
+      "object"
+    ],
+    "attribution": [
+      "string"
+    ],
+    "year": [
+      "number"
+    ],
+    "duration": [
+      "number"
+    ],
+    "tmdb": [
+      "string"
+    ],
+    "imdb": [
+      "string"
+    ]
+  },
+  "sampleValues": {
+    "id": "VoATVChina.cn@SD",
+    "kind": "live",
+    "title": "VOA Chinese TV",
+    "group": "CN | News",
+    "url": "https://voa-ingest.akamaized.net/hls/live/2033878/tvmc08/playlist.m3u8",
+    "logo": "https://www.voachinese.com/Content/responsive/VOA/img/webApp/ico-192x192.png",
+    "languages": [
+      "zho"
+    ],
+    "countries": [
+      "CN"
+    ],
+    "license": "Public domain (material produced by the Voice of America)",
+    "page": "https://www.voachinese.com/live/",
+    "description": "Voice of America's Chinese-language television channel.",
+    "source": "voice-of-america",
+    "legal": {
+      "basis": "permission",
+      "title": "The owner's terms allow it",
+      "text": "The owner's terms say: “All text, audio and video material produced exclusively by the Voice of America is in the public domain.” The same page excludes material licensed to VOA from others (news agencies such as AFP, AP and Reuters), which may not be redistributed without their permission. The VOA Chinese live page contains this stream address.",
+      "links": [
+        [
+          "Where it says so",
+          "https://www.voanews.com/p/5338.html"
+        ],
+        [
+          "Page with the stream address",
+          "https://www.voachinese.com/live/"
+        ],
+        [
+          "Channel website",
+          "https://www.voachinese.com/live/"
+        ]
+      ],
+      "terms": [
+        "https://www.voanews.com/p/5338.html"
+      ]
+    },
+    "attribution": "Government of the District of Columbia, Office of Cable Television, Film, Music and Entertainment",
+    "year": 1906,
+    "duration": 833,
+    "tmdb": "432449",
+    "imdb": "tt0029537"
+  },
+  "kinds": [
+    "live",
+    "movie"
+  ],
+  "topLanguages": [
+    [
+      "zxx",
+      337
+    ],
+    [
+      "eng",
+      111
+    ],
+    [
+      "fra",
+      4
+    ],
+    [
+      "zho",
+      1
+    ],
+    [
+      "fas",
+      1
+    ],
+    [
+      "mis",
+      1
+    ],
+    [
+      "deu",
+      1
+    ],
+    [
+      "spa",
+      1
+    ]
+  ],
+  "topLicenses": [
+    [
+      "Public domain",
+      614
+    ],
+    [
+      "Public domain in the US (as marked on the Internet Archive)",
+      122
+    ],
+    [
+      "Public domain in the US (published before 1931)",
+      116
+    ],
+    [
+      "CC BY 3.0",
+      15
+    ],
+    [
+      "http://creativecommons.org/licenses/by/3.0/",
+      15
+    ],
+    [
+      "CC0",
+      11
+    ],
+    [
+      "Public Domain",
+      7
+    ],
+    [
+      "CC BY 4.0",
+      5
+    ],
+    [
+      "Public domain (material produced by the Voice of America)",
+      2
+    ],
+    [
+      "Creative Commons Attribution 3.0 (District of Columbia content)",
+      1
+    ],
+    [
+      "CC BY 2.5",
+      1
+    ]
+  ],
+  "topSources": [
+    [
+      "wikimedia-commons",
+      642
+    ],
+    [
+      "internet-archive",
+      253
+    ],
+    [
+      "blender",
+      11
+    ],
+    [
+      "voice-of-america",
+      2
+    ],
+    [
+      "dc-government",
+      1
+    ]
+  ],
+  "topHosts": [
+    [
+      "upload.wikimedia.org",
+      642
+    ],
+    [
+      "archive.org",
+      264
+    ],
+    [
+      "voa-ingest.akamaized.net",
+      2
+    ],
+    [
+      "video.oct.dc.gov",
+      1
+    ]
+  ],
+  "spanishCountInCatalog": 1,
+  "languagesSpaM3uEntries": "Error: HTTP 404 for https://biskyt.github.io/legalFreeIPTVplaylist/languages/spa.m3u",
+  "langHeadResults": {
+    "spa.m3u": {
+      "status": 404,
+      "headers": {
+        "connection": "keep-alive",
+        "content-length": "9379",
+        "server": "GitHub.com",
+        "content-type": "text/html; charset=utf-8",
+        "access-control-allow-origin": "*",
+        "etag": "\"6abd0db9-24a3\"",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'",
+        "x-proxy-cache": "MISS",
+        "x-github-request-id": "26A0:8C610:B8D0E:E361F:6AF614A3",
+        "x-github-edge-region": "iad",
+        "accept-ranges": "bytes",
+        "age": "0",
+        "date": "Thu, 12 Nov 2026 19:33:55 GMT",
+        "via": "1.1 varnish",
+        "x-served-by": "cache-lim-spjc1280020-LIM",
+        "x-cache": "MISS",
+        "x-cache-hits": "0",
+        "x-timer": "S1794512035.349863,VS0,VE131",
+        "vary": "Accept-Encoding",
+        "x-fastly-request-id": "fc07ca0ddf638adda1206bac5a63d77c18ca684b"
+      }
+    },
+    "es.m3u": {
+      "status": 404,
+      "headers": {
+        "connection": "keep-alive",
+        "content-length": "9379",
+        "server": "GitHub.com",
+        "content-type": "text/html; charset=utf-8",
+        "x-origin-cache": "HIT",
+        "access-control-allow-origin": "*",
+        "etag": "\"6abd0db9-24a3\"",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'",
+        "x-proxy-cache": "MISS",
+        "x-github-request-id": "1618:234BFC:C27E2:ECFC0:6AF614A3",
+        "x-github-edge-region": "iad",
+        "accept-ranges": "bytes",
+        "age": "0",
+        "date": "Thu, 12 Nov 2026 19:33:55 GMT",
+        "via": "1.1 varnish",
+        "x-served-by": "cache-lim-spjc1280033-LIM",
+        "x-cache": "MISS",
+        "x-cache-hits": "0",
+        "x-timer": "S1794512036.611323,VS0,VE139",
+        "vary": "Accept-Encoding",
+        "x-fastly-request-id": "dd13f2ca111faa402abbc7ca9ef16f09ce71b560"
+      }
+    },
+    "spanish.m3u": {
+      "status": 404,
+      "headers": {
+        "connection": "keep-alive",
+        "content-length": "9379",
+        "server": "GitHub.com",
+        "content-type": "text/html; charset=utf-8",
+        "x-origin-cache": "HIT",
+        "access-control-allow-origin": "*",
+        "etag": "\"6abd0db9-24a3\"",
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'self'",
+        "x-proxy-cache": "MISS",
+        "x-github-request-id": "3480:38E9FE:E6E88:111739:6AF614A2",
+        "x-github-edge-region": "iad",
+        "accept-ranges": "bytes",
+        "age": "0",
+        "date": "Thu, 12 Nov 2026 19:33:55 GMT",
+        "via": "1.1 varnish",
+        "x-served-by": "cache-lim-spjc1280023-LIM",
+        "x-cache": "MISS",
+        "x-cache-hits": "0",
+        "x-timer": "S1794512036.866375,VS0,VE107",
+        "vary": "Accept-Encoding",
+        "x-fastly-request-id": "ee8444f07f715a5e5eac1eac6383be1b284d2db0"
+      }
+    }
+  },
+  "vodM3uFirst20Lines": [
+    "#EXTM3U",
+    "#EXTINF:833 tvg-type=\"movie\" tvg-id=\"ia.TripDown1905\" tvg-name=\"[Trip Down Market Street Before the Fire A] (1906)\" tvg-logo=\"https://archive.org/services/img/TripDown1905\" tvg-language=\"English\" year=\"1906\" group-title=\"Documentaries: Prelinger Archives\",[Trip Down Market Street Before the Fire – A] (1906)",
+    "https://archive.org/download/TripDown1905/TripDown1905.mp4",
+    "#EXTINF:639 tvg-type=\"movie\" tvg-id=\"ia.FindingH1929\" tvg-name=\"Finding his voice : an animated cartoon synchronized to voice & sound (1929)\" tvg-logo=\"https://archive.org/services/img/FindingH1929\" tvg-language=\"English\" year=\"1929\" group-title=\"Documentaries: Prelinger Archives\",Finding his voice : an animated cartoon synchronized to voice & sound (1929)",
+    "https://archive.org/download/FindingH1929/FindingH1929.mp4",
+    "#EXTINF:382 tvg-type=\"movie\" tvg-id=\"ia.GeneralH1928\" tvg-name=\"General Health Habits (1928)\" tvg-logo=\"https://archive.org/services/img/GeneralH1928\" tvg-language=\"English\" year=\"1928\" group-title=\"Documentaries: Prelinger Archives\",General Health Habits (1928)",
+    "https://archive.org/download/GeneralH1928/GeneralH1928.mp4",
+    "#EXTINF:427 tvg-type=\"movie\" tvg-id=\"ia.HowtoUse1927\" tvg-name=\"How to Use the Dial Phone (1927)\" tvg-logo=\"https://archive.org/services/img/HowtoUse1927\" tvg-language=\"English\" year=\"1927\" group-title=\"Documentaries: Prelinger Archives\",How to Use the Dial Phone (1927)",
+    "https://archive.org/download/HowtoUse1927/HowtoUse1927.mp4",
+    "#EXTINF:1066 tvg-type=\"movie\" tvg-id=\"ia.6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18\" tvg-name=\"The Sky: A Film Lesson in 'Nature Study' (1928)\" tvg-logo=\"https://archive.org/services/img/6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18\" tvg-language=\"English\" year=\"1928\" group-title=\"Documentaries: Prelinger Archives\",The Sky: A Film Lesson in \"Nature Study\" (1928)",
+    "https://archive.org/download/6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18/6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18.mp4",
+    "#EXTINF:690 tvg-type=\"movie\" tvg-id=\"ia.TripDownMarketStreetrBeforeTheFire\" tvg-name=\"Trip Down Market Street Before the Fire A (DV25 version) (1906)\" tvg-logo=\"https://archive.org/services/img/TripDownMarketStreetrBeforeTheFire\" tvg-language=\"English\" year=\"1906\" group-title=\"Documentaries: Prelinger Archives\",Trip Down Market Street Before the Fire – A (DV25 version) (1906)",
+    "https://archive.org/download/TripDownMarketStreetrBeforeTheFire/TripDownMktStreet_clean.mp4",
+    "#EXTINF:1787 tvg-type=\"movie\" tvg-id=\"commons.Apollo_13_Home_Safe\" tvg-name=\"Apollo 13 - Home Safe (2023)\" tvg-logo=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/1/19/Apollo_13_-_Home_Safe.webm/500px--Apollo_13_-_Home_Safe.webm.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo\" year=\"2023\" http-user-agent=\"freeplaylist/0.1 (+https://github.com/biskyt/legalFreeIPTVplaylist)\" group-title=\"Documentaries: Wikimedia Commons\",Apollo 13 - Home Safe (2023)",
+    "#EXTVLCOPT:http-user-agent=freeplaylist/0.1 (+https://github.com/biskyt/legalFreeIPTVplaylist)",
+    "https://upload.wikimedia.org/wikipedia/commons/transcoded/1/19/Apollo_13_-_Home_Safe.webm/Apollo_13_-_Home_Safe.webm.480p.vp9.webm",
+    "#EXTINF:1701 tvg-type=\"movie\" tvg-id=\"commons.Apollo_13_Houston_We_ve_Got_a_Problem\" tvg-name=\"Apollo 13 Houston We've Got a Problem (1970)\" tvg-logo=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/Apollo_13_Houston%2C_We%27ve_Got_a_Problem.ogv/330px--Apollo_13_Houston%2C_We%27ve_Got_a_Problem.ogv.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo\" year=\"1970\" http-user-agent=\"freeplaylist/0.1 (+https://github.com/biskyt/legalFreeIPTVplaylist)\" group-title=\"Documentaries: Wikimedia Commons\",Apollo 13 Houston – We've Got a Problem (1970)",
+    "#EXTVLCOPT:http-user-agent=freeplaylist/0.1 (+https://github.com/biskyt/legalFreeIPTVplaylist)",
+    "https://upload.wikimedia.org/wikipedia/commons/transcoded/2/23/Apollo_13_Houston%2C_We%27ve_Got_a_Problem.ogv/Apollo_13_Houston%2C_We%27ve_Got_a_Problem.ogv.240p.vp9.webm",
+    "#EXTINF:1706 tvg-type=\"movie\" tvg-id=\"commons.Apollo_14_Mission_to_Fra_Mauro\" tvg-name=\"Apollo 14 - Mission to Fra Mauro (1971)\" tvg-logo=\"https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f7/Apollo_14_-_Mission_to_Fra_Mauro.webm/500px--Apollo_14_-_Mission_to_Fra_Mauro.webm.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo\" year=\"1971\" http-user-agent=\"freeplaylist/0.1 (+https://github.com/biskyt/legalFreeIPTVplaylist)\" group-title=\"Documentaries: Wikimedia Commons\",Apollo 14 - Mission to Fra Mauro (1971)"
+  ],
+  "probeArchive": [
+    {
+      "url": "https://archive.org/download/TripDown1905/TripDown1905.mp4",
+      "status": 302,
+      "redirected": true,
+      "location": "https://dn790001.ca.archive.org/0/items/TripDown1905/TripDown1905.mp4",
+      "ct": "video/mp4",
+      "cr": "",
+      "ar": "bytes",
+      "cl": ""
+    },
+    {
+      "url": "https://archive.org/download/FindingH1929/FindingH1929.mp4",
+      "status": 302,
+      "redirected": true,
+      "location": "https://dn790001.ca.archive.org/0/items/FindingH1929/FindingH1929.mp4",
+      "ct": "video/mp4",
+      "cr": "",
+      "ar": "bytes",
+      "cl": ""
+    },
+    {
+      "url": "https://archive.org/download/GeneralH1928/GeneralH1928.mp4",
+      "status": 302,
+      "redirected": true,
+      "location": "https://dn790001.ca.archive.org/0/items/GeneralH1928/GeneralH1928.mp4",
+      "ct": "video/mp4",
+      "cr": "",
+      "ar": "bytes",
+      "cl": ""
+    },
+    {
+      "url": "https://archive.org/download/HowtoUse1927/HowtoUse1927.mp4",
+      "status": 302,
+      "redirected": true,
+      "location": "https://dn790001.ca.archive.org/0/items/HowtoUse1927/HowtoUse1927.mp4",
+      "ct": "video/mp4",
+      "cr": "",
+      "ar": "bytes",
+      "cl": ""
+    },
+    {
+      "url": "https://archive.org/download/6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18/6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18.mp4",
+      "status": 302,
+      "redirected": true,
+      "location": "https://dn790001.ca.archive.org/0/items/6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18/6090_Sky_A_Film_Lesson_in_Nature_Study_The_01_35_14_18.mp4",
+      "ct": "video/mp4",
+      "cr": "",
+      "ar": "bytes",
+      "cl": ""
+    }
+  ],
+  "probeWiki": [
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/1/19/Apollo_13_-_Home_Safe.webm/Apollo_13_-_Home_Safe.webm.480p.vp9.webm",
+      "status": 206,
+      "redirected": false,
+      "location": "",
+      "ct": "video/webm",
+      "cr": "bytes 0-1023/155822308",
+      "ar": "bytes",
+      "cl": "1024"
+    },
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/2/23/Apollo_13_Houston%2C_We%27ve_Got_a_Problem.ogv/Apollo_13_Houston%2C_We%27ve_Got_a_Problem.ogv.240p.vp9.webm",
+      "status": 206,
+      "redirected": false,
+      "location": "",
+      "ct": "video/webm",
+      "cr": "bytes 0-1023/70072969",
+      "ar": "bytes",
+      "cl": "1024"
+    },
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/f/f7/Apollo_14_-_Mission_to_Fra_Mauro.webm/Apollo_14_-_Mission_to_Fra_Mauro.webm.480p.vp9.webm",
+      "status": 206,
+      "redirected": false,
+      "location": "",
+      "ct": "video/webm",
+      "cr": "bytes 0-1023/172184573",
+      "ar": "bytes",
+      "cl": "1024"
+    }
+  ],
+  "reportSummary": {}
+}

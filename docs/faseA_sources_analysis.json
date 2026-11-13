@@ -1,0 +1,68 @@
+[
+  {
+    "name": "legalFree live.m3u",
+    "total": 3,
+    "attributes": {
+      "tvgId": "3 (100.0%)",
+      "groupTitle": "3 (100.0%)",
+      "country": "3 (100.0%)",
+      "language": "3 (100.0%)",
+      "logo": "3 (100.0%)"
+    },
+    "urlFormats": {
+      "hls": 3,
+      "mp4": 0,
+      "youtube": 0,
+      "mpegts": 0,
+      "other": 0
+    },
+    "overlap": {
+      "byTvgId": "1 (33.3%)",
+      "byUrl": "1 (33.3%)"
+    }
+  },
+  {
+    "name": "Free-TV playlist.m3u8",
+    "total": 2203,
+    "attributes": {
+      "tvgId": "1634 (74.2%)",
+      "groupTitle": "2203 (100.0%)",
+      "country": "1932 (87.7%)",
+      "language": "0 (0.0%)",
+      "logo": "2111 (95.8%)"
+    },
+    "urlFormats": {
+      "hls": 1937,
+      "mp4": 1,
+      "youtube": 129,
+      "mpegts": 0,
+      "other": 136
+    },
+    "overlap": {
+      "byTvgId": "0 (0.0%)",
+      "byUrl": "207 (9.4%)"
+    }
+  },
+  {
+    "name": "Archive Watch VOD",
+    "total": 49405,
+    "attributes": {
+      "tvgId": "49405 (100.0%)",
+      "groupTitle": "49405 (100.0%)",
+      "country": "0 (0.0%)",
+      "language": "0 (0.0%)",
+      "logo": "49264 (99.7%)"
+    },
+    "urlFormats": {
+      "hls": 0,
+      "mp4": 49297,
+      "youtube": 4,
+      "mpegts": 0,
+      "other": 104
+    },
+    "overlap": {
+      "byTvgId": "0 (0.0%)",
+      "byUrl": "0 (0.0%)"
+    }
+  }
+]
