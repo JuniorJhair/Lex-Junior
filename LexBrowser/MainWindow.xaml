@@ -463,7 +463,10 @@
                                 </Canvas>
                             </Viewbox>
                         </Border>
-                        <TextBlock x:Name="TxtSecurityIcon" Text="🔒" FontSize="11" Foreground="#10B981" VerticalAlignment="Center" Visibility="Collapsed" ToolTip="Conexión cifrada segura (HTTPS)"/>
+                        <Border x:Name="BtnSecurityInfo" Cursor="Hand" Background="Transparent" Padding="2" CornerRadius="4"
+                                MouseLeftButtonDown="BtnSecurityInfo_Click" ToolTip="Información del sitio y permisos (Clic para gestionar)">
+                            <TextBlock x:Name="TxtSecurityIcon" Text="🔒" FontSize="11" Foreground="#10B981" VerticalAlignment="Center" Visibility="Collapsed"/>
+                        </Border>
                     </StackPanel>
 
                     <!-- Input URL: Comportamiento exacto de Chrome/Brave con sugerencias en vivo -->
@@ -549,6 +552,99 @@
                     </Button>
                 </Grid>
             </Border>
+
+            <!-- Popover de Permisos del Sitio e Información de Seguridad -->
+            <Popup x:Name="PopupSitePermissions" PlacementTarget="{Binding ElementName=BtnSecurityInfo}"
+                   Placement="Bottom" VerticalOffset="6" HorizontalOffset="-6"
+                   StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Background="#151520" BorderBrush="#2D2D44" BorderThickness="1.5" CornerRadius="12" Padding="15,13" Width="330">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="18" ShadowDepth="5" Opacity="0.72" Color="#000000"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <!-- Encabezado con Dominio y Estado de Conexión -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TxtSitePermSecurityBadge" Grid.Column="0" Text="🔒" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtSitePermHost" Text="dominio.com" FontSize="12.5" FontWeight="Bold" Foreground="#FFFFFF" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="TxtSitePermStatus" Text="La conexión es segura" FontSize="10.5" Foreground="#10B981"/>
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="✕" Width="24" Height="24" Background="Transparent" BorderThickness="0"
+                                    Foreground="#A1A1AA" Cursor="Hand" Click="BtnCloseSitePermissions_Click"/>
+                        </Grid>
+
+                        <Border Height="1" Background="#242436" Margin="0,0,0,10"/>
+
+                        <!-- Sección de Permisos -->
+                        <TextBlock Text="PERMISOS DEL SITIO" FontSize="10" FontWeight="Bold" Foreground="#818CF8" Margin="0,0,0,8"/>
+
+                        <!-- Micrófono -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="135"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="🎤" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Grid.Column="1" Text="Micrófono" FontSize="11.5" Foreground="#E4E4E7" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbPermMicrophone" Grid.Column="2" Height="26" Style="{StaticResource LexComboBox}"
+                                      SelectionChanged="CmbPerm_SelectionChanged">
+                                <ComboBoxItem Content="Preguntar" Tag="Default"/>
+                                <ComboBoxItem Content="Permitir" Tag="Allow"/>
+                                <ComboBoxItem Content="Bloquear" Tag="Deny"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Cámara -->
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="135"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="📷" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Grid.Column="1" Text="Cámara" FontSize="11.5" Foreground="#E4E4E7" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbPermCamera" Grid.Column="2" Height="26" Style="{StaticResource LexComboBox}"
+                                      SelectionChanged="CmbPerm_SelectionChanged">
+                                <ComboBoxItem Content="Preguntar" Tag="Default"/>
+                                <ComboBoxItem Content="Permitir" Tag="Allow"/>
+                                <ComboBoxItem Content="Bloquear" Tag="Deny"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Notificaciones -->
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="135"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="🔔" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBlock Grid.Column="1" Text="Notificaciones" FontSize="11.5" Foreground="#E4E4E7" VerticalAlignment="Center"/>
+                            <ComboBox x:Name="CmbPermNotifications" Grid.Column="2" Height="26" Style="{StaticResource LexComboBox}"
+                                      SelectionChanged="CmbPerm_SelectionChanged">
+                                <ComboBoxItem Content="Preguntar" Tag="Default"/>
+                                <ComboBoxItem Content="Permitir" Tag="Allow"/>
+                                <ComboBoxItem Content="Bloquear" Tag="Deny"/>
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Botón Restablecer permisos -->
+                        <Border Height="1" Background="#242436" Margin="0,0,0,8"/>
+                        <Button x:Name="BtnResetSitePermissions" Style="{StaticResource LexSecondaryButton}"
+                                Content="↺ Restablecer permisos" FontSize="11" Padding="8,5" HorizontalAlignment="Stretch"
+                                Click="BtnResetSitePermissions_Click"/>
+
+                        <TextBlock x:Name="TxtSitePermHint" Text="Recarga la página para aplicar los cambios."
+                                   FontSize="10" Foreground="#A1A1AA" Margin="0,6,0,0" HorizontalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+            </Popup>
 
             <!-- Popover Interactivo de Control por Sitio de LexShield (Airspace-safe) -->
             <Popup x:Name="PopupShieldPanel" PlacementTarget="{Binding ElementName=BorderShieldBadge}"
@@ -968,10 +1064,10 @@
                 <!-- Botón Lex TV (Reproductor bajo demanda: IPTV y VOD) -->
                 <Button x:Name="BtnLiveTv" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
                         ToolTip="Lex TV: Reproductor bajo demanda (IPTV y VOD, 0% consumo al cerrar)" Click="BtnLiveTv_Click">
-                    <Border Background="#252536" CornerRadius="8" Padding="7,4">
+                    <Border Background="#252536" CornerRadius="8" Padding="10,4,12,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
+                            <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center" Margin="0,0,2,0"/>
                         </StackPanel>
                     </Border>
                 </Button>

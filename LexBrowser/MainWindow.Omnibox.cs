@@ -10,8 +10,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using LexBrowser.Core;
 using LexBrowser.Core.Engine;
+using LexBrowser.Core.Notifications;
 using LexBrowser.Core.Pdf;
 using LexBrowser.UI.Models;
+using Microsoft.Web.WebView2.Core;
 
 namespace LexBrowser;
 
@@ -469,4 +471,233 @@ public partial class MainWindow
             UpdateNavigationButtons();
         }
     }
+
+    #region Site Permissions & Security Info
+
+    private bool _isUpdatingSitePermissionsUI;
+
+    private async void BtnSecurityInfo_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        await ToggleSitePermissionsPopupAsync();
+    }
+
+    private void BtnCloseSitePermissions_Click(object sender, RoutedEventArgs e)
+    {
+        if (PopupSitePermissions != null)
+            PopupSitePermissions.IsOpen = false;
+    }
+
+    private async Task ToggleSitePermissionsPopupAsync()
+    {
+        if (PopupSitePermissions == null) return;
+        if (PopupSitePermissions.IsOpen)
+        {
+            PopupSitePermissions.IsOpen = false;
+            return;
+        }
+
+        var uri = _activeTab?.CurrentUri;
+        if (uri == null || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return;
+
+        string host = uri.Host;
+        if (TxtSitePermHost != null) TxtSitePermHost.Text = host;
+
+        if (uri.Scheme == Uri.UriSchemeHttps)
+        {
+            if (TxtSitePermSecurityBadge != null) TxtSitePermSecurityBadge.Text = "🔒";
+            if (TxtSitePermStatus != null)
+            {
+                TxtSitePermStatus.Text = "La conexión es segura";
+                TxtSitePermStatus.Foreground = BrushHttpsSecure;
+            }
+        }
+        else
+        {
+            if (TxtSitePermSecurityBadge != null) TxtSitePermSecurityBadge.Text = "⚠️";
+            if (TxtSitePermStatus != null)
+            {
+                TxtSitePermStatus.Text = "La conexión no es segura";
+                TxtSitePermStatus.Foreground = BrushHttpWarning;
+            }
+        }
+
+        _isUpdatingSitePermissionsUI = true;
+        try
+        {
+            var core = _activeTab?.WebView?.CoreWebView2;
+            if (core != null)
+            {
+                var nonDefault = await core.Profile.GetNonDefaultPermissionSettingsAsync();
+
+                var micState = ResolvePermissionState(nonDefault, CoreWebView2PermissionKind.Microphone, uri);
+                SetComboPermissionState(CmbPermMicrophone, micState);
+
+                var camState = ResolvePermissionState(nonDefault, CoreWebView2PermissionKind.Camera, uri);
+                SetComboPermissionState(CmbPermCamera, camState);
+
+                var notifState = ResolvePermissionState(nonDefault, CoreWebView2PermissionKind.Notifications, uri);
+                SetComboPermissionState(CmbPermNotifications, notifState);
+            }
+        }
+        catch { }
+        finally
+        {
+            _isUpdatingSitePermissionsUI = false;
+        }
+
+        if (TxtSitePermHint != null) TxtSitePermHint.Visibility = Visibility.Collapsed;
+        PopupSitePermissions.IsOpen = true;
+    }
+
+    private static CoreWebView2PermissionState ResolvePermissionState(
+        IReadOnlyList<CoreWebView2PermissionSetting>? settings,
+        CoreWebView2PermissionKind kind,
+        Uri uri)
+    {
+        if (settings == null || settings.Count == 0) return CoreWebView2PermissionState.Default;
+
+        string host = uri.Host;
+        var match = settings.FirstOrDefault(s => s.PermissionKind == kind &&
+            s.PermissionOrigin.Contains(host, StringComparison.OrdinalIgnoreCase));
+
+        return match?.PermissionState ?? CoreWebView2PermissionState.Default;
+    }
+
+    private static void SetComboPermissionState(ComboBox? cmb, CoreWebView2PermissionState state)
+    {
+        if (cmb == null) return;
+        string tag = state switch
+        {
+            CoreWebView2PermissionState.Allow => "Allow",
+            CoreWebView2PermissionState.Deny => "Deny",
+            _ => "Default"
+        };
+        foreach (ComboBoxItem item in cmb.Items)
+        {
+            if (string.Equals(item.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase))
+            {
+                cmb.SelectedItem = item;
+                return;
+            }
+        }
+        if (cmb.Items.Count > 0) cmb.SelectedIndex = 0;
+    }
+
+    private static CoreWebView2PermissionState ParsePermissionState(string? tag) => tag switch
+    {
+        "Allow" => CoreWebView2PermissionState.Allow,
+        "Deny" => CoreWebView2PermissionState.Deny,
+        _ => CoreWebView2PermissionState.Default
+    };
+
+    private static async Task SafeSetPermissionStateAsync(CoreWebView2 core, CoreWebView2PermissionKind kind, Uri uri, CoreWebView2PermissionState state)
+    {
+        if (core?.Profile == null) return;
+        string originStandard = $"{uri.Scheme}://{uri.Host}";
+        try
+        {
+            await core.Profile.SetPermissionStateAsync(kind, originStandard, state);
+        }
+        catch { }
+
+        string originAuth = $"{uri.Scheme}://{uri.Authority}";
+        if (!string.Equals(originStandard, originAuth, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await core.Profile.SetPermissionStateAsync(kind, originAuth, state);
+            }
+            catch { }
+        }
+
+        if (string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await core.Profile.SetPermissionStateAsync(kind, $"https://{uri.Host}:443", state);
+            }
+            catch { }
+        }
+    }
+
+    private async void CmbPerm_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingSitePermissionsUI) return;
+        var uri = _activeTab?.CurrentUri;
+        var core = _activeTab?.WebView?.CoreWebView2;
+        if (uri == null || core == null) return;
+
+        try
+        {
+            if (sender == CmbPermMicrophone && CmbPermMicrophone.SelectedItem is ComboBoxItem itemMic)
+            {
+                var state = ParsePermissionState(itemMic.Tag?.ToString());
+                await SafeSetPermissionStateAsync(core, CoreWebView2PermissionKind.Microphone, uri, state);
+            }
+            else if (sender == CmbPermCamera && CmbPermCamera.SelectedItem is ComboBoxItem itemCam)
+            {
+                var state = ParsePermissionState(itemCam.Tag?.ToString());
+                await SafeSetPermissionStateAsync(core, CoreWebView2PermissionKind.Camera, uri, state);
+            }
+            else if (sender == CmbPermNotifications && CmbPermNotifications.SelectedItem is ComboBoxItem itemNotif)
+            {
+                var state = ParsePermissionState(itemNotif.Tag?.ToString());
+                await SafeSetPermissionStateAsync(core, CoreWebView2PermissionKind.Notifications, uri, state);
+                string origin = $"{uri.Scheme}://{uri.Authority}";
+                if (state == CoreWebView2PermissionState.Allow)
+                    NotificationPermissionManager.SetSiteMode(origin, SiteNotificationMode.Allow, _activeTab?.IsIncognito ?? false);
+                else if (state == CoreWebView2PermissionState.Deny)
+                    NotificationPermissionManager.SetSiteMode(origin, SiteNotificationMode.Block, _activeTab?.IsIncognito ?? false);
+                else
+                    NotificationPermissionManager.SetSiteMode(origin, SiteNotificationMode.Ask, _activeTab?.IsIncognito ?? false);
+            }
+
+            if (TxtSitePermHint != null)
+            {
+                TxtSitePermHint.Text = "Permiso actualizado. Recarga la página para aplicar.";
+                TxtSitePermHint.Visibility = Visibility.Visible;
+            }
+        }
+        catch { }
+    }
+
+    private async void BtnResetSitePermissions_Click(object sender, RoutedEventArgs e)
+    {
+        var uri = _activeTab?.CurrentUri;
+        var core = _activeTab?.WebView?.CoreWebView2;
+        if (uri == null || core == null) return;
+
+        try
+        {
+            await SafeSetPermissionStateAsync(core, CoreWebView2PermissionKind.Microphone, uri, CoreWebView2PermissionState.Default);
+            await SafeSetPermissionStateAsync(core, CoreWebView2PermissionKind.Camera, uri, CoreWebView2PermissionState.Default);
+            await SafeSetPermissionStateAsync(core, CoreWebView2PermissionKind.Notifications, uri, CoreWebView2PermissionState.Default);
+
+            string origin = $"{uri.Scheme}://{uri.Authority}";
+            NotificationPermissionManager.SetSiteMode(origin, SiteNotificationMode.Ask, _activeTab?.IsIncognito ?? false);
+
+            _isUpdatingSitePermissionsUI = true;
+            try
+            {
+                SetComboPermissionState(CmbPermMicrophone, CoreWebView2PermissionState.Default);
+                SetComboPermissionState(CmbPermCamera, CoreWebView2PermissionState.Default);
+                SetComboPermissionState(CmbPermNotifications, CoreWebView2PermissionState.Default);
+            }
+            finally
+            {
+                _isUpdatingSitePermissionsUI = false;
+            }
+
+            if (TxtSitePermHint != null)
+            {
+                TxtSitePermHint.Text = "Permisos restablecidos a 'Preguntar'. Recarga la página.";
+                TxtSitePermHint.Visibility = Visibility.Visible;
+            }
+        }
+        catch { }
+    }
+
+    #endregion
 }
