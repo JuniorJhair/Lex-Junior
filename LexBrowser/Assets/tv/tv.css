@@ -818,3 +818,226 @@ video {
   }
 }
 
+/* Hub / Index Styles */
+.hub-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 30px 20px 60px;
+  overflow-y: auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.hero {
+  text-align: center;
+  margin-bottom: 36px;
+}
+.hero h1 {
+  font-size: 28px;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+.hero p {
+  font-size: 15px;
+  color: var(--muted);
+  max-width: 620px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  width: 100%;
+  margin-bottom: 40px;
+}
+.mode-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+.mode-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.mode-card-icon {
+  font-size: 38px;
+  margin-bottom: 16px;
+}
+.mode-card h2 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  color: var(--text);
+}
+.mode-card p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 13px;
+  flex-grow: 1;
+}
+.mode-card .btn-card {
+  align-self: flex-start;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+.mode-card .btn-card:hover {
+  background: var(--accent-hover);
+}
+.hub-footer {
+  text-align: center;
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.hub-footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.hub-footer a:hover {
+  text-decoration: underline;
+}
+
+/* Modal de Términos Obligatorios */
+.terms-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.terms-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+}
+.terms-head {
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.terms-head h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text);
+}
+.terms-body {
+  padding: 20px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.terms-body strong {
+  color: var(--text);
+}
+.terms-body p {
+  margin: 0 0 12px;
+}
+.terms-foot {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 0 0 12px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.terms-chk-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Legal & Info Container Styles */
+.legal-container, .info-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 30px 20px 60px;
+  line-height: 1.6;
+  overflow-y: auto;
+  height: 100%;
+}
+.legal-card, .info-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.legal-card h2, .info-card h2 {
+  margin-top: 0;
+  color: var(--accent);
+  font-size: 18px;
+}
+.contact-box {
+  background: var(--panel-2);
+  border-left: 4px solid var(--accent);
+  padding: 12px 16px;
+  border-radius: 4px;
+  margin: 15px 0;
+}
+.contact-box p {
+  margin: 4px 0;
+}
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  text-decoration: none;
+  padding: 8px 14px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+.back-btn:hover {
+  background: var(--border);
+}
+.badge-feature {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--ok);
+  margin-right: 6px;
+}
+

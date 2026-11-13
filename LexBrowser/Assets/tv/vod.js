@@ -812,7 +812,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const apiKey = (els.jfApiKey.value || '').trim();
     if (!serverUrl) {
       els.jfStatus.textContent = 'Ingresa la URL de tu servidor Jellyfin/Emby.';
-      els.jfStatus.style.color = 'var(--bad)';
+      els.jfStatus.className = 'text-bad';
       els.jfStatus.classList.remove('hidden');
       return;
     }
@@ -826,15 +826,15 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       });
       if (res.ok) {
         els.jfStatus.textContent = '✓ Conexión exitosa con el servidor.';
-        els.jfStatus.style.color = 'var(--ok)';
+        els.jfStatus.className = 'text-ok';
       } else {
         els.jfStatus.textContent = '✗ No se pudo conectar al servidor. Verifica la URL y clave.';
-        els.jfStatus.style.color = 'var(--bad)';
+        els.jfStatus.className = 'text-bad';
       }
       els.jfStatus.classList.remove('hidden');
     } catch (err) {
       els.jfStatus.textContent = `Error: ${err.message}`;
-      els.jfStatus.style.color = 'var(--bad)';
+      els.jfStatus.className = 'text-bad';
       els.jfStatus.classList.remove('hidden');
     } finally {
       els.btnJfTest.disabled = false;
@@ -847,7 +847,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const userId = (els.jfUserId.value || '').trim();
     if (!serverUrl) {
       els.jfStatus.textContent = 'Ingresa la URL del servidor.';
-      els.jfStatus.style.color = 'var(--bad)';
+      els.jfStatus.className = 'text-bad';
       els.jfStatus.classList.remove('hidden');
       return;
     }
@@ -860,7 +860,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         body: JSON.stringify({ serverUrl, apiKey, userId })
       });
       els.jfStatus.textContent = `✓ Importados ${res.addedCount || 0} títulos de ${res.totalFound || 0} encontrados.`;
-      els.jfStatus.style.color = 'var(--ok)';
+      els.jfStatus.className = 'text-ok';
       els.jfStatus.classList.remove('hidden');
       setTimeout(() => {
         closeJfModal();

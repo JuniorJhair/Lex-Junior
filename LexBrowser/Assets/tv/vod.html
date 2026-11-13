@@ -164,8 +164,8 @@
           <textarea id="importTextInput" class="ctrl mono" rows="5" placeholder="#EXTM3U&#10;#EXTINF:-1 group-title=&quot;Peliculas&quot;,Titulo&#10;https://..."></textarea>
         </label>
 
-        <div id="importError" class="muted hidden" style="color: var(--bad); font-weight: 500;"></div>
-        <div id="importInfo" class="muted hidden" style="color: var(--ok); font-weight: 500;"></div>
+        <div id="importError" class="text-bad hidden"></div>
+        <div id="importInfo" class="text-ok hidden"></div>
       </div>
       <div class="modal-foot">
         <button id="btnCancelImport" class="btn" type="button">Cancelar</button>
@@ -201,7 +201,7 @@
           <input id="jfUserId" class="ctrl" type="text" placeholder="ID de usuario de Jellyfin" />
         </label>
 
-        <div id="jfStatus" class="muted hidden" style="font-weight: 500;"></div>
+        <div id="jfStatus" class="hidden"></div>
       </div>
       <div class="modal-foot">
         <button id="btnJfTest" class="btn" type="button">Probar conexión</button>

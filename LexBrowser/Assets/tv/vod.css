@@ -690,3 +690,13 @@ body {
   display: none;
 }
 
+.text-bad {
+  color: var(--bad);
+  font-weight: 500;
+}
+
+.text-ok {
+  color: var(--ok);
+  font-weight: 500;
+}
+
