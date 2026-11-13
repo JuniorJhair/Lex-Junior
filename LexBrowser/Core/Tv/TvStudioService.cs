@@ -240,7 +240,10 @@ public static class TvStudioService
                 var resolve = TvXtreamService.ResolveUpstreamStreamUrl(TvXtreamStore.Shared, connId, streamType, streamId, ext);
                 if (!resolve.Success || string.IsNullOrEmpty(resolve.UpstreamUrl))
                 {
-                    e.Response = CreateJsonResponse(env, 404, "Not Found", new { error = resolve.Error ?? "Flujo Xtream no disponible." });
+                    string errCls = resolve.Error != null && (resolve.Error.Contains("Credenciales", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Conexión", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Identificadores", StringComparison.OrdinalIgnoreCase))
+                        ? "credentials"
+                        : "blocked";
+                    e.Response = CreateJsonResponse(env, 404, "Not Found", new { error = resolve.Error ?? "Flujo Xtream no disponible.", cls = errCls, msg = resolve.Error }, errorClass: errCls);
                     return;
                 }
 
@@ -289,7 +292,7 @@ public static class TvStudioService
                     }
                 }
 
-                var imgRes = await TvStreamProxy.FetchImageAsync(rawTarget, cts.Token);
+                var imgRes = await TvStreamProxy.FetchImageAsync(rawTarget, connId, cts.Token);
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(imgRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
@@ -880,16 +883,23 @@ public static class TvStudioService
         return false;
     }
 
-    private static CoreWebView2WebResourceResponse CreateJsonResponse(CoreWebView2Environment env, int code, string reason, object payload)
+    private static CoreWebView2WebResourceResponse CreateJsonResponse(
+        CoreWebView2Environment env,
+        int code,
+        string reason,
+        object payload,
+        string? errorClass = null)
     {
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOutOptions);
         string headers =
             $"Content-Type: application/json; charset=utf-8\r\n" +
             $"Access-Control-Allow-Origin: {AllowedCorsOrigin}\r\n" +
+            $"Access-Control-Expose-Headers: X-Lex-Error-Class, X-Lex-Upstream, Content-Range, Accept-Ranges, Content-Length\r\n" +
             $"X-Content-Type-Options: nosniff\r\n" +
             $"Referrer-Policy: same-origin\r\n" +
             $"X-Frame-Options: DENY\r\n" +
-            $"Cache-Control: no-store";
+            $"Cache-Control: no-store" +
+            (string.IsNullOrEmpty(errorClass) ? "" : $"\r\nX-Lex-Error-Class: {errorClass}");
         return env.CreateWebResourceResponse(new MemoryStream(bytes, writable: false), code, reason, headers);
     }
 

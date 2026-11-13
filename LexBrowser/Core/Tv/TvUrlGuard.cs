@@ -33,6 +33,49 @@ public static class TvUrlGuard
     public const int MaxPlaylistBytes = 20 * 1024 * 1024;
     public const string DefaultUserAgent = "LexBrowser/2.1 (Windows NT 10.0; Win64; x64) LexTv/1.0";
 
+    /// <summary>User-Agent neutro por defecto para streams e imágenes (reproductor).</summary>
+    public const string DefaultPlayerUserAgent = "LexTV/1.0 (Player)";
+    /// <summary>User-Agent alternativo usado una sola vez cuando el primario recibe 403/404.</summary>
+    public const string FallbackPlayerUserAgent = "VLC/3.0.20 LibVLC/3.0.20";
+    public const string PlayerUserAgentEnvVar = "LEXTV_PLAYER_UA";
+    public const string PlayerUserAgentFileName = "tv_player_ua.txt";
+
+    private static string? _playerUserAgent;
+
+    /// <summary>
+    /// ÚNICO campo de configuración del User-Agent de reproductor (streams e imágenes).
+    /// Se resuelve (sin recompilar) desde la variable de entorno LEXTV_PLAYER_UA o, si no existe,
+    /// desde el archivo tv_player_ua.txt (primera línea) en la carpeta de datos de Lex; si no, el valor neutro.
+    /// </summary>
+    public static string PlayerUserAgent
+    {
+        get => _playerUserAgent ??= LoadPlayerUserAgent();
+        set
+        {
+            string clean = SanitizeHeaderValue(value, 120);
+            _playerUserAgent = clean.Length > 0 ? clean : DefaultPlayerUserAgent;
+        }
+    }
+
+    private static string LoadPlayerUserAgent()
+    {
+        try
+        {
+            string env = SanitizeHeaderValue(Environment.GetEnvironmentVariable(PlayerUserAgentEnvVar), 120);
+            if (env.Length > 0) return env;
+
+            string file = Path.Combine(TvUserStateStore.GetDefaultDirectory(), PlayerUserAgentFileName);
+            if (File.Exists(file))
+            {
+                using var reader = new StreamReader(file);
+                string fromFile = SanitizeHeaderValue(reader.ReadLine(), 120);
+                if (fromFile.Length > 0) return fromFile;
+            }
+        }
+        catch { }
+        return DefaultPlayerUserAgent;
+    }
+
     /// <summary>Host interno exacto reservado para el WebView2 local de Lex TV.</summary>
     public const string InternalHost = "tv.lex.local";
     /// <summary>Origen HTTPS interno exacto de Lex TV.</summary>
@@ -292,15 +335,17 @@ public static class TvUrlGuard
 
     /// <summary>
     /// Ejecuta GET validando cada salto de redirección (hasta 5) para impedir redirecciones a hosts locales/privados,
-    /// usando siempre el User-Agent estándar de Lex TV y reenviando Range si aplica.
+    /// usando el User-Agent indicado (por defecto el estándar de Lex TV) y reenviando Range si aplica.
     /// </summary>
     public static async Task<(HttpResponseMessage Response, Uri FinalUri)> GetWithSafeRedirectsAsync(
         HttpClient client,
         Uri initialUri,
         string? rangeHeader,
         CancellationToken ct,
-        int maxRedirects = 5)
+        int maxRedirects = 5,
+        string? userAgent = null)
     {
+        string ua = string.IsNullOrWhiteSpace(userAgent) ? DefaultUserAgent : SanitizeHeaderValue(userAgent, 120);
         Uri current = initialUri;
         for (int hop = 0; hop <= maxRedirects; hop++)
         {
@@ -308,7 +353,7 @@ public static class TvUrlGuard
                 throw new TvProxyErrorException("blocked", 403, denyReason ?? "Fuente deshabilitada tras una reclamación.");
 
             using var req = new HttpRequestMessage(HttpMethod.Get, current);
-            req.Headers.TryAddWithoutValidation("User-Agent", DefaultUserAgent);
+            req.Headers.TryAddWithoutValidation("User-Agent", ua);
 
             string cleanRange = SanitizeHeaderValue(rangeHeader, 80);
             if (cleanRange.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase))

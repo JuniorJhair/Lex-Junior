@@ -705,24 +705,34 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
           const checkUrl = video.src;
           if (checkUrl) {
             const resp = await fetch(checkUrl, { method: 'GET', headers: { 'Range': 'bytes=0-1' } });
-            if (resp.status === 401 || resp.status === 403) {
+            const errCls = resp.headers.get('X-Lex-Error-Class') || '';
+            let customMsg = '';
+            try {
+              const errJson = await resp.json();
+              if (errJson && (errJson.msg || errJson.error)) customMsg = errJson.msg || errJson.error;
+            } catch (_) { }
+
+            if (errCls === 'credentials') {
+              title = 'Credenciales no disponibles';
+              desc = customMsg || 'Credenciales no disponibles para esta conexión (sesión expirada o no guardadas).';
+            } else if (errCls === 'blocked') {
+              title = 'Flujo bloqueado por seguridad';
+              desc = customMsg || 'La dirección solicitada no cumple con las políticas de seguridad de red de Lex TV.';
+            } else if (errCls) {
+              title = 'Error de reproducción';
+              desc = customMsg || `Error (${errCls}).`;
+            } else if (resp.status === 401 || resp.status === 403) {
               title = 'Acceso rechazado por el servidor';
               desc = `El proveedor rechazó la conexión (HTTP ${resp.status}). Revisa las credenciales o suscripción.`;
             } else if (resp.status === 404) {
               title = 'Fuente no disponible';
-              desc = 'El video o episodio no se encuentra en el servidor (HTTP 404).';
+              desc = customMsg || 'El video o episodio no se encuentra en el servidor (HTTP 404).';
             } else if (resp.status === 504) {
               title = 'Tiempo de espera agotado';
               desc = 'El servidor de video tardó demasiado en responder (HTTP 504).';
             } else if (resp.status === 502) {
-              const errCls = resp.headers.get('X-Lex-Error-Class') || '';
-              if (errCls === 'blocked') {
-                title = 'Flujo bloqueado por seguridad';
-                desc = 'La dirección solicitada no cumple con las políticas de seguridad de red de Lex TV.';
-              } else {
-                title = 'Error de conexión';
-                desc = 'No se pudo establecer conexión con el servidor de video remoto.';
-              }
+              title = 'Error de conexión';
+              desc = customMsg || 'No se pudo establecer conexión con el servidor de video remoto.';
             }
           }
         } catch (_) { }

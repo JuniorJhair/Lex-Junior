@@ -40,11 +40,31 @@ function classifyFailure(ctx) {
     };
   }
 
+  if (errorClass === 'credentials') {
+    return {
+      category: 'credentials',
+      title: 'Credenciales no disponibles',
+      detail: message || 'Credenciales no disponibles para esta conexión (sesión expirada o no guardadas).',
+      persistKind: 'restricted',
+      hint: 'Revisa o reconecta el servidor en la pestaña Xtream Codes.'
+    };
+  }
+
+  if (errorClass === 'blocked') {
+    return {
+      category: 'blocked',
+      title: 'Destino bloqueado por seguridad',
+      detail: message || 'La URL o su resolución DNS apunta a una red privada o esquema bloqueado.',
+      persistKind: 'restricted',
+      hint: 'Revisa que la URL sea pública http:// o https://.'
+    };
+  }
+
   if (status === 404 || status === 410) {
     return {
       category: 'offline',
       title: `Canal fuera de línea (HTTP ${status})`,
-      detail: 'El servidor respondió que el stream no existe o fue retirado.',
+      detail: message || 'El servidor respondió que el stream no existe o fue retirado.',
       persistKind: 'dead',
       hint: 'Prueba otra fuente alternativa o marca como caído.'
     };
