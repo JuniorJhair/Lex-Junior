@@ -249,23 +249,8 @@ THE SOFTWARE.
    See the License for the specific language governing permissions and
    limitations under the License.
 ========================================================================
-3. iptv-org Channel & Stream Directory Metadata
-   Project: https://github.com/iptv-org/iptv
-   Usage: On-demand public API index (https://iptv-org.github.io/api/*)
-   Disclaimer: Lex TV does not host media streams; availability, copyright
-   and regional restrictions are the sole responsibility of stream providers
-   and user-supplied playlists.
-========================================================================
-4. legalFreeIPTVplaylist Catalog Metadata (VOD / Cine)
-   Project: https://github.com/biskyt/legalFreeIPTVplaylist
-   Feed: https://biskyt.github.io/legalFreeIPTVplaylist/catalog.json
-   License: Creative Commons Zero v1.0 Universal / Public Domain
-   Attributions:
-   - Internet Archive (https://archive.org) — Public Domain, CC0, CC-BY media hosting
-   - Wikimedia Commons (https://commons.wikimedia.org) — Educational & open media
-   - Blender Foundation Open Movies (CC-BY)
-   - The Movie Database (TMDb) & IMDb ID references for informational metadata
-   Disclaimer: Lex TV Cine does not host, store, or re-encode video media files.
-   All media is streamed directly from verified public repositories adhering to
-   the strict host allowlist (archive.org, upload.wikimedia.org).
+3. Lex TV — User-Supplied Sources Architecture
+   Notice: Lex TV does not bundle, host, distribute or preload any third-party
+   channel directories, catalogs, or media streams. Lex TV operates strictly
+   as a local client media player for sources provided directly by the user.
 ========================================================================
