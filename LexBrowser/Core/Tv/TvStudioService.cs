@@ -41,6 +41,7 @@ public static class TvStudioService
         TvStreamProxy.AbortSession(null);
         TvUserStateStore.Shared.ReleaseMemoryCache();
         TvVodStore.Shared.ReleaseMemoryCache();
+        TvXtreamStore.Shared.ReleaseMemoryCache();
         TvStreamProxy.ClearProbeCache();
     }
 
@@ -225,6 +226,38 @@ public static class TvStudioService
                 return;
             }
 
+            if (path.Equals("api/xtream/live", StringComparison.OrdinalIgnoreCase) ||
+                path.Equals("api/xtream/vod", StringComparison.OrdinalIgnoreCase) ||
+                path.Equals("api/xtream/series", StringComparison.OrdinalIgnoreCase))
+            {
+                string streamType = path.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
+                                    path.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
+                string connId = q["conn"] ?? "";
+                string streamId = q["id"] ?? "";
+                string ext = q["ext"] ?? "";
+
+                var resolve = TvXtreamService.ResolveUpstreamStreamUrl(TvXtreamStore.Shared, connId, streamType, streamId, ext);
+                if (!resolve.Success || string.IsNullOrEmpty(resolve.UpstreamUrl))
+                {
+                    e.Response = CreateJsonResponse(env, 404, "Not Found", new { error = resolve.Error ?? "Flujo Xtream no disponible." });
+                    return;
+                }
+
+                var proxyRes = await TvStreamProxy.FetchAsync(resolve.UpstreamUrl, rangeHeader, q["sid"], cts.Token);
+                var hdrSb = new StringBuilder();
+                hdrSb.Append("Content-Type: ").Append(proxyRes.ContentType).Append("\r\n");
+                hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
+                hdrSb.Append("Access-Control-Expose-Headers: X-Lex-Error-Class, X-Lex-Upstream, Content-Range, Accept-Ranges\r\n");
+                hdrSb.Append("X-Content-Type-Options: nosniff\r\n");
+                hdrSb.Append("Cache-Control: no-store");
+                foreach (var kv in proxyRes.ExtraHeaders)
+                {
+                    hdrSb.Append("\r\n").Append(kv.Key).Append(": ").Append(kv.Value);
+                }
+                e.Response = env.CreateWebResourceResponse(proxyRes.ContentStream, proxyRes.StatusCode, proxyRes.ReasonPhrase, hdrSb.ToString());
+                return;
+            }
+
             if (path.Equals("api/image", StringComparison.OrdinalIgnoreCase))
             {
                 var imgRes = await TvStreamProxy.FetchImageAsync(q["u"], cts.Token);
@@ -273,11 +306,13 @@ public static class TvStudioService
             {
                 var prefs = TvUserStateStore.Shared.GetPrefsSnapshot();
                 var summaries = TvUserStateStore.Shared.GetPlaylistSummaries();
+                var xtreamSummaries = TvXtreamStore.Shared.GetSummaries();
 
                 e.Response = CreateJsonResponse(env, 200, "OK", new
                 {
                     channels = Array.Empty<TvChannel>(),
                     playlists = summaries,
+                    xtreamConnections = xtreamSummaries,
                     prefs = new
                     {
                         favorites = prefs.Favorites,
@@ -482,6 +517,149 @@ public static class TvStudioService
                     totalFound = items.Count,
                     libraryCount = TvVodStore.Shared.GetLibrarySnapshot().Count
                 });
+                return;
+            }
+
+            if (path.Equals("api/xtream/test", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string serverUrl = doc.RootElement.TryGetProperty("serverUrl", out var sEl) ? (sEl.GetString() ?? "") : "";
+                string username = doc.RootElement.TryGetProperty("username", out var uEl) ? (uEl.GetString() ?? "") : "";
+                string password = doc.RootElement.TryGetProperty("password", out var pEl) ? (pEl.GetString() ?? "") : "";
+
+                var auth = await TvXtreamService.Shared.AuthenticateAsync(serverUrl, username, password, cts.Token);
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    success = auth.Success,
+                    isHttpWarning = auth.IsHttpWarning,
+                    errorMessage = auth.ErrorMessage,
+                    userInfo = auth.UserInfo != null ? new
+                    {
+                        status = auth.UserInfo.Status,
+                        expDate = auth.UserInfo.ExpDate,
+                        activeCons = auth.UserInfo.ActiveCons,
+                        maxCons = auth.UserInfo.MaxCons
+                    } : null,
+                    serverInfo = auth.ServerInfo != null ? new
+                    {
+                        url = auth.ServerInfo.Url,
+                        protocol = auth.ServerInfo.ServerProtocol,
+                        timezone = auth.ServerInfo.Timezone
+                    } : null
+                });
+                return;
+            }
+
+            if (path.Equals("api/xtream/connect", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                bool confirmedAuth = doc.RootElement.TryGetProperty("confirmedAuthorized", out var caEl) && caEl.GetBoolean();
+                if (!confirmedAuth)
+                {
+                    e.Response = CreateJsonResponse(env, 400, "Bad Request", new
+                    {
+                        error = "Debes confirmar que tienes autorización para acceder a los contenidos de esta fuente."
+                    });
+                    return;
+                }
+
+                string name = doc.RootElement.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
+                string serverUrl = doc.RootElement.TryGetProperty("serverUrl", out var sEl) ? (sEl.GetString() ?? "") : "";
+                string username = doc.RootElement.TryGetProperty("username", out var uEl) ? (uEl.GetString() ?? "") : "";
+                string password = doc.RootElement.TryGetProperty("password", out var pEl) ? (pEl.GetString() ?? "") : "";
+                bool saveCreds = doc.RootElement.TryGetProperty("saveCredentials", out var scEl) && scEl.GetBoolean();
+                bool syncVod = doc.RootElement.TryGetProperty("syncVod", out var svEl) && svEl.GetBoolean();
+
+                var auth = await TvXtreamService.Shared.AuthenticateAsync(serverUrl, username, password, cts.Token);
+                if (!auth.Success)
+                {
+                    e.Response = CreateJsonResponse(env, 400, "Bad Request", new
+                    {
+                        error = auth.ErrorMessage ?? "No se pudo autenticar con el servidor Xtream."
+                    });
+                    return;
+                }
+
+                string connId = "xc_" + Guid.NewGuid().ToString("N")[..10];
+                string cleanName = string.IsNullOrWhiteSpace(name) ? "Mi IPTV Xtream" : name.Trim();
+
+                // 1. Obtener canales en vivo
+                var channels = await TvXtreamService.Shared.FetchLiveChannelsAsync(serverUrl, username, password, connId, cleanName, cts.Token);
+
+                // 2. Registrar en TvUserStateStore como playlist para que aparezca en el selector
+                TvUserStateStore.Shared.AddOrUpdatePlaylist(cleanName, $"xtream://{connId}", channels);
+
+                // 3. Importar VOD y Series si se solicitó
+                int vodCount = 0;
+                int seriesCount = 0;
+                if (syncVod)
+                {
+                    var movies = await TvXtreamService.Shared.FetchVodMoviesAsync(serverUrl, username, password, connId, cts.Token);
+                    vodCount = movies.Count;
+                    if (movies.Count > 0) TvVodStore.Shared.ImportItems(movies);
+
+                    var series = await TvXtreamService.Shared.FetchSeriesAsync(serverUrl, username, password, connId, cts.Token);
+                    seriesCount = series.Count;
+                    if (series.Count > 0) TvVodStore.Shared.ImportItems(series);
+                }
+
+                // 4. Guardar conexión en TvXtreamStore
+                var conn = new TvXtreamConnection
+                {
+                    Id = connId,
+                    Name = cleanName,
+                    ServerUrl = serverUrl.Trim().TrimEnd('/'),
+                    AddedUtc = DateTime.UtcNow,
+                    SaveCredentials = saveCreds,
+                    LiveCount = channels.Count,
+                    VodCount = vodCount,
+                    SeriesCount = seriesCount,
+                    ServerStatus = auth.UserInfo?.Status,
+                    ExpirationDate = auth.UserInfo?.ExpDate
+                };
+                TvXtreamStore.Shared.AddOrUpdateConnection(conn, username.Trim(), password.Trim());
+
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    ok = true,
+                    connectionId = connId,
+                    name = cleanName,
+                    liveCount = channels.Count,
+                    vodCount,
+                    seriesCount,
+                    saveCredentials = saveCreds
+                });
+                return;
+            }
+
+            if (path.Equals("api/xtream/connections", StringComparison.OrdinalIgnoreCase))
+            {
+                var summaries = TvXtreamStore.Shared.GetSummaries();
+                e.Response = CreateJsonResponse(env, 200, "OK", new { connections = summaries });
+                return;
+            }
+
+            if (path.Equals("api/xtream/remove", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string id = doc.RootElement.TryGetProperty("id", out var iEl) ? (iEl.GetString() ?? "") : "";
+
+                bool removed = TvXtreamStore.Shared.RemoveConnection(id);
+                if (removed)
+                {
+                    var playlists = TvUserStateStore.Shared.GetPlaylistSummaries();
+                    var match = playlists.FirstOrDefault(p => string.Equals(p.SourceUrl, $"xtream://{id}", StringComparison.OrdinalIgnoreCase));
+                    if (match != null) TvUserStateStore.Shared.RemovePlaylist(match.Id);
+
+                    var vodSnap = TvVodStore.Shared.GetLibrarySnapshot();
+                    foreach (var v in vodSnap)
+                    {
+                        if (v.Id.StartsWith($"xc_vod_{id}_") || v.Id.StartsWith($"xc_series_{id}_"))
+                            TvVodStore.Shared.RemoveItem(v.Id);
+                    }
+                }
+
+                e.Response = CreateJsonResponse(env, 200, "OK", new { ok = removed });
                 return;
             }
 

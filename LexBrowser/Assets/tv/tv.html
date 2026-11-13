@@ -108,40 +108,95 @@
     </section>
   </main>
 
-  <!-- Modal para Agregar Lista M3U del usuario -->
+  <!-- Modal para Agregar Fuente (M3U / Xtream Codes) del usuario -->
   <div id="addModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="addModalTitle">
     <div class="modal-card">
       <div class="modal-head">
-        <h3 id="addModalTitle">Agregar lista IPTV propia (.m3u / .m3u8)</h3>
+        <h3 id="addModalTitle">Agregar mi fuente de contenidos</h3>
         <button id="btnCloseAddModal" class="btn btn-sm" type="button" aria-label="Cerrar">✕</button>
       </div>
       <div class="modal-body">
-        <label class="field">
-          <span>Nombre de la lista (opcional)</span>
-          <input id="plNameInput" class="ctrl" type="text" maxlength="60" placeholder="Ej: Mis canales HD" />
-        </label>
-        <label class="field">
-          <span>URL pública (.m3u / .m3u8, solo http/https)</span>
-          <input id="plUrlInput" class="ctrl" type="url" placeholder="https://ejemplo.com/lista.m3u" />
-        </label>
-        <div class="divider">o subir / pegar archivo local (máx. 10 MB)</div>
-        <div class="file-row">
-          <input id="plFileInput" type="file" accept=".m3u,.m3u8,.txt" />
-          <span id="plFileInfo" class="muted"></span>
+        <!-- Pestañas de modalidad -->
+        <div class="source-tabs">
+          <button id="tabModeM3u" class="btn-tab active" type="button">📄 Lista M3U / M3U8</button>
+          <button id="tabModeXtream" class="btn-tab" type="button">⚡ Xtream Codes</button>
         </div>
-        <label class="field">
-          <span>Contenido M3U</span>
-          <textarea id="plTextInput" class="ctrl textarea" rows="5" placeholder="#EXTM3U&#10;#EXTINF:-1,Mi Canal&#10;https://..."></textarea>
-        </label>
-        <p class="legal-note">
-          Aviso: solo se admiten enlaces públicos http/https; las URLs locales o privadas y esquemas no HTTP son descartados por seguridad. El usuario es responsable del origen y derechos de las listas cargadas.
+
+        <!-- Panel M3U -->
+        <div id="panelModeM3u">
+          <label class="field">
+            <span>Nombre de la lista (opcional)</span>
+            <input id="plNameInput" class="ctrl" type="text" maxlength="60" placeholder="Ej: Mis canales favoritos" />
+          </label>
+          <label class="field">
+            <span>URL pública (.m3u / .m3u8, solo http/https)</span>
+            <input id="plUrlInput" class="ctrl" type="url" placeholder="https://ejemplo.invalid/lista.m3u" />
+          </label>
+          <div class="divider">o subir / pegar archivo local (máx. 10 MB)</div>
+          <div class="file-row">
+            <input id="plFileInput" type="file" accept=".m3u,.m3u8,.txt" />
+            <span id="plFileInfo" class="muted"></span>
+          </div>
+          <label class="field">
+            <span>Contenido M3U</span>
+            <textarea id="plTextInput" class="ctrl textarea" rows="4" placeholder="#EXTM3U&#10;#EXTINF:-1,Canal Ejemplo&#10;https://ejemplo.invalid/stream.m3u8"></textarea>
+          </label>
+        </div>
+
+        <!-- Panel Xtream Codes -->
+        <div id="panelModeXtream" class="hidden">
+          <label class="field">
+            <span>Nombre de la conexión (opcional)</span>
+            <input id="xcNameInput" class="ctrl" type="text" maxlength="60" placeholder="Ej: Mi IPTV Personal" />
+          </label>
+          <label class="field">
+            <span>URL del servidor</span>
+            <input id="xcServerInput" class="ctrl" type="url" placeholder="https://ejemplo.invalid" />
+          </label>
+          <div id="xcHttpAlert" class="alert-warning hidden">
+            ⚠️ El servidor especificado utiliza HTTP no cifrado. Las credenciales se transmitirían sin cifrar en la red.
+            <label class="legal-check-row mt-8">
+              <input type="checkbox" id="chkConfirmHttp" />
+              <span>Acepto conectar por HTTP sin cifrar bajo mi responsabilidad.</span>
+            </label>
+          </div>
+          <div class="grid-2col">
+            <label class="field">
+              <span>Usuario</span>
+              <input id="xcUserInput" class="ctrl" type="text" placeholder="usuario_de_ejemplo" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Contraseña</span>
+              <input id="xcPassInput" class="ctrl" type="password" placeholder="contraseña_de_ejemplo" autocomplete="off" />
+            </label>
+          </div>
+          <label class="legal-check-row">
+            <input type="checkbox" id="chkXcSaveCreds" />
+            <span>Recordar credenciales protegidas en este equipo (Windows DPAPI)</span>
+          </label>
+          <label class="legal-check-row">
+            <input type="checkbox" id="chkXcSyncVod" checked />
+            <span>Importar también películas y series a Cine VOD</span>
+          </label>
+        </div>
+
+        <!-- Aviso legal obligatorio (Sección 11.A) -->
+        <p class="legal-note mt-12">
+          «Declaro que tengo autorización para acceder y visualizar el contenido de las fuentes que agrego. Soy responsable del uso que hago de ellas. Lex es únicamente una herramienta de reproducción y organización de fuentes proporcionadas por el usuario».
         </p>
+
+        <!-- Casilla de confirmación obligatoria (Sección 11.A) -->
+        <label class="legal-check-row mt-8">
+          <input type="checkbox" id="chkLegalAuth" />
+          <span class="bold-white">Confirmo que utilizaré únicamente fuentes y contenidos cuyo acceso y visualización estén autorizados.</span>
+        </label>
+
         <div id="addModalError" class="form-error hidden"></div>
         <div id="addModalInfo" class="form-info hidden"></div>
       </div>
       <div class="modal-foot">
         <button id="btnCancelAdd" class="btn" type="button">Cancelar</button>
-        <button id="btnSubmitAdd" class="btn btn-primary" type="button">Importar lista</button>
+        <button id="btnSubmitAdd" class="btn btn-primary" type="button" disabled>Guardar y conectar</button>
       </div>
     </div>
   </div>

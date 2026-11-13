@@ -747,6 +747,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   function openImportModal() {
     els.importError.classList.add('hidden');
     els.importInfo.classList.add('hidden');
+    if (els.chkVodLegalAuth) els.chkVodLegalAuth.checked = false;
+    els.btnSubmitImport.disabled = true;
     els.importModal.classList.remove('hidden');
   }
 
@@ -757,6 +759,12 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   async function submitImport() {
     els.importError.classList.add('hidden');
     els.importInfo.classList.add('hidden');
+
+    if (els.chkVodLegalAuth && !els.chkVodLegalAuth.checked) {
+      els.importError.textContent = 'Debes confirmar que cuentas con autorización para utilizar las fuentes.';
+      els.importError.classList.remove('hidden');
+      return;
+    }
 
     const group = (els.importGroupInput.value || '').trim() || 'Películas';
     const url = (els.importUrlInput.value || '').trim();
@@ -886,7 +894,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       'scrubberContainer', 'scrubberFill', 'btnPlayPause', 'btnStepBack', 'btnStepForward',
       'timeDisplay', 'btnMute', 'volumeSlider', 'subSelect', 'btnLoadLocalSub', 'subFileInput', 'btnFullscreen',
       'importModal', 'importTitle', 'btnCloseImport', 'importGroupInput', 'importUrlInput',
-      'importFileInput', 'importTextInput', 'importError', 'importInfo', 'btnCancelImport', 'btnSubmitImport',
+      'importFileInput', 'importTextInput', 'importError', 'importInfo', 'btnCancelImport', 'btnSubmitImport', 'chkVodLegalAuth',
       'jellyfinModal', 'btnCloseJfModal', 'jfServerUrl', 'jfApiKey', 'jfUserId', 'jfStatus', 'btnJfTest', 'btnJfImport'
     ].forEach((id) => { els[id] = $(id); });
 
@@ -901,6 +909,12 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     els.btnCloseImport.addEventListener('click', closeImportModal);
     els.btnCancelImport.addEventListener('click', closeImportModal);
     els.btnSubmitImport.addEventListener('click', submitImport);
+
+    if (els.chkVodLegalAuth) {
+      els.chkVodLegalAuth.addEventListener('change', () => {
+        els.btnSubmitImport.disabled = !els.chkVodLegalAuth.checked;
+      });
+    }
 
     els.btnOpenJellyfin.addEventListener('click', openJfModal);
     els.btnCloseJfModal.addEventListener('click', closeJfModal);

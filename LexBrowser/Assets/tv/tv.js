@@ -1048,7 +1048,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     for (const pl of state.playlists) {
       const opt = document.createElement('option');
       opt.value = pl.id;
-      opt.textContent = `📁 ${pl.name} (${pl.channelCount})`;
+      const isXc = (pl.sourceUrl || '').startsWith('xtream://');
+      opt.textContent = `${isXc ? '⚡' : '📁'} ${pl.name} (${pl.channelCount})`;
       els.sourceSelect.appendChild(opt);
     }
 
@@ -1365,9 +1366,47 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     });
   }
 
+  let addSourceMode = 'm3u';
+
+  function setAddSourceMode(mode) {
+    addSourceMode = mode;
+    if (mode === 'xtream') {
+      els.tabModeXtream.classList.add('active');
+      els.tabModeM3u.classList.remove('active');
+      els.panelModeXtream.classList.remove('hidden');
+      els.panelModeM3u.classList.add('hidden');
+    } else {
+      els.tabModeM3u.classList.add('active');
+      els.tabModeXtream.classList.remove('active');
+      els.panelModeM3u.classList.remove('hidden');
+      els.panelModeXtream.classList.add('hidden');
+    }
+    updateSubmitAddState();
+  }
+
+  function updateSubmitAddState() {
+    if (!els.chkLegalAuth.checked) {
+      els.btnSubmitAdd.disabled = true;
+      return;
+    }
+    if (addSourceMode === 'xtream') {
+      const srv = (els.xcServerInput.value || '').trim().toLowerCase();
+      if (srv.startsWith('http://') && !els.chkConfirmHttp.checked) {
+        els.btnSubmitAdd.disabled = true;
+        return;
+      }
+    }
+    els.btnSubmitAdd.disabled = false;
+  }
+
   function openAddModal() {
     els.addModalError.classList.add('hidden');
     els.addModalInfo.classList.add('hidden');
+    els.chkLegalAuth.checked = false;
+    els.chkConfirmHttp.checked = false;
+    els.xcHttpAlert.classList.add('hidden');
+    setAddSourceMode('m3u');
+    els.btnSubmitAdd.disabled = true;
     els.addModal.classList.remove('hidden');
   }
 
@@ -1384,9 +1423,83 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     return parts.length ? ` (omitidos: ${parts.join(', ')})` : '';
   }
 
-  async function submitAddPlaylist() {
+  async function submitAddSource() {
     els.addModalError.classList.add('hidden');
     els.addModalInfo.classList.add('hidden');
+
+    if (!els.chkLegalAuth.checked) {
+      els.addModalError.textContent = 'Debes confirmar que cuentas con autorización para utilizar las fuentes.';
+      els.addModalError.classList.remove('hidden');
+      return;
+    }
+
+    if (addSourceMode === 'xtream') {
+      const name = (els.xcNameInput.value || '').trim();
+      const serverUrl = (els.xcServerInput.value || '').trim();
+      const username = (els.xcUserInput.value || '').trim();
+      const password = (els.xcPassInput.value || '').trim();
+      const saveCredentials = !!els.chkXcSaveCreds.checked;
+      const syncVod = !!els.chkXcSyncVod.checked;
+
+      if (!serverUrl || !username || !password) {
+        els.addModalError.textContent = 'Ingresa la URL del servidor, usuario y contraseña.';
+        els.addModalError.classList.remove('hidden');
+        return;
+      }
+
+      if (serverUrl.toLowerCase().startsWith('http://') && !els.chkConfirmHttp.checked) {
+        els.addModalError.textContent = 'Debes confirmar la advertencia de conexión HTTP no cifrada antes de continuar.';
+        els.addModalError.classList.remove('hidden');
+        return;
+      }
+
+      els.btnSubmitAdd.disabled = true;
+      try {
+        els.addModalInfo.textContent = 'Conectando con el servidor Xtream Codes…';
+        els.addModalInfo.classList.remove('hidden');
+
+        const res = await apiJson('/api/xtream/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            serverUrl,
+            username,
+            password,
+            saveCredentials,
+            syncVod,
+            confirmedAuthorized: true
+          })
+        });
+
+        await loadCatalog();
+        if (res.connectionId) {
+          const match = state.playlists.find((p) => p.sourceUrl === `xtream://${res.connectionId}`);
+          if (match) {
+            state.activeSourceId = match.id;
+            renderSourceSelect();
+            await onSourceChange();
+          }
+        }
+
+        let summary = `Conectado a ${res.name || 'Xtream'}: ${res.liveCount || 0} canales en vivo`;
+        if (res.vodCount) summary += `, ${res.vodCount} películas`;
+        if (res.seriesCount) summary += `, ${res.seriesCount} series`;
+        summary += '.';
+
+        els.addModalInfo.textContent = summary;
+        els.addModalInfo.classList.remove('hidden');
+        setTimeout(closeAddModal, 1200);
+      } catch (err) {
+        els.addModalInfo.classList.add('hidden');
+        els.addModalError.textContent = err.message;
+        els.addModalError.classList.remove('hidden');
+      } finally {
+        updateSubmitAddState();
+      }
+      return;
+    }
+
     const name = (els.plNameInput.value || '').trim();
     const url = (els.plUrlInput.value || '').trim();
     const content = (els.plTextInput.value || '').trim();
@@ -1425,7 +1538,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       els.addModalError.textContent = err.message;
       els.addModalError.classList.remove('hidden');
     } finally {
-      els.btnSubmitAdd.disabled = false;
+      updateSubmitAddState();
     }
   }
 
@@ -1639,6 +1752,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       'btnRetry', 'btnNextAlt', 'btnOverlayVlc',
       'addModal', 'btnCloseAddModal', 'btnCancelAdd', 'btnSubmitAdd', 'plNameInput', 'plUrlInput',
       'plFileInput', 'plFileInfo', 'plTextInput', 'addModalError', 'addModalInfo',
+      'tabModeM3u', 'tabModeXtream', 'panelModeM3u', 'panelModeXtream',
+      'xcNameInput', 'xcServerInput', 'xcHttpAlert', 'chkConfirmHttp',
+      'xcUserInput', 'xcPassInput', 'chkXcSaveCreds', 'chkXcSyncVod', 'chkLegalAuth',
       'diagModal', 'btnCloseDiag', 'diagCountInput', 'diagScopeSelect', 'btnDiagRun', 'btnDiagStop',
       'diagProgressText', 'diagOk', 'diagAuth', 'diagDead', 'diagCodec', 'diagOther',
       'diagTableBody', 'diagSaveMsg', 'btnDiagJson', 'btnDiagCsv', 'btnDiagSave', 'btnDiagApply',
@@ -1668,7 +1784,18 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     els.btnRemoveList.addEventListener('click', async () => {
       const id = state.activeSourceId;
-      if (id === 'catalog' || id === 'favorites') return;
+      if (!id || id === 'catalog' || id === 'favorites' || id === 'none') return;
+      const pl = state.playlists.find((p) => p.id === id);
+      if (pl && pl.sourceUrl && pl.sourceUrl.startsWith('xtream://')) {
+        const xcId = pl.sourceUrl.replace('xtream://', '');
+        try {
+          await apiJson('/api/xtream/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: xcId })
+          });
+        } catch { }
+      }
       const res = await apiJson('/api/playlists/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1676,7 +1803,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       });
       state.loadedPlaylists.delete(id);
       state.playlists = res.playlists || [];
-      state.activeSourceId = 'catalog';
+      state.activeSourceId = state.playlists.length > 0 ? state.playlists[0].id : 'favorites';
       renderSourceSelect();
       await onSourceChange();
     });
@@ -1707,7 +1834,17 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     els.btnAddList.addEventListener('click', openAddModal);
     els.btnCloseAddModal.addEventListener('click', closeAddModal);
     els.btnCancelAdd.addEventListener('click', closeAddModal);
-    els.btnSubmitAdd.addEventListener('click', submitAddPlaylist);
+    els.btnSubmitAdd.addEventListener('click', submitAddSource);
+
+    els.tabModeM3u.addEventListener('click', () => setAddSourceMode('m3u'));
+    els.tabModeXtream.addEventListener('click', () => setAddSourceMode('xtream'));
+    els.chkLegalAuth.addEventListener('change', updateSubmitAddState);
+    els.chkConfirmHttp.addEventListener('change', updateSubmitAddState);
+    els.xcServerInput.addEventListener('input', () => {
+      const val = (els.xcServerInput.value || '').trim().toLowerCase();
+      els.xcHttpAlert.classList.toggle('hidden', !val.startsWith('http://'));
+      updateSubmitAddState();
+    });
 
     els.plFileInput.addEventListener('change', async () => {
       els.addModalError.classList.add('hidden');

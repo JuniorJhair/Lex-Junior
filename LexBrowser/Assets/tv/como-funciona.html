@@ -61,6 +61,19 @@
         <li><strong>Conmutación de canales (Zapping):</strong> Diseñado con control de sesiones por generación en el servidor virtual, permitiendo cambios inmediatos sin solapamiento de conexiones ni bloqueos HTTP 429.</li>
       </ul>
     </div>
+
+    <div class="info-card">
+      <h2><span class="badge-feature">XTREAM CODES</span> 4. Soporte para Servicios Xtream Codes</h2>
+      <p>
+        Lex TV permite conectar servicios IPTV personales que utilicen el protocolo estándar Xtream Codes:
+      </p>
+      <ul>
+        <li><strong>Protección de credenciales con Windows DPAPI:</strong> Si el usuario elige recordar sus credenciales, la contraseña se cifra localmente mediante <span class="mono">ProtectedData</span> (DPAPI a nivel de usuario actual de Windows). Nunca se almacena en texto claro en disco ni se comparte en archivos de configuración accesibles.</li>
+        <li><strong>Sin exposición en URLs ni frontend:</strong> Las credenciales no se envían al DOM ni a páginas web. Las solicitudes de reproducción se dirigen a endpoints virtuales protegidos en <span class="mono">tv.lex.local</span> que resuelven y validan la conexión en memoria nativa.</li>
+        <li><strong>Validación estricta de red y Anti-SSRF:</strong> Todas las peticiones al servidor Xtream y sus flujos de video derivados son validadas por <span class="mono">TvUrlGuard</span>, verificando DNS, IP pública y bloqueando cualquier intento de conexión hacia redes privadas, loopback o metadatos en la nube.</li>
+        <li><strong>Advertencia HTTP:</strong> Si el servidor configurado no admite HTTPS, Lex TV alerta explícitamente sobre el riesgo de transmitir credenciales sin cifrado y exige confirmación expresa del usuario antes de proceder.</li>
+      </ul>
+    </div>
   </main>
 </body>
 </html>

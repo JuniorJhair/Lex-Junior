@@ -151,7 +151,7 @@
 
         <label>
           <span class="muted">URL remota M3U/M3U8:</span>
-          <input id="importUrlInput" class="ctrl" type="url" placeholder="https://ejemplo.com/lista_vod.m3u" />
+          <input id="importUrlInput" class="ctrl" type="url" placeholder="https://ejemplo.invalid/lista_vod.m3u" />
         </label>
 
         <label>
@@ -161,7 +161,18 @@
 
         <label>
           <span class="muted">O pegar texto M3U directamente:</span>
-          <textarea id="importTextInput" class="ctrl mono" rows="5" placeholder="#EXTM3U&#10;#EXTINF:-1 group-title=&quot;Peliculas&quot;,Titulo&#10;https://..."></textarea>
+          <textarea id="importTextInput" class="ctrl mono" rows="4" placeholder="#EXTM3U&#10;#EXTINF:-1 group-title=&quot;Peliculas&quot;,Titulo&#10;https://ejemplo.invalid/stream.mp4"></textarea>
+        </label>
+
+        <!-- Aviso legal obligatorio (Sección 11.A) -->
+        <p class="legal-note">
+          «Declaro que tengo autorización para acceder y visualizar el contenido de las fuentes que agrego. Soy responsable del uso que hago de ellas. Lex es únicamente una herramienta de reproducción y organización de fuentes proporcionadas por el usuario».
+        </p>
+
+        <!-- Casilla de confirmación obligatoria (Sección 11.A) -->
+        <label class="legal-check-row">
+          <input type="checkbox" id="chkVodLegalAuth" />
+          <span class="bold-white">Confirmo que utilizaré únicamente fuentes y contenidos cuyo acceso y visualización estén autorizados.</span>
         </label>
 
         <div id="importError" class="text-bad hidden"></div>
@@ -169,7 +180,7 @@
       </div>
       <div class="modal-foot">
         <button id="btnCancelImport" class="btn" type="button">Cancelar</button>
-        <button id="btnSubmitImport" class="btn btn-primary" type="button">Importar títulos</button>
+        <button id="btnSubmitImport" class="btn btn-primary" type="button" disabled>Importar títulos</button>
       </div>
     </div>
   </div>
