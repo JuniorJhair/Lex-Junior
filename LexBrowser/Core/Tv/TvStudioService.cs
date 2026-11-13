@@ -40,6 +40,7 @@ public static class TvStudioService
         TvSessions.AbortAll();
         TvStreamProxy.AbortSession(null);
         TvUserStateStore.Shared.ReleaseMemoryCache();
+        TvVodStore.Shared.ReleaseMemoryCache();
         TvStreamProxy.ClearProbeCache();
     }
 
@@ -368,6 +369,92 @@ public static class TvStudioService
                 string id = doc.RootElement.TryGetProperty("id", out var idEl) ? (idEl.GetString() ?? "") : "";
                 TvUserStateStore.Shared.RemovePlaylist(id);
                 e.Response = CreateJsonResponse(env, 200, "OK", new { playlists = TvUserStateStore.Shared.GetPlaylistSummaries() });
+                return;
+            }
+
+            if (path.Equals("api/vod/library", StringComparison.OrdinalIgnoreCase))
+            {
+                var items = TvVodStore.Shared.GetLibrarySnapshot();
+                var progress = TvVodStore.Shared.GetProgressSnapshot();
+                e.Response = CreateJsonResponse(env, 200, "OK", new { items, progress });
+                return;
+            }
+
+            if (path.Equals("api/vod/import-url", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string url = doc.RootElement.TryGetProperty("url", out var uEl) ? (uEl.GetString() ?? "") : "";
+                string group = doc.RootElement.TryGetProperty("group", out var gEl) ? (gEl.GetString() ?? "Películas") : "Películas";
+                var res = await TvVodService.Shared.ImportFromUrlAsync(url, group, cts.Token);
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    result = res,
+                    libraryCount = TvVodStore.Shared.GetLibrarySnapshot().Count
+                });
+                return;
+            }
+
+            if (path.Equals("api/vod/import-text", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string content = doc.RootElement.TryGetProperty("content", out var cEl) ? (cEl.GetString() ?? "") : "";
+                string group = doc.RootElement.TryGetProperty("group", out var gEl) ? (gEl.GetString() ?? "Películas") : "Películas";
+                var res = TvVodService.Shared.ImportFromText(content, group);
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    result = res,
+                    libraryCount = TvVodStore.Shared.GetLibrarySnapshot().Count
+                });
+                return;
+            }
+
+            if (path.Equals("api/vod/progress", StringComparison.OrdinalIgnoreCase))
+            {
+                if (e.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                    string url = doc.RootElement.TryGetProperty("url", out var uEl) ? (uEl.GetString() ?? "") : "";
+                    double pos = doc.RootElement.TryGetProperty("positionSec", out var pEl) ? pEl.GetDouble() : 0.0;
+                    double dur = doc.RootElement.TryGetProperty("durationSec", out var dEl) ? dEl.GetDouble() : 0.0;
+                    TvVodStore.Shared.SaveProgress(url, pos, dur);
+                    e.Response = CreateJsonResponse(env, 200, "OK", new { ok = true });
+                    return;
+                }
+                else
+                {
+                    string url = q["url"] ?? "";
+                    var prog = TvVodStore.Shared.GetProgressForUrl(url);
+                    e.Response = CreateJsonResponse(env, 200, "OK", new { progress = prog });
+                    return;
+                }
+            }
+
+            if (path.Equals("api/vod/progress/clear", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string url = doc.RootElement.TryGetProperty("url", out var uEl) ? (uEl.GetString() ?? "") : "";
+                TvVodStore.Shared.ClearProgress(url);
+                e.Response = CreateJsonResponse(env, 200, "OK", new { ok = true });
+                return;
+            }
+
+            if (path.Equals("api/vod/remove", StringComparison.OrdinalIgnoreCase))
+            {
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+                string id = doc.RootElement.TryGetProperty("id", out var idEl) ? (idEl.GetString() ?? "") : "";
+                bool removed = TvVodStore.Shared.RemoveItem(id);
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    ok = removed,
+                    libraryCount = TvVodStore.Shared.GetLibrarySnapshot().Count
+                });
+                return;
+            }
+
+            if (path.Equals("api/vod/clear", StringComparison.OrdinalIgnoreCase))
+            {
+                TvVodStore.Shared.ClearLibrary();
+                e.Response = CreateJsonResponse(env, 200, "OK", new { ok = true, libraryCount = 0 });
                 return;
             }
 

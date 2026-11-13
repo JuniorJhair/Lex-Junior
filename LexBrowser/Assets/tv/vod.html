@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none';" />
+  <title>Lex TV — Películas y Series (VOD)</title>
+  <link rel="stylesheet" href="vod.css" />
+</head>
+<body>
+
+  <!-- Top Navigation & Controls Bar -->
+  <header class="vod-topbar">
+    <div class="brand-section">
+      <a href="index.html" class="btn-back" title="Volver al selector de modos">← Lex TV</a>
+      <div class="brand-title">🎬 Películas y Series</div>
+    </div>
+
+    <div class="vod-controls">
+      <input id="vodSearch" class="ctrl search-input" type="search" placeholder="Buscar título o serie…" autocomplete="off" />
+
+      <select id="vodTypeSelect" class="ctrl" aria-label="Tipo de contenido">
+        <option value="all">Todo</option>
+        <option value="movies">Solo Películas</option>
+        <option value="series">Solo Series</option>
+      </select>
+
+      <select id="vodGroupSelect" class="ctrl" aria-label="Categoría">
+        <option value="all">Categoría: Todas</option>
+      </select>
+
+      <button id="btnOpenImport" class="btn btn-primary" type="button">+ Importar lista VOD</button>
+      <button id="btnClearLibrary" class="btn btn-danger" type="button" title="Eliminar todos los contenidos de la biblioteca">Limpiar</button>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="vod-main">
+    <!-- Continuar Viendo Row -->
+    <section id="resumeSection" class="hidden">
+      <div class="section-head">
+        <div class="section-title">⏱️ Continuar viendo</div>
+      </div>
+      <div id="resumeContainer" class="resume-scroll"></div>
+    </section>
+
+    <!-- Library Section -->
+    <section id="librarySection">
+      <div class="section-head">
+        <div class="section-title">
+          <span>📚 Mi Biblioteca</span>
+          <span id="libraryCountLabel" class="muted mono text-sm">(0 títulos)</span>
+        </div>
+      </div>
+
+      <div id="vodGrid" class="vod-grid"></div>
+
+      <!-- Empty State Notice -->
+      <div id="emptyNotice" class="empty-notice hidden">
+        <div class="empty-icon">🎬</div>
+        <h3>Tu biblioteca VOD está vacía</h3>
+        <p>
+          Lex TV no incluye ni transmite contenidos protegidos. Importa una lista M3U personal con tus películas y series bajo demanda para comenzar a organizar tu videoteca.
+        </p>
+        <button id="btnEmptyImport" class="btn btn-primary" type="button">+ Importar lista VOD (M3U)</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Series Episode Selection Modal -->
+  <div id="seriesModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="seriesModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="seriesModalTitle">Nombre de la Serie</h3>
+        <button id="btnCloseSeriesModal" class="btn" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="seasonTabs" class="season-tabs"></div>
+        <div id="episodeList" class="episode-list"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="btnCloseSeriesFoot" class="btn" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Player Overlay -->
+  <div id="playerOverlay" class="player-overlay hidden" role="dialog" aria-modal="true">
+    <div class="player-top-header">
+      <div id="playerTitle" class="player-title">Título del video</div>
+      <button id="btnClosePlayer" class="player-close-btn" type="button">✕ Salir del reproductor</button>
+    </div>
+
+    <!-- Resume Banner Prompt -->
+    <div id="resumeBanner" class="resume-banner hidden">
+      <span id="resumeBannerText">Tenías un progreso guardado en este video.</span>
+      <button id="btnResumeContinue" class="btn btn-primary" type="button">Continuar</button>
+      <button id="btnResumeRestart" class="btn" type="button">Desde el inicio</button>
+    </div>
+
+    <div class="player-video-container" id="videoContainer">
+      <video id="vodVideo" playsinline></video>
+
+      <!-- Player Bottom Bar -->
+      <div class="player-bar" id="playerBar">
+        <div class="scrubber-container" id="scrubberContainer">
+          <div class="scrubber-track">
+            <div id="scrubberFill" class="scrubber-fill"></div>
+          </div>
+        </div>
+
+        <div class="player-controls-row">
+          <div class="player-left">
+            <button id="btnPlayPause" class="player-btn" type="button" title="Reproducir / Pausar (Espacio)">▶</button>
+            <button id="btnStepBack" class="player-btn" type="button" title="Retroceder 10s (←)">↺ 10s</button>
+            <button id="btnStepForward" class="player-btn" type="button" title="Adelantar 10s (→)">↻ 10s</button>
+            <div id="timeDisplay" class="time-display">00:00 / 00:00</div>
+          </div>
+
+          <div class="player-right">
+            <button id="btnMute" class="player-btn" type="button" title="Silenciar / Activar sonido (M)">🔊</button>
+            <input id="volumeSlider" class="volume-slider" type="range" min="0" max="1" step="0.05" value="1" title="Volumen" />
+
+            <select id="subSelect" class="sub-select" title="Pistas de subtítulos">
+              <option value="none">Subtítulos: Desactivados</option>
+            </select>
+
+            <button id="btnLoadLocalSub" class="btn" type="button" title="Cargar archivo de subtítulo externo (.vtt o .srt)">+ Subtítulo local</button>
+            <input id="subFileInput" class="file-hidden" type="file" accept=".vtt,.srt,text/vtt,text/plain" />
+
+            <button id="btnFullscreen" class="player-btn" type="button" title="Pantalla completa (F)">⛶</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Playlist Modal -->
+  <div id="importModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="importTitle">Importar Lista VOD (Películas / Series)</h3>
+        <button id="btnCloseImport" class="btn" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <label>
+          <span class="muted">Categoría por defecto:</span>
+          <input id="importGroupInput" class="ctrl" type="text" placeholder="Películas" value="Películas" />
+        </label>
+
+        <label>
+          <span class="muted">URL remota M3U/M3U8:</span>
+          <input id="importUrlInput" class="ctrl" type="url" placeholder="https://ejemplo.com/lista_vod.m3u" />
+        </label>
+
+        <label>
+          <span class="muted">O seleccionar archivo local .m3u / .m3u8:</span>
+          <input id="importFileInput" class="ctrl" type="file" accept=".m3u,.m3u8,text/plain" />
+        </label>
+
+        <label>
+          <span class="muted">O pegar texto M3U directamente:</span>
+          <textarea id="importTextInput" class="ctrl mono" rows="5" placeholder="#EXTM3U&#10;#EXTINF:-1 group-title=&quot;Peliculas&quot;,Titulo&#10;https://..."></textarea>
+        </label>
+
+        <div id="importError" class="muted hidden" style="color: var(--bad); font-weight: 500;"></div>
+        <div id="importInfo" class="muted hidden" style="color: var(--ok); font-weight: 500;"></div>
+      </div>
+      <div class="modal-foot">
+        <button id="btnCancelImport" class="btn" type="button">Cancelar</button>
+        <button id="btnSubmitImport" class="btn btn-primary" type="button">Importar títulos</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="vendor/hls.light.min.js"></script>
+  <script src="vod.js"></script>
+</body>
+</html>
+
