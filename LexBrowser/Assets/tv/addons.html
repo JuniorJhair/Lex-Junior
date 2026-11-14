@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none';" />
+  <title>Lex TV — Centro de Addons</title>
+  <link rel="stylesheet" href="./tv.css" />
+  <link rel="stylesheet" href="./addons.css" />
+  <script src="./theme.js"></script>
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <link rel="shortcut icon" href="./favicon.ico" />
+  <script defer src="./addons.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">Lex TV</span>
+      <nav class="section-nav" aria-label="Secciones">
+        <a href="index.html" class="nav-tab">Inicio</a>
+        <a href="tv.html" class="nav-tab">TV en vivo</a>
+        <a href="vod.html" class="nav-tab">VOD</a>
+        <a href="xtream.html" class="nav-tab">Xtream Codes</a>
+        <a href="addons.html" class="nav-tab active" aria-current="page">Addons</a>
+        <a href="legal.html" class="nav-tab">Aviso Legal</a>
+        <a href="como-funciona.html" class="nav-tab">Cómo funciona</a>
+      </nav>
+    </div>
+    <div class="toolbar">
+      <select id="themeSelect" class="ctrl theme-selector" aria-label="Tema visual" title="Seleccionar tema visual">
+        <option value="dark">🌙 Oscuro</option>
+        <option value="light">☀️ Claro</option>
+        <option value="classic">⚡ Clásico</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="hub-container xtream-main">
+    <section class="hero">
+      <h1>Lex Addon Center — Complementos HTTP/JSON</h1>
+      <p>
+        Instala complementos declarativos mediante URL de manifiesto (<code>manifest.json</code>) compatibles con el protocolo abierto Lex y Stremio. Sin código ejecutable externo, con protección anti-SSRF y cifrado DPAPI local.
+      </p>
+    </section>
+
+    <div class="xtream-layout">
+      <!-- Panel de Instalación por URL -->
+      <section class="xtream-card form-card">
+        <div class="card-head">
+          <span class="card-icon">🧩</span>
+          <div>
+            <h2>Instalar Addon por URL</h2>
+            <p class="muted">Pega la dirección pública de un <code>manifest.json</code></p>
+          </div>
+        </div>
+
+        <form id="addonInstallForm" class="xtream-form">
+          <label class="field">
+            <span>URL del manifiesto (https://, http:// o stremio://)</span>
+            <input id="addonUrlInput" class="ctrl" type="text" required maxlength="2048" placeholder="https://addon.ejemplo.invalid/manifest.json" autocomplete="off" />
+          </label>
+
+          <label class="legal-check-row">
+            <input type="checkbox" id="chkAllowLocal" />
+            <span>Permitir addon local en este equipo (<code>localhost</code> / <code>127.0.0.1</code>)</span>
+          </label>
+
+          <div class="addon-btn-row">
+            <button id="btnPreviewAddon" class="btn" type="button">Previsualizar manifiesto</button>
+            <button id="btnInstallAddon" class="btn btn-primary" type="submit">Instalar addon</button>
+          </div>
+
+          <div id="addonStatusMsg" class="addon-status hidden" role="status"></div>
+
+          <div id="addonPreviewBox" class="addon-preview hidden">
+            <div class="addon-preview-head">
+              <div>
+                <div id="pvName" class="addon-preview-title"></div>
+                <div id="pvMeta" class="muted mono text-xs"></div>
+              </div>
+              <span id="pvProtocol" class="addon-badge"></span>
+            </div>
+            <p id="pvDesc" class="addon-preview-desc"></p>
+            <div id="pvCaps" class="addon-pills"></div>
+          </div>
+        </form>
+      </section>
+
+      <!-- Lista de Addons Instalados -->
+      <section class="xtream-card">
+        <div class="card-head addon-list-head">
+          <div class="addon-title-wrap">
+            <span class="card-icon">📦</span>
+            <div>
+              <h2>Mis Addons Instalados</h2>
+              <p id="addonsCountSub" class="muted">0 complementos configurados</p>
+            </div>
+          </div>
+          <div class="addon-btn-row">
+            <button id="btnCheckAllUpdates" class="btn btn-sm" type="button">Buscar actualizaciones</button>
+            <button id="btnReloadList" class="btn btn-sm" type="button">Recargar</button>
+          </div>
+        </div>
+
+        <div id="addonsEmpty" class="addon-empty">
+          Aún no tienes addons instalados. Previsualiza e instala un manifiesto HTTP/JSON desde el panel izquierdo.
+        </div>
+
+        <div id="addonsList" class="addon-list"></div>
+      </section>
+    </div>
+
+    <!-- Fase 5: Repositorios de Addons -->
+    <section class="xtream-card addon-repo-section">
+      <div class="card-head addon-list-head">
+        <div class="addon-title-wrap">
+          <span class="card-icon">📚</span>
+          <div>
+            <h2>Repositorios de Addons</h2>
+            <p class="muted">Conecta índices JSON propios o comunitarios para descubrir e instalar complementos en 1 clic.</p>
+          </div>
+        </div>
+      </div>
+
+      <form id="repoAddForm" class="addon-repo-form">
+        <div class="addon-repo-input-row">
+          <input id="repoUrlInput" class="ctrl" type="text" required maxlength="2048" placeholder="https://ejemplo.invalid/repositorio/addons.json" autocomplete="off" />
+          <button id="btnAddRepo" class="btn btn-primary" type="submit">Añadir y explorar</button>
+        </div>
+        <label class="legal-check-row">
+          <input type="checkbox" id="chkRepoAllowLocal" />
+          <span>Permitir repositorio local en este equipo (<code>localhost</code> / <code>127.0.0.1</code>)</span>
+        </label>
+      </form>
+
+      <div id="repoStatusMsg" class="addon-status hidden" role="status"></div>
+
+      <div class="addon-repo-grid">
+        <div>
+          <h3 class="addon-subhead">Repositorios guardados</h3>
+          <div id="repoEmpty" class="addon-empty">
+            No has agregado ningún repositorio todavía. Lex Junior no incluye repositorios de terceros precargados.
+          </div>
+          <div id="repoList" class="addon-list"></div>
+        </div>
+
+        <div id="repoExplorerBox" class="addon-repo-explorer hidden">
+          <div class="addon-preview-head">
+            <div>
+              <h3 id="repoExplorerTitle" class="addon-subhead">Contenido del repositorio</h3>
+              <div id="repoExplorerSub" class="muted text-xs"></div>
+            </div>
+            <button id="btnCloseRepoExplorer" class="btn btn-sm" type="button">Cerrar</button>
+          </div>
+          <div id="repoEntriesList" class="addon-list"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+

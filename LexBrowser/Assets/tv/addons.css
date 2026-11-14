@@ -1,0 +1,234 @@
+.addon-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.addon-status {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+}
+
+.addon-status.ok {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.addon-status.err {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.addon-preview {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.addon-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.addon-preview-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.addon-preview-desc {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.addon-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.addon-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.addon-badge.local {
+  color: var(--warn);
+}
+
+.addon-badge.off {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.addon-list-head {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.addon-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.addon-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+
+.addon-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.addon-item {
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addon-item.disabled {
+  opacity: 0.68;
+}
+
+.addon-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.addon-item-idwrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.addon-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.addon-logo-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.addon-item-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.addon-item-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.addon-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.addon-item-err {
+  font-size: 0.8rem;
+  color: var(--bad);
+}
+
+.text-xs {
+  font-size: 0.78rem;
+}
+
+.addon-repo-section {
+  margin-top: 22px;
+}
+
+.addon-repo-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.addon-repo-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.addon-repo-input-row .ctrl {
+  flex: 1;
+  min-width: 240px;
+}
+
+.addon-repo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+  margin-top: 12px;
+}
+
+.addon-subhead {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.addon-repo-explorer {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.addon-badge.update {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+

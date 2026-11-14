@@ -869,4 +869,324 @@ body {
   color: #fff;
 }
 
+/* =========================================================================
+   Fase 3: Selector de Origen y Catálogos de Addons en VOD
+   ========================================================================= */
+.vod-source-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
+
+.vod-source-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.vod-source-tab:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+.vod-source-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.addon-tab-badge {
+  background: rgba(255, 255, 255, 0.22);
+  color: inherit;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.addon-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.addon-catalog-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.addon-type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.addon-pill {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.addon-pill:hover {
+  border-color: var(--accent);
+}
+
+.addon-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.addon-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.addon-rating-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.addon-status-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.addon-status-banner.is-error {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.addon-status-banner.is-info {
+  border-color: var(--accent);
+}
+
+.addon-loadmore-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.addon-meta-modal {
+  max-width: 780px;
+  width: 94vw;
+}
+
+.addon-meta-hero {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.addon-meta-poster {
+  width: 140px;
+  height: 210px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.addon-meta-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.addon-meta-info {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.addon-meta-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.addon-chip {
+  font-size: 11.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.addon-meta-desc {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+a.btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* =========================================================================
+   Fase 4: Resolución y Selector de Streams en Detalle de Addon
+   ========================================================================= */
+.addon-meta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.addon-streams-section {
+  margin: 14px 0 18px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.addon-streams-heading {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.addon-streams-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.addon-stream-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.addon-stream-row.is-disabled {
+  opacity: 0.65;
+}
+
+.addon-stream-row a.btn {
+  text-decoration: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.addon-stream-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.addon-stream-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.addon-stream-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.addon-kind-badge,
+.addon-sub-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.addon-kind-badge {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.addon-sub-badge {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.addon-size-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.addon-stream-filename {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.episode-item.is-selected {
+  border-color: var(--accent);
+  background: var(--panel-hover);
+}
+
 

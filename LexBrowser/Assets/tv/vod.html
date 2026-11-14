@@ -34,6 +34,7 @@
 
       <button id="btnOpenImport" class="btn btn-primary" type="button">+ Importar lista VOD</button>
       <a href="xtream.html" class="btn" title="Conectar servidor IPTV Xtream Codes (Películas, Series y TV)" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">⚡ Xtream Codes</a>
+      <a href="addons.html" class="btn" title="Instalar y administrar complementos HTTP/JSON (Stremio / Lex)" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">🧩 Addons</a>
       <button id="btnOpenJellyfin" class="btn" type="button" title="Conectar servidor multimedia propio (Jellyfin / Emby)">Jellyfin / Emby</button>
       <button id="btnClearLibrary" class="btn btn-danger" type="button" title="Eliminar todos los contenidos de la biblioteca">Limpiar</button>
       <select id="themeSelect" class="ctrl theme-selector" aria-label="Tema visual" title="Seleccionar tema visual">
@@ -46,6 +47,15 @@
 
   <!-- Main Content Area -->
   <main class="vod-main">
+    <!-- Source Switcher: Biblioteca local vs Catálogos de Addons -->
+    <div class="vod-source-tabs" role="tablist" aria-label="Origen del catálogo">
+      <button id="btnModeLibrary" class="vod-source-tab active" type="button" role="tab" aria-selected="true">📚 Mi Biblioteca (M3U / Xtream)</button>
+      <button id="btnModeAddons" class="vod-source-tab" type="button" role="tab" aria-selected="false">
+        <span>🧩 Catálogos de Addons</span>
+        <span id="addonCatalogCountBadge" class="addon-tab-badge hidden">0</span>
+      </button>
+    </div>
+
     <!-- Continuar Viendo Row -->
     <section id="resumeSection" class="hidden">
       <div class="section-head">
@@ -73,6 +83,47 @@
           Lex TV no incluye ni transmite contenidos protegidos. Importa una lista M3U personal con tus películas y series bajo demanda para comenzar a organizar tu videoteca.
         </p>
         <button id="btnEmptyImport" class="btn btn-primary" type="button">+ Importar lista VOD (M3U)</button>
+      </div>
+    </section>
+
+    <!-- Addon Catalogs Section (Phase 3: Películas, Series y Anime) -->
+    <section id="addonsCatalogSection" class="hidden">
+      <div class="section-head addon-section-head">
+        <div class="section-title">
+          <span>🧩 Catálogos de Addons</span>
+          <span id="addonCatalogCountLabel" class="muted mono text-sm">(0 títulos)</span>
+        </div>
+        <a href="addons.html" class="btn">Administrar addons →</a>
+      </div>
+
+      <div id="addonCatalogToolbar" class="addon-catalog-toolbar hidden">
+        <div id="addonTypePills" class="addon-type-pills" role="group" aria-label="Filtrar por tipo de contenido"></div>
+
+        <div class="addon-filter-row">
+          <select id="addonCatalogSelect" class="ctrl" aria-label="Seleccionar catálogo de addon"></select>
+          <select id="addonGenreSelect" class="ctrl hidden" aria-label="Filtrar por género"></select>
+          <input id="addonCatalogSearch" class="ctrl search-input" type="search" placeholder="Buscar en este catálogo…" autocomplete="off" />
+          <button id="btnAddonSearch" class="btn btn-primary" type="button">Buscar</button>
+          <button id="btnAddonSearchAll" class="btn hidden" type="button" title="Buscar simultáneamente en todos los catálogos compatibles">🌐 En todos</button>
+          <button id="btnAddonReload" class="btn" type="button">Recargar</button>
+        </div>
+      </div>
+
+      <div id="addonCatalogBanner" class="addon-status-banner hidden" role="status"></div>
+
+      <div id="addonCatalogGrid" class="vod-grid"></div>
+
+      <div id="addonLoadMoreWrap" class="addon-loadmore-wrap hidden">
+        <button id="btnAddonLoadMore" class="btn" type="button">Cargar más resultados</button>
+      </div>
+
+      <div id="addonEmptyNotice" class="empty-notice hidden">
+        <div class="empty-icon">🧩</div>
+        <h3>Aún no hay catálogos de addons activos</h3>
+        <p>
+          Instala un addon compatible con manifiestos Stremio/Lex (películas, series o anime) desde el Centro de Addons y sus catálogos aparecerán aquí automáticamente.
+        </p>
+        <a href="addons.html" class="btn btn-primary">Ir al Centro de Addons</a>
       </div>
     </section>
   </main>
@@ -243,9 +294,48 @@
     </div>
   </div>
 
+  <!-- Addon Meta / Details / Episodes Modal -->
+  <div id="addonMetaModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="addonMetaTitle">
+    <div class="modal-card addon-meta-modal">
+      <div class="modal-head">
+        <h3 id="addonMetaTitle">Detalles del título</h3>
+        <button id="btnCloseAddonMeta" class="btn" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="addon-meta-hero">
+          <div id="addonMetaPoster" class="addon-meta-poster"></div>
+          <div class="addon-meta-info">
+            <div id="addonMetaSubtitle" class="muted text-sm"></div>
+            <div id="addonMetaGenres" class="addon-meta-genres"></div>
+            <p id="addonMetaDesc" class="addon-meta-desc"></p>
+            <div id="addonMetaCredits" class="muted text-xs hidden"></div>
+            <div class="addon-meta-actions">
+              <button id="btnLoadAddonStreams" class="btn btn-primary" type="button">🔎 Buscar fuentes disponibles</button>
+            </div>
+            <div id="addonMetaStatus" class="addon-status-banner is-info hidden" role="status"></div>
+          </div>
+        </div>
+
+        <div id="addonStreamsBlock" class="addon-streams-section hidden">
+          <div id="addonStreamsTitle" class="addon-streams-heading">Fuentes disponibles</div>
+          <div id="addonStreamsList" class="addon-streams-list"></div>
+        </div>
+
+        <div id="addonMetaEpisodesBlock" class="hidden">
+          <div id="addonSeasonTabs" class="season-tabs"></div>
+          <div id="addonEpisodeList" class="episode-list"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button id="btnCloseAddonMetaFoot" class="btn" type="button">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="vendor/hls.light.min.js"></script>
   <script src="vendor/mpegts.js"></script>
   <script src="vod.js"></script>
+  <script src="vod-addons.js" defer></script>
 </body>
 </html>
 

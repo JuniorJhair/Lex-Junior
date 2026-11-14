@@ -18,6 +18,8 @@ public static class TvPlaybackHints
     {
         public string? UserAgent;
         public string? LiveExt;
+        public string? Referer;
+        public string? Origin;
     }
 
     private static string? HostKey(string? host)
@@ -66,6 +68,56 @@ public static class TvPlaybackHints
         {
             GetOrAdd(connId.Trim()).LiveExt = ext.TrimStart('.').ToLowerInvariant();
         }
+    }
+
+    public static void RememberHostPlaybackHeaders(string? host, string? userAgent, string? referer, string? origin)
+    {
+        string? hk = HostKey(host);
+        if (hk == null) return;
+
+        string cleanUa = TvUrlGuard.SanitizeHeaderValue(userAgent, 160);
+        string? cleanRef = SanitizeHttpUrlHeader(referer);
+        string? cleanOrig = SanitizeHttpUrlHeader(origin);
+
+        lock (Gate)
+        {
+            var h = GetOrAdd(hk);
+            if (!string.IsNullOrWhiteSpace(cleanUa)) h.UserAgent = cleanUa;
+            if (!string.IsNullOrWhiteSpace(cleanRef)) h.Referer = cleanRef;
+            if (!string.IsNullOrWhiteSpace(cleanOrig)) h.Origin = cleanOrig;
+        }
+    }
+
+    public static (string? UserAgent, string? Referer, string? Origin) GetHostHeaders(string? connId, string? host)
+    {
+        string? ua = GetUserAgent(connId, host);
+        string? hk = HostKey(host);
+        string? referer = null;
+        string? origin = null;
+
+        if (hk != null)
+        {
+            lock (Gate)
+            {
+                if (Map.TryGetValue(hk, out var byHost))
+                {
+                    referer = byHost.Referer;
+                    origin = byHost.Origin;
+                }
+            }
+        }
+
+        return (ua, referer, origin);
+    }
+
+    private static string? SanitizeHttpUrlHeader(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        string clean = TvUrlGuard.SanitizeHeaderValue(raw, 512);
+        if (!Uri.TryCreate(clean, UriKind.Absolute, out var u)) return null;
+        if (u.Scheme != Uri.UriSchemeHttp && u.Scheme != Uri.UriSchemeHttps) return null;
+        if (!string.IsNullOrEmpty(u.UserInfo)) return null;
+        return u.AbsoluteUri;
     }
 
     public static void Clear()

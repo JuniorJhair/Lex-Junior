@@ -292,6 +292,25 @@ public sealed class TvVodStore
         }
     }
 
+    /// <summary>
+    /// Elimina en una sola pasada y con una única escritura atómica todos los ítems VOD
+    /// que cumplan el predicado, evitando bloquear la UI en borrados masivos (p. ej. Xtream Codes).
+    /// </summary>
+    public int RemoveItemsWhere(Predicate<TvVodItem> match)
+    {
+        if (match == null) throw new ArgumentNullException(nameof(match));
+        lock (_lock)
+        {
+            var lib = EnsureLibraryLoaded();
+            int removed = lib.RemoveAll(match);
+            if (removed > 0)
+            {
+                SaveLibraryFileAtomic(lib);
+            }
+            return removed;
+        }
+    }
+
     public void ClearLibrary()
     {
         lock (_lock)

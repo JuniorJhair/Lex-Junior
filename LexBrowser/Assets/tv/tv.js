@@ -289,6 +289,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     catalog: [],
     playlists: [],
     loadedPlaylists: new Map(),
+    addonIptvSources: [],
+    loadedAddonChannels: new Map(),
     favorites: new Set(),
     deadStreams: Object.create(null),
     activeSourceId: 'catalog',
@@ -408,13 +410,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   }
 
   function getChannelSources(ch) {
-    const list = [{
-      url: ch.url,
-      quality: ch.quality || '',
-      referrer: ch.referrer || '',
-      userAgent: ch.userAgent || ''
-    }];
-    if (Array.isArray(ch.alternates)) {
+    const list = [];
+    if (ch && ch.url) {
+      list.push({
+        url: ch.url,
+        quality: ch.quality || '',
+        referrer: ch.referrer || '',
+        userAgent: ch.userAgent || ''
+      });
+    }
+    if (ch && Array.isArray(ch.alternates)) {
       for (const a of ch.alternates) {
         if (a && a.url) {
           list.push({
@@ -515,6 +520,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (ch.countryName || ch.country) parts.push(ch.countryName || ch.country);
     if (ch.group) parts.push(ch.group);
     if (ch.language) parts.push(ch.language);
+    if (ch.epgNow) parts.push(`Ahora: ${ch.epgNow}`);
+    if (ch.addonName) parts.push(`Addon: ${ch.addonName}`);
     const activeSrc = state.activeSources[srcIndex];
     if (activeSrc && activeSrc.quality) parts.push(activeSrc.quality);
     if (ch.tags) parts.push(ch.tags);
@@ -626,6 +633,42 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         }).catch(() => { });
       };
       return;
+    }
+
+    if (ch.isAddonChannel && !ch.url && (!Array.isArray(ch.alternates) || ch.alternates.length === 0)) {
+      state.activeSources = [];
+      updateNowPlayingHeader(ch, 0);
+      showOverlay('⏳', 'Consultando fuentes del addon…', ch.name, false);
+      try {
+        const res = await apiJson('/api/addons/streams', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            addonId: ch.addonId,
+            type: ch.itemType || 'tv',
+            id: ch.itemId
+          })
+        });
+        if (my !== state.gen) return;
+        const playable = (Array.isArray(res.streams) ? res.streams : []).filter((s) => s && s.playable && s.streamUrl);
+        if (playable.length === 0) {
+          const reason = Array.isArray(res.errors) && res.errors.length > 0
+            ? res.errors[0]
+            : 'Ningún addon devolvió streams HTTP/HLS reproducibles para este canal.';
+          showOverlay('⚠', 'Canal sin flujo disponible', reason, true);
+          return;
+        }
+        ch.url = playable[0].streamUrl;
+        ch.quality = ch.quality || playable[0].name || playable[0].addonName || '';
+        ch.alternates = playable.slice(1).map((s) => ({
+          url: s.streamUrl,
+          quality: s.name || s.addonName || ''
+        }));
+      } catch (err) {
+        if (my !== state.gen) return;
+        showOverlay('⚠', 'Error al consultar addon IPTV', err.message || 'No se pudieron resolver fuentes.', true);
+        return;
+      }
     }
 
     const allSources = getChannelSources(ch);
@@ -1017,15 +1060,19 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     let baseList = [];
     if (state.activeSourceId === 'favorites') {
-      const all = Array.from(state.loadedPlaylists.values()).flatMap((p) => p.channels || []);
+      const playlistChannels = Array.from(state.loadedPlaylists.values()).flatMap((p) => p.channels || []);
+      const addonChannels = Array.from(state.loadedAddonChannels.values()).flat();
+      const all = playlistChannels.concat(addonChannels);
       const seen = new Set();
       baseList = all.filter((c) => {
-        if (!state.favorites.has(c.id) && !state.favorites.has(c.url)) return false;
+        if (!state.favorites.has(c.id) && !(c.url && state.favorites.has(c.url))) return false;
         const key = c.url || c.id;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
+    } else if (state.activeSourceId && state.activeSourceId.startsWith('addon::')) {
+      baseList = state.loadedAddonChannels.get(state.activeSourceId) || [];
     } else if (state.activeSourceId !== 'none') {
       const pl = state.loadedPlaylists.get(state.activeSourceId);
       baseList = pl ? (pl.channels || []) : [];
@@ -1073,7 +1120,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
   function renderSourceSelect() {
     const cur = state.activeSourceId;
-    els.sourceSelect.innerHTML = '';
+    els.sourceSelect.textContent = '';
 
     for (const pl of state.playlists) {
       const opt = document.createElement('option');
@@ -1083,12 +1130,19 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       els.sourceSelect.appendChild(opt);
     }
 
+    for (const src of state.addonIptvSources) {
+      const opt = document.createElement('option');
+      opt.value = src.sourceKey;
+      opt.textContent = `🧩 ${src.name}`;
+      els.sourceSelect.appendChild(opt);
+    }
+
     const optFav = document.createElement('option');
     optFav.value = 'favorites';
     optFav.textContent = `★ Favoritos (${state.favorites.size})`;
     els.sourceSelect.appendChild(optFav);
 
-    if (state.playlists.length === 0) {
+    if (state.playlists.length === 0 && state.addonIptvSources.length === 0) {
       const optNone = document.createElement('option');
       optNone.value = 'none';
       optNone.textContent = '(Sin listas cargadas)';
@@ -1098,11 +1152,18 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     const exists = Array.from(els.sourceSelect.options).some((o) => o.value === cur);
     if (exists) {
       state.activeSourceId = cur;
+    } else if (state.playlists.length > 0) {
+      state.activeSourceId = state.playlists[0].id;
+    } else if (state.addonIptvSources.length > 0) {
+      state.activeSourceId = state.addonIptvSources[0].sourceKey;
     } else {
-      state.activeSourceId = state.playlists.length > 0 ? state.playlists[0].id : (state.favorites.size > 0 ? 'favorites' : 'none');
+      state.activeSourceId = state.favorites.size > 0 ? 'favorites' : 'none';
     }
     els.sourceSelect.value = state.activeSourceId;
-    els.btnRemoveList.classList.toggle('hidden', state.activeSourceId === 'favorites' || state.activeSourceId === 'none');
+    const isRemovablePlaylist = state.activeSourceId !== 'favorites' &&
+      state.activeSourceId !== 'none' &&
+      !state.activeSourceId.startsWith('addon::');
+    els.btnRemoveList.classList.toggle('hidden', !isRemovablePlaylist);
   }
 
   let virtualRaf = 0;
@@ -1184,7 +1245,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
         const sub = document.createElement('div');
         sub.className = 'ch-sub';
-        sub.textContent = [ch.country || ch.countryName, ch.group, ch.language].filter(Boolean).join(' · ');
+        sub.textContent = [ch.country || ch.countryName, ch.group, ch.epgNow, ch.language].filter(Boolean).join(' · ');
         info.appendChild(sub);
         row.appendChild(info);
 
@@ -1244,13 +1305,46 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     }
   }
 
+  async function fetchAddonIptvChannels(src) {
+    const res = await apiJson('/api/addons/iptv/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        addonId: src.addonId,
+        type: src.type,
+        catalogId: src.catalogId
+      })
+    });
+    const channels = Array.isArray(res.channels) ? res.channels : [];
+    state.loadedAddonChannels.set(src.sourceKey, channels);
+    return channels;
+  }
+
   async function loadCatalog(refresh = false) {
     els.channelCountLabel.textContent = 'Cargando listas…';
+    if (refresh) {
+      state.loadedAddonChannels.clear();
+    }
     try {
-      const data = await apiJson('/api/catalog');
+      const [catalogSettled, addonIptvSettled] = await Promise.allSettled([
+        apiJson('/api/catalog'),
+        apiJson('/api/addons/iptv/sources')
+      ]);
+
+      if (catalogSettled.status !== 'fulfilled') {
+        throw catalogSettled.reason;
+      }
+
+      const data = catalogSettled.value;
       state.playlists = data.playlists || [];
       state.favorites = new Set(data.prefs?.favorites || []);
       state.deadStreams = data.prefs?.deadStreams || Object.create(null);
+
+      if (addonIptvSettled.status === 'fulfilled' && Array.isArray(addonIptvSettled.value?.sources)) {
+        state.addonIptvSources = addonIptvSettled.value.sources;
+      } else {
+        state.addonIptvSources = [];
+      }
 
       renderSourceSelect();
       await onSourceChange();
@@ -1261,7 +1355,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
   async function onSourceChange() {
     state.activeSourceId = els.sourceSelect.value;
-    els.btnRemoveList.classList.toggle('hidden', state.activeSourceId === 'favorites' || state.activeSourceId === 'none');
+    const isRemovablePlaylist = state.activeSourceId !== 'favorites' &&
+      state.activeSourceId !== 'none' &&
+      !state.activeSourceId.startsWith('addon::');
+    els.btnRemoveList.classList.toggle('hidden', !isRemovablePlaylist);
 
     if (state.activeSourceId === 'favorites') {
       for (const pl of state.playlists) {
@@ -1272,9 +1369,36 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
           } catch { }
         }
       }
-      const all = Array.from(state.loadedPlaylists.values()).flatMap((p) => p.channels || []);
-      const favs = all.filter((c) => state.favorites.has(c.id) || state.favorites.has(c.url));
+      for (const src of state.addonIptvSources) {
+        if (!state.loadedAddonChannels.has(src.sourceKey)) {
+          try {
+            await fetchAddonIptvChannels(src);
+          } catch { }
+        }
+      }
+      const plChannels = Array.from(state.loadedPlaylists.values()).flatMap((p) => p.channels || []);
+      const addonChannels = Array.from(state.loadedAddonChannels.values()).flat();
+      const all = plChannels.concat(addonChannels);
+      const favs = all.filter((c) => state.favorites.has(c.id) || (c.url && state.favorites.has(c.url)));
       renderCategorySelect(favs);
+    } else if (state.activeSourceId && state.activeSourceId.startsWith('addon::')) {
+      const src = state.addonIptvSources.find((s) => s.sourceKey === state.activeSourceId);
+      if (!src) {
+        renderCategorySelect([]);
+      } else {
+        if (!state.loadedAddonChannels.has(src.sourceKey)) {
+          els.channelCountLabel.textContent = 'Cargando canales del addon…';
+          try {
+            await fetchAddonIptvChannels(src);
+          } catch (err) {
+            els.channelCountLabel.textContent = `Error addon: ${err.message}`;
+            renderCategorySelect([]);
+            applyFilters();
+            return;
+          }
+        }
+        renderCategorySelect(state.loadedAddonChannels.get(src.sourceKey) || []);
+      }
     } else if (state.activeSourceId !== 'none') {
       if (!state.loadedPlaylists.has(state.activeSourceId)) {
         els.channelCountLabel.textContent = 'Cargando lista…';
@@ -1728,7 +1852,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
     els.btnRemoveList.addEventListener('click', async () => {
       const id = state.activeSourceId;
-      if (!id || id === 'catalog' || id === 'favorites' || id === 'none') return;
+      if (!id || id === 'catalog' || id === 'favorites' || id === 'none' || id.startsWith('addon::')) return;
       const pl = state.playlists.find((p) => p.id === id);
       if (pl && pl.sourceUrl && pl.sourceUrl.startsWith('xtream://')) {
         const xcId = pl.sourceUrl.replace('xtream://', '');

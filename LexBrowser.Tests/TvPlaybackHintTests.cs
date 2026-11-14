@@ -11,6 +11,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
+[Collection("PlaybackHints")]
 public sealed class TvPlaybackHintTests : IDisposable
 {
     private sealed class DelegatingMockHandler : HttpMessageHandler

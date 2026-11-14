@@ -37,7 +37,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     selectedSeries: null,
     activeSeason: 1,
     activeSid: null,
-    vodSessionSeq: 0
+    vodSessionSeq: 0,
+    externalSubtitles: []
   };
 
   const els = {};
@@ -774,16 +775,24 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     state.activeItem = item;
     state.fallbackAttempted = false;
     state.lastProbeError = null;
+    state.externalSubtitles = Array.isArray(item.subtitles) ? item.subtitles : [];
     els.playerTitle.textContent = item.title;
     els.playerOverlay.classList.remove('hidden');
     hidePlayerStatus();
 
     destroyPlayer();
+    state.externalSubtitles = Array.isArray(item.subtitles) ? item.subtitles : [];
     showPlayerStatus('Conectando...', 'Verificando disponibilidad del video...', '⏳', false);
 
-    let engine = detectVodEngine(item.url);
+    const probeTarget = item.probeUrl || item.url;
+    const rawPlayback = item.playbackUrl || item.url;
+    const playbackTarget = (rawPlayback && !rawPlayback.startsWith('/') && !rawPlayback.startsWith('https://tv.lex.local/'))
+      ? `/api/proxy?u=${encodeURIComponent(rawPlayback)}`
+      : rawPlayback;
+
+    let engine = detectVodEngine(probeTarget);
     try {
-      const probeResp = await fetch(`/api/probe?u=${encodeURIComponent(item.url)}`);
+      const probeResp = await fetch(`/api/probe?u=${encodeURIComponent(probeTarget)}`);
       if (!state.activeItem || state.activeItem.url !== item.url) return;
       if (probeResp.ok) {
         const probe = await probeResp.json();
@@ -803,7 +812,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     } catch (_) { }
 
     if (!state.activeItem || state.activeItem.url !== item.url) return;
-    startVodWithEngine(item.url, engine);
+    attachAddonSubtitles(state.externalSubtitles);
+    populateSubtitlesFromHls(null);
+    startVodWithEngine(playbackTarget, engine);
 
     // Comprobar si hay progreso guardado
     checkAndPromptResume(item.url);
@@ -921,23 +932,62 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     }
   }
 
-  function populateSubtitlesFromHls(hls) {
-    els.subSelect.innerHTML = '<option value="none">Subtítulos: Desactivados</option>';
-    if (!hls.subtitleTracks) return;
+  function attachAddonSubtitles(subtitles) {
+    const video = els.vodVideo;
+    if (!video || !Array.isArray(subtitles) || subtitles.length === 0) return;
 
-    hls.subtitleTracks.forEach((track, idx) => {
+    subtitles.forEach((sub, idx) => {
+      if (!sub || !sub.proxyUrl) return;
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = sub.label || sub.lang || `Addon ${idx + 1}`;
+      track.srclang = sub.lang || 'es';
+      track.src = sub.proxyUrl;
+      track.setAttribute('data-addon-sub', String(idx));
+      video.appendChild(track);
+      if (track.track) track.track.mode = 'disabled';
+    });
+  }
+
+  function populateSubtitlesFromHls(hls) {
+    els.subSelect.textContent = '';
+    const noneOpt = document.createElement('option');
+    noneOpt.value = 'none';
+    noneOpt.textContent = 'Subtítulos: Desactivados';
+    els.subSelect.appendChild(noneOpt);
+
+    const hlsTracks = (hls && Array.isArray(hls.subtitleTracks)) ? hls.subtitleTracks : [];
+    hlsTracks.forEach((track, idx) => {
       const opt = document.createElement('option');
-      opt.value = String(idx);
+      opt.value = `hls:${idx}`;
       opt.textContent = track.name || track.lang || `Pista ${idx + 1}`;
+      els.subSelect.appendChild(opt);
+    });
+
+    const addonTracks = Array.isArray(state.externalSubtitles) ? state.externalSubtitles : [];
+    addonTracks.forEach((sub, idx) => {
+      if (!sub || !sub.proxyUrl) return;
+      const opt = document.createElement('option');
+      opt.value = `addon:${idx}`;
+      opt.textContent = `🧩 ${sub.label || sub.lang || `Subtítulo ${idx + 1}`}`;
       els.subSelect.appendChild(opt);
     });
 
     els.subSelect.onchange = () => {
       const val = els.subSelect.value;
-      if (val === 'none') {
-        hls.subtitleTrack = -1;
-      } else {
-        hls.subtitleTrack = parseInt(val, 10);
+      if (hls) {
+        hls.subtitleTrack = val.startsWith('hls:') ? parseInt(val.slice(4), 10) : -1;
+      }
+
+      const video = els.vodVideo;
+      if (video && video.textTracks) {
+        const tracks = video.querySelectorAll('track[data-addon-sub]');
+        tracks.forEach((tr) => {
+          const idx = tr.getAttribute('data-addon-sub');
+          if (tr.track) {
+            tr.track.mode = (val === `addon:${idx}`) ? 'showing' : 'disabled';
+          }
+        });
       }
     };
   }
@@ -1422,6 +1472,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     checkTermsAccepted();
     loadLibrary();
   }
+
+  window.LexVodPlayer = {
+    openPlayer,
+    closePlayer
+  };
 
   window.addEventListener('DOMContentLoaded', initApp);
 }

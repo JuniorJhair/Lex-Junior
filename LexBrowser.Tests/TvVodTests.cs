@@ -151,5 +151,33 @@ http://192.168.1.100/video.mp4";
         Assert.NotNull(matrix);
         Assert.False(matrix.IsSeries);
     }
+
+    [Fact]
+    public void TvVodStore_RemoveItemsWhere_RemovesMatchingInSinglePass()
+    {
+        var items = new List<TvVodItem>();
+        for (int i = 0; i < 2500; i++)
+        {
+            items.Add(new TvVodItem
+            {
+                Id = i % 2 == 0 ? $"xc_vod_conn1_{i}" : $"xc_vod_conn2_{i}",
+                Title = $"Item {i}",
+                Url = $"https://example.com/v/{i}.mp4"
+            });
+        }
+        items.Add(new TvVodItem { Id = "xc_series_conn1_s1", Title = "Serie", Url = "https://example.com/s/1.mp4" });
+
+        _store.ImportItems(items);
+        Assert.Equal(2501, _store.GetLibrarySnapshot().Count);
+
+        int removed = _store.RemoveItemsWhere(v =>
+            v.Id.StartsWith("xc_vod_conn1_", StringComparison.OrdinalIgnoreCase) ||
+            v.Id.StartsWith("xc_series_conn1_", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(1251, removed);
+        var remaining = _store.GetLibrarySnapshot();
+        Assert.Equal(1250, remaining.Count);
+        Assert.All(remaining, r => Assert.StartsWith("xc_vod_conn2_", r.Id));
+    }
 }
 

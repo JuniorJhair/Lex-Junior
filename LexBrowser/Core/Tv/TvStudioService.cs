@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using LexBrowser.Core.Tv.Addons;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 
@@ -24,7 +25,7 @@ public static class TvStudioService
     public const string HtmlContentSecurityPolicy =
         "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none';";
 
-    private const string AllowedCorsOrigin = "https://tv.lex.local";
+    internal const string AllowedCorsOrigin = "https://tv.lex.local";
     private const int MaxJsonBodyBytes = 24 * 1024 * 1024;
 
     private static readonly JsonSerializerOptions JsonOutOptions = new()
@@ -42,6 +43,7 @@ public static class TvStudioService
         TvUserStateStore.Shared.ReleaseMemoryCache();
         TvVodStore.Shared.ReleaseMemoryCache();
         TvXtreamStore.Shared.ReleaseMemoryCache();
+        LexAddonStore.Shared.ReleaseMemoryCache();
         TvStreamProxy.ClearProbeCache();
     }
 
@@ -439,8 +441,12 @@ public static class TvStudioService
             {
                 using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
                 string id = doc.RootElement.TryGetProperty("id", out var idEl) ? (idEl.GetString() ?? "") : "";
-                TvUserStateStore.Shared.RemovePlaylist(id);
-                e.Response = CreateJsonResponse(env, 200, "OK", new { playlists = TvUserStateStore.Shared.GetPlaylistSummaries() });
+                var playlists = await Task.Run(() =>
+                {
+                    TvUserStateStore.Shared.RemovePlaylist(id);
+                    return TvUserStateStore.Shared.GetPlaylistSummaries();
+                });
+                e.Response = CreateJsonResponse(env, 200, "OK", new { playlists });
                 return;
             }
 
@@ -731,22 +737,30 @@ public static class TvStudioService
             if (path.Equals("api/xtream/remove", StringComparison.OrdinalIgnoreCase))
             {
                 using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
-                string id = doc.RootElement.TryGetProperty("id", out var iEl) ? (iEl.GetString() ?? "") : "";
+                string rawId = doc.RootElement.TryGetProperty("id", out var iEl) ? (iEl.GetString() ?? "") : "";
+                string id = rawId.Trim();
 
-                bool removed = TvXtreamStore.Shared.RemoveConnection(id);
-                if (removed)
+                // Ejecutar el borrado fuera del hilo STA de WebView2 y eliminar los ítems VOD
+                // asociados en una sola pasada para no congelar la página con bibliotecas grandes.
+                bool removed = await Task.Run(() =>
                 {
+                    bool connRemoved = TvXtreamStore.Shared.RemoveConnection(id);
+                    if (!connRemoved)
+                        return false;
+
                     var playlists = TvUserStateStore.Shared.GetPlaylistSummaries();
                     var match = playlists.FirstOrDefault(p => string.Equals(p.SourceUrl, $"xtream://{id}", StringComparison.OrdinalIgnoreCase));
-                    if (match != null) TvUserStateStore.Shared.RemovePlaylist(match.Id);
+                    if (match != null)
+                        TvUserStateStore.Shared.RemovePlaylist(match.Id);
 
-                    var vodSnap = TvVodStore.Shared.GetLibrarySnapshot();
-                    foreach (var v in vodSnap)
-                    {
-                        if (v.Id.StartsWith($"xc_vod_{id}_") || v.Id.StartsWith($"xc_series_{id}_"))
-                            TvVodStore.Shared.RemoveItem(v.Id);
-                    }
-                }
+                    string vodPrefix = $"xc_vod_{id}_";
+                    string seriesPrefix = $"xc_series_{id}_";
+                    TvVodStore.Shared.RemoveItemsWhere(v =>
+                        v.Id.StartsWith(vodPrefix, StringComparison.OrdinalIgnoreCase) ||
+                        v.Id.StartsWith(seriesPrefix, StringComparison.OrdinalIgnoreCase));
+
+                    return true;
+                });
 
                 e.Response = CreateJsonResponse(env, 200, "OK", new { ok = removed });
                 return;
@@ -858,6 +872,13 @@ public static class TvStudioService
                 File.WriteAllText(fullPath, body);
                 e.Response = CreateJsonResponse(env, 200, "OK", new { path = fullPath });
                 return;
+            }
+
+            if (path.Equals("api/addons", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("api/addons/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (await TvAddonController.TryHandleAsync(env, e, path, body, CreateJsonResponse, cts.Token))
+                    return;
             }
 
             e.Response = CreateJsonResponse(env, 404, "Not Found", new { error = "Endpoint no encontrado." });

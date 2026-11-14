@@ -467,7 +467,8 @@ public static class TvStreamProxy
         bool useRetry,
         bool retryOnServerError = false)
     {
-        var candidates = TvUrlGuard.GetUserAgentCandidates(TvPlaybackHints.GetUserAgent(connId, targetUri.Host));
+        var (hintUa, hintReferer, hintOrigin) = TvPlaybackHints.GetHostHeaders(connId, targetUri.Host);
+        var candidates = TvUrlGuard.GetUserAgentCandidates(hintUa);
         HttpResponseMessage? lastResp = null;
         Uri lastFinal = targetUri;
         string lastUa = candidates[0];
@@ -476,8 +477,8 @@ public static class TvStreamProxy
         {
             string ua = candidates[i];
             var (resp, finalUri) = useRetry && ReferenceEquals(client, Http)
-                ? await SendWithRetryAsync(targetUri, rangeHeader, ct, ua).ConfigureAwait(false)
-                : await TvUrlGuard.GetWithSafeRedirectsAsync(client, targetUri, rangeHeader, ct, userAgent: ua).ConfigureAwait(false);
+                ? await SendWithRetryAsync(targetUri, rangeHeader, ct, ua, hintReferer, hintOrigin).ConfigureAwait(false)
+                : await TvUrlGuard.GetWithSafeRedirectsAsync(client, targetUri, rangeHeader, ct, userAgent: ua, referer: hintReferer, origin: hintOrigin).ConfigureAwait(false);
 
             lastResp = resp;
             lastFinal = finalUri;
@@ -1023,14 +1024,16 @@ public static class TvStreamProxy
         Uri targetUri,
         string? rangeHeader,
         CancellationToken ct,
-        string? userAgent = null)
+        string? userAgent = null,
+        string? referer = null,
+        string? origin = null)
     {
         for (int attempt = 0; attempt < 2; attempt++)
         {
             try
             {
                 var (resp, finalUri) = await TvUrlGuard.GetWithSafeRedirectsAsync(
-                    Http, targetUri, rangeHeader, ct, userAgent: userAgent).ConfigureAwait(false);
+                    Http, targetUri, rangeHeader, ct, userAgent: userAgent, referer: referer, origin: origin).ConfigureAwait(false);
 
                 int code = (int)resp.StatusCode;
                 if (attempt == 0 && (code == 429 || code == 503))
@@ -1050,7 +1053,7 @@ public static class TvStreamProxy
         }
 
         return await TvUrlGuard.GetWithSafeRedirectsAsync(
-            Http, targetUri, rangeHeader, ct, userAgent: userAgent).ConfigureAwait(false);
+            Http, targetUri, rangeHeader, ct, userAgent: userAgent, referer: referer, origin: origin).ConfigureAwait(false);
     }
 
     private static bool IsPreFirstByteTransient(Exception ex)

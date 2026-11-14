@@ -388,9 +388,13 @@ public static class TvUrlGuard
         string? rangeHeader,
         CancellationToken ct,
         int maxRedirects = 8,
-        string? userAgent = null)
+        string? userAgent = null,
+        string? referer = null,
+        string? origin = null)
     {
-        string ua = string.IsNullOrWhiteSpace(userAgent) ? DefaultUserAgent : SanitizeHeaderValue(userAgent, 120);
+        string ua = string.IsNullOrWhiteSpace(userAgent) ? DefaultUserAgent : SanitizeHeaderValue(userAgent, 160);
+        string cleanRef = SanitizeHeaderValue(referer, 512);
+        string cleanOrig = SanitizeHeaderValue(origin, 256);
         Uri current = initialUri;
         for (int hop = 0; hop <= maxRedirects; hop++)
         {
@@ -399,6 +403,22 @@ public static class TvUrlGuard
 
             using var req = new HttpRequestMessage(HttpMethod.Get, current);
             req.Headers.TryAddWithoutValidation("User-Agent", ua);
+
+            if (!string.IsNullOrEmpty(cleanRef) &&
+                Uri.TryCreate(cleanRef, UriKind.Absolute, out var refUri) &&
+                (refUri.Scheme == Uri.UriSchemeHttp || refUri.Scheme == Uri.UriSchemeHttps) &&
+                string.IsNullOrEmpty(refUri.UserInfo))
+            {
+                req.Headers.TryAddWithoutValidation("Referer", refUri.AbsoluteUri);
+            }
+
+            if (!string.IsNullOrEmpty(cleanOrig) &&
+                Uri.TryCreate(cleanOrig, UriKind.Absolute, out var origUri) &&
+                (origUri.Scheme == Uri.UriSchemeHttp || origUri.Scheme == Uri.UriSchemeHttps) &&
+                string.IsNullOrEmpty(origUri.UserInfo))
+            {
+                req.Headers.TryAddWithoutValidation("Origin", origUri.GetLeftPart(UriPartial.Authority));
+            }
 
             string cleanRange = SanitizeHeaderValue(rangeHeader, 80);
             if (cleanRange.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase))
