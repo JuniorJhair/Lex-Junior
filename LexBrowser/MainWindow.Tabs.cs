@@ -910,7 +910,8 @@ public partial class MainWindow
                     }
                 }
 
-                bool shouldBlockNetwork = !isRedirectStub && policy.Network && AdBlockFilter.ShouldBlock(uri, originHost, e.ResourceContext);
+                bool isYouTubeContext = MediaShieldRules.IsServiceHost(policyHost) || MediaShieldRules.IsServiceOrStreamHost(uri.Host);
+                bool shouldBlockNetwork = !isRedirectStub && policy.Network && (!isYouTubeContext || policy.YouTubeAdapter) && AdBlockFilter.ShouldBlock(uri, originHost, e.ResourceContext);
 
                 if (isRedirectStub || shouldBlockNetwork)
                 {
@@ -923,11 +924,6 @@ public partial class MainWindow
                     string contentType = "Content-Type: text/plain";
                     byte[] responseBytes = EmptyResponseBytes;
 
-                    bool isYouTubeApiJson = (PublicSuffix.HostMatchesDomain(uri.Host, "youtube.com") ||
-                                             PublicSuffix.HostMatchesDomain(uri.Host, "youtu.be")) &&
-                                            (uri.AbsolutePath.Contains("/youtubei/", StringComparison.OrdinalIgnoreCase) ||
-                                             uri.AbsolutePath.Contains("/get_midroll_info", StringComparison.OrdinalIgnoreCase));
-
                     if (isRedirectStub)
                     {
                         statusCode = 200;
@@ -937,7 +933,7 @@ public partial class MainWindow
 
                         ShieldLogger.LogForTab(tab, "REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "AdBlockResources redirect stub (200 OK)", tabDesc);
                     }
-                    else if (isYouTubeApiJson)
+                    else if (MediaShieldRules.WantsEmptyJson(uri))
                     {
                         statusCode = 200;
                         statusReason = "OK";
@@ -945,13 +941,13 @@ public partial class MainWindow
                         responseBytes = Encoding.UTF8.GetBytes("{}");
                         ShieldLogger.LogForTab(tab, "REQUEST_STUB_200", originHost, uri.AbsoluteUri, frameDesc, "YouTube ad JSON stub (200 OK)", tabDesc);
                     }
-                    else if (PublicSuffix.HostMatchesDomain(uri.Host, "youtube.com") ||
-                             PublicSuffix.HostMatchesDomain(uri.Host, "youtu.be") ||
+                    else if (MediaShieldRules.IsServiceOrStreamHost(uri.Host) ||
+                             MediaShieldRules.IsServiceHost(originHost) ||
                              AdBlockFilter.IsGoogleDomain(originHost))
                     {
                         statusCode = 204;
                         statusReason = "No Content";
-                        ShieldLogger.LogForTab(tab, "REQUEST_BLOCKED_204", originHost, uri.AbsoluteUri, frameDesc, "Google/YouTube ad or telemetry endpoint", tabDesc);
+                        ShieldLogger.LogForTab(tab, "REQUEST_BLOCKED_204", originHost, uri.AbsoluteUri, frameDesc, "Google/YouTube ad or telemetry endpoint (204 No Content)", tabDesc);
                     }
                     else
                     {
@@ -1195,6 +1191,7 @@ public partial class MainWindow
         {
             tab.ActiveFrames.Clear();
             tab.DailymotionRealVideoSignaled = false;
+            tab.HasShownYouTubeIssueNotice = false;
             tab.CorsUnlocker?.Dispose();
             tab.CorsUnlocker = null;
 
@@ -1297,6 +1294,46 @@ public partial class MainWindow
                         if (win._activeTab == tab)
                             win.UpdateShieldBadgeText();
                     });
+                }
+                else if (type == "site_issue")
+                {
+                    string site = root.TryGetProperty("site", out var sProp) ? (sProp.GetString() ?? "") : "unknown";
+                    string reason = root.TryGetProperty("reason", out var rProp) ? (rProp.GetString() ?? "") : "issue_detected";
+                    string issueUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : (tab.CurrentUri?.AbsoluteUri ?? "");
+
+                    string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+                    ShieldLogger.LogForTab(tab, "SITE_ISSUE", site, issueUrl, "DOM", reason, tabDesc);
+
+                    _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                    {
+                        if (tab.IsDisposed) return;
+                        if (tab.HasShownYouTubeIssueNotice) return;
+                        tab.HasShownYouTubeIssueNotice = true;
+
+                        if (win._activeTab == tab)
+                        {
+                            win.ShowToast(
+                                "¿Tiene error esta página? Prueba desactivar el bloqueo de YouTube y recarga",
+                                "Modo Compatible",
+                                () => _ = win.ActivateCompatModeForTabAsync(tab, persistForSite: false),
+                                durationSeconds: 3);
+                        }
+                    });
+                }
+                else if (type == "diag")
+                {
+                    string site = root.TryGetProperty("site", out var sProp) ? (sProp.GetString() ?? "") : "";
+                    if (site == "youtube")
+                    {
+                        int stripped = root.TryGetProperty("stripped", out var stProp) ? stProp.GetInt32() : 0;
+                        int skipClicks = root.TryGetProperty("skipClicks", out var scProp) ? scProp.GetInt32() : 0;
+                        int enforcement = root.TryGetProperty("enforcement", out var efProp) ? efProp.GetInt32() : 0;
+                        bool breaker = root.TryGetProperty("breaker", out var bkProp) && bkProp.GetBoolean();
+
+                        string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
+                        ShieldLogger.LogForTab(tab, "YOUTUBE_DIAG", "youtube.com", tab.CurrentUri?.AbsoluteUri ?? "", "DOM",
+                            $"stripped={stripped}, skipClicks={skipClicks}, enforcement={enforcement}, breaker={breaker}", tabDesc);
+                    }
                 }
                 else if (type == "shortcut_new_tab")
                 {
@@ -3081,7 +3118,11 @@ public partial class MainWindow
         }
 
         var s = SettingsManager.Current;
-        if (s.EnableAdBlocker && s.EnableYouTubeAdBlock && (s.Shield?.Adapters?.YouTube ?? true))
+        string ytHost = (tab.CurrentUri != null && MediaShieldRules.IsServiceHost(tab.CurrentUri.Host))
+            ? tab.CurrentUri.Host
+            : "youtube.com";
+        var ytPolicy = SitePolicy.Resolve(ytHost, tab.TemporaryCompatMode);
+        if (ytPolicy.YouTubeAdapter)
         {
             try
             {

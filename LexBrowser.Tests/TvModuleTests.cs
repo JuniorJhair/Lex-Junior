@@ -379,9 +379,11 @@ public class TvModuleTests
         Assert.True(File.Exists(Path.Combine(dir, "index.html")));
         Assert.True(File.Exists(Path.Combine(dir, "tv.css")));
         Assert.True(File.Exists(Path.Combine(dir, "tv.js")));
+        Assert.True(File.Exists(Path.Combine(dir, "theme.js")));
         Assert.True(File.Exists(Path.Combine(dir, "vendor", "hls.light.min.js")));
         Assert.True(File.Exists(Path.Combine(dir, "vendor", "mpegts.js")));
 
+        Assert.NotNull(TvStudioService.LoadStaticAsset("theme.js"));
         Assert.NotNull(TvStudioService.LoadStaticAsset("vendor/hls.light.min.js"));
         Assert.NotNull(TvStudioService.LoadStaticAsset("vendor/mpegts.js"));
         Assert.Null(TvStudioService.LoadStaticAsset("../app.manifest"));
@@ -389,6 +391,28 @@ public class TvModuleTests
         // Escudos no inyectan lógica sobre tv.lex.local
         Assert.Contains("tv.lex.local", CookieBannerShield.BaseScript);
         Assert.Contains("tv.lex.local", WebShield.BaseScript);
+    }
+
+    [Fact]
+    public void TvTheme_AllViews_IncludeThemeScriptAndSelector()
+    {
+        string dir = TvStudioService.GetTvAssetsFolder();
+        string[] htmlFiles = ["index.html", "tv.html", "vod.html", "xtream.html", "como-funciona.html", "legal.html"];
+        foreach (string file in htmlFiles)
+        {
+            string content = File.ReadAllText(Path.Combine(dir, file));
+            Assert.Contains("theme.js", content);
+            Assert.Contains("theme-selector", content);
+        }
+
+        byte[]? themeBytes = TvStudioService.LoadStaticAsset("theme.js");
+        Assert.NotNull(themeBytes);
+        string themeJs = System.Text.Encoding.UTF8.GetString(themeBytes!);
+        Assert.Contains("lex_tv_theme", themeJs);
+        Assert.Contains("data-theme", themeJs);
+        Assert.Contains("'dark'", themeJs);
+        Assert.Contains("'light'", themeJs);
+        Assert.Contains("'classic'", themeJs);
     }
 
     [Fact]

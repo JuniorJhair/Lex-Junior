@@ -172,6 +172,26 @@
                         <TextBlock Text="Funciones de Navegación" FontSize="20" FontWeight="Bold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
                         <TextBlock Text="Personaliza los controles y botones activos en tu ventana" FontSize="12" Foreground="#8B8B96" Margin="0,0,0,18"/>
 
+                        <!-- Tarjeta: Tema Visual del Navegador -->
+                        <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="🎨 Tema Visual del Navegador" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                    <TextBlock Text="Elige la apariencia para la ventana, pestañas, barra de navegación y páginas del sistema." FontSize="11" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <ComboBox x:Name="CmbBrowserTheme" Grid.Column="1" Width="175" Height="30" VerticalAlignment="Center"
+                                          SelectionChanged="CmbBrowserTheme_SelectionChanged">
+                                    <ComboBoxItem Content="🌙 Oscuro" Tag="Dark"/>
+                                    <ComboBoxItem Content="☀️ Claro" Tag="Light"/>
+                                    <ComboBoxItem Content="⚡ Clásico (Original)" Tag="Classic"/>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
                         <!-- Tarjeta: Navegador Predeterminado -->
                         <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                             <Grid>
@@ -251,6 +271,17 @@
                                         <StackPanel>
                                             <TextBlock Text="Filtrado Cosmético de Anuncios y Banners" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
                                             <TextBlock Text="Oculta espacios publicitarios vacíos y contenedores de banners promocionales para una visualización limpia." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                                <StackPanel>
+                                    <CheckBox x:Name="ChkYouTubeAdBlock" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="Bloqueador de Anuncios en YouTube (Motor Brave)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Elimina anuncios de video, Shorts patrocinados y espacios publicitarios en YouTube antes de que carguen en el reproductor, sin alterar la velocidad ni el audio." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>

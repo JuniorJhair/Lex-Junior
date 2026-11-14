@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lex TV — Televisión en Vivo</title>
   <link rel="stylesheet" href="./tv.css" />
+  <script src="./theme.js"></script>
   <link rel="icon" type="image/png" href="./favicon.png" />
   <link rel="shortcut icon" href="./favicon.ico" />
   <script defer src="./tv.js"></script>
@@ -52,6 +53,11 @@
       <button id="btnRefresh" class="btn" type="button" title="Actualizar listas">Actualizar</button>
       <button id="btnDiag" class="btn" type="button" title="Diagnóstico de compatibilidad (Ctrl+Shift+D)">Diagnóstico</button>
       <button id="btnClearCache" class="btn" type="button" title="Borrar marcas de fallo">Limpiar fallos</button>
+      <select id="themeSelect" class="ctrl theme-selector" aria-label="Tema visual" title="Seleccionar tema visual">
+        <option value="dark">🌙 Oscuro</option>
+        <option value="light">☀️ Claro</option>
+        <option value="classic">⚡ Clásico</option>
+      </select>
     </div>
   </header>
 

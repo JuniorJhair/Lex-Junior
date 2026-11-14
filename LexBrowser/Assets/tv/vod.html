@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none';" />
   <title>Lex TV — Películas y Series (VOD)</title>
   <link rel="stylesheet" href="vod.css" />
+  <script src="theme.js"></script>
   <link rel="icon" type="image/png" href="./favicon.png" />
   <link rel="shortcut icon" href="./favicon.ico" />
 </head>
@@ -35,6 +36,11 @@
       <a href="xtream.html" class="btn" title="Conectar servidor IPTV Xtream Codes (Películas, Series y TV)" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">⚡ Xtream Codes</a>
       <button id="btnOpenJellyfin" class="btn" type="button" title="Conectar servidor multimedia propio (Jellyfin / Emby)">Jellyfin / Emby</button>
       <button id="btnClearLibrary" class="btn btn-danger" type="button" title="Eliminar todos los contenidos de la biblioteca">Limpiar</button>
+      <select id="themeSelect" class="ctrl theme-selector" aria-label="Tema visual" title="Seleccionar tema visual">
+        <option value="dark">🌙 Oscuro</option>
+        <option value="light">☀️ Claro</option>
+        <option value="classic">⚡ Clásico</option>
+      </select>
     </div>
   </header>
 
@@ -238,6 +244,7 @@
   </div>
 
   <script src="vendor/hls.light.min.js"></script>
+  <script src="vendor/mpegts.js"></script>
   <script src="vod.js"></script>
 </body>
 </html>

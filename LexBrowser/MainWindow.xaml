@@ -8,8 +8,8 @@
         WindowState="Maximized"
         WindowStyle="None"
         AllowsTransparency="False"
-        Background="#0F0F12"
-        Foreground="#E4E4E7"
+        Background="{DynamicResource BgDark}"
+        Foreground="{DynamicResource TextLight}"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp">
@@ -30,13 +30,20 @@
         <SolidColorBrush x:Key="BorderDark" Color="#2E2E3A"/>
         <SolidColorBrush x:Key="TextLight" Color="#F4F4F5"/>
         <SolidColorBrush x:Key="TextMuted" Color="#A1A1AA"/>
+        <SolidColorBrush x:Key="TabInactiveBg" Color="#16161B"/>
+        <SolidColorBrush x:Key="TabHoverBg" Color="#252535"/>
+        <SolidColorBrush x:Key="BookmarksBarBg" Color="#121217"/>
+        <SolidColorBrush x:Key="BookmarkItemBg" Color="#181820"/>
+        <SolidColorBrush x:Key="UtilityBtnBg" Color="#252536"/>
+        <SolidColorBrush x:Key="CaretColor" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="WindowCtrlHoverBg" Color="#252530"/>
 
         <!-- Estilo botones de ventana (Minimizar, Maximizar, Cerrar) -->
         <Style x:Key="WindowCtrlBtn" TargetType="Button">
             <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
             <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="#9CA3AF"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Width" Value="46"/>
             <Setter Property="Height" Value="42"/>
@@ -51,8 +58,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#252530"/>
-                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource WindowCtrlHoverBg}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextLight}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -82,7 +89,7 @@
         <Style x:Key="NavBtn" TargetType="Button">
             <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextLight}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextLight}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Width" Value="34"/>
             <Setter Property="Height" Value="34"/>
@@ -97,7 +104,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource SurfaceLighter}"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource SurfaceLighter}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.3"/>
@@ -223,7 +230,7 @@
         </Grid.RowDefinitions>
 
         <!-- Fila 0: Header & Tabs (Doble clic maximiza/restaura, clic arrastra) -->
-        <Grid Grid.Row="0" Background="{StaticResource BgDark}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+        <Grid Grid.Row="0" Background="{DynamicResource BgDark}" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid.ColumnDefinitions>
                 <!-- Logo & Brand LJ -->
                 <ColumnDefinition Width="Auto"/>
@@ -257,7 +264,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border x:Name="TabBorder" Width="{Binding TabWidth}" Margin="2,0,2,0" VerticalAlignment="Stretch" CornerRadius="6,6,0,0" Padding="10,0,8,0" Cursor="Hand"
-                                            Background="#16161B" BorderBrush="Transparent" BorderThickness="0,2,0,0"
+                                            Background="{DynamicResource TabInactiveBg}" BorderBrush="Transparent" BorderThickness="0,2,0,0"
                                             WindowChrome.IsHitTestVisibleInChrome="True"
                                             PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
                                             PreviewMouseMove="Tab_PreviewMouseMove"
@@ -316,7 +323,7 @@
                                                        VerticalAlignment="Center"/>
 
                                             <!-- Título (Visible solo si no es solo logo) -->
-                                            <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" Foreground="{StaticResource TextLight}" FontSize="12" 
+                                            <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" Foreground="{DynamicResource TextLight}" FontSize="12" 
                                                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                                        Visibility="{Binding ShowTitleInTab, Converter={StaticResource BoolToVis}}"/>
 
@@ -359,12 +366,12 @@
                                     <DataTemplate.Triggers>
                                         <!-- Efecto Hover cuando el puntero pasa encima de una pestaña (sombreado elegante) -->
                                         <Trigger SourceName="TabBorder" Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="TabBorder" Property="Background" Value="#252535"/>
+                                            <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource TabHoverBg}"/>
                                         </Trigger>
                                         <!-- Pestaña seleccionada normal -->
                                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                            <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource SurfaceDark}"/>
-                                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AccentColor}"/>
+                                            <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource SurfaceDark}"/>
+                                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource AccentColor}"/>
                                             <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
                                         </DataTrigger>
                                         <!-- Pestaña incógnito seleccionada -->
@@ -417,7 +424,7 @@
         </Grid>
 
         <!-- Fila 1: Barra de herramientas y URL Omnibox -->
-        <Grid Grid.Row="1" Background="{StaticResource SurfaceDark}">
+        <Grid Grid.Row="1" Background="{DynamicResource SurfaceDark}">
             <Grid.ColumnDefinitions>
                 <!-- Botones de Navegación -->
                 <ColumnDefinition Width="Auto"/>
@@ -440,7 +447,7 @@
             </StackPanel>
 
             <!-- Barra de Direcciones / Omnibox (Estilo Chrome / Brave con logo G y autocompletado inteligente) -->
-            <Border x:Name="BorderOmnibox" Grid.Column="1" Background="{StaticResource SurfaceLighter}" CornerRadius="10" Margin="4,7" BorderBrush="{StaticResource BorderDark}" BorderThickness="1">
+            <Border x:Name="BorderOmnibox" Grid.Column="1" Background="{DynamicResource SurfaceLighter}" CornerRadius="10" Margin="4,7" BorderBrush="{DynamicResource BorderDark}" BorderThickness="1">
                 <Grid Margin="10,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -471,8 +478,8 @@
 
                     <!-- Input URL: Comportamiento exacto de Chrome/Brave con sugerencias en vivo -->
                     <TextBox x:Name="TxtUrl" Grid.Column="1" Background="Transparent" BorderThickness="0" 
-                             Foreground="{StaticResource TextLight}" FontSize="13" VerticalAlignment="Center"
-                             CaretBrush="#FFFFFF" SelectionBrush="{StaticResource AccentColor}"
+                             Foreground="{DynamicResource TextLight}" FontSize="13" VerticalAlignment="Center"
+                             CaretBrush="{DynamicResource CaretColor}" SelectionBrush="{DynamicResource AccentColor}"
                              PreviewKeyDown="TxtUrl_PreviewKeyDown"
                              KeyDown="TxtUrl_KeyDown"
                              TextChanged="TxtUrl_TextChanged"
@@ -1064,10 +1071,10 @@
                 <!-- Botón Lex TV (Reproductor bajo demanda: IPTV y VOD) -->
                 <Button x:Name="BtnLiveTv" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
                         ToolTip="Lex TV: Reproductor bajo demanda (IPTV y VOD, 0% consumo al cerrar)" Click="BtnLiveTv_Click">
-                    <Border Background="#252536" CornerRadius="8" Padding="10,4,16,4">
+                    <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="10,4,16,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center" Margin="0,0,4,0"/>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -1075,10 +1082,10 @@
                 <!-- Botón Página Flotante (Controlable desde configuración) -->
                 <Button x:Name="BtnTogglePip" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0" 
                         ToolTip="Página Flotante: ver la página web completa en una mini ventana flotante" Click="BtnTogglePip_Click">
-                    <Border Background="#252536" CornerRadius="8" Padding="8,4">
+                    <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="🗖" FontSize="12" Foreground="{StaticResource AccentHover}" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtPipBtnLabel" Text="Página Flotante" Margin="5,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
+                            <TextBlock Text="🗖" FontSize="12" Foreground="{DynamicResource AccentHover}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtPipBtnLabel" Text="Página Flotante" Margin="5,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -1086,10 +1093,10 @@
                 <!-- Botón Amplificador de Volumen (Hasta 300% estilo Volume Master) -->
                 <Button x:Name="BtnVolumeBooster" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
                         ToolTip="Amplificador de Volumen: ajusta el volumen de esta pestaña hasta 300%" Click="BtnVolumeBooster_Click">
-                    <Border x:Name="BorderVolumeBooster" Background="#252536" CornerRadius="8" Padding="8,4">
+                    <Border x:Name="BorderVolumeBooster" Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtVolumeBoosterIcon" Text="🔊" FontSize="11" Margin="0,0,4,0" Foreground="#38BDF8"/>
-                            <TextBlock x:Name="TxtVolumeBoosterLabel" Text="100%" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextLight}"/>
+                            <TextBlock x:Name="TxtVolumeBoosterLabel" Text="100%" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource TextLight}"/>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -1143,11 +1150,11 @@
                 <Button x:Name="BtnMediaSniffer" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
                         ToolTip="Detector Multimedia Bajo Demanda: detecta y descarga videos, audios, imágenes y documentos de la página"
                         Click="BtnMediaSniffer_Click">
-                    <Border x:Name="BorderMediaSniffer" Background="#252536" CornerRadius="8" Padding="8,4">
+                    <Border x:Name="BorderMediaSniffer" Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse x:Name="DotMediaSnifferStatus" Width="6" Height="6" Fill="#8B8B96" Margin="0,0,5,0" VerticalAlignment="Center"/>
                             <TextBlock Text="📥" FontSize="11" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtMediaSnifferLabel" Text="Multimedia" Margin="4,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextLight}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtMediaSnifferLabel" Text="Multimedia" Margin="4,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -1533,7 +1540,7 @@
         </Grid>
 
         <!-- Fila 2: Barra de Accesos Directos Pro (Bookmarks Bar) -->
-        <Grid x:Name="RowBookmarksGrid" Grid.Row="2" Background="#121217" Height="34">
+        <Grid x:Name="RowBookmarksGrid" Grid.Row="2" Background="{DynamicResource BookmarksBarBg}" Height="34">
             <Grid.ContextMenu>
                 <ContextMenu Style="{StaticResource TabContextMenu}">
                     <MenuItem Header="Ocultar barra de accesos directos" Click="BtnHideBookmarksBar_Click" Style="{StaticResource TabMenuItem}" InputGestureText="Ctrl+Shift+B"/>
@@ -1552,11 +1559,11 @@
 
             <!-- Botón Pestaña Actual: Color de borde brillante si está anclada, borde tenue si no -->
             <Border x:Name="BorderCurrentTabBookmark" Grid.Column="0" Margin="10,3,4,3" CornerRadius="7" 
-                    Background="#1A1A24" BorderBrush="#2E2E3A" BorderThickness="1.5" Cursor="Hand"
+                    Background="{DynamicResource BookmarkItemBg}" BorderBrush="{DynamicResource BorderDark}" BorderThickness="1.5" Cursor="Hand"
                     MouseLeftButtonDown="CurrentTabBookmark_Click" ToolTip="Anclar / Desanclar la página actual">
                 <StackPanel Orientation="Horizontal" Margin="8,0" VerticalAlignment="Center">
                     <TextBlock x:Name="TxtCurrentTabBookmarkIcon" Text="＋" Foreground="#A1A1AA" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="TxtCurrentTabBookmarkTitle" Text="Anclar pestaña actual" Foreground="#E4E4E7" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock x:Name="TxtCurrentTabBookmarkTitle" Text="Anclar pestaña actual" Foreground="{DynamicResource TextLight}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
             </Border>
 
@@ -1573,7 +1580,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border x:Name="BkBorder" Margin="3,3" CornerRadius="6" Background="#181820" BorderBrush="#272736" BorderThickness="1" Padding="7,2,5,2" Cursor="Hand"
+                            <Border x:Name="BkBorder" Margin="3,3" CornerRadius="6" Background="{DynamicResource BookmarkItemBg}" BorderBrush="{DynamicResource BorderDark}" BorderThickness="1" Padding="7,2,5,2" Cursor="Hand"
                                     MouseLeftButtonDown="BookmarkItem_Click">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Image Source="{Binding FaviconImage}" Width="14" Height="14" Margin="0,0,5,0" 
@@ -1582,7 +1589,7 @@
                                     <TextBlock Text="{Binding DisplayIcon}" FontSize="11" Margin="0,0,5,0" 
                                                VerticalAlignment="Center"
                                                Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
-                                    <TextBlock Text="{Binding Title}" Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center" MaxWidth="110" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextLight}" FontSize="11" VerticalAlignment="Center" MaxWidth="110" TextTrimming="CharacterEllipsis"/>
                                     <!-- Botón '✕' protegido (Área de clic ampliada a 22x22 de forma invisible, icono visual de 16x16) -->
                                     <Button Width="22" Height="22" Margin="3,0,0,0" Padding="0"
                                             Background="Transparent" BorderThickness="0" FontSize="11"

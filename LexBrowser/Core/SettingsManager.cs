@@ -8,6 +8,7 @@ namespace LexBrowser.Core;
 public class BrowserSettings
 {
     public int SettingsSchemaVersion { get; set; } = 1;
+    public string Theme { get; set; } = "Dark"; // "Dark", "Light", "Classic"
     public bool ShowFloatingPageButton { get; set; } = true;
     public bool EnableAutoVideoPip { get; set; } = true;
     public bool ShowBookmarksBar { get; set; } = true;

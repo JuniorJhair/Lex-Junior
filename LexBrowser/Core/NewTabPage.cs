@@ -99,13 +99,17 @@ public static class NewTabPage
 
     public static string GetHtml(bool incognito = false, bool isGuest = false)
     {
-        string bg = isGuest ? "#070D18" : (incognito ? "#0A0010" : "#0F0F12");
-        string glow = isGuest ? "rgba(56,189,248,0.12)" : (incognito ? "rgba(139,92,246,0.12)" : "rgba(99,102,241,0.09)");
+        string theme = BrowserThemeManager.NormalizeTheme(SettingsManager.Current?.Theme);
+        bool isLight = theme == BrowserThemeManager.Light && !incognito && !isGuest;
+        bool isClassic = theme == BrowserThemeManager.Classic && !incognito && !isGuest;
+
+        string bg = isGuest ? "#070D18" : (incognito ? "#0A0010" : (isLight ? "#F8FAFC" : (isClassic ? "#000000" : "#0F0F12")));
+        string glow = isGuest ? "rgba(56,189,248,0.12)" : (incognito ? "rgba(139,92,246,0.12)" : (isClassic ? "rgba(255,107,0,0.10)" : (isLight ? "rgba(37,99,235,0.06)" : "rgba(99,102,241,0.09)")));
         string badgeDisplay = (incognito || isGuest) ? "flex" : "none";
-        string accent = isGuest ? "#38BDF8" : (incognito ? "#8B5CF6" : "#6366F1");
-        string accentBtn = isGuest ? "#0284C7" : (incognito ? "#7C3AED" : "#6366F1");
-        string focusGlow = isGuest ? "rgba(56,189,248,0.18)" : (incognito ? "rgba(139,92,246,0.14)" : "rgba(99,102,241,0.14)");
-        string hoverBorder = isGuest ? "rgba(56,189,248,0.45)" : (incognito ? "rgba(139,92,246,0.4)" : "rgba(99,102,241,0.35)");
+        string accent = isGuest ? "#38BDF8" : (incognito ? "#8B5CF6" : (isClassic ? "#FF6B00" : (isLight ? "#2563EB" : "#6366F1")));
+        string accentBtn = isGuest ? "#0284C7" : (incognito ? "#7C3AED" : (isClassic ? "#E05E00" : (isLight ? "#2563EB" : "#6366F1")));
+        string focusGlow = isGuest ? "rgba(56,189,248,0.18)" : (incognito ? "rgba(139,92,246,0.14)" : (isClassic ? "rgba(255,107,0,0.20)" : (isLight ? "rgba(37,99,235,0.18)" : "rgba(99,102,241,0.14)")));
+        string hoverBorder = isGuest ? "rgba(56,189,248,0.45)" : (incognito ? "rgba(139,92,246,0.4)" : (isClassic ? "rgba(255,107,0,0.5)" : (isLight ? "rgba(37,99,235,0.4)" : "rgba(99,102,241,0.35)")));
 
         string badgeText = isGuest
             ? "👤 Modo Invitado — Sesión limpia y aislada"
@@ -118,14 +122,33 @@ public static class NewTabPage
             ? "linear-gradient(135deg, #38BDF8 0%, #60A5FA 100%)"
             : (incognito
                 ? "linear-gradient(135deg, #A855F7 0%, #C084FC 100%)"
-                : "linear-gradient(135deg, #60A5FA 0%, #A855F7 100%)");
+                : (isClassic
+                    ? "linear-gradient(135deg, #FF6B00 0%, #FFA500 100%)"
+                    : (isLight
+                        ? "linear-gradient(135deg, #2563EB 0%, #4F46E5 100%)"
+                        : "linear-gradient(135deg, #60A5FA 0%, #A855F7 100%)")));
+
+        string bodyText = isLight ? "#0F172A" : "#E4E4E7";
+        string clockColor = isLight ? "#0F172A" : "#F4F4F5";
+        string dateColor = isLight ? "#64748B" : "#52525B";
+        string searchBarBg = isLight ? "#FFFFFF" : (isClassic ? "#111111" : "#18181D");
+        string searchBarBorder = isLight ? "#CBD5E1" : (isClassic ? "#262626" : "#272730");
+        string searchBarShadow = isLight ? "0 4px 20px rgba(15,23,42,0.06)" : "none";
+        string searchTextColor = isLight ? "#0F172A" : "#F4F4F5";
+        string placeholderColor = isLight ? "#94A3B8" : "#52525B";
+        string quickLinkBg = isLight ? "#FFFFFF" : (isClassic ? "#0F0F0F" : "#18181D");
+        string quickLinkBorder = isLight ? "#E2E8F0" : (isClassic ? "#222222" : "#1E1E28");
+        string quickLinkText = isLight ? "#334155" : "#71717A";
+        string quickLinkHoverBg = isLight ? "#F1F5F9" : (isClassic ? "#1A1A1A" : "#22222E");
+        string quickLinkHoverText = isLight ? "#0F172A" : "#D4D4D8";
+        string footerColor = isLight ? "#64748B" : "#3F3F46";
 
         string logoBase64 = GetLogoBase64();
         string logoHtml = !string.IsNullOrEmpty(logoBase64)
             ? @"<img src=""data:image/png;base64," + logoBase64 + @""" class=""logo-img"" alt=""Lex Junior Logo""/>"
             : @"<div class=""logo-fallback"">LJ</div>";
 
-        string engineName = SettingsManager.Current.DefaultSearchEngine switch
+        string engineName = (SettingsManager.Current?.DefaultSearchEngine ?? "Google") switch
         {
             "DuckDuckGo" => "DuckDuckGo",
             "Brave" => "Brave Search",
@@ -146,7 +169,7 @@ public static class NewTabPage
 
     body {
       background: " + bg + @";
-      color: #E4E4E7;
+      color: " + bodyText + @";
       font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
       min-height: 100vh;
       display: flex;
@@ -211,13 +234,13 @@ public static class NewTabPage
 
     .clock {
       font-size: clamp(44px, 8.5vh, 68px); font-weight: 200;
-      letter-spacing: -2px; color: #F4F4F5;
+      letter-spacing: -2px; color: " + clockColor + @";
       margin-bottom: 4px; line-height: 1;
       font-variant-numeric: tabular-nums;
     }
 
     .date {
-      font-size: 13px; color: #52525B;
+      font-size: 13px; color: " + dateColor + @";
       margin-bottom: clamp(14px, 3.2vh, 34px); letter-spacing: 0.5px;
       text-transform: capitalize; font-weight: 400;
     }
@@ -226,8 +249,9 @@ public static class NewTabPage
 
     .search-bar {
       display: flex; align-items: center; gap: 6px;
-      background: #18181D;
-      border: 1.5px solid #272730;
+      background: " + searchBarBg + @";
+      border: 1.5px solid " + searchBarBorder + @";
+      box-shadow: " + searchBarShadow + @";
       border-radius: 32px; padding: 7px 14px;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
@@ -309,12 +333,12 @@ public static class NewTabPage
 
     .search-bar input {
       flex: 1; min-width: 0; background: transparent; border: none; outline: none;
-      color: #F4F4F5; font-size: 15px;
+      color: " + searchTextColor + @"; font-size: 15px;
       caret-color: " + accent + @";
       padding: 4px 6px;
     }
 
-    .search-bar input::placeholder { color: #52525B; }
+    .search-bar input::placeholder { color: " + placeholderColor + @"; }
 
     .search-btn {
       background: " + accentBtn + @";
@@ -333,18 +357,18 @@ public static class NewTabPage
     .quick-link {
       display: flex; flex-direction: column; align-items: center; gap: 8px;
       padding: 13px 12px 10px;
-      background: #18181D;
-      border: 1px solid #1E1E28;
+      background: " + quickLinkBg + @";
+      border: 1px solid " + quickLinkBorder + @";
       border-radius: 14px; cursor: pointer;
       width: 82px; text-decoration: none;
-      color: #71717A; font-size: 11px;
+      color: " + quickLinkText + @"; font-size: 11px;
       transition: all 0.18s ease;
     }
 
     .quick-link:hover {
-      background: #22222E;
+      background: " + quickLinkHoverBg + @";
       border-color: " + hoverBorder + @";
-      color: #D4D4D8;
+      color: " + quickLinkHoverText + @";
       transform: translateY(-3px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     }

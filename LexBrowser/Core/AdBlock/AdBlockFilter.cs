@@ -298,25 +298,11 @@ public static class AdBlockFilter
         string path = uri.AbsolutePath;
         string fullUrl = uri.AbsoluteUri;
 
-        // Regla especial de YouTube: proteger el registro del historial del usuario (watchtime, playback, ptracking)
-        // YouTube requiere s.youtube.com/api/stats/watchtime, playback, etc., para guardar el historial y sincronizar el progreso.
-        if (PublicSuffix.HostMatchesDomain(host, "youtube.com") ||
-            PublicSuffix.HostMatchesDomain(host, "youtu.be") ||
-            PublicSuffix.HostMatchesDomain(host, "youtube-nocookie.com") ||
-            PublicSuffix.HostMatchesDomain(host, "googlevideo.com"))
+        // Reglas declarativas de YouTube (basadas en las listas de Brave):
+        // bloquea solo endpoints publicitarios explícitos y permite el resto del tráfico de YouTube/googlevideo.
+        if (MediaShieldRules.IsServiceOrStreamHost(host))
         {
-            // Solo bloquear anuncios explícitos conocidos dentro de YouTube
-            if (path.StartsWith("/api/stats/ads", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/youtubei/v1/player/ad_break", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/get_midroll_info", StringComparison.OrdinalIgnoreCase) ||
-                path.StartsWith("/pagead", StringComparison.OrdinalIgnoreCase) ||
-                fullUrl.Contains("googleads.g.doubleclick.net", StringComparison.OrdinalIgnoreCase) ||
-                fullUrl.Contains("&adformat=", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-            // Permitir todo lo demás de YouTube (watchtime, playback, log_event, player, streams de video)
-            return false;
+            return MediaShieldRules.IsAdRequest(uri, originHost, resourceContext);
         }
 
         // Regla especial de Dailymotion: permitir reproductor, API y streams CDN; bloquear solo servidor de banners dedicado

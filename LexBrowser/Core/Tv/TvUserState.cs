@@ -374,6 +374,26 @@ public sealed class TvUserStateStore
         }
     }
 
+    public int ClearInternalXtreamDeadStreams()
+    {
+        lock (_lock)
+        {
+            var prefs = EnsurePrefsLoaded();
+            if (prefs.DeadStreams.Count == 0) return 0;
+
+            var keysToRemove = prefs.DeadStreams.Keys
+                .Where(k => k.Contains("tv.lex.local/api/xtream/", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (keysToRemove.Count == 0) return 0;
+
+            foreach (var k in keysToRemove)
+                prefs.DeadStreams.Remove(k);
+            _prefsDirty = false;
+            SaveJsonAtomic(_prefsPath, prefs);
+            return keysToRemove.Count;
+        }
+    }
+
     public void Flush()
     {
         lock (_lock)
@@ -593,6 +613,12 @@ public sealed class TvUserStateStore
         {
             var m = kv.Value;
             if (m == null) { expired.Add(kv.Key); continue; }
+            if (string.Equals(m.Kind, "restricted", StringComparison.OrdinalIgnoreCase) &&
+                kv.Key.Contains("tv.lex.local/api/xtream/", StringComparison.OrdinalIgnoreCase))
+            {
+                expired.Add(kv.Key);
+                continue;
+            }
             DateTime exp = m.ExpiresUtc != default
                 ? m.ExpiresUtc
                 : (m.FailedUtc != default ? m.FailedUtc + TimeSpan.FromHours(72) : DateTime.MinValue);

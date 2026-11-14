@@ -190,6 +190,9 @@ public class BrowserTab : INotifyPropertyChanged
     /// <summary>Indica si ya se notificó al script de Dailymotion que inició el flujo de video principal en la navegación actual.</summary>
     public bool DailymotionRealVideoSignaled { get; set; }
 
+    /// <summary>Indica si ya se mostró el aviso de posible error en YouTube durante la navegación actual (máximo 1 vez por navegación).</summary>
+    public bool HasShownYouTubeIssueNotice { get; set; }
+
     /// <summary>Seguimiento de recargas manuales consecutivas para ofrecer Modo Compatible si una página falla.</summary>
     public string? LastReloadHost { get; set; }
     public List<DateTime> RecentReloadTimesUtc { get; } = new();

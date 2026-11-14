@@ -24,8 +24,15 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     items: [],
     progressMap: new Map(),
     filtered: [],
+    displayEntries: [],
+    renderedCount: 0,
+    batchSize: 60,
+    gridObserver: null,
+    lastProbeError: null,
     activeItem: null,
     activeHls: null,
+    activeMpegts: null,
+    fallbackAttempted: false,
     progressInterval: null,
     selectedSeries: null,
     activeSeason: 1,
@@ -41,9 +48,12 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
   function buildVodPosterUrl(logo, itemUrl) {
     if (!logo) return null;
-    const trimmed = String(logo).trim();
+    let trimmed = String(logo).trim();
     if (!trimmed) return null;
+    const lower = trimmed.toLowerCase();
+    if (lower === 'null' || lower === 'none' || lower === 'n/a') return null;
     if (trimmed.startsWith('/api/image')) return trimmed;
+    if (trimmed.startsWith('//')) trimmed = `https:${trimmed}`;
 
     let connParam = '';
     if (itemUrl && itemUrl.includes('conn=')) {
@@ -55,6 +65,13 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     }
 
     return `/api/image?u=${encodeURIComponent(trimmed)}${connParam}`;
+  }
+
+  function createPosterFallbackSpan(icon) {
+    const span = document.createElement('span');
+    span.className = 'vod-poster-fallback';
+    span.textContent = icon || '🎬';
+    return span;
   }
 
   function showPlayerStatus(title, desc, icon = '⚠️', showRetry = true) {
@@ -162,12 +179,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         img.src = safePoster;
         img.alt = item.title;
         img.onerror = () => {
-          img.remove();
-          thumb.textContent = item.isSeries ? '📺' : '🎬';
+          img.replaceWith(createPosterFallbackSpan(item.isSeries ? '📺' : '🎬'));
         };
         thumb.appendChild(img);
       } else {
-        thumb.textContent = item.isSeries ? '📺' : '🎬';
+        thumb.appendChild(createPosterFallbackSpan(item.isSeries ? '📺' : '🎬'));
       }
 
       const pBar = document.createElement('div');
@@ -250,30 +266,107 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     renderLibraryGrid();
   }
 
+  function disconnectGridObserver() {
+    if (state.gridObserver) {
+      try { state.gridObserver.disconnect(); } catch { }
+      state.gridObserver = null;
+    }
+    const oldSentinel = document.getElementById('vodGridSentinel');
+    if (oldSentinel) oldSentinel.remove();
+  }
+
+  function appendNextGridBatch() {
+    disconnectGridObserver();
+    const entries = state.displayEntries || [];
+    if (state.renderedCount >= entries.length) return;
+
+    const end = Math.min(entries.length, state.renderedCount + state.batchSize);
+    const frag = document.createDocumentFragment();
+    for (let i = state.renderedCount; i < end; i++) {
+      const entry = entries[i];
+      if (entry.type === 'series') {
+        frag.appendChild(createSeriesCard(entry.title, entry.episodes, entry.logo, entry.group));
+      } else {
+        frag.appendChild(createMovieCard(entry.item));
+      }
+    }
+    els.vodGrid.appendChild(frag);
+    state.renderedCount = end;
+
+    if (state.renderedCount < entries.length) {
+      const sentinel = document.createElement('div');
+      sentinel.id = 'vodGridSentinel';
+      sentinel.className = 'vod-grid-sentinel';
+      sentinel.textContent = `Mostrando ${state.renderedCount.toLocaleString('es')} de ${entries.length.toLocaleString('es')} · Haz scroll o clic aquí para cargar más`;
+      sentinel.style.gridColumn = '1 / -1';
+      sentinel.style.textAlign = 'center';
+      sentinel.style.padding = '16px';
+      sentinel.style.cursor = 'pointer';
+      sentinel.style.opacity = '0.8';
+      sentinel.addEventListener('click', () => appendNextGridBatch());
+      els.vodGrid.appendChild(sentinel);
+
+      if (typeof IntersectionObserver !== 'undefined') {
+        state.gridObserver = new IntersectionObserver((obsEntries) => {
+          if (obsEntries.some((e) => e.isIntersecting)) {
+            appendNextGridBatch();
+          }
+        }, { rootMargin: '450px 0px' });
+        state.gridObserver.observe(sentinel);
+      }
+    }
+  }
+
   function renderLibraryGrid() {
+    disconnectGridObserver();
     els.vodGrid.innerHTML = '';
     const hasItems = state.filtered.length > 0;
     els.emptyNotice.classList.toggle('hidden', state.items.length > 0);
 
-    if (!hasItems) return;
+    if (!hasItems) {
+      state.displayEntries = [];
+      state.renderedCount = 0;
+      return;
+    }
 
-    // Agrupar series para mostrar una tarjeta por serie
+    // Indexar episodios por serie en O(N) para evitar O(N^2) en catálogos de 14k+ títulos
+    const seriesMap = new Map();
+    for (let i = 0; i < state.items.length; i++) {
+      const it = state.items[i];
+      if (it.isSeries && it.seriesTitle) {
+        const key = it.seriesTitle.toLowerCase();
+        let arr = seriesMap.get(key);
+        if (!arr) {
+          arr = [];
+          seriesMap.set(key, arr);
+        }
+        arr.push(it);
+      }
+    }
+
     const renderedSeries = new Set();
-
-    state.filtered.forEach((item) => {
+    const displayEntries = [];
+    for (let i = 0; i < state.filtered.length; i++) {
+      const item = state.filtered[i];
       if (item.isSeries && item.seriesTitle) {
         const sKey = item.seriesTitle.toLowerCase();
-        if (renderedSeries.has(sKey)) return;
+        if (renderedSeries.has(sKey)) continue;
         renderedSeries.add(sKey);
-
-        const seriesEpisodes = state.items.filter((i) => i.isSeries && (i.seriesTitle || '').toLowerCase() === sKey);
-        const card = createSeriesCard(item.seriesTitle, seriesEpisodes, item.logo, item.group);
-        els.vodGrid.appendChild(card);
+        displayEntries.push({
+          type: 'series',
+          title: item.seriesTitle,
+          episodes: seriesMap.get(sKey) || [item],
+          logo: item.logo,
+          group: item.group
+        });
       } else {
-        const card = createMovieCard(item);
-        els.vodGrid.appendChild(card);
+        displayEntries.push({ type: 'movie', item });
       }
-    });
+    }
+
+    state.displayEntries = displayEntries;
+    state.renderedCount = 0;
+    appendNextGridBatch();
   }
 
   function createMovieCard(item) {
@@ -286,15 +379,15 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (safePoster) {
       const img = document.createElement('img');
       img.loading = 'lazy';
+      img.decoding = 'async';
       img.src = safePoster;
       img.alt = item.title;
       img.onerror = () => {
-        img.remove();
-        poster.textContent = '🎬';
+        img.replaceWith(createPosterFallbackSpan('🎬'));
       };
       poster.appendChild(img);
     } else {
-      poster.textContent = '🎬';
+      poster.appendChild(createPosterFallbackSpan('🎬'));
     }
 
     const badge = document.createElement('div');
@@ -334,15 +427,15 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (safePoster) {
       const img = document.createElement('img');
       img.loading = 'lazy';
+      img.decoding = 'async';
       img.src = safePoster;
       img.alt = seriesTitle;
       img.onerror = () => {
-        img.remove();
-        poster.textContent = '📺';
+        img.replaceWith(createPosterFallbackSpan('📺'));
       };
       poster.appendChild(img);
     } else {
-      poster.textContent = '📺';
+      poster.appendChild(createPosterFallbackSpan('📺'));
     }
 
     const badge = document.createElement('div');
@@ -452,28 +545,70 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     });
   }
 
-  // --- Dedicated Video Player ---
-  async function openPlayer(item) {
-    state.activeItem = item;
-    els.playerTitle.textContent = item.title;
-    els.playerOverlay.classList.remove('hidden');
-    hidePlayerStatus();
+  function detectVodEngine(url) {
+    const raw = String(url || '').toLowerCase();
+    const clean = raw.split('?')[0].split('#')[0];
+    if (clean.endsWith('.m3u8') || clean.endsWith('.m3u') || raw.includes('application/x-mpegurl')) return 'hls';
+    if (clean.endsWith('.ts') || clean.endsWith('.flv')) return 'mpegts';
+    const extMatch = raw.match(/[?&]ext=([a-z0-9]+)/);
+    if (extMatch) {
+      const ext = extMatch[1];
+      if (ext === 'm3u8' || ext === 'm3u') return 'hls';
+      if (ext === 'ts' || ext === 'flv') return 'mpegts';
+    }
+    return 'native';
+  }
 
-    destroyPlayer();
+  function withReplacedExtParam(url, newExt) {
+    try {
+      const u = new URL(url, window.location.origin);
+      u.searchParams.set('ext', newExt);
+      u.searchParams.delete('sid');
+      return u.toString();
+    } catch (_) {
+      return url;
+    }
+  }
 
+  function destroyMediaEngines() {
+    if (state.activeHls) {
+      try { state.activeHls.destroy(); } catch { }
+      state.activeHls = null;
+    }
+    if (state.activeMpegts) {
+      try {
+        state.activeMpegts.unload();
+        state.activeMpegts.detachMediaElement();
+        state.activeMpegts.destroy();
+      } catch { }
+      state.activeMpegts = null;
+    }
+  }
+
+  function startVodWithEngine(baseUrl, engineKind) {
     const video = els.vodVideo;
+    if (!video) return;
+
+    if (state.activeSid) {
+      try {
+        fetch(`/api/proxy/abort?sid=${encodeURIComponent(state.activeSid)}`, { method: 'POST', keepalive: true }).catch(() => { });
+      } catch (_) { }
+    }
+    destroyMediaEngines();
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+
     const sid = `vod_${++state.vodSessionSeq}`;
     state.activeSid = sid;
 
-    let url = item.url;
+    let url = baseUrl;
     if (!url.includes('sid=')) {
       const sep = url.includes('?') ? '&' : '?';
       url = `${url}${sep}sid=${encodeURIComponent(sid)}`;
     }
 
-    const isHls = url.toLowerCase().includes('.m3u8') || url.toLowerCase().includes('application/x-mpegurl');
-
-    if (isHls && window.Hls && window.Hls.isSupported()) {
+    if (engineKind === 'hls' && window.Hls && window.Hls.isSupported()) {
       showPlayerStatus('Conectando...', 'Iniciando reproducción HLS...', '⏳', false);
       const hls = new window.Hls({
         maxBufferLength: 60,
@@ -492,7 +627,45 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
       hls.on(window.Hls.Events.ERROR, (_event, data) => {
         if (data && data.fatal) {
-          showPlayerStatus('Error de transmisión HLS', data.details || 'Error al cargar manifiesto o segmentos.', '⚠️', true);
+          if (!state.fallbackAttempted && state.activeItem) {
+            attemptVodFallback().then(recovered => {
+              if (!recovered) {
+                showHlsFallbackOrError(data);
+              }
+            }).catch(() => {
+              showHlsFallbackOrError(data);
+            });
+          } else {
+            showHlsFallbackOrError(data);
+          }
+        }
+      });
+    } else if (engineKind === 'mpegts' && window.mpegts && window.mpegts.isSupported()) {
+      showPlayerStatus('Conectando...', 'Iniciando reproducción MPEG-TS...', '⏳', false);
+      const player = window.mpegts.createPlayer({
+        type: 'mpegts',
+        isLive: false,
+        url
+      });
+      player.attachMediaElement(video);
+      player.load();
+      state.activeMpegts = player;
+      video.play().catch(() => { });
+
+      player.on(window.mpegts.Events.ERROR, (errType, errDetail) => {
+        if (!state.fallbackAttempted && state.activeItem) {
+          attemptVodFallback().then(recovered => {
+            if (!recovered) {
+              if (state.lastProbeError) {
+                const info = formatVodProbeError(state.lastProbeError.status, state.lastProbeError.errorClass, state.lastProbeError.errorMessage);
+                showPlayerStatus(info.title, info.desc, '⚠️', true);
+              } else {
+                showPlayerStatus('Error de transmisión MPEG-TS', `${errType || ''} ${errDetail || ''}`.trim() || 'No se pudo cargar el flujo MPEG-TS.', '⚠️', true);
+              }
+            }
+          }).catch(() => { });
+        } else {
+          showPlayerStatus('Error de transmisión MPEG-TS', `${errType || ''} ${errDetail || ''}`.trim() || 'No se pudo cargar el flujo MPEG-TS.', '⚠️', true);
         }
       });
     } else {
@@ -500,6 +673,137 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       video.src = url;
       video.play().catch(() => { });
     }
+  }
+
+  function formatVodProbeError(status, errCls, customMsg) {
+    if (errCls === 'credentials') {
+      return {
+        title: 'Credenciales no disponibles',
+        desc: customMsg || 'Credenciales no disponibles para esta conexión (sesión expirada o no guardadas).'
+      };
+    }
+    if (errCls === 'blocked') {
+      return {
+        title: 'Flujo bloqueado por seguridad',
+        desc: customMsg || 'La dirección solicitada no cumple con las políticas de seguridad de red de Lex TV.'
+      };
+    }
+    if (errCls === 'timeout' || status === 504) {
+      return {
+        title: 'Tiempo de espera agotado',
+        desc: customMsg || 'El servidor de video tardó demasiado en responder (HTTP 504).'
+      };
+    }
+    if (status === 401 || status === 403) {
+      return {
+        title: 'Acceso rechazado por el servidor',
+        desc: customMsg || `El proveedor rechazó la conexión (HTTP ${status}). Revisa las credenciales o suscripción.`
+      };
+    }
+    if (status === 404) {
+      return {
+        title: 'Fuente no disponible',
+        desc: customMsg || 'El video o episodio no se encuentra en el servidor (HTTP 404).'
+      };
+    }
+    if (status === 502 || status >= 500) {
+      return {
+        title: 'Error de conexión',
+        desc: customMsg || `No se pudo establecer conexión con el servidor de video remoto (HTTP ${status}).`
+      };
+    }
+    if (errCls) {
+      return {
+        title: 'Error de reproducción',
+        desc: customMsg || `Error (${errCls}).`
+      };
+    }
+    return {
+      title: 'Error de reproducción',
+      desc: customMsg || 'No se pudo reproducir este video.'
+    };
+  }
+
+  function showHlsFallbackOrError(data) {
+    if (state.lastProbeError) {
+      const p = state.lastProbeError;
+      const info = formatVodProbeError(p.status, p.errorClass, p.errorMessage);
+      showPlayerStatus(info.title, info.desc, '⚠️', true);
+      return;
+    }
+    showPlayerStatus('Error de transmisión HLS', (data && data.details) || 'Error al cargar manifiesto o segmentos.', '⚠️', true);
+  }
+
+  async function attemptVodFallback() {
+    if (state.fallbackAttempted || !state.activeItem) return false;
+    state.fallbackAttempted = true;
+
+    const itemUrl = state.activeItem.url;
+    try {
+      const probeResp = await fetch(`/api/probe?u=${encodeURIComponent(itemUrl)}`);
+      if (probeResp.ok) {
+        const probe = await probeResp.json();
+        const status = Number(probe.status || 0);
+        const errCls = String(probe.errorClass || '');
+        if (status >= 400 || errCls) {
+          state.lastProbeError = probe;
+          return false;
+        }
+
+        const kind = String(probe.kind || '').toLowerCase();
+        if (kind === 'hls' && !state.activeHls) {
+          startVodWithEngine(itemUrl, 'hls');
+          return true;
+        }
+        if (kind === 'mpegts' && !state.activeMpegts) {
+          startVodWithEngine(itemUrl, 'mpegts');
+          return true;
+        }
+        if ((kind === 'mp4' || kind === 'webm') && (state.activeHls || state.activeMpegts)) {
+          startVodWithEngine(itemUrl, 'native');
+          return true;
+        }
+      }
+    } catch (_) { }
+
+    return false;
+  }
+
+  // --- Dedicated Video Player ---
+  async function openPlayer(item) {
+    state.activeItem = item;
+    state.fallbackAttempted = false;
+    state.lastProbeError = null;
+    els.playerTitle.textContent = item.title;
+    els.playerOverlay.classList.remove('hidden');
+    hidePlayerStatus();
+
+    destroyPlayer();
+    showPlayerStatus('Conectando...', 'Verificando disponibilidad del video...', '⏳', false);
+
+    let engine = detectVodEngine(item.url);
+    try {
+      const probeResp = await fetch(`/api/probe?u=${encodeURIComponent(item.url)}`);
+      if (!state.activeItem || state.activeItem.url !== item.url) return;
+      if (probeResp.ok) {
+        const probe = await probeResp.json();
+        const status = Number(probe.status || 0);
+        const errCls = String(probe.errorClass || '');
+        if (status >= 400 || errCls) {
+          state.lastProbeError = probe;
+          const info = formatVodProbeError(status, errCls, probe.errorMessage || '');
+          showPlayerStatus(info.title, info.desc, '⚠️', true);
+          return;
+        }
+        const kind = String(probe.kind || '').toLowerCase();
+        if (kind === 'hls') engine = 'hls';
+        else if (kind === 'mpegts') engine = 'mpegts';
+        else if (kind === 'mp4' || kind === 'webm') engine = 'native';
+      }
+    } catch (_) { }
+
+    if (!state.activeItem || state.activeItem.url !== item.url) return;
+    startVodWithEngine(item.url, engine);
 
     // Comprobar si hay progreso guardado
     checkAndPromptResume(item.url);
@@ -521,12 +825,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       state.progressInterval = null;
     }
 
-    if (state.activeHls) {
-      try {
-        state.activeHls.destroy();
-      } catch { }
-      state.activeHls = null;
-    }
+    destroyMediaEngines();
 
     const video = els.vodVideo;
     if (video) {
@@ -683,6 +982,13 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   async function handleVideoError() {
     const video = els.vodVideo;
     const err = video ? video.error : null;
+    if (!video || (!video.getAttribute('src') && !state.activeHls && !state.activeMpegts)) return;
+
+    if (err && (err.code === 3 || err.code === 4) && !state.fallbackAttempted && state.activeItem) {
+      const recovered = await attemptVodFallback();
+      if (recovered) return;
+    }
+
     let title = 'Error de reproducción';
     let desc = 'No se pudo reproducir este video.';
     let icon = '⚠️';
@@ -698,44 +1004,33 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
         title = 'Formato o códec no compatible';
         desc = 'El navegador no puede decodificar este contenedor o pista de audio/video.';
       } else if (err.code === 4) { // MEDIA_ERR_SRC_NOT_SUPPORTED
-        title = 'Fuente no disponible';
-        desc = 'El servidor no pudo entregar el flujo o el formato no es compatible.';
+        if (state.lastProbeError) {
+          const info = formatVodProbeError(state.lastProbeError.status, state.lastProbeError.errorClass, state.lastProbeError.errorMessage);
+          title = info.title;
+          desc = info.desc;
+        } else {
+          title = 'Fuente no disponible';
+          desc = 'El servidor no pudo entregar el flujo o el formato no es compatible.';
 
-        try {
-          const checkUrl = video.src;
-          if (checkUrl) {
-            const resp = await fetch(checkUrl, { method: 'GET', headers: { 'Range': 'bytes=0-1' } });
-            const errCls = resp.headers.get('X-Lex-Error-Class') || '';
-            let customMsg = '';
-            try {
-              const errJson = await resp.json();
-              if (errJson && (errJson.msg || errJson.error)) customMsg = errJson.msg || errJson.error;
-            } catch (_) { }
+          try {
+            const checkUrl = video.src;
+            if (checkUrl) {
+              const resp = await fetch(checkUrl, { method: 'GET', headers: { 'Range': 'bytes=0-1' } });
+              const errCls = resp.headers.get('X-Lex-Error-Class') || '';
+              let customMsg = '';
+              try {
+                const errJson = await resp.json();
+                if (errJson && (errJson.msg || errJson.error)) customMsg = errJson.msg || errJson.error;
+              } catch (_) { }
 
-            if (errCls === 'credentials') {
-              title = 'Credenciales no disponibles';
-              desc = customMsg || 'Credenciales no disponibles para esta conexión (sesión expirada o no guardadas).';
-            } else if (errCls === 'blocked') {
-              title = 'Flujo bloqueado por seguridad';
-              desc = customMsg || 'La dirección solicitada no cumple con las políticas de seguridad de red de Lex TV.';
-            } else if (errCls) {
-              title = 'Error de reproducción';
-              desc = customMsg || `Error (${errCls}).`;
-            } else if (resp.status === 401 || resp.status === 403) {
-              title = 'Acceso rechazado por el servidor';
-              desc = `El proveedor rechazó la conexión (HTTP ${resp.status}). Revisa las credenciales o suscripción.`;
-            } else if (resp.status === 404) {
-              title = 'Fuente no disponible';
-              desc = customMsg || 'El video o episodio no se encuentra en el servidor (HTTP 404).';
-            } else if (resp.status === 504) {
-              title = 'Tiempo de espera agotado';
-              desc = 'El servidor de video tardó demasiado en responder (HTTP 504).';
-            } else if (resp.status === 502) {
-              title = 'Error de conexión';
-              desc = customMsg || 'No se pudo establecer conexión con el servidor de video remoto.';
+              if (errCls || resp.status >= 400) {
+                const info = formatVodProbeError(resp.status, errCls, customMsg);
+                title = info.title;
+                desc = info.desc;
+              }
             }
-          }
-        } catch (_) { }
+          } catch (_) { }
+        }
       }
     }
     showPlayerStatus(title, desc, icon, true);

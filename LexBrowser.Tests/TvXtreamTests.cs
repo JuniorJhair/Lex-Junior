@@ -587,7 +587,7 @@ public sealed class TvXtreamTests
 
     // 21. Normalización de URL sin esquema http/https
     [Theory]
-    [InlineData("tv.m3uts.xyz", "http://tv.m3uts.xyz/")]
+    [InlineData("xtream.ejemplo.invalid", "http://xtream.ejemplo.invalid/")]
     [InlineData("servidor.ejemplo.invalid:8080", "http://servidor.ejemplo.invalid:8080/")]
     [InlineData("https://seguro.ejemplo.invalid", "https://seguro.ejemplo.invalid/")]
     public void ValidateServerUrl_AutoAddsHttpSchemeIfMissing(string input, string expected)
@@ -674,8 +674,8 @@ public sealed class TvXtreamTests
     [Theory]
     [InlineData("http://servidor.com/images/poster.jpg", "http://base.com", "http://servidor.com/images/poster.jpg")]
     [InlineData("https://tmdb.org/t/p/w500/abc.jpg", "http://base.com", "https://tmdb.org/t/p/w500/abc.jpg")]
-    [InlineData("/images/poster.jpg", "http://tv.m3uts.xyz:80", "http://tv.m3uts.xyz:80/images/poster.jpg")]
-    [InlineData("images/poster.jpg", "http://tv.m3uts.xyz", "http://tv.m3uts.xyz/images/poster.jpg")]
+    [InlineData("/images/poster.jpg", "http://xtream.ejemplo.invalid:80", "http://xtream.ejemplo.invalid:80/images/poster.jpg")]
+    [InlineData("images/poster.jpg", "http://xtream.ejemplo.invalid", "http://xtream.ejemplo.invalid/images/poster.jpg")]
     [InlineData("poster.png", "https://servidor.com:8080/", "https://servidor.com:8080/poster.png")]
     public void NormalizePosterUrl_ResolvesCorrectly(string raw, string serverBase, string expected)
     {
@@ -695,10 +695,10 @@ public sealed class TvXtreamTests
         }]";
 
         var categories = new Dictionary<string, string>();
-        var items = TvXtreamService.ParseVodStreams(json, categories, "conn1", "http://tv.m3uts.xyz:80");
+        var items = TvXtreamService.ParseVodStreams(json, categories, "conn1", "http://xtream.ejemplo.invalid:80");
 
         Assert.Single(items);
-        Assert.Equal("http://tv.m3uts.xyz:80/images/godzilla.jpg", items[0].Logo);
+        Assert.Equal("http://xtream.ejemplo.invalid:80/images/godzilla.jpg", items[0].Logo);
         Assert.StartsWith("https://tv.lex.local/api/xtream/vod", items[0].Url);
     }
 
@@ -750,5 +750,420 @@ public sealed class TvXtreamTests
         Assert.DoesNotContain("clave", vod[0].Url);
         Assert.StartsWith("https://tv.lex.local/api/xtream/live", live[0].Url);
         Assert.StartsWith("https://tv.lex.local/api/xtream/vod", vod[0].Url);
+    }
+
+    // 31. Normalización de pósteres con esquema relativo (//), barras escapadas, nulos y base sin esquema
+    [Theory]
+    [InlineData("//cdn.ejemplo.invalid/posters/p1.jpg", "https://panel.ejemplo.invalid", "https://cdn.ejemplo.invalid/posters/p1.jpg")]
+    [InlineData("/img/cover.png", "panel.ejemplo.invalid:8080", "http://panel.ejemplo.invalid:8080/img/cover.png")]
+    [InlineData(@"http:\/\/cdn.ejemplo.invalid\/a\/b.jpg", "panel.ejemplo.invalid", "http://cdn.ejemplo.invalid/a/b.jpg")]
+    [InlineData("null", "https://panel.ejemplo.invalid", null)]
+    [InlineData("N/A", "https://panel.ejemplo.invalid", null)]
+    public void NormalizePosterUrl_HandlesExtendedVariants(string raw, string serverBase, string? expected)
+    {
+        Assert.Equal(expected, TvXtreamService.NormalizePosterUrl(raw, serverBase));
+    }
+
+    // 32. ParseVodStreams y ParseSeriesInfoEpisodes soportan campos alternos de portada, extensión vacía y episodes como array
+    [Fact]
+    public void ParseVodAndSeries_SupportAlternatePosterFieldsEmptyExtAndArrayEpisodes()
+    {
+        string vodJson = @"[{
+            ""stream_id"": 77,
+            ""name"": ""Cine Ejemplo"",
+            ""container_extension"": """",
+            ""movie_image"": ""/posters/cine77.jpg""
+        }]";
+
+        var vods = TvXtreamService.ParseVodStreams(vodJson, new(), "c_vod", "panel.ejemplo.invalid");
+        Assert.Single(vods);
+        Assert.Equal("http://panel.ejemplo.invalid/posters/cine77.jpg", vods[0].Logo);
+        Assert.EndsWith("&ext=mp4", vods[0].Url);
+
+        string seriesJson = @"{
+            ""episodes"": [
+                {
+                    ""id"": ""901"",
+                    ""title"": ""Piloto"",
+                    ""season"": ""2"",
+                    ""episode_num"": ""1"",
+                    ""container_extension"": """",
+                    ""info"": { ""cover_big"": ""//img.ejemplo.invalid/ep1.jpg"" }
+                }
+            ]
+        }";
+
+        var series = new TvXtreamSeriesItem { SeriesId = "s1", Name = "Serie Demo", Cover = null };
+        var eps = TvXtreamService.ParseSeriesInfoEpisodes(seriesJson, series, "c_vod", "panel.ejemplo.invalid");
+        Assert.Single(eps);
+        Assert.Equal(2, eps[0].SeasonNumber);
+        Assert.Equal(1, eps[0].EpisodeNumber);
+        Assert.Equal("https://img.ejemplo.invalid/ep1.jpg", eps[0].Logo);
+        Assert.EndsWith("&ext=mp4", eps[0].Url);
+    }
+
+    // 33. ResolveUpstreamStreamUrl normaliza conexiones heredadas cuyo ServerUrl carecía de http://
+    [Fact]
+    public void ResolveUpstreamStreamUrl_NormalizesSchemelessServerUrl()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "LexTv_Resolve_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var store = new TvXtreamStore(tempDir);
+            store.AddOrUpdateConnection(new TvXtreamConnection
+            {
+                Id = "xc_no_scheme",
+                Name = "Demo",
+                ServerUrl = "stream.ejemplo.invalid:8080",
+                SaveCredentials = true
+            }, "user_demo", "pass_demo");
+
+            var resolved = TvXtreamService.ResolveUpstreamStreamUrl(store, "xc_no_scheme", "live", "101", null);
+            Assert.True(resolved.Success);
+            Assert.Equal("http://stream.ejemplo.invalid:8080/live/user_demo/pass_demo/101.ts", resolved.UpstreamUrl);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    // 34. Detección de tipo MIME de imagen por magic bytes y rechazo de HTML disfrazado
+    [Fact]
+    public void SniffImageContentType_DetectsMagicBytesAndRejectsHtml()
+    {
+        byte[] jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        byte[] png = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00];
+        byte[] webp = Encoding.ASCII.GetBytes("RIFF1234WEBP");
+        byte[] html = Encoding.UTF8.GetBytes("  <!DOCTYPE html><html><body>403</body></html>");
+
+        Assert.Equal("image/jpeg", TvStreamProxy.SniffImageContentType(jpeg, "application/octet-stream"));
+        Assert.Equal("image/png", TvStreamProxy.SniffImageContentType(png, "application/octet-stream"));
+        Assert.Equal("image/webp", TvStreamProxy.SniffImageContentType(webp, null));
+        Assert.Null(TvStreamProxy.SniffImageContentType(html, "image/jpeg"));
+    }
+
+    // 35. FetchImageAsync acepta octet-stream JPEG tras rotación a Magma Player/10
+    [Fact]
+    public async Task FetchImageAsync_OctetStreamJpeg_RetriesWithMagmaUaAndSucceeds()
+    {
+        TvPlaybackHints.Clear();
+        var triedUas = new List<string>();
+        byte[] jpegBytes = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46];
+
+        using var handler = new MockHttpHandler(req =>
+        {
+            string ua = req.Headers.UserAgent?.ToString() ?? "";
+            triedUas.Add(ua);
+            if (!string.Equals(ua, TvUrlGuard.MagmaPlayerUserAgent, StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.Forbidden);
+            }
+
+            var resp = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(jpegBytes)
+            };
+            resp.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            return resp;
+        });
+
+        using var client = new HttpClient(handler);
+        try
+        {
+            using var res = await TvStreamProxy.FetchImageAsync(
+                "https://cdn.ejemplo.invalid/posters/cover.bin",
+                "conn_img_magma",
+                client,
+                CancellationToken.None);
+
+            Assert.Equal(200, res.StatusCode);
+            Assert.Equal("image/jpeg", res.ContentType);
+            Assert.Contains(TvUrlGuard.MagmaPlayerUserAgent, triedUas);
+            Assert.Equal(TvUrlGuard.MagmaPlayerUserAgent, TvPlaybackHints.GetUserAgent("conn_img_magma", "cdn.ejemplo.invalid"));
+        }
+        finally
+        {
+            TvPlaybackHints.Clear();
+        }
+    }
+
+    // 36. URLs internas relativas se aceptan y rutas desconocidas en tv.lex.local no devuelven blocked
+    [Fact]
+    public async Task InternalTvUrls_AcceptRelative_AndUnknownInternalDoesNotReportBlocked()
+    {
+        Assert.True(TvUrlGuard.IsInternalTvStreamUrl("/api/xtream/live?conn=c1&id=1", out var relUri));
+        Assert.NotNull(relUri);
+        Assert.True(TvUrlGuard.IsInternalTvHostUrl("http://tv.lex.local/api/xtream/vod?conn=c1&id=2&ext=mp4"));
+
+        var probe = await TvStreamProxy.ProbeAsync("https://tv.lex.local/api/unknown-route", CancellationToken.None);
+        Assert.Equal(404, probe.Status);
+        Assert.Equal("not_found", probe.ErrorClass);
+        Assert.NotEqual("blocked", probe.ErrorClass);
+    }
+
+    // 37. Parseo de claves compactas estilo Magma, URLs directas (&direct=) y rutas relativas TMDB
+    [Fact]
+    public void ParseStreams_SupportsCompactMagmaKeysDirectUrlsAndTmdbRelativePosters()
+    {
+        var cats = new Dictionary<string, string> { ["10"] = "Entretenimiento" };
+        string liveJson = @"[
+            {
+                ""a"": ""501"",
+                ""b"": ""Canal Compacto HD"",
+                ""c"": ""/t/p/w300/abc123logo.png"",
+                ""d"": ""https://cdn.ejemplo.invalid/live/ch501/index.m3u8"",
+                ""e"": [""10""]
+            }
+        ]";
+
+        var channels = TvXtreamService.ParseLiveStreams(liveJson, cats, "c_magma", "Demo", "https://panel.ejemplo.invalid");
+        Assert.Single(channels);
+        Assert.Equal("Canal Compacto HD", channels[0].Name);
+        Assert.Equal("Entretenimiento", channels[0].Group);
+        Assert.Equal("https://image.tmdb.org/t/p/w300/abc123logo.png", channels[0].Logo);
+        Assert.Contains("&direct=https%3A%2F%2Fcdn.ejemplo.invalid%2Flive%2Fch501%2Findex.m3u8", channels[0].Url);
+
+        string vodJson = @"[
+            {
+                ""stream_id"": ""801"",
+                ""name"": ""Pelicula TMDB Hash"",
+                ""poster"": ""/9xjZS2rlVxm8SFx8kPC3aIGCOYQ.jpg"",
+                ""container_extension"": ""mkv""
+            },
+            {
+                ""stream_id"": ""802"",
+                ""name"": ""Pelicula TMDB Size"",
+                ""backdrop"": ""/w500/xyz12345back.jpg"",
+                ""direct_source"": ""http://127.0.0.1/blocked.mp4""
+            }
+        ]";
+
+        var vods = TvXtreamService.ParseVodStreams(vodJson, new Dictionary<string, string>(), "c_magma", "https://panel.ejemplo.invalid");
+        Assert.Equal(2, vods.Count);
+        Assert.Equal("https://image.tmdb.org/t/p/w500/9xjZS2rlVxm8SFx8kPC3aIGCOYQ.jpg", vods[0].Logo);
+        Assert.Equal("https://image.tmdb.org/t/p/w500/xyz12345back.jpg", vods[1].Logo);
+        // La URL privada 127.0.0.1 no debe adjuntarse como &direct=
+        Assert.DoesNotContain("&direct=", vods[1].Url);
+    }
+
+    // 38. ResolveUpstreamStreamCandidates incluye URL directa, rutas modernas, rutas heredadas y fallback get_vod_info
+    [Fact]
+    public void ResolveUpstreamStreamCandidates_IncludesDirectLegacyAndVodInfoPaths()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "LexTv_Cand_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var store = new TvXtreamStore(tempDir);
+            store.AddOrUpdateConnection(new TvXtreamConnection
+            {
+                Id = "xc_cand",
+                Name = "Demo",
+                ServerUrl = "https://stream.ejemplo.invalid",
+                SaveCredentials = true
+            }, "usr1", "pwd1");
+
+            string liveInternal = "https://tv.lex.local/api/xtream/live?conn=xc_cand&id=42&direct=" +
+                                  Uri.EscapeDataString("https://edge.ejemplo.invalid/live/42.m3u8");
+            var liveRes = TvXtreamService.ResolveUpstreamStreamCandidates(store, liveInternal);
+            Assert.True(liveRes.Success);
+            Assert.Equal("https://edge.ejemplo.invalid/live/42.m3u8", liveRes.Candidates[0]);
+            Assert.Contains("https://stream.ejemplo.invalid/live/usr1/pwd1/42.ts", liveRes.Candidates);
+            Assert.Contains("https://stream.ejemplo.invalid/live/usr1/pwd1/42.m3u8", liveRes.Candidates);
+            Assert.Contains("https://stream.ejemplo.invalid/usr1/pwd1/42", liveRes.Candidates);
+
+            // Conexión huérfana de biblioteca antigua debe usar la conexión activa disponible
+            string orphanVod = "https://tv.lex.local/api/xtream/vod?conn=xc_old_orphan&id=99&ext=mp4";
+            var vodRes = TvXtreamService.ResolveUpstreamStreamCandidates(store, orphanVod);
+            Assert.True(vodRes.Success);
+            Assert.Equal("https://stream.ejemplo.invalid/movie/usr1/pwd1/99.mp4", vodRes.Candidates[0]);
+            Assert.Contains("https://stream.ejemplo.invalid/movie/usr1/pwd1/99.mkv", vodRes.Candidates);
+            Assert.Contains("https://stream.ejemplo.invalid/usr1/pwd1/99.mp4", vodRes.Candidates);
+
+            string vodInfoJson = @"{ ""movie_data"": { ""container_extension"": ""mkv"" } }";
+            string? infoUrl = TvXtreamService.ParseVodInfoStreamUrl(vodInfoJson, "https://stream.ejemplo.invalid", "usr1", "pwd1", "99");
+            Assert.Equal("https://stream.ejemplo.invalid/movie/usr1/pwd1/99.mkv", infoUrl);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    // 39. TvVodStore.ImportItems actualiza logos y URLs existentes al resincronizar
+    [Fact]
+    public void TvVodStore_ImportItems_UpdatesExistingLogoAndUrlInPlace()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "LexTv_VodUpd_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var store = new TvVodStore(tempDir);
+            int firstAdded = store.ImportItems(new[]
+            {
+                new TvVodItem
+                {
+                    Id = "xc_vod_oldconn_55",
+                    Title = "Pelicula Prueba",
+                    Url = "https://tv.lex.local/api/xtream/vod?conn=oldconn&id=55&ext=mp4",
+                    Group = "Acción",
+                    Logo = ""
+                }
+            });
+            Assert.Equal(1, firstAdded);
+
+            int secondAdded = store.ImportItems(new[]
+            {
+                new TvVodItem
+                {
+                    Id = "xc_vod_newconn_55",
+                    Title = "Pelicula Prueba",
+                    Url = "https://tv.lex.local/api/xtream/vod?conn=newconn&id=55&ext=mp4&direct=https%3A%2F%2Fcdn.ejemplo.invalid%2F55.mp4",
+                    Group = "Acción HD",
+                    Logo = "https://image.tmdb.org/t/p/w500/poster55.jpg"
+                }
+            });
+            Assert.Equal(0, secondAdded);
+
+            var lib = store.GetLibrarySnapshot();
+            Assert.Single(lib);
+            Assert.Equal("https://image.tmdb.org/t/p/w500/poster55.jpg", lib[0].Logo);
+            Assert.Contains("conn=newconn", lib[0].Url);
+            Assert.Equal("Acción HD", lib[0].Group);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    // 40. TvDiagLog redacta credenciales y respeta límite de buffer y archivo en disco
+    [Fact]
+    public void TvDiagLog_RedactsSecrets_AndPersistsBoundedEntries()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "LexTv_Diag_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string r1 = TvDiagLog.RedactUrl("https://stream.ejemplo.invalid/live/miUser/miClave/635.ts?token=abc123");
+            Assert.DoesNotContain("miUser", r1);
+            Assert.DoesNotContain("miClave", r1);
+            Assert.DoesNotContain("abc123", r1);
+            Assert.Contains("/live/***/***/635.ts", r1);
+
+            string r2 = TvDiagLog.RedactUrl("https://stream.ejemplo.invalid/miUser/miClave/14838.mp4");
+            Assert.DoesNotContain("miUser", r2);
+            Assert.DoesNotContain("miClave", r2);
+            Assert.Contains("/***/***/14838.mp4", r2);
+
+            string r3 = TvDiagLog.RedactUrl("https://miUser:miClave@stream.ejemplo.invalid/player_api.php?username=miUser&password=miClave");
+            Assert.DoesNotContain("miUser", r3);
+            Assert.DoesNotContain("miClave", r3);
+
+            var log = new TvDiagLog(tempDir);
+            log.Record("probe", "HTTP 404", "ua=Test/1 url=https://stream.ejemplo.invalid/movie/u1/p1/99.mp4");
+            log.Record("fallback", "HTTP 404", "ua=Test/1 url=https://stream.ejemplo.invalid/u1/p1/99");
+
+            var snap = log.GetSnapshot();
+            Assert.Equal(2, snap.Count);
+            Assert.DoesNotContain("u1", snap[0].Detail);
+            Assert.DoesNotContain("p1", snap[0].Detail);
+            Assert.DoesNotContain("u1", snap[1].Detail);
+            Assert.DoesNotContain("p1", snap[1].Detail);
+            Assert.Contains("/***/***/99", snap[1].Detail);
+            Assert.True(File.Exists(log.LogPath));
+            string onDisk = File.ReadAllText(log.LogPath);
+            Assert.DoesNotContain("u1", onDisk);
+            Assert.DoesNotContain("p1", onDisk);
+
+            log.Clear();
+            Assert.Empty(log.GetSnapshot());
+            Assert.False(File.Exists(log.LogPath));
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    // 41. TvStudioService.ResolveImageTargetUrl prioriza rutas TMDB sobre ServerUrl del proveedor
+    [Fact]
+    public void ResolveImageTargetUrl_NormalizesTmdbPaths_EvenWhenXtreamServerExists()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "LexTv_ImgRes_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var store = new TvXtreamStore(tempDir);
+            store.AddOrUpdateConnection(new TvXtreamConnection
+            {
+                Id = "xc_img",
+                Name = "Demo",
+                ServerUrl = "https://stream.ejemplo.invalid",
+                SaveCredentials = true
+            }, "u1", "p1");
+
+            Assert.Equal(
+                "https://image.tmdb.org/t/p/w500/6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg",
+                TvStudioService.ResolveImageTargetUrl("/6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg", "xc_img", store));
+
+            Assert.Equal(
+                "https://image.tmdb.org/t/p/w500/6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg",
+                TvStudioService.ResolveImageTargetUrl("6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg", "xc_img", store));
+
+            Assert.Equal(
+                "https://image.tmdb.org/t/p/original/6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg",
+                TvStudioService.ResolveImageTargetUrl("/t/p/original/6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg", "xc_img", store));
+
+            Assert.Equal(
+                "https://stream.ejemplo.invalid/logos/ch1.png",
+                TvStudioService.ResolveImageTargetUrl("/logos/ch1.png", "xc_img", store));
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    // 42. TvVodStore normaliza portadas TMDB relativas guardadas previamente en disco al cargar
+    [Fact]
+    public void TvVodStore_Load_NormalizesPreExistingRelativeTmdbLogos()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "LexTv_VodLoad_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            string libPath = Path.Combine(tempDir, "vod_library.json");
+            File.WriteAllText(libPath, """
+                [
+                  {
+                    "Id": "xc_vod_1",
+                    "Title": "Pelicula Guardada",
+                    "Url": "https://tv.lex.local/api/xtream/vod?conn=xc_old&id=1&ext=mp4",
+                    "Logo": "/6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg",
+                    "Group": "Películas"
+                  },
+                  {
+                    "Id": "xc_vod_2",
+                    "Title": "Protocolo Relativo",
+                    "Url": "https://tv.lex.local/api/xtream/vod?conn=xc_old&id=2&ext=mp4",
+                    "Logo": "//cdn.ejemplo.invalid/poster2.jpg",
+                    "Group": "Películas"
+                  }
+                ]
+                """);
+
+            var store = new TvVodStore(tempDir);
+            var lib = store.GetLibrarySnapshot();
+            Assert.Equal(2, lib.Count);
+            Assert.Equal("https://image.tmdb.org/t/p/w500/6ItqVHcsb2swkE7ajS6EVCH2mpd.jpg", lib[0].Logo);
+            Assert.Equal("https://cdn.ejemplo.invalid/poster2.jpg", lib[1].Logo);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
     }
 }

@@ -126,6 +126,8 @@ public partial class App : Application
             try { InstallerService.CleanOldTempInstallers(); } catch { }
         });
 
+        BrowserThemeManager.ApplyTheme(SettingsManager.Current.Theme);
+
         var browserWindow = new MainWindow(
             initialUrl: initialUrl,
             startInIncognito: isIncognitoLaunch,

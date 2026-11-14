@@ -198,6 +198,12 @@ function pickEngineKind(url, probeKind) {
   const cleanUrl = String(url || '').split('?')[0].split('#')[0].toLowerCase();
   if (cleanUrl.endsWith('.m3u8') || cleanUrl.endsWith('.m3u')) return 'hls';
   if (cleanUrl.endsWith('.ts') || cleanUrl.endsWith('.flv')) return 'mpegts';
+  const extMatch = String(url || '').toLowerCase().match(/[?&]ext=([a-z0-9]+)/);
+  if (extMatch) {
+    const ext = extMatch[1];
+    if (ext === 'm3u8' || ext === 'm3u') return 'hls';
+    if (ext === 'ts' || ext === 'flv') return 'mpegts';
+  }
   if (
     cleanUrl.endsWith('.mp4') ||
     cleanUrl.endsWith('.webm') ||

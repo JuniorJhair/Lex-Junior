@@ -613,6 +613,37 @@ public partial class MainWindow : Window
 
         UpdateNotificationBadge();
         RescheduleSuspensionTimer();
+        UpdateThemeStyles(s.Theme);
+    }
+
+    public void UpdateThemeStyles(string? theme = null)
+    {
+        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current.Theme);
+        BrowserThemeManager.ApplyThemePalette(Resources, target);
+
+        if (Resources["BgDark"] is Brush bgBrush)
+        {
+            Background = bgBrush;
+        }
+        if (Resources["TextLight"] is Brush fgBrush)
+        {
+            Foreground = fgBrush;
+        }
+
+        // Refrescar cualquier pestaña que esté en Nueva Pestaña (lex://newtab)
+        foreach (var tab in Tabs)
+        {
+            if (tab.IsNewTab && !tab.IsDisposed && tab.WebView?.CoreWebView2 != null)
+            {
+                try
+                {
+                    tab.WebView.NavigateToString(NewTabPage.GetHtml(tab.IsIncognito, isGuest: tab.IsGuest));
+                }
+                catch { }
+            }
+        }
+
+        UpdateTabWidths();
     }
 
     private Action? _toastActionCallback;

@@ -53,6 +53,23 @@
     <Color x:Key="ColorAccentDanger">#DC2626</Color>
     <SolidColorBrush x:Key="BrushAccentDanger" Color="{StaticResource ColorAccentDanger}"/>
 
+    <!-- Brochas dinámicas para tematización del navegador (Oscuro / Claro / Clásico) -->
+    <SolidColorBrush x:Key="BgDark" Color="#0F0F12"/>
+    <SolidColorBrush x:Key="SurfaceDark" Color="#18181D"/>
+    <SolidColorBrush x:Key="SurfaceLighter" Color="#22222B"/>
+    <SolidColorBrush x:Key="AccentColor" Color="#4F46E5"/>
+    <SolidColorBrush x:Key="AccentHover" Color="#818CF8"/>
+    <SolidColorBrush x:Key="BorderDark" Color="#2E2E3A"/>
+    <SolidColorBrush x:Key="TextLight" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="TextMuted" Color="#A1A1AA"/>
+    <SolidColorBrush x:Key="TabInactiveBg" Color="#16161B"/>
+    <SolidColorBrush x:Key="TabHoverBg" Color="#252535"/>
+    <SolidColorBrush x:Key="BookmarksBarBg" Color="#121217"/>
+    <SolidColorBrush x:Key="BookmarkItemBg" Color="#181820"/>
+    <SolidColorBrush x:Key="UtilityBtnBg" Color="#252536"/>
+    <SolidColorBrush x:Key="CaretColor" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="WindowCtrlHoverBg" Color="#252530"/>
+
     <!-- ======================================================== -->
     <!-- ESTILO DE FOCO ACCESIBLE DE TECLADO VISIBLE               -->
     <!-- ======================================================== -->

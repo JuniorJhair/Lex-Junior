@@ -1,19 +1,92 @@
-:root {
+:root,
+html[data-theme="dark"] {
   --bg: #0b0f17;
   --panel: #121824;
   --panel-2: #182132;
+  --panel-hover: #1e293b;
   --border: #253047;
+  --border-subtle: rgba(37, 48, 71, 0.5);
   --text: #e8eef9;
   --muted: #8ea0bf;
   --accent: #3b82f6;
   --accent-hover: #2563eb;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent-soft-active: rgba(59, 130, 246, 0.24);
   --ok: #22c55e;
   --warn: #f59e0b;
   --bad: #ef4444;
+  --card-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --modal-overlay: rgba(0, 0, 0, 0.85);
+  --scrollbar-thumb: #253047;
+  --scrollbar-track: #0b0f17;
+}
+
+html[data-theme="light"] {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --panel-2: #f1f5f9;
+  --panel-hover: #e2e8f0;
+  --border: #cbd5e1;
+  --border-subtle: rgba(203, 213, 225, 0.7);
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --accent-soft-active: rgba(37, 99, 235, 0.18);
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --card-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --modal-overlay: rgba(15, 23, 42, 0.6);
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-track: #f1f5f9;
+}
+
+html[data-theme="classic"] {
+  --bg: #000000;
+  --panel: #111111;
+  --panel-2: #191919;
+  --panel-hover: #242424;
+  --border: #2c2c2c;
+  --border-subtle: rgba(55, 55, 55, 0.6);
+  --text: #ffffff;
+  --muted: #9e9e9e;
+  --accent: #ff6b00;
+  --accent-hover: #e05e00;
+  --accent-soft: rgba(255, 107, 0, 0.14);
+  --accent-soft-active: rgba(255, 107, 0, 0.28);
+  --ok: #00e676;
+  --warn: #ffab00;
+  --bad: #ff3d00;
+  --card-shadow: 0 6px 20px rgba(0, 0, 0, 0.85);
+  --modal-overlay: rgba(0, 0, 0, 0.92);
+  --scrollbar-thumb: #333333;
+  --scrollbar-track: #000000;
 }
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 
 html, body {
@@ -25,6 +98,17 @@ html, body {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 13px;
   overflow: hidden;
+}
+
+body,
+.vod-topbar,
+.btn-back,
+.ctrl,
+.btn,
+.vod-card,
+.resume-card,
+.modal-content {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 body {
@@ -76,7 +160,7 @@ body {
 }
 
 .btn-back:hover {
-  background: var(--border);
+  background: var(--panel-hover);
 }
 
 .brand-title {
@@ -125,7 +209,7 @@ body {
 }
 
 .btn:hover {
-  background: var(--border);
+  background: var(--panel-hover);
 }
 
 .btn-primary {
@@ -494,7 +578,7 @@ body {
 }
 
 .episode-item:hover {
-  background: var(--border);
+  background: var(--panel-hover);
   border-color: var(--accent);
 }
 
@@ -562,12 +646,12 @@ body {
 .vod-status-card {
   max-width: 480px;
   width: 100%;
-  background: #111827;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 28px;
   text-align: center;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8);
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -582,12 +666,12 @@ body {
 .vod-status-title {
   font-size: 18px;
   font-weight: 600;
-  color: #f3f4f6;
+  color: var(--text);
 }
 
 .vod-status-desc {
   font-size: 14px;
-  color: #9ca3af;
+  color: var(--muted);
   line-height: 1.5;
   margin-bottom: 6px;
 }

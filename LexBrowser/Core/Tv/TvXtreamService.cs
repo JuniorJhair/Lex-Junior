@@ -6,8 +6,10 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 
 namespace LexBrowser.Core.Tv;
 
@@ -19,6 +21,12 @@ namespace LexBrowser.Core.Tv;
 public sealed class TvXtreamService : IDisposable
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(20);
+    private static readonly Regex TmdbSizePathRegex = new(
+        @"^/?(?:w\d+|original)/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)(?:\?.*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex TmdbBareHashRegex = new(
+        @"^/?[A-Za-z0-9_-]{18,}\.(?:jpg|jpeg|png|webp)(?:\?.*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private readonly Func<string, CancellationToken, Task<IPAddress[]>>? _customResolver;
     private readonly HttpClient _client;
@@ -49,6 +57,59 @@ public sealed class TvXtreamService : IDisposable
         {
             _client.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Normaliza la URL base del servidor Xtream añadiendo http:// si falta el esquema
+    /// y eliminando barras finales, query o fragmentos sin alterar el puerto explícito.
+    /// </summary>
+    public static string? NormalizeServerBaseUrl(string? serverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(serverUrl)) return null;
+        string trimmed = serverUrl.Trim();
+        if (!trimmed.Contains("://", StringComparison.Ordinal))
+            trimmed = "http://" + trimmed;
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)) return null;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return null;
+
+        int qIdx = trimmed.IndexOfAny(['?', '#']);
+        string withoutQuery = qIdx >= 0 ? trimmed[..qIdx] : trimmed;
+        return withoutQuery.TrimEnd('/');
+    }
+
+    private async Task<(HttpResponseMessage Response, Uri FinalUri)> SendApiGetAsync(Uri targetUri, CancellationToken ct)
+    {
+        var candidates = TvUrlGuard.GetUserAgentCandidates(TvPlaybackHints.GetUserAgent(null, targetUri.Host));
+        HttpResponseMessage? lastResp = null;
+        Uri lastFinalUri = targetUri;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            string ua = candidates[i];
+            var (resp, finalUri) = await TvUrlGuard.GetWithSafeRedirectsAsync(GetClient(), targetUri, rangeHeader: null, ct, userAgent: ua).ConfigureAwait(false);
+            lastResp = resp;
+            lastFinalUri = finalUri;
+
+            int code = (int)resp.StatusCode;
+            if (resp.IsSuccessStatusCode)
+            {
+                TvPlaybackHints.RememberUserAgent(null, targetUri.Host, ua);
+                TvPlaybackHints.RememberUserAgent(null, finalUri.Host, ua);
+                return (resp, finalUri);
+            }
+
+            // 400 suele ser "Action not found" en player_api; devolver de inmediato para activar el fallback con action
+            if (code == 400)
+                return (resp, finalUri);
+
+            bool shouldRetryUa = (code == 401 || code == 403 || code == 404 || code == 406) && i + 1 < candidates.Count;
+            if (!shouldRetryUa)
+                return (resp, finalUri);
+
+            resp.Dispose();
+        }
+
+        return (lastResp!, lastFinalUri);
     }
 
     /// <summary>
@@ -180,13 +241,12 @@ public sealed class TvXtreamService : IDisposable
             };
         }
 
-        string cleanBase = val.Uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        string cleanBase = NormalizeServerBaseUrl(val.Uri.AbsoluteUri) ?? val.Uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
         string targetUrl = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username.Trim())}&password={Uri.EscapeDataString(password.Trim())}";
 
         try
         {
-            var client = GetClient();
-            var (response, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(targetUrl), rangeHeader: null, ct).ConfigureAwait(false);
+            var (response, _) = await SendApiGetAsync(new Uri(targetUrl), ct).ConfigureAwait(false);
             using (response)
             {
                 // Flujo 1: Servidor tradicional que responde 2xx
@@ -288,8 +348,7 @@ public sealed class TvXtreamService : IDisposable
 
         try
         {
-            var client = GetClient();
-            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(liveCatUrl), rangeHeader: null, ct).ConfigureAwait(false);
+            var (resp, _) = await SendApiGetAsync(new Uri(liveCatUrl), ct).ConfigureAwait(false);
             using (resp)
             {
                 if (resp.IsSuccessStatusCode)
@@ -327,8 +386,7 @@ public sealed class TvXtreamService : IDisposable
 
         try
         {
-            var client = GetClient();
-            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(vodCatUrl), rangeHeader: null, ct).ConfigureAwait(false);
+            var (resp, _) = await SendApiGetAsync(new Uri(vodCatUrl), ct).ConfigureAwait(false);
             using (resp)
             {
                 if (resp.IsSuccessStatusCode)
@@ -491,14 +549,14 @@ public sealed class TvXtreamService : IDisposable
     /// </summary>
     public async Task<List<TvChannel>> FetchLiveChannelsAsync(string serverUrl, string username, string password, string connId, string connName, CancellationToken ct)
     {
-        var categories = await FetchCategoriesAsync(serverUrl, username, password, "get_live_categories", ct).ConfigureAwait(false);
-        string url = $"{serverUrl.TrimEnd('/')}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_live_streams";
+        string cleanBase = NormalizeServerBaseUrl(serverUrl) ?? serverUrl.Trim().TrimEnd('/');
+        var categories = await FetchCategoriesAsync(cleanBase, username, password, "get_live_categories", ct).ConfigureAwait(false);
+        string url = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_live_streams";
 
         string json;
         try
         {
-            var client = GetClient();
-            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
+            var (resp, _) = await SendApiGetAsync(new Uri(url), ct).ConfigureAwait(false);
             using (resp)
             {
                 if (!resp.IsSuccessStatusCode) return new List<TvChannel>();
@@ -510,29 +568,168 @@ public sealed class TvXtreamService : IDisposable
             return new List<TvChannel>();
         }
 
-        return ParseLiveStreams(json, categories, connId, connName);
+        return ParseLiveStreams(json, categories, connId, connName, cleanBase);
     }
 
     public static string? NormalizePosterUrl(string? rawIcon, string? serverBaseUrl)
     {
         if (string.IsNullOrWhiteSpace(rawIcon)) return null;
-        string icon = rawIcon.Trim();
+        string icon = rawIcon.Trim().Replace("\\/", "/");
+        if (string.IsNullOrWhiteSpace(icon) ||
+            icon.Equals("null", StringComparison.OrdinalIgnoreCase) ||
+            icon.Equals("none", StringComparison.OrdinalIgnoreCase) ||
+            icon.Equals("n/a", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (icon.StartsWith("//", StringComparison.Ordinal))
+            return "https:" + icon;
+
         if (icon.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             icon.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
             return icon;
         }
 
-        if (!string.IsNullOrWhiteSpace(serverBaseUrl) &&
-            (serverBaseUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-             serverBaseUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+        if (icon.StartsWith("/t/p/", StringComparison.OrdinalIgnoreCase) ||
+            icon.StartsWith("t/p/", StringComparison.OrdinalIgnoreCase))
         {
-            string cleanBase = serverBaseUrl.TrimEnd('/');
+            return "https://image.tmdb.org/" + icon.TrimStart('/');
+        }
+
+        if (TmdbSizePathRegex.IsMatch(icon))
+        {
+            return "https://image.tmdb.org/t/p/" + icon.TrimStart('/');
+        }
+
+        if (TmdbBareHashRegex.IsMatch(icon))
+        {
+            return "https://image.tmdb.org/t/p/w500/" + icon.TrimStart('/');
+        }
+
+        string? normalizedBase = NormalizeServerBaseUrl(serverBaseUrl);
+        if (!string.IsNullOrEmpty(normalizedBase))
+        {
             string cleanIcon = icon.TrimStart('/');
-            return $"{cleanBase}/{cleanIcon}";
+            return $"{normalizedBase}/{cleanIcon}";
         }
 
         return icon;
+    }
+
+    private static string? GetFlexibleString(JsonElement el, params string[] keys)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return null;
+        foreach (var key in keys)
+        {
+            if (!el.TryGetProperty(key, out var prop)) continue;
+            string? val = prop.ValueKind switch
+            {
+                JsonValueKind.String => prop.GetString(),
+                JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => prop.ToString(),
+                _ => null
+            };
+            if (!string.IsNullOrWhiteSpace(val))
+            {
+                string trimmed = val.Trim();
+                if (!trimmed.Equals("null", StringComparison.OrdinalIgnoreCase))
+                    return trimmed;
+            }
+        }
+        return null;
+    }
+
+    private static string? GetFirstStringOrArrayFirst(JsonElement el, params string[] keys)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return null;
+        foreach (var key in keys)
+        {
+            if (!el.TryGetProperty(key, out var prop)) continue;
+            if (prop.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in prop.EnumerateArray())
+                {
+                    if (entry.ValueKind == JsonValueKind.String)
+                    {
+                        string? s = entry.GetString()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(s) && !s.Equals("null", StringComparison.OrdinalIgnoreCase))
+                            return s;
+                    }
+                }
+                continue;
+            }
+
+            if (prop.ValueKind == JsonValueKind.String)
+            {
+                string? s = prop.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(s) && !s.Equals("null", StringComparison.OrdinalIgnoreCase))
+                    return s;
+            }
+        }
+        return null;
+    }
+
+    private static int GetFlexibleInt(JsonElement el, int defaultValue, params string[] keys)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return defaultValue;
+        foreach (var key in keys)
+        {
+            if (!el.TryGetProperty(key, out var prop)) continue;
+            if (prop.ValueKind == JsonValueKind.Number)
+            {
+                if (prop.TryGetInt32(out int num)) return num;
+                if (prop.TryGetDouble(out double d)) return (int)d;
+            }
+            else if (prop.ValueKind == JsonValueKind.String && int.TryParse(prop.GetString()?.Trim(), out int parsed))
+            {
+                return parsed;
+            }
+        }
+        return defaultValue;
+    }
+
+    private static string? ExtractPosterFromElement(JsonElement item, bool preferSeriesCover = false)
+    {
+        string? direct = preferSeriesCover
+            ? GetFirstStringOrArrayFirst(item, "cover", "cover_big", "poster", "poster_path", "stream_icon", "movie_image", "backdrop", "backdrop_path", "logo", "icon", "thumbnail", "thumb", "img", "c")
+            : GetFirstStringOrArrayFirst(item, "stream_icon", "movie_image", "cover", "cover_big", "poster", "poster_path", "logo", "icon", "thumbnail", "thumb", "img", "c", "backdrop", "backdrop_path");
+
+        if (!string.IsNullOrWhiteSpace(direct))
+            return direct;
+
+        if (item.TryGetProperty("info", out var infoEl) && infoEl.ValueKind == JsonValueKind.Object)
+        {
+            return GetFirstStringOrArrayFirst(infoEl, "movie_image", "cover_big", "cover", "poster", "poster_path", "stream_icon", "backdrop", "backdrop_path", "thumbnail", "thumb", "tmdb_poster");
+        }
+
+        return null;
+    }
+
+    private static string? ExtractDirectStreamUrl(JsonElement item, string? serverUrl)
+    {
+        string? raw = GetFirstStringOrArrayFirst(item, "direct_source", "stream_url", "url", "d", "link", "source");
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        string candidate = raw.Trim().Replace("\\/", "/");
+        if (candidate.StartsWith("//", StringComparison.Ordinal))
+            candidate = "https:" + candidate;
+        else if (!candidate.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                 !candidate.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            string? cleanBase = NormalizeServerBaseUrl(serverUrl);
+            if (string.IsNullOrEmpty(cleanBase)) return null;
+            candidate = $"{cleanBase}/{candidate.TrimStart('/')}";
+        }
+
+        return TvUrlGuard.IsAllowedRemoteUrl(candidate, out _) ? candidate : null;
+    }
+
+    private static string ExtractCategoryId(JsonElement item)
+    {
+        string? direct = GetFlexibleString(item, "category_id", "category");
+        if (!string.IsNullOrWhiteSpace(direct)) return direct;
+        return GetFirstStringOrArrayFirst(item, "categories", "e", "category_ids") ?? "";
     }
 
     public static List<TvChannel> ParseLiveStreams(string json, Dictionary<string, string> categories, string connId, string connName, string? serverUrl = null)
@@ -548,22 +745,27 @@ public sealed class TvXtreamService : IDisposable
             int autoNum = 1;
             foreach (var item in doc.RootElement.EnumerateArray())
             {
-                string streamId = item.TryGetProperty("stream_id", out var sidEl) ? sidEl.ToString() : "";
-                string name = item.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
+                string streamId = GetFlexibleString(item, "stream_id", "id", "a") ?? "";
+                string name = GetFlexibleString(item, "name", "title", "b") ?? "";
                 if (string.IsNullOrWhiteSpace(streamId) || string.IsNullOrWhiteSpace(name)) continue;
 
-                string catId = item.TryGetProperty("category_id", out var cidEl) ? cidEl.ToString() : "";
+                string catId = ExtractCategoryId(item);
                 string group = !string.IsNullOrEmpty(catId) && categories.TryGetValue(catId, out var cName) ? cName : "En vivo";
 
-                int num = autoNum++;
-                if (item.TryGetProperty("num", out var numEl) && numEl.TryGetInt32(out int parsedNum) && parsedNum > 0)
-                    num = parsedNum;
+                int parsedNum = GetFlexibleInt(item, 0, "num");
+                int num = parsedNum > 0 ? parsedNum : autoNum++;
+                if (parsedNum > 0) autoNum = Math.Max(autoNum, parsedNum + 1);
 
-                string? logo = item.TryGetProperty("stream_icon", out var iconEl) ? iconEl.GetString() : null;
+                string? logo = ExtractPosterFromElement(item, preferSeriesCover: false);
                 string normalizedLogo = NormalizePosterUrl(logo, serverUrl) ?? "";
+                string? directUrl = ExtractDirectStreamUrl(item, serverUrl);
 
                 // URL segura protegida en el host virtual tv.lex.local sin exponer credenciales
                 string secureStreamUrl = $"https://tv.lex.local/api/xtream/live?conn={Uri.EscapeDataString(connId)}&id={Uri.EscapeDataString(streamId)}";
+                if (!string.IsNullOrWhiteSpace(directUrl))
+                {
+                    secureStreamUrl += $"&direct={Uri.EscapeDataString(directUrl)}";
+                }
 
                 string quality = name.Contains("4K", StringComparison.OrdinalIgnoreCase) ? "4K" :
                                  name.Contains("FHD", StringComparison.OrdinalIgnoreCase) || name.Contains("1080", StringComparison.OrdinalIgnoreCase) ? "FHD" :
@@ -593,14 +795,14 @@ public sealed class TvXtreamService : IDisposable
     /// </summary>
     public async Task<List<TvVodItem>> FetchVodMoviesAsync(string serverUrl, string username, string password, string connId, CancellationToken ct)
     {
-        var categories = await FetchCategoriesAsync(serverUrl, username, password, "get_vod_categories", ct).ConfigureAwait(false);
-        string url = $"{serverUrl.TrimEnd('/')}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_vod_streams";
+        string cleanBase = NormalizeServerBaseUrl(serverUrl) ?? serverUrl.Trim().TrimEnd('/');
+        var categories = await FetchCategoriesAsync(cleanBase, username, password, "get_vod_categories", ct).ConfigureAwait(false);
+        string url = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_vod_streams";
 
         string json;
         try
         {
-            var client = GetClient();
-            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
+            var (resp, _) = await SendApiGetAsync(new Uri(url), ct).ConfigureAwait(false);
             using (resp)
             {
                 if (!resp.IsSuccessStatusCode) return new List<TvVodItem>();
@@ -612,7 +814,7 @@ public sealed class TvXtreamService : IDisposable
             return new List<TvVodItem>();
         }
 
-        return ParseVodStreams(json, categories, connId, serverUrl);
+        return ParseVodStreams(json, categories, connId, cleanBase);
     }
 
     public static List<TvVodItem> ParseVodStreams(string json, Dictionary<string, string> categories, string connId, string? serverUrl = null)
@@ -627,18 +829,23 @@ public sealed class TvXtreamService : IDisposable
 
             foreach (var item in doc.RootElement.EnumerateArray())
             {
-                string streamId = item.TryGetProperty("stream_id", out var sidEl) ? sidEl.ToString() : "";
-                string name = item.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
+                string streamId = GetFlexibleString(item, "stream_id", "id", "a") ?? "";
+                string name = GetFlexibleString(item, "name", "title", "b") ?? "";
                 if (string.IsNullOrWhiteSpace(streamId) || string.IsNullOrWhiteSpace(name)) continue;
 
-                string catId = item.TryGetProperty("category_id", out var cidEl) ? cidEl.ToString() : "";
+                string catId = ExtractCategoryId(item);
                 string group = !string.IsNullOrEmpty(catId) && categories.TryGetValue(catId, out var cName) ? cName : "Películas";
 
-                string ext = item.TryGetProperty("container_extension", out var extEl) ? (extEl.GetString() ?? "mp4") : "mp4";
-                string? logo = item.TryGetProperty("stream_icon", out var iconEl) ? iconEl.GetString() : null;
+                string ext = GetFlexibleString(item, "container_extension", "ext") ?? "mp4";
+                string? logo = ExtractPosterFromElement(item, preferSeriesCover: false);
                 string? normalizedLogo = NormalizePosterUrl(logo, serverUrl);
+                string? directUrl = ExtractDirectStreamUrl(item, serverUrl);
 
                 string secureUrl = $"https://tv.lex.local/api/xtream/vod?conn={Uri.EscapeDataString(connId)}&id={Uri.EscapeDataString(streamId)}&ext={Uri.EscapeDataString(ext)}";
+                if (!string.IsNullOrWhiteSpace(directUrl))
+                {
+                    secureUrl += $"&direct={Uri.EscapeDataString(directUrl)}";
+                }
 
                 list.Add(new TvVodItem
                 {
@@ -663,14 +870,14 @@ public sealed class TvXtreamService : IDisposable
     /// </summary>
     public async Task<List<TvVodItem>> FetchSeriesAsync(string serverUrl, string username, string password, string connId, CancellationToken ct)
     {
-        var categories = await FetchCategoriesAsync(serverUrl, username, password, "get_series_categories", ct).ConfigureAwait(false);
-        string url = $"{serverUrl.TrimEnd('/')}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_series";
+        string cleanBase = NormalizeServerBaseUrl(serverUrl) ?? serverUrl.Trim().TrimEnd('/');
+        var categories = await FetchCategoriesAsync(cleanBase, username, password, "get_series_categories", ct).ConfigureAwait(false);
+        string url = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_series";
 
         string json;
         try
         {
-            var client = GetClient();
-            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
+            var (resp, _) = await SendApiGetAsync(new Uri(url), ct).ConfigureAwait(false);
             using (resp)
             {
                 if (!resp.IsSuccessStatusCode) return new List<TvVodItem>();
@@ -682,30 +889,40 @@ public sealed class TvXtreamService : IDisposable
             return new List<TvVodItem>();
         }
 
-        var seriesList = ParseSeriesList(json, categories, serverUrl);
-        var result = new List<TvVodItem>();
+        var seriesList = ParseSeriesList(json, categories, cleanBase);
+        var targets = seriesList.Take(200).ToList();
+        if (targets.Count == 0) return new List<TvVodItem>();
 
-        // Obtener episodios de cada serie (hasta 200 series para balancear tiempo de importación inicial)
-        foreach (var s in seriesList.Take(200))
+        using var throttle = new SemaphoreSlim(6, 6);
+        var tasks = targets.Select(async s =>
         {
-            if (ct.IsCancellationRequested) break;
+            await throttle.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                string infoUrl = $"{serverUrl.TrimEnd('/')}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_series_info&series_id={Uri.EscapeDataString(s.SeriesId)}";
-                var client = GetClient();
-                var (infoResp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(infoUrl), null, ct).ConfigureAwait(false);
+                if (ct.IsCancellationRequested) return new List<TvVodItem>();
+                string infoUrl = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action=get_series_info&series_id={Uri.EscapeDataString(s.SeriesId)}";
+                var (infoResp, _) = await SendApiGetAsync(new Uri(infoUrl), ct).ConfigureAwait(false);
                 using (infoResp)
                 {
                     if (infoResp.IsSuccessStatusCode)
                     {
                         string infoJson = await infoResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                        var episodes = ParseSeriesInfoEpisodes(infoJson, s, connId, serverUrl);
-                        result.AddRange(episodes);
+                        return ParseSeriesInfoEpisodes(infoJson, s, connId, cleanBase);
                     }
                 }
             }
             catch { }
-        }
+            finally
+            {
+                throttle.Release();
+            }
+            return new List<TvVodItem>();
+        }).ToArray();
+
+        var perSeries = await Task.WhenAll(tasks).ConfigureAwait(false);
+        var result = new List<TvVodItem>();
+        foreach (var episodes in perSeries)
+            result.AddRange(episodes);
 
         return result;
     }
@@ -722,12 +939,12 @@ public sealed class TvXtreamService : IDisposable
 
             foreach (var item in doc.RootElement.EnumerateArray())
             {
-                string seriesId = item.TryGetProperty("series_id", out var sidEl) ? sidEl.ToString() : "";
-                string name = item.TryGetProperty("name", out var nEl) ? (nEl.GetString() ?? "") : "";
+                string seriesId = GetFlexibleString(item, "series_id", "id", "a") ?? "";
+                string name = GetFlexibleString(item, "name", "title", "b") ?? "";
                 if (string.IsNullOrWhiteSpace(seriesId) || string.IsNullOrWhiteSpace(name)) continue;
 
-                string catId = item.TryGetProperty("category_id", out var cidEl) ? cidEl.ToString() : "";
-                string? cover = item.TryGetProperty("cover", out var covEl) ? covEl.GetString() : null;
+                string catId = ExtractCategoryId(item);
+                string? cover = ExtractPosterFromElement(item, preferSeriesCover: true);
                 string? normalizedCover = NormalizePosterUrl(cover, serverUrl);
 
                 list.Add(new TvXtreamSeriesItem
@@ -744,6 +961,50 @@ public sealed class TvXtreamService : IDisposable
         return list;
     }
 
+    private static TvVodItem? ParseEpisodeObject(JsonElement ep, TvXtreamSeriesItem series, string connId, int defaultSeason, string? serverUrl)
+    {
+        if (ep.ValueKind != JsonValueKind.Object) return null;
+
+        string epId = GetFlexibleString(ep, "id", "stream_id", "a") ?? "";
+        string epTitle = GetFlexibleString(ep, "title", "name", "b") ?? "";
+        if (string.IsNullOrWhiteSpace(epId)) return null;
+
+        int seasonNum = GetFlexibleInt(ep, defaultSeason, "season", "season_num");
+        if (seasonNum <= 0) seasonNum = defaultSeason;
+
+        int epNum = GetFlexibleInt(ep, 1, "episode_num", "episode");
+        if (epNum <= 0) epNum = 1;
+
+        string ext = GetFlexibleString(ep, "container_extension", "ext") ?? "mp4";
+        string? epCover = ExtractPosterFromElement(ep, preferSeriesCover: false) ?? series.Cover;
+        string? normalizedCover = NormalizePosterUrl(epCover, serverUrl);
+        string? directUrl = ExtractDirectStreamUrl(ep, serverUrl);
+
+        string secureUrl = $"https://tv.lex.local/api/xtream/series?conn={Uri.EscapeDataString(connId)}&id={Uri.EscapeDataString(epId)}&ext={Uri.EscapeDataString(ext)}";
+        if (!string.IsNullOrWhiteSpace(directUrl))
+        {
+            secureUrl += $"&direct={Uri.EscapeDataString(directUrl)}";
+        }
+        string displayTitle = !string.IsNullOrWhiteSpace(epTitle)
+            ? $"{series.Name} S{seasonNum:D2}E{epNum:D2} - {epTitle}"
+            : $"{series.Name} S{seasonNum:D2}E{epNum:D2}";
+
+        return new TvVodItem
+        {
+            Id = $"xc_series_{connId}_{series.SeriesId}_{epId}",
+            Title = displayTitle,
+            Url = secureUrl,
+            Group = series.Name,
+            Logo = normalizedCover,
+            IsSeries = true,
+            SeriesTitle = series.Name,
+            SeasonNumber = seasonNum,
+            EpisodeNumber = epNum,
+            EpisodeTitle = epTitle,
+            AddedUtc = DateTime.UtcNow
+        };
+    }
+
     public static List<TvVodItem> ParseSeriesInfoEpisodes(string json, TvXtreamSeriesItem series, string connId, string? serverUrl = null)
     {
         var list = new List<TvVodItem>();
@@ -752,52 +1013,42 @@ public sealed class TvXtreamService : IDisposable
         try
         {
             using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("episodes", out var epRoot) || epRoot.ValueKind != JsonValueKind.Object)
+            if (!doc.RootElement.TryGetProperty("episodes", out var epRoot))
                 return list;
 
-            foreach (var seasonProp in epRoot.EnumerateObject())
+            if (epRoot.ValueKind == JsonValueKind.Object)
             {
-                int seasonNum = int.TryParse(seasonProp.Name, out int sn) ? sn : 1;
-                if (seasonProp.Value.ValueKind != JsonValueKind.Array) continue;
-
-                foreach (var ep in seasonProp.Value.EnumerateArray())
+                foreach (var seasonProp in epRoot.EnumerateObject())
                 {
-                    string epId = ep.TryGetProperty("id", out var idEl) ? idEl.ToString() : "";
-                    string epTitle = ep.TryGetProperty("title", out var tEl) ? (tEl.GetString() ?? "") : "";
-                    if (string.IsNullOrWhiteSpace(epId)) continue;
+                    int seasonNum = int.TryParse(seasonProp.Name, out int sn) ? sn : 1;
+                    if (seasonProp.Value.ValueKind != JsonValueKind.Array) continue;
 
-                    int epNum = 1;
-                    if (ep.TryGetProperty("episode_num", out var enEl))
+                    foreach (var ep in seasonProp.Value.EnumerateArray())
                     {
-                        if (enEl.ValueKind == JsonValueKind.Number) epNum = enEl.GetInt32();
-                        else if (enEl.ValueKind == JsonValueKind.String && int.TryParse(enEl.GetString(), out int parsed)) epNum = parsed;
+                        var item = ParseEpisodeObject(ep, series, connId, seasonNum, serverUrl);
+                        if (item != null) list.Add(item);
                     }
-
-                    string ext = ep.TryGetProperty("container_extension", out var extEl) ? (extEl.GetString() ?? "mp4") : "mp4";
-                    string? epCover = ep.TryGetProperty("info", out var infoEl) && infoEl.TryGetProperty("movie_image", out var miEl)
-                        ? miEl.GetString()
-                        : series.Cover;
-                    string? normalizedCover = NormalizePosterUrl(epCover, serverUrl);
-
-                    string secureUrl = $"https://tv.lex.local/api/xtream/series?conn={Uri.EscapeDataString(connId)}&id={Uri.EscapeDataString(epId)}&ext={Uri.EscapeDataString(ext)}";
-                    string displayTitle = !string.IsNullOrWhiteSpace(epTitle)
-                        ? $"{series.Name} S{seasonNum:D2}E{epNum:D2} - {epTitle}"
-                        : $"{series.Name} S{seasonNum:D2}E{epNum:D2}";
-
-                    list.Add(new TvVodItem
+                }
+            }
+            else if (epRoot.ValueKind == JsonValueKind.Array)
+            {
+                int seasonIdx = 1;
+                foreach (var entry in epRoot.EnumerateArray())
+                {
+                    if (entry.ValueKind == JsonValueKind.Array)
                     {
-                        Id = $"xc_series_{connId}_{series.SeriesId}_{epId}",
-                        Title = displayTitle,
-                        Url = secureUrl,
-                        Group = series.Name,
-                        Logo = normalizedCover,
-                        IsSeries = true,
-                        SeriesTitle = series.Name,
-                        SeasonNumber = seasonNum,
-                        EpisodeNumber = epNum,
-                        EpisodeTitle = epTitle,
-                        AddedUtc = DateTime.UtcNow
-                    });
+                        foreach (var ep in entry.EnumerateArray())
+                        {
+                            var item = ParseEpisodeObject(ep, series, connId, seasonIdx, serverUrl);
+                            if (item != null) list.Add(item);
+                        }
+                        seasonIdx++;
+                    }
+                    else if (entry.ValueKind == JsonValueKind.Object)
+                    {
+                        var item = ParseEpisodeObject(entry, series, connId, 1, serverUrl);
+                        if (item != null) list.Add(item);
+                    }
                 }
             }
         }
@@ -809,12 +1060,12 @@ public sealed class TvXtreamService : IDisposable
     private async Task<Dictionary<string, string>> FetchCategoriesAsync(string serverUrl, string username, string password, string action, CancellationToken ct)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        string url = $"{serverUrl.TrimEnd('/')}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action={action}";
+        string cleanBase = NormalizeServerBaseUrl(serverUrl) ?? serverUrl.Trim().TrimEnd('/');
+        string url = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(username)}&password={Uri.EscapeDataString(password)}&action={action}";
 
         try
         {
-            var client = GetClient();
-            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(client, new Uri(url), null, ct).ConfigureAwait(false);
+            var (resp, _) = await SendApiGetAsync(new Uri(url), ct).ConfigureAwait(false);
             using (resp)
             {
                 if (!resp.IsSuccessStatusCode) return map;
@@ -824,8 +1075,8 @@ public sealed class TvXtreamService : IDisposable
 
                 foreach (var el in doc.RootElement.EnumerateArray())
                 {
-                    string id = el.TryGetProperty("category_id", out var idEl) ? idEl.ToString() : "";
-                    string name = el.TryGetProperty("category_name", out var nEl) ? (nEl.GetString() ?? "") : "";
+                    string id = GetFlexibleString(el, "category_id", "id", "a") ?? "";
+                    string name = GetFlexibleString(el, "category_name", "name", "title", "b") ?? "";
                     if (!string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(name))
                     {
                         map[id] = name;
@@ -861,7 +1112,9 @@ public sealed class TvXtreamService : IDisposable
         if (creds == null || string.IsNullOrWhiteSpace(creds.Username) || string.IsNullOrWhiteSpace(creds.Password))
             return (false, null, "Credenciales no disponibles para esta conexión (sesión expirada o no guardadas).");
 
-        string serverBase = conn.ServerUrl.TrimEnd('/');
+        string? serverBase = NormalizeServerBaseUrl(conn.ServerUrl);
+        if (string.IsNullOrEmpty(serverBase))
+            return (false, null, "La URL del servidor no cumple los requisitos de seguridad de red de Lex TV.");
         string cleanType = streamType.ToLowerInvariant();
         if (cleanType != "live" && cleanType != "movie" && cleanType != "series")
             return (false, null, "Tipo de stream no soportado.");
@@ -895,5 +1148,235 @@ public sealed class TvXtreamService : IDisposable
             return (false, null, "La URL del servidor no cumple los requisitos de seguridad de red de Lex TV.");
 
         return (true, rawUpstream, null);
+    }
+
+    private static bool TryResolveConnectionAndCreds(
+        TvXtreamStore store,
+        string connId,
+        out TvXtreamConnection? conn,
+        out TvXtreamCredentials? creds,
+        out string? error)
+    {
+        conn = store.GetConnection(connId);
+        creds = conn != null ? store.GetCredentials(connId) : null;
+
+        // Respaldo: si connId quedó huérfano por una reimportación previa, usar la primera conexión activa con credenciales.
+        if (conn == null || creds == null ||
+            string.IsNullOrWhiteSpace(creds.Username) ||
+            string.IsNullOrWhiteSpace(creds.Password))
+        {
+            foreach (var candidate in store.GetSummaries())
+            {
+                var cCreds = store.GetCredentials(candidate.Id);
+                if (cCreds != null &&
+                    !string.IsNullOrWhiteSpace(cCreds.Username) &&
+                    !string.IsNullOrWhiteSpace(cCreds.Password))
+                {
+                    conn = store.GetConnection(candidate.Id);
+                    creds = cCreds;
+                    break;
+                }
+            }
+        }
+
+        if (conn == null)
+        {
+            error = "Conexión Xtream no encontrada.";
+            return false;
+        }
+
+        if (creds == null || string.IsNullOrWhiteSpace(creds.Username) || string.IsNullOrWhiteSpace(creds.Password))
+        {
+            error = "Credenciales no disponibles para esta conexión (sesión expirada o no guardadas).";
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Construye la lista ordenada y deduplicada de URLs upstream candidatas para un stream Xtream interno,
+    /// incluyendo URL directa (si vino en el catálogo), rutas modernas (/live, /movie, /series) y rutas heredadas.
+    /// </summary>
+    public static (bool Success, List<string> Candidates, string? Error) ResolveUpstreamStreamCandidates(
+        TvXtreamStore store,
+        string? rawInternalUrl,
+        string? overrideExt = null)
+    {
+        var candidates = new List<string>();
+        if (!TvUrlGuard.IsInternalTvStreamUrl(rawInternalUrl, out var internalUri) || internalUri == null)
+            return (false, candidates, "Ruta interna de streaming no reconocida.");
+
+        var q = HttpUtility.ParseQueryString(internalUri.Query);
+        string connId = q["conn"] ?? "";
+        string streamId = q["id"] ?? "";
+        string requestedExt = !string.IsNullOrWhiteSpace(overrideExt) ? overrideExt : (q["ext"] ?? "");
+        string directParam = q["direct"] ?? "";
+        string streamType = internalUri.AbsolutePath.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
+                            internalUri.AbsolutePath.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
+
+        if (string.IsNullOrWhiteSpace(streamId))
+            return (false, candidates, "Identificadores de flujo faltantes.");
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        void AddIfValid(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return;
+            if (TvUrlGuard.IsAllowedRemoteUrl(url, out var uri) && uri != null && seen.Add(uri.AbsoluteUri))
+            {
+                candidates.Add(uri.AbsoluteUri);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(directParam))
+        {
+            AddIfValid(directParam.Trim());
+        }
+
+        if (!TryResolveConnectionAndCreds(store, connId, out var conn, out var creds, out var credErr) || conn == null || creds == null)
+        {
+            if (candidates.Count > 0)
+                return (true, candidates, null);
+            return (false, candidates, credErr);
+        }
+
+        string? serverBase = NormalizeServerBaseUrl(conn.ServerUrl);
+        if (string.IsNullOrEmpty(serverBase))
+        {
+            if (candidates.Count > 0)
+                return (true, candidates, null);
+            return (false, candidates, "La URL del servidor no cumple los requisitos de seguridad de red de Lex TV.");
+        }
+
+        string u = Uri.EscapeDataString(creds.Username);
+        string p = Uri.EscapeDataString(creds.Password);
+        string id = Uri.EscapeDataString(streamId);
+
+        string cleanExt = requestedExt.Trim().TrimStart('.');
+        if (!cleanExt.All(char.IsLetterOrDigit)) cleanExt = "";
+
+        if (streamType == "live")
+        {
+            if (string.IsNullOrEmpty(cleanExt))
+            {
+                string? remembered = TvPlaybackHints.GetLiveExt(connId);
+                cleanExt = !string.IsNullOrWhiteSpace(remembered) ? remembered.TrimStart('.') : "ts";
+            }
+            string altExt = string.Equals(cleanExt, "ts", StringComparison.OrdinalIgnoreCase) ? "m3u8" : "ts";
+
+            AddIfValid($"{serverBase}/live/{u}/{p}/{id}.{cleanExt}");
+            AddIfValid($"{serverBase}/live/{u}/{p}/{id}.{altExt}");
+            // Rutas heredadas/compatibles de paneles Xtream y reproductores IPTV (incluyendo sin extensión ni prefijo /live)
+            AddIfValid($"{serverBase}/{u}/{p}/{id}");
+            AddIfValid($"{serverBase}/live/{u}/{p}/{id}");
+            AddIfValid($"{serverBase}/{u}/{p}/{id}.{cleanExt}");
+            AddIfValid($"{serverBase}/{u}/{p}/{id}.{altExt}");
+        }
+        else if (streamType == "movie")
+        {
+            if (string.IsNullOrEmpty(cleanExt)) cleanExt = "mp4";
+            AddIfValid($"{serverBase}/movie/{u}/{p}/{id}.{cleanExt}");
+            foreach (string alt in new[] { "mp4", "mkv", "m3u8", "ts", "avi" })
+            {
+                if (!string.Equals(alt, cleanExt, StringComparison.OrdinalIgnoreCase))
+                    AddIfValid($"{serverBase}/movie/{u}/{p}/{id}.{alt}");
+            }
+            AddIfValid($"{serverBase}/{u}/{p}/{id}.{cleanExt}");
+            AddIfValid($"{serverBase}/movie/{u}/{p}/{id}");
+            AddIfValid($"{serverBase}/{u}/{p}/{id}");
+        }
+        else
+        {
+            if (string.IsNullOrEmpty(cleanExt)) cleanExt = "mp4";
+            AddIfValid($"{serverBase}/series/{u}/{p}/{id}.{cleanExt}");
+            foreach (string alt in new[] { "mp4", "mkv", "m3u8", "ts" })
+            {
+                if (!string.Equals(alt, cleanExt, StringComparison.OrdinalIgnoreCase))
+                    AddIfValid($"{serverBase}/series/{u}/{p}/{id}.{alt}");
+            }
+            AddIfValid($"{serverBase}/{u}/{p}/{id}.{cleanExt}");
+            AddIfValid($"{serverBase}/series/{u}/{p}/{id}");
+        }
+
+        if (candidates.Count == 0)
+            return (false, candidates, "La URL del servidor no cumple los requisitos de seguridad de red de Lex TV.");
+
+        return (true, candidates, null);
+    }
+
+    public static string? ParseVodInfoStreamUrl(string json, string? serverBaseUrl, string username, string password, string vodId)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+
+            string? direct = null;
+            string? ext = null;
+
+            if (root.TryGetProperty("movie_data", out var movieData) && movieData.ValueKind == JsonValueKind.Object)
+            {
+                direct = ExtractDirectStreamUrl(movieData, serverBaseUrl);
+                ext = GetFlexibleString(movieData, "container_extension", "ext");
+            }
+
+            if (string.IsNullOrWhiteSpace(direct) && root.TryGetProperty("info", out var infoEl) && infoEl.ValueKind == JsonValueKind.Object)
+            {
+                direct = ExtractDirectStreamUrl(infoEl, serverBaseUrl);
+                ext ??= GetFlexibleString(infoEl, "container_extension", "ext");
+            }
+
+            direct ??= ExtractDirectStreamUrl(root, serverBaseUrl);
+            if (!string.IsNullOrWhiteSpace(direct))
+                return direct;
+
+            string? cleanBase = NormalizeServerBaseUrl(serverBaseUrl);
+            if (!string.IsNullOrEmpty(cleanBase) && !string.IsNullOrWhiteSpace(ext))
+            {
+                string cleanExt = ext.Trim().TrimStart('.');
+                if (!string.IsNullOrEmpty(cleanExt) && cleanExt.All(char.IsLetterOrDigit))
+                {
+                    string candidate = $"{cleanBase}/movie/{Uri.EscapeDataString(username)}/{Uri.EscapeDataString(password)}/{Uri.EscapeDataString(vodId)}.{cleanExt}";
+                    if (TvUrlGuard.IsAllowedRemoteUrl(candidate, out _))
+                        return candidate;
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    public async Task<string?> TryResolveVodInfoStreamUrlAsync(TvXtreamStore store, string connId, string vodId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(vodId)) return null;
+        if (!TryResolveConnectionAndCreds(store, connId, out var conn, out var creds, out _) || conn == null || creds == null)
+            return null;
+
+        string? cleanBase = NormalizeServerBaseUrl(conn.ServerUrl);
+        if (string.IsNullOrEmpty(cleanBase)) return null;
+
+        string infoUrl = $"{cleanBase}/player_api.php?username={Uri.EscapeDataString(creds.Username)}&password={Uri.EscapeDataString(creds.Password)}&action=get_vod_info&vod_id={Uri.EscapeDataString(vodId)}";
+        if (!TvUrlGuard.IsAllowedRemoteUrl(infoUrl, out var uri) || uri == null)
+            return null;
+
+        try
+        {
+            var (resp, _) = await SendApiGetAsync(uri, ct).ConfigureAwait(false);
+            using (resp)
+            {
+                if (!resp.IsSuccessStatusCode) return null;
+                string json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                return ParseVodInfoStreamUrl(json, cleanBase, creds.Username, creds.Password, vodId);
+            }
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

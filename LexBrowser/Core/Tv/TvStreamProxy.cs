@@ -56,10 +56,11 @@ public static class TvStreamProxy
     private const int MaxM3u8Bytes = 4 * 1024 * 1024;
     private const int MaxProbeBytes = 4096;
     private const int MaxProbeCacheEntries = 256;
-    private const int MaxImageBytes = 2 * 1024 * 1024;
+    private const int MaxImageBytes = 8 * 1024 * 1024;
     private static readonly TimeSpan ProbeTtl = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(8);
-    private static readonly TimeSpan ImageTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan ImageQueueTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan ImageTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ReadIdleTimeout = TimeSpan.FromSeconds(30);
 
     private static readonly Regex UriAttrRegex =
@@ -69,7 +70,7 @@ public static class TvStreamProxy
         new(() => TvUrlGuard.CreatePinnedHttpClient(timeout: TimeSpan.FromSeconds(45)));
 
     private static readonly SemaphoreSlim UpstreamGate = new(MaxConcurrentUpstream, MaxConcurrentUpstream);
-    private static readonly SemaphoreSlim ImageGate = new(6, 6);
+    private static readonly SemaphoreSlim ImageGate = new(12, 12);
     private static int _activeUpstreamConnections;
     private static long _nextStreamToken;
     private static readonly object ActiveStreamsLock = new();
@@ -193,47 +194,44 @@ public static class TvStreamProxy
         string? connId = null;
         string? liveStreamId = null;
         string? liveRequestedExt = null;
+        string streamType = "";
+        bool isInternalXtream = false;
         bool isLiveStream = false;
+        List<string>? xtreamCandidates = null;
 
         if (TvUrlGuard.IsInternalTvStreamUrl(rawUrl, out var internalUri) && internalUri != null)
         {
+            isInternalXtream = true;
             var internalQ = HttpUtility.ParseQueryString(internalUri.Query);
             connId = internalQ["conn"] ?? "";
-            string streamType = internalUri.AbsolutePath.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
-                                internalUri.AbsolutePath.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
+            streamType = internalUri.AbsolutePath.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
+                         internalUri.AbsolutePath.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
             isLiveStream = string.Equals(streamType, "live", StringComparison.OrdinalIgnoreCase);
             liveStreamId = internalQ["id"] ?? "";
             liveRequestedExt = internalQ["ext"] ?? "";
 
-            string extToUse = liveRequestedExt;
-            if (isLiveStream)
-            {
-                string? rememberedExt = TvPlaybackHints.GetLiveExt(connId);
-                if (!string.IsNullOrWhiteSpace(rememberedExt))
-                {
-                    extToUse = rememberedExt;
-                }
-            }
+            var resolved = TvXtreamService.ResolveUpstreamStreamCandidates(TvXtreamStore.Shared, rawUrl);
 
-            var resolve = TvXtreamService.ResolveUpstreamStreamUrl(
-                TvXtreamStore.Shared,
-                connId,
-                streamType,
-                liveStreamId,
-                extToUse);
-
-            if (!resolve.Success || string.IsNullOrEmpty(resolve.UpstreamUrl))
+            if (!resolved.Success || resolved.Candidates.Count == 0)
             {
-                string errCls = resolve.Error != null && (resolve.Error.Contains("Credenciales", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Conexión", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Identificadores", StringComparison.OrdinalIgnoreCase))
+                string errCls = resolved.Error != null && (resolved.Error.Contains("Credenciales", StringComparison.OrdinalIgnoreCase) || resolved.Error.Contains("Conexión", StringComparison.OrdinalIgnoreCase) || resolved.Error.Contains("Identificadores", StringComparison.OrdinalIgnoreCase))
                     ? "credentials"
                     : "blocked";
-                return ProxyErrorResult(404, "Not Found", errCls, resolve.Error ?? "Flujo Xtream no disponible.");
+                TvDiagLog.Write("stream-resolve", $"Sin candidatos ({errCls})", $"{rawUrl ?? "<null>"} | {resolved.Error ?? "empty"}");
+                return ProxyErrorResult(404, "Not Found", errCls, resolved.Error ?? "Flujo Xtream no disponible.");
             }
-            effectiveUrl = resolve.UpstreamUrl;
+            xtreamCandidates = resolved.Candidates;
+            effectiveUrl = xtreamCandidates[0];
+        }
+        else if (TvUrlGuard.IsInternalTvHostUrl(rawUrl))
+        {
+            TvDiagLog.Write("stream-resolve", "Ruta interna desconocida", rawUrl ?? "<null>");
+            return ProxyErrorResult(404, "Not Found", "not_found", "Ruta interna de streaming no reconocida.");
         }
 
         if (!TvUrlGuard.IsAllowedRemoteUrl(effectiveUrl, out var targetUri) || targetUri == null)
         {
+            TvDiagLog.Write("stream-blocked", "URL bloqueada por TvUrlGuard", effectiveUrl ?? rawUrl ?? "<null>");
             return ProxyErrorResult(404, "Not Found", "blocked", "URL privada o esquema no permitido.");
         }
 
@@ -296,82 +294,77 @@ public static class TvStreamProxy
         HttpResponseMessage? resp = null;
         try
         {
-            string currentUa = TvPlaybackHints.GetUserAgent(connId, targetUri.Host) ?? TvUrlGuard.PlayerUserAgent;
+            string initialUa = TvPlaybackHints.GetUserAgent(connId, targetUri.Host) ?? TvUrlGuard.PlayerUserAgent;
             Uri finalUri;
-            (resp, finalUri) = await SendWithRetryAsync(targetUri, rangeHeader, linkedToken, currentUa).ConfigureAwait(false);
+            string currentUa;
+            (resp, finalUri, currentUa) = await SendWithUserAgentFallbackAsync(
+                Http, targetUri, rangeHeader, connId, linkedToken, useRetry: true).ConfigureAwait(false);
 
             int status = (int)resp.StatusCode;
-
-            // 1. Reintento de User-Agent si da 403 o 404
-            if ((status == 403 || status == 404) && !string.Equals(currentUa, TvUrlGuard.FallbackPlayerUserAgent, StringComparison.Ordinal))
+            if (resp.IsSuccessStatusCode && !string.Equals(currentUa, initialUa, StringComparison.Ordinal))
             {
-                resp.Dispose();
-                currentUa = TvUrlGuard.FallbackPlayerUserAgent;
-                (resp, finalUri) = await SendWithRetryAsync(targetUri, rangeHeader, linkedToken, currentUa).ConfigureAwait(false);
-                status = (int)resp.StatusCode;
-                if (resp.IsSuccessStatusCode)
-                {
-                    TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
-                    InvalidateProbe(effectiveUrl);
-                    InvalidateProbe(rawUrl);
-                }
-            }
-            else if (resp.IsSuccessStatusCode)
-            {
-                TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
+                InvalidateProbe(effectiveUrl);
+                InvalidateProbe(rawUrl);
             }
 
-            // 2. Reintento de formato de live stream (.ts <-> .m3u8) si da 404
-            if (status == 404 && (isLiveStream || LooksLikeLiveStream(targetUri)))
+            // Reintento de candidatos Xtream o formato de stream si da 404
+            if (status == 404)
             {
-                string currentExt = GetLiveStreamExtension(targetUri, liveRequestedExt);
-                string alternateExt = string.Equals(currentExt, "ts", StringComparison.OrdinalIgnoreCase) ? "m3u8" : "ts";
-                Uri? altUri = null;
-                if (isLiveStream && !string.IsNullOrEmpty(connId) && !string.IsNullOrEmpty(liveStreamId))
+                if (isInternalXtream)
                 {
-                    var altResolve = TvXtreamService.ResolveUpstreamStreamUrl(TvXtreamStore.Shared, connId, "live", liveStreamId, alternateExt);
-                    if (altResolve.Success && !string.IsNullOrEmpty(altResolve.UpstreamUrl))
-                        TvUrlGuard.IsAllowedRemoteUrl(altResolve.UpstreamUrl, out altUri);
-                }
-                else
-                {
-                    altUri = SwapLiveExtension(targetUri, currentExt, alternateExt);
-                }
-
-                if (altUri != null)
-                {
-                    var (altResp, altFinal) = await SendWithRetryAsync(altUri, rangeHeader, linkedToken, currentUa).ConfigureAwait(false);
-                    int altStatus = (int)altResp.StatusCode;
-                    if ((altStatus == 403 || altStatus == 404) && !string.Equals(currentUa, TvUrlGuard.FallbackPlayerUserAgent, StringComparison.Ordinal))
-                    {
-                        altResp.Dispose();
-                        currentUa = TvUrlGuard.FallbackPlayerUserAgent;
-                        (altResp, altFinal) = await SendWithRetryAsync(altUri, rangeHeader, linkedToken, currentUa).ConfigureAwait(false);
-                        altStatus = (int)altResp.StatusCode;
-                    }
-
-                    if (altResp.IsSuccessStatusCode)
+                    var (altResp, altFinal, altUri, altUa) = await TryXtream404FallbackAsync(
+                        xtreamCandidates, streamType, connId, liveStreamId, rangeHeader, useRetry: true, linkedToken).ConfigureAwait(false);
+                    if (altResp != null && altFinal != null && altUri != null)
                     {
                         resp.Dispose();
                         resp = altResp;
                         finalUri = altFinal;
-                        status = altStatus;
+                        status = (int)altResp.StatusCode;
                         targetUri = altUri;
-                        TvPlaybackHints.RememberLiveExt(connId, alternateExt);
-                        TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
+                        currentUa = altUa;
                         InvalidateProbe(effectiveUrl);
                         InvalidateProbe(rawUrl);
+                        if (isLiveStream)
+                        {
+                            string matchedExt = GetLiveStreamExtension(targetUri, "");
+                            if (!string.IsNullOrEmpty(matchedExt))
+                                TvPlaybackHints.RememberLiveExt(connId, matchedExt);
+                        }
                     }
-                    else
+                }
+                else if (isLiveStream || LooksLikeLiveStream(targetUri))
+                {
+                    string currentExt = GetLiveStreamExtension(targetUri, liveRequestedExt);
+                    string alternateExt = string.Equals(currentExt, "ts", StringComparison.OrdinalIgnoreCase) ? "m3u8" : "ts";
+                    Uri? altUri = SwapLiveExtension(targetUri, currentExt, alternateExt);
+                    if (altUri != null)
                     {
-                        altResp.Dispose();
+                        var (altResp, altFinal, altUa) = await SendWithUserAgentFallbackAsync(
+                            Http, altUri, rangeHeader, connId, linkedToken, useRetry: true).ConfigureAwait(false);
+                        if (altResp.IsSuccessStatusCode)
+                        {
+                            resp.Dispose();
+                            resp = altResp;
+                            finalUri = altFinal;
+                            status = (int)altResp.StatusCode;
+                            targetUri = altUri;
+                            currentUa = altUa;
+                            InvalidateProbe(effectiveUrl);
+                            InvalidateProbe(rawUrl);
+                        }
+                        else
+                        {
+                            altResp.Dispose();
+                        }
                     }
                 }
             }
 
             if (resp.IsSuccessStatusCode && isLiveStream)
             {
-                TvPlaybackHints.RememberLiveExt(connId, GetLiveStreamExtension(targetUri, liveRequestedExt));
+                string okExt = GetLiveStreamExtension(targetUri, "");
+                if (!string.IsNullOrEmpty(okExt))
+                    TvPlaybackHints.RememberLiveExt(connId, okExt);
             }
 
             string reason = resp.ReasonPhrase ?? "OK";
@@ -391,6 +384,7 @@ public static class TvStreamProxy
 
             if (!resp.IsSuccessStatusCode)
             {
+                TvDiagLog.Write("stream-upstream", $"HTTP {status} {reason}", $"ua={currentUa} target={targetUri.AbsoluteUri} final={finalUri.AbsoluteUri}");
                 resp.Dispose();
                 lease.Dispose();
                 return UpstreamErrorResult(status, reason, $"Error remoto {status} {reason}");
@@ -404,6 +398,7 @@ public static class TvStreamProxy
 
                 if (HasNonNoneEncryption(body))
                 {
+                    TvDiagLog.Write("stream-encrypted", "Manifiesto HLS cifrado no soportado", finalUri.AbsoluteUri);
                     return ProxyErrorResult(422, "Unprocessable Entity", "encrypted",
                         "Este método de reproducción (flujo cifrado) no está soportado.");
                 }
@@ -461,73 +456,272 @@ public static class TvStreamProxy
     /// Descarga y sirve imágenes de logotipos o portadas bajo estricto control de origen,
     /// concurrencia máx. 6, límite de 2 MB y timeout de 8 s, validando Content-Type: image/*.
     /// </summary>
-    public static async Task<TvProxyResult> FetchImageAsync(string? rawUrl, string? connId, CancellationToken ct)
+    private static readonly string[] VodFallbackExtensions = ["m3u8", "mp4", "mkv", "ts"];
+
+    private static async Task<(HttpResponseMessage Response, Uri FinalUri, string UsedUa)> SendWithUserAgentFallbackAsync(
+        HttpClient client,
+        Uri targetUri,
+        string? rangeHeader,
+        string? connId,
+        CancellationToken ct,
+        bool useRetry,
+        bool retryOnServerError = false)
     {
-        if (!TvUrlGuard.IsAllowedRemoteUrl(rawUrl, out var targetUri) || targetUri == null)
+        var candidates = TvUrlGuard.GetUserAgentCandidates(TvPlaybackHints.GetUserAgent(connId, targetUri.Host));
+        HttpResponseMessage? lastResp = null;
+        Uri lastFinal = targetUri;
+        string lastUa = candidates[0];
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            string ua = candidates[i];
+            var (resp, finalUri) = useRetry && ReferenceEquals(client, Http)
+                ? await SendWithRetryAsync(targetUri, rangeHeader, ct, ua).ConfigureAwait(false)
+                : await TvUrlGuard.GetWithSafeRedirectsAsync(client, targetUri, rangeHeader, ct, userAgent: ua).ConfigureAwait(false);
+
+            lastResp = resp;
+            lastFinal = finalUri;
+            lastUa = ua;
+
+            if (resp.IsSuccessStatusCode)
+            {
+                TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, ua);
+                TvPlaybackHints.RememberUserAgent(connId, finalUri.Host, ua);
+                return (resp, finalUri, ua);
+            }
+
+            int code = (int)resp.StatusCode;
+            bool shouldRetry = code == 401 || code == 403 || code == 404 || code == 406 ||
+                               (retryOnServerError && code >= 500);
+            if (!shouldRetry || i + 1 >= candidates.Count)
+                return (resp, finalUri, ua);
+
+            resp.Dispose();
+        }
+
+        return (lastResp!, lastFinal, lastUa);
+    }
+
+    public static string? SniffImageContentType(ReadOnlySpan<byte> bytes, string? currentContentType, Uri? uri = null)
+    {
+        if (bytes.Length == 0) return null;
+
+        if (bytes.Length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+            return "image/jpeg";
+
+        if (bytes.Length >= 8 &&
+            bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 &&
+            bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A)
+            return "image/png";
+
+        if (bytes.Length >= 6 && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F' &&
+            bytes[3] == '8' && (bytes[4] == '7' || bytes[4] == '9') && bytes[5] == 'a')
+            return "image/gif";
+
+        if (bytes.Length >= 12 &&
+            bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F' &&
+            bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P')
+            return "image/webp";
+
+        if (bytes.Length >= 2 && bytes[0] == 'B' && bytes[1] == 'M')
+            return "image/bmp";
+
+        if (bytes.Length >= 4 && bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0x01 && bytes[3] == 0x00)
+            return "image/x-icon";
+
+        if (bytes.Length >= 12 && bytes[4] == 'f' && bytes[5] == 't' && bytes[6] == 'y' && bytes[7] == 'p')
+        {
+            string brand = Encoding.ASCII.GetString(bytes.Slice(8, 4));
+            if (brand.Equals("avif", StringComparison.OrdinalIgnoreCase) || brand.Equals("avis", StringComparison.OrdinalIgnoreCase))
+                return "image/avif";
+            if (brand.Equals("heic", StringComparison.OrdinalIgnoreCase) || brand.Equals("heix", StringComparison.OrdinalIgnoreCase))
+                return "image/heic";
+        }
+
+        // Recortar BOM/espacios UTF-8 iniciales para detectar SVG o rechazar HTML disfrazado
+        int headLen = Math.Min(bytes.Length, 512);
+        string head = Encoding.UTF8.GetString(bytes[..headLen]).TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+        if (head.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase) ||
+            head.StartsWith("<html", StringComparison.OrdinalIgnoreCase) ||
+            head.StartsWith("<head", StringComparison.OrdinalIgnoreCase) ||
+            head.StartsWith("<body", StringComparison.OrdinalIgnoreCase) ||
+            head.StartsWith("<script", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (head.StartsWith("<svg", StringComparison.OrdinalIgnoreCase) ||
+            (head.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase) &&
+             head.Contains("<svg", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "image/svg+xml";
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentContentType))
+        {
+            string mediaType = currentContentType.Split(';', 2)[0].Trim();
+            if (mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                return mediaType;
+        }
+
+        return null;
+    }
+
+    private static async Task<(HttpResponseMessage? Resp, Uri? FinalUri, Uri? MatchedUri, string MatchedUa)> TryXtream404FallbackAsync(
+        List<string>? candidates,
+        string streamType,
+        string? connId,
+        string? liveStreamId,
+        string? rangeHeader,
+        bool useRetry,
+        CancellationToken ct)
+    {
+        var tried = new HashSet<string>(StringComparer.Ordinal);
+        if (candidates != null && candidates.Count > 0)
+        {
+            tried.Add(candidates[0]);
+            for (int i = 1; i < candidates.Count; i++)
+            {
+                if (ct.IsCancellationRequested) break;
+                string altUrl = candidates[i];
+                if (!tried.Add(altUrl)) continue;
+                if (!TvUrlGuard.IsAllowedRemoteUrl(altUrl, out var altUri) || altUri == null) continue;
+
+                try
+                {
+                    var (altResp, altFinal, altUa) = await SendWithUserAgentFallbackAsync(
+                        Http, altUri, rangeHeader, connId, ct, useRetry: useRetry).ConfigureAwait(false);
+                    if (altResp.IsSuccessStatusCode)
+                    {
+                        TvDiagLog.Write("xtream-fallback", $"Candidato #{i} OK ({(int)altResp.StatusCode})", $"ua={altUa} url={altUri.AbsoluteUri}");
+                        return (altResp, altFinal, altUri, altUa);
+                    }
+                    TvDiagLog.Write("xtream-fallback", $"Candidato #{i} HTTP {(int)altResp.StatusCode}", $"ua={altUa} url={altUri.AbsoluteUri}");
+                    altResp.Dispose();
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    TvDiagLog.Write("xtream-fallback", $"Candidato #{i} error {ex.GetType().Name}", $"url={altUri.AbsoluteUri} | {ex.Message}");
+                }
+            }
+        }
+
+        if (string.Equals(streamType, "movie", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrEmpty(liveStreamId) &&
+            !ct.IsCancellationRequested)
+        {
+            string? vodInfoUrl = await TvXtreamService.Shared.TryResolveVodInfoStreamUrlAsync(
+                TvXtreamStore.Shared, connId ?? "", liveStreamId, ct).ConfigureAwait(false);
+            if (!string.IsNullOrEmpty(vodInfoUrl) &&
+                TvUrlGuard.IsAllowedRemoteUrl(vodInfoUrl, out var vodInfoUri) &&
+                vodInfoUri != null &&
+                tried.Add(vodInfoUri.AbsoluteUri))
+            {
+                var (altResp, altFinal, altUa) = await SendWithUserAgentFallbackAsync(
+                    Http, vodInfoUri, rangeHeader, connId, ct, useRetry: useRetry).ConfigureAwait(false);
+                if (altResp.IsSuccessStatusCode)
+                {
+                    TvDiagLog.Write("xtream-fallback", $"get_vod_info OK ({(int)altResp.StatusCode})", $"ua={altUa} url={vodInfoUri.AbsoluteUri}");
+                    return (altResp, altFinal, vodInfoUri, altUa);
+                }
+                TvDiagLog.Write("xtream-fallback", $"get_vod_info HTTP {(int)altResp.StatusCode}", $"ua={altUa} url={vodInfoUri.AbsoluteUri}");
+                altResp.Dispose();
+            }
+        }
+
+        return (null, null, null, "");
+    }
+
+    public static Task<TvProxyResult> FetchImageAsync(string? rawUrl, string? connId, CancellationToken ct)
+        => FetchImageAsync(rawUrl, connId, null, ct);
+
+    public static async Task<TvProxyResult> FetchImageAsync(string? rawUrl, string? connId, HttpClient? httpClient, CancellationToken ct)
+    {
+        string? normalizedUrl = rawUrl?.Trim();
+        if (!string.IsNullOrEmpty(normalizedUrl) && normalizedUrl.StartsWith("//", StringComparison.Ordinal))
+            normalizedUrl = "https:" + normalizedUrl;
+
+        if (TvUrlGuard.IsInternalTvHostUrl(normalizedUrl))
+        {
+            TvDiagLog.Write("image-proxy", "Imagen interna no encontrada", normalizedUrl ?? "<null>");
+            return ProxyErrorResult(404, "Not Found", "not_found", "Imagen interna no encontrada.");
+        }
+
+        if (!TvUrlGuard.IsAllowedRemoteUrl(normalizedUrl, out var targetUri) || targetUri == null)
+        {
+            TvDiagLog.Write("image-proxy", "URL de imagen bloqueada", normalizedUrl ?? "<null>");
             return ProxyErrorResult(400, "Bad Request", "blocked", "URL de imagen no permitida o privada.");
+        }
+
+        bool gotSlot = false;
+        try
+        {
+            gotSlot = await ImageGate.WaitAsync(ImageQueueTimeout, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            TvDiagLog.Write("image-proxy", "Timeout en cola de imágenes", targetUri.AbsoluteUri);
+            return ProxyErrorResult(504, "Gateway Timeout", "timeout", "Tiempo de espera agotado en cola de imágenes.");
+        }
+
+        if (!gotSlot)
+        {
+            TvDiagLog.Write("image-proxy", "429 límite concurrencia imágenes", targetUri.AbsoluteUri);
+            return ProxyErrorResult(429, "Too Many Requests", "upstream", "Límite de concurrencia de imágenes alcanzado.");
+        }
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(ImageTimeout);
         var token = timeoutCts.Token;
 
-        bool gotSlot = false;
         try
         {
-            gotSlot = await ImageGate.WaitAsync(ImageTimeout, token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            return ProxyErrorResult(504, "Gateway Timeout", "timeout", "Tiempo de espera agotado en cola de imágenes.");
-        }
-
-        if (!gotSlot)
-            return ProxyErrorResult(429, "Too Many Requests", "upstream", "Límite de concurrencia de imágenes alcanzado.");
-
-        try
-        {
-            string currentUa = TvPlaybackHints.GetUserAgent(connId, targetUri.Host) ?? TvUrlGuard.PlayerUserAgent;
-            var (resp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(Http, targetUri, null, token, userAgent: currentUa).ConfigureAwait(false);
-
-            int code = (int)resp.StatusCode;
-            if ((code == 403 || code == 404) && !string.Equals(currentUa, TvUrlGuard.FallbackPlayerUserAgent, StringComparison.Ordinal))
-            {
-                resp.Dispose();
-                currentUa = TvUrlGuard.FallbackPlayerUserAgent;
-                var (fallbackResp, _) = await TvUrlGuard.GetWithSafeRedirectsAsync(Http, targetUri, null, token, userAgent: currentUa).ConfigureAwait(false);
-                resp = fallbackResp;
-                if (resp.IsSuccessStatusCode)
-                {
-                    TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
-                }
-            }
-            else if (resp.IsSuccessStatusCode)
-            {
-                TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
-            }
+            HttpClient activeClient = httpClient ?? Http;
+            var (resp, finalUri, usedUa) = await SendWithUserAgentFallbackAsync(
+                activeClient, targetUri, rangeHeader: null, connId, token, useRetry: false, retryOnServerError: true).ConfigureAwait(false);
 
             using (resp)
             {
                 if (!resp.IsSuccessStatusCode)
-                    return UpstreamErrorResult((int)resp.StatusCode, resp.ReasonPhrase ?? "Error", "Error al obtener imagen.");
-
-                string contentType = resp.Content.Headers.ContentType?.MediaType ?? "";
-                if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
                 {
-                    return ProxyErrorResult(415, "Unsupported Media Type", "blocked", "El recurso no es una imagen válida.");
+                    TvDiagLog.Write("image-proxy", $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}", $"ua={usedUa} url={targetUri.AbsoluteUri} final={finalUri.AbsoluteUri}");
+                    return UpstreamErrorResult((int)resp.StatusCode, resp.ReasonPhrase ?? "Error", "Error al obtener imagen.");
                 }
 
                 if (resp.Content.Headers.ContentLength is long cl && cl > MaxImageBytes)
                 {
-                    return ProxyErrorResult(413, "Payload Too Large", "blocked", "La imagen excede el límite de 2 MB.");
+                    TvDiagLog.Write("image-proxy", $"413 imagen excede 8MB ({cl} bytes)", finalUri.AbsoluteUri);
+                    return ProxyErrorResult(413, "Payload Too Large", "blocked", "La imagen excede el límite de 8 MB.");
                 }
 
                 await using var inStream = await resp.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
                 using var bounded = new BoundedReadStream(inStream, MaxImageBytes);
                 var ms = new MemoryStream();
                 await bounded.CopyToAsync(ms, token).ConfigureAwait(false);
+                if (ms.Length == 0)
+                {
+                    ms.Dispose();
+                    TvDiagLog.Write("image-proxy", "404 cuerpo de imagen vacío", finalUri.AbsoluteUri);
+                    return ProxyErrorResult(404, "Not Found", "upstream", "La imagen está vacía.");
+                }
+
+                string? rawUpstreamCt = resp.Content.Headers.ContentType?.MediaType;
+                string? detectedType = SniffImageContentType(
+                    ms.GetBuffer().AsSpan(0, (int)ms.Length),
+                    rawUpstreamCt,
+                    finalUri);
+
+                if (string.IsNullOrEmpty(detectedType))
+                {
+                    long byteCount = ms.Length;
+                    ms.Dispose();
+                    TvDiagLog.Write("image-proxy", "415 tipo no válido", $"ct={rawUpstreamCt ?? "<null>"} bytes={byteCount} final={finalUri.AbsoluteUri}");
+                    return ProxyErrorResult(415, "Unsupported Media Type", "blocked", "El recurso no es una imagen válida.");
+                }
+
                 ms.Position = 0;
 
-                var res = new TvProxyResult(200, "OK", contentType, ms);
+                var res = new TvProxyResult(200, "OK", detectedType, ms);
                 res.ExtraHeaders["Cache-Control"] = "public, max-age=86400";
                 return res;
             }
@@ -535,6 +729,7 @@ public static class TvStreamProxy
         catch (Exception ex)
         {
             var (cls, status, msg) = TvUrlGuard.ClassifyException(ex);
+            TvDiagLog.Write("image-proxy", $"Excepción {ex.GetType().Name} ({status})", $"{targetUri.AbsoluteUri} | {ex.Message}");
             return ProxyErrorResult(status, status == 504 ? "Gateway Timeout" : "Bad Gateway", cls, msg);
         }
         finally
@@ -554,48 +749,45 @@ public static class TvStreamProxy
         string? connId = null;
         string? liveStreamId = null;
         string? liveRequestedExt = null;
+        string streamType = "";
+        bool isInternalXtream = false;
         bool isLiveStream = false;
+        List<string>? xtreamCandidates = null;
 
         if (TvUrlGuard.IsInternalTvStreamUrl(rawUrl, out var internalUri) && internalUri != null)
         {
+            isInternalXtream = true;
             var internalQ = HttpUtility.ParseQueryString(internalUri.Query);
             connId = internalQ["conn"] ?? "";
-            string streamType = internalUri.AbsolutePath.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
-                                internalUri.AbsolutePath.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
+            streamType = internalUri.AbsolutePath.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
+                         internalUri.AbsolutePath.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
             isLiveStream = string.Equals(streamType, "live", StringComparison.OrdinalIgnoreCase);
             liveStreamId = internalQ["id"] ?? "";
             liveRequestedExt = internalQ["ext"] ?? "";
 
-            string extToUse = liveRequestedExt;
-            if (isLiveStream)
-            {
-                string? rememberedExt = TvPlaybackHints.GetLiveExt(connId);
-                if (!string.IsNullOrWhiteSpace(rememberedExt))
-                {
-                    extToUse = rememberedExt;
-                }
-            }
+            var resolved = TvXtreamService.ResolveUpstreamStreamCandidates(TvXtreamStore.Shared, rawUrl);
 
-            var resolve = TvXtreamService.ResolveUpstreamStreamUrl(
-                TvXtreamStore.Shared,
-                connId,
-                streamType,
-                liveStreamId,
-                extToUse);
-
-            if (!resolve.Success || string.IsNullOrEmpty(resolve.UpstreamUrl))
+            if (!resolved.Success || resolved.Candidates.Count == 0)
             {
-                string errCls = resolve.Error != null && (resolve.Error.Contains("Credenciales", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Conexión", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Identificadores", StringComparison.OrdinalIgnoreCase))
+                string errCls = resolved.Error != null && (resolved.Error.Contains("Credenciales", StringComparison.OrdinalIgnoreCase) || resolved.Error.Contains("Conexión", StringComparison.OrdinalIgnoreCase) || resolved.Error.Contains("Identificadores", StringComparison.OrdinalIgnoreCase))
                     ? "credentials"
                     : "blocked";
+                TvDiagLog.Write("probe-resolve", $"Sin candidatos ({errCls})", $"{rawUrl ?? "<null>"} | {resolved.Error ?? "empty"}");
                 // REQUIREMENT 4: No cachear fallos de credenciales en ProbeCache
-                return new TvProbeResult("unknown", 404, "", errCls, resolve.Error ?? "Flujo Xtream no disponible.");
+                return new TvProbeResult("unknown", 404, "", errCls, resolved.Error ?? "Flujo Xtream no disponible.");
             }
-            targetToProbe = resolve.UpstreamUrl;
+            xtreamCandidates = resolved.Candidates;
+            targetToProbe = xtreamCandidates[0];
+        }
+        else if (TvUrlGuard.IsInternalTvHostUrl(rawUrl))
+        {
+            TvDiagLog.Write("probe-resolve", "Ruta interna desconocida", rawUrl ?? "<null>");
+            return new TvProbeResult("unknown", 404, "", "not_found", "Ruta interna de streaming no reconocida.");
         }
 
         if (!TvUrlGuard.IsAllowedRemoteUrl(targetToProbe, out var targetUri) || targetUri == null)
         {
+            TvDiagLog.Write("probe-blocked", "URL bloqueada por TvUrlGuard", targetToProbe ?? rawUrl ?? "<null>");
             return new TvProbeResult("unknown", 502, "", "blocked", "URL privada o no permitida.");
         }
 
@@ -608,73 +800,56 @@ public static class TvStreamProxy
 
         try
         {
-            string currentUa = TvPlaybackHints.GetUserAgent(connId, targetUri.Host) ?? TvUrlGuard.PlayerUserAgent;
-            var (resp, finalUri) = await TvUrlGuard.GetWithSafeRedirectsAsync(
-                Http, targetUri, null, timeoutCts.Token, userAgent: currentUa).ConfigureAwait(false);
+            var (resp, finalUri, _) = await SendWithUserAgentFallbackAsync(
+                Http, targetUri, rangeHeader: null, connId, timeoutCts.Token, useRetry: false).ConfigureAwait(false);
 
             int status = (int)resp.StatusCode;
-            if ((status == 403 || status == 404) && !string.Equals(currentUa, TvUrlGuard.FallbackPlayerUserAgent, StringComparison.Ordinal))
-            {
-                resp.Dispose();
-                currentUa = TvUrlGuard.FallbackPlayerUserAgent;
-                (resp, finalUri) = await TvUrlGuard.GetWithSafeRedirectsAsync(
-                    Http, targetUri, null, timeoutCts.Token, userAgent: currentUa).ConfigureAwait(false);
-                status = (int)resp.StatusCode;
-                if (resp.IsSuccessStatusCode)
-                {
-                    TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
-                }
-            }
-            else if (resp.IsSuccessStatusCode)
-            {
-                TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
-            }
 
-            // Reintento de extensión en Live (.ts <-> .m3u8) si da 404
-            if (status == 404 && (isLiveStream || LooksLikeLiveStream(targetUri)))
+            // Reintento de candidatos Xtream o formato en 404
+            if (status == 404)
             {
-                string currentExt = GetLiveStreamExtension(targetUri, liveRequestedExt);
-                string alternateExt = string.Equals(currentExt, "ts", StringComparison.OrdinalIgnoreCase) ? "m3u8" : "ts";
-                Uri? altUri = null;
-                if (isLiveStream && !string.IsNullOrEmpty(connId) && !string.IsNullOrEmpty(liveStreamId))
+                if (isInternalXtream)
                 {
-                    var altResolve = TvXtreamService.ResolveUpstreamStreamUrl(TvXtreamStore.Shared, connId, "live", liveStreamId, alternateExt);
-                    if (altResolve.Success && !string.IsNullOrEmpty(altResolve.UpstreamUrl))
-                        TvUrlGuard.IsAllowedRemoteUrl(altResolve.UpstreamUrl, out altUri);
-                }
-                else
-                {
-                    altUri = SwapLiveExtension(targetUri, currentExt, alternateExt);
-                }
-
-                if (altUri != null)
-                {
-                    var (altResp, altFinal) = await TvUrlGuard.GetWithSafeRedirectsAsync(
-                        Http, altUri, null, timeoutCts.Token, userAgent: currentUa).ConfigureAwait(false);
-                    int altStatus = (int)altResp.StatusCode;
-                    if ((altStatus == 403 || altStatus == 404) && !string.Equals(currentUa, TvUrlGuard.FallbackPlayerUserAgent, StringComparison.Ordinal))
-                    {
-                        altResp.Dispose();
-                        currentUa = TvUrlGuard.FallbackPlayerUserAgent;
-                        (altResp, altFinal) = await TvUrlGuard.GetWithSafeRedirectsAsync(
-                            Http, altUri, null, timeoutCts.Token, userAgent: currentUa).ConfigureAwait(false);
-                        altStatus = (int)altResp.StatusCode;
-                    }
-
-                    if (altResp.IsSuccessStatusCode)
+                    var (altResp, altFinal, altUri, _) = await TryXtream404FallbackAsync(
+                        xtreamCandidates, streamType, connId, liveStreamId, rangeHeader: null, useRetry: false, timeoutCts.Token).ConfigureAwait(false);
+                    if (altResp != null && altFinal != null && altUri != null)
                     {
                         resp.Dispose();
                         resp = altResp;
                         finalUri = altFinal;
-                        status = altStatus;
+                        status = (int)altResp.StatusCode;
                         targetUri = altUri;
                         cacheKey = altUri.AbsoluteUri;
-                        TvPlaybackHints.RememberLiveExt(connId, alternateExt);
-                        TvPlaybackHints.RememberUserAgent(connId, targetUri.Host, currentUa);
+                        if (isLiveStream)
+                        {
+                            string matchedExt = GetLiveStreamExtension(targetUri, "");
+                            if (!string.IsNullOrEmpty(matchedExt))
+                                TvPlaybackHints.RememberLiveExt(connId, matchedExt);
+                        }
                     }
-                    else
+                }
+                else if (isLiveStream || LooksLikeLiveStream(targetUri))
+                {
+                    string currentExt = GetLiveStreamExtension(targetUri, liveRequestedExt);
+                    string alternateExt = string.Equals(currentExt, "ts", StringComparison.OrdinalIgnoreCase) ? "m3u8" : "ts";
+                    Uri? altUri = SwapLiveExtension(targetUri, currentExt, alternateExt);
+                    if (altUri != null)
                     {
-                        altResp.Dispose();
+                        var (altResp, altFinal, _) = await SendWithUserAgentFallbackAsync(
+                            Http, altUri, rangeHeader: null, connId, timeoutCts.Token, useRetry: false).ConfigureAwait(false);
+                        if (altResp.IsSuccessStatusCode)
+                        {
+                            resp.Dispose();
+                            resp = altResp;
+                            finalUri = altFinal;
+                            status = (int)altResp.StatusCode;
+                            targetUri = altUri;
+                            cacheKey = altUri.AbsoluteUri;
+                        }
+                        else
+                        {
+                            altResp.Dispose();
+                        }
                     }
                 }
             }
@@ -685,6 +860,7 @@ public static class TvStreamProxy
 
                 if (!resp.IsSuccessStatusCode)
                 {
+                    TvDiagLog.Write("probe-upstream", $"HTTP {status}", $"ct={contentType} target={targetUri.AbsoluteUri} final={finalUri.AbsoluteUri}");
                     var fail = new TvProbeResult("unknown", status, contentType, "upstream", $"HTTP {status}");
                     // REQUIREMENT 4: No cachear en ProbeCache los fallos 404/403
                     if (status != 403 && status != 404)
@@ -735,6 +911,7 @@ public static class TvStreamProxy
         catch (Exception ex)
         {
             var (cls, status, msg) = TvUrlGuard.ClassifyException(ex);
+            TvDiagLog.Write("probe-error", $"Excepción {ex.GetType().Name} ({status})", $"{targetUri.AbsoluteUri} | {ex.Message}");
             return new TvProbeResult("unknown", status, "", cls, msg);
         }
     }

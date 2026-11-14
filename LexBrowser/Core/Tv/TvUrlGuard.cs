@@ -35,10 +35,35 @@ public static class TvUrlGuard
 
     /// <summary>User-Agent neutro por defecto para streams e imágenes (reproductor).</summary>
     public const string DefaultPlayerUserAgent = "LexTV/1.0 (Player)";
-    /// <summary>User-Agent alternativo usado una sola vez cuando el primario recibe 403/404.</summary>
+    /// <summary>User-Agent alternativo usado cuando el primario recibe rechazo o 403/404.</summary>
     public const string FallbackPlayerUserAgent = "VLC/3.0.20 LibVLC/3.0.20";
+    /// <summary>User-Agent compatible con paneles Xtream/Magma.</summary>
+    public const string MagmaPlayerUserAgent = "Magma Player/10";
+    /// <summary>User-Agent estándar de navegador para portadas o CDN con bloqueo de reproductores.</summary>
+    public const string BrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
     public const string PlayerUserAgentEnvVar = "LEXTV_PLAYER_UA";
     public const string PlayerUserAgentFileName = "tv_player_ua.txt";
+
+    /// <summary>
+    /// Devuelve la lista ordenada y sin duplicados de User-Agents candidatos para streams, APIs e imágenes.
+    /// </summary>
+    public static IReadOnlyList<string> GetUserAgentCandidates(string? preferredUa = null)
+    {
+        var list = new List<string>(5);
+        void AddUnique(string? ua)
+        {
+            string clean = SanitizeHeaderValue(ua, 140);
+            if (clean.Length > 0 && !list.Contains(clean, StringComparer.Ordinal))
+                list.Add(clean);
+        }
+
+        AddUnique(preferredUa);
+        AddUnique(PlayerUserAgent);
+        AddUnique(FallbackPlayerUserAgent);
+        AddUnique(MagmaPlayerUserAgent);
+        AddUnique(BrowserUserAgent);
+        return list;
+    }
 
     private static string? _playerUserAgent;
 
@@ -98,13 +123,19 @@ public static class TvUrlGuard
     /// <summary>
     /// Comprueba si la URL corresponde a una ruta virtual interna autorizada de streaming de Lex TV
     /// (/api/xtream/live, /api/xtream/vod, /api/xtream/series).
-    /// No admite orígenes remotos ni otros endpoints que no pertenezcan a tv.lex.local.
+    /// Acepta también rutas relativas (/api/xtream/...) normalizándolas a https://tv.lex.local.
     /// </summary>
     public static bool IsInternalTvStreamUrl(string? url, out Uri? uri)
     {
         uri = null;
         if (string.IsNullOrWhiteSpace(url) || url.Length > 2048) return false;
-        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u)) return false;
+        string trimmed = url.Trim();
+        if (trimmed.StartsWith("/api/xtream/", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = InternalOrigin + trimmed;
+        }
+
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var u)) return false;
         if (!IsInternalTvOrigin(u)) return false;
 
         string path = u.AbsolutePath.Trim().ToLowerInvariant();
@@ -115,6 +146,20 @@ public static class TvUrlGuard
             uri = u;
             return true;
         }
+        return false;
+    }
+
+    /// <summary>
+    /// Indica si la URL apunta al host virtual interno tv.lex.local (http o https) o es ruta relativa /api/.
+    /// Útil para impedir que rutas internas fallen con "URL privada o no permitida".
+    /// </summary>
+    public static bool IsInternalTvHostUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        string trimmed = url.Trim();
+        if (trimmed.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)) return true;
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var u))
+            return string.Equals(u.Host, InternalHost, StringComparison.OrdinalIgnoreCase);
         return false;
     }
 
@@ -342,7 +387,7 @@ public static class TvUrlGuard
         Uri initialUri,
         string? rangeHeader,
         CancellationToken ct,
-        int maxRedirects = 5,
+        int maxRedirects = 8,
         string? userAgent = null)
     {
         string ua = string.IsNullOrWhiteSpace(userAgent) ? DefaultUserAgent : SanitizeHeaderValue(userAgent, 120);

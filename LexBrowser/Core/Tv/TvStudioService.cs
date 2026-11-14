@@ -133,6 +133,10 @@ public static class TvStudioService
 
             if (!IsValidTvOriginOrReferer(originHeader, refererHeader))
             {
+                TvDiagLog.Write(
+                    "auth",
+                    $"403 {path}",
+                    $"origin={originHeader ?? "<null>"} referer={refererHeader ?? "<null>"} ctx={e.ResourceContext}");
                 e.Response = CreateJsonResponse(env, 403, "Forbidden", new { error = "Origen no autorizado." });
                 return true;
             }
@@ -196,6 +200,29 @@ public static class TvStudioService
         return true;
     }
 
+    public static string? ResolveImageTargetUrl(string? rawTarget, string? connId, TvXtreamStore? xtreamStore = null)
+    {
+        if (string.IsNullOrWhiteSpace(rawTarget)) return null;
+        string trimmed = rawTarget.Trim();
+
+        string? sUrl = null;
+        var store = xtreamStore ?? TvXtreamStore.Shared;
+        if (!string.IsNullOrWhiteSpace(connId))
+        {
+            var match = store.GetConnection(connId);
+            if (match != null && !string.IsNullOrWhiteSpace(match.ServerUrl))
+                sUrl = match.ServerUrl;
+        }
+        if (string.IsNullOrEmpty(sUrl))
+        {
+            var first = store.GetSummaries().FirstOrDefault();
+            if (first != null && !string.IsNullOrWhiteSpace(first.ServerUrl))
+                sUrl = first.ServerUrl;
+        }
+
+        return TvXtreamService.NormalizePosterUrl(trimmed, sUrl);
+    }
+
     private static async Task HandleApiAsync(
         CoreWebView2Environment env,
         CoreWebView2WebResourceRequestedEventArgs e,
@@ -212,7 +239,12 @@ public static class TvStudioService
 
             if (path.Equals("api/proxy", StringComparison.OrdinalIgnoreCase))
             {
-                var proxyRes = await TvStreamProxy.FetchAsync(q["u"], rangeHeader, q["sid"], cts.Token);
+                string? rawU = q["u"];
+                var proxyRes = await TvStreamProxy.FetchAsync(rawU, rangeHeader, q["sid"], cts.Token);
+                if (proxyRes.StatusCode >= 400 && proxyRes.StatusCode != 410 && proxyRes.StatusCode != 499)
+                {
+                    TvDiagLog.Write("proxy", $"HTTP {proxyRes.StatusCode} {proxyRes.ReasonPhrase}", $"u={rawU ?? "<null>"}");
+                }
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(proxyRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
@@ -231,23 +263,11 @@ public static class TvStudioService
                 path.Equals("api/xtream/vod", StringComparison.OrdinalIgnoreCase) ||
                 path.Equals("api/xtream/series", StringComparison.OrdinalIgnoreCase))
             {
-                string streamType = path.EndsWith("live", StringComparison.OrdinalIgnoreCase) ? "live" :
-                                    path.EndsWith("vod", StringComparison.OrdinalIgnoreCase) ? "movie" : "series";
-                string connId = q["conn"] ?? "";
-                string streamId = q["id"] ?? "";
-                string ext = q["ext"] ?? "";
-
-                var resolve = TvXtreamService.ResolveUpstreamStreamUrl(TvXtreamStore.Shared, connId, streamType, streamId, ext);
-                if (!resolve.Success || string.IsNullOrEmpty(resolve.UpstreamUrl))
+                var proxyRes = await TvStreamProxy.FetchAsync(uri.AbsoluteUri, rangeHeader, q["sid"], cts.Token);
+                if (proxyRes.StatusCode >= 400 && proxyRes.StatusCode != 410 && proxyRes.StatusCode != 499)
                 {
-                    string errCls = resolve.Error != null && (resolve.Error.Contains("Credenciales", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Conexión", StringComparison.OrdinalIgnoreCase) || resolve.Error.Contains("Identificadores", StringComparison.OrdinalIgnoreCase))
-                        ? "credentials"
-                        : "blocked";
-                    e.Response = CreateJsonResponse(env, 404, "Not Found", new { error = resolve.Error ?? "Flujo Xtream no disponible.", cls = errCls, msg = resolve.Error }, errorClass: errCls);
-                    return;
+                    TvDiagLog.Write("xtream-play", $"HTTP {proxyRes.StatusCode} {proxyRes.ReasonPhrase}", $"path={path} conn={q["conn"] ?? ""} id={q["id"] ?? ""}");
                 }
-
-                var proxyRes = await TvStreamProxy.FetchAsync(resolve.UpstreamUrl, rangeHeader, q["sid"], cts.Token);
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(proxyRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
@@ -264,35 +284,15 @@ public static class TvStudioService
 
             if (path.Equals("api/image", StringComparison.OrdinalIgnoreCase))
             {
-                string? rawTarget = q["u"];
+                string? rawTarget = q["u"]?.Trim();
                 string? connId = q["conn"];
+                string? resolvedTarget = ResolveImageTargetUrl(rawTarget, connId);
 
-                // Si la URL es relativa y se proporcionó connId o existe una conexión en el almacén, resolver contra ServerUrl
-                if (!string.IsNullOrWhiteSpace(rawTarget) &&
-                    !rawTarget.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
-                    !rawTarget.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                var imgRes = await TvStreamProxy.FetchImageAsync(resolvedTarget, connId, cts.Token);
+                if (imgRes.StatusCode >= 400)
                 {
-                    string? sUrl = null;
-                    if (!string.IsNullOrWhiteSpace(connId))
-                    {
-                        var match = TvXtreamStore.Shared.GetConnection(connId);
-                        if (match != null && !string.IsNullOrWhiteSpace(match.ServerUrl))
-                            sUrl = match.ServerUrl;
-                    }
-                    if (string.IsNullOrEmpty(sUrl))
-                    {
-                        var first = TvXtreamStore.Shared.GetSummaries().FirstOrDefault();
-                        if (first != null && !string.IsNullOrWhiteSpace(first.ServerUrl))
-                            sUrl = first.ServerUrl;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(sUrl))
-                    {
-                        rawTarget = $"{sUrl.TrimEnd('/')}/{rawTarget.TrimStart('/')}";
-                    }
+                    TvDiagLog.Write("image", $"HTTP {imgRes.StatusCode} {imgRes.ReasonPhrase}", $"raw={rawTarget ?? "<null>"} resolved={resolvedTarget ?? "<null>"}");
                 }
-
-                var imgRes = await TvStreamProxy.FetchImageAsync(rawTarget, connId, cts.Token);
                 var hdrSb = new StringBuilder();
                 hdrSb.Append("Content-Type: ").Append(imgRes.ContentType).Append("\r\n");
                 hdrSb.Append("Access-Control-Allow-Origin: ").Append(AllowedCorsOrigin).Append("\r\n");
@@ -322,7 +322,12 @@ public static class TvStudioService
 
             if (path.Equals("api/probe", StringComparison.OrdinalIgnoreCase))
             {
-                var probe = await TvStreamProxy.ProbeAsync(q["u"], cts.Token);
+                string? probeTarget = q["u"];
+                var probe = await TvStreamProxy.ProbeAsync(probeTarget, cts.Token);
+                if (!string.IsNullOrEmpty(probe.ErrorClass) || probe.Status >= 400)
+                {
+                    TvDiagLog.Write("probe", $"HTTP {probe.Status} class={probe.ErrorClass}", $"u={probeTarget ?? "<null>"} msg={probe.ErrorMessage}");
+                }
                 e.Response = CreateJsonResponse(env, 200, "OK", new
                 {
                     kind = probe.Kind,
@@ -605,6 +610,7 @@ public static class TvStudioService
                 var auth = await TvXtreamService.Shared.AuthenticateAsync(serverUrl, username, password, cts.Token);
                 if (!auth.Success)
                 {
+                    TvDiagLog.Write("xtream-connect", "Autenticación fallida", $"{serverUrl} | {auth.ErrorMessage ?? "unknown"}");
                     e.Response = CreateJsonResponse(env, 400, "Bad Request", new
                     {
                         error = auth.ErrorMessage ?? "No se pudo autenticar con el servidor Xtream."
@@ -612,16 +618,44 @@ public static class TvStudioService
                     return;
                 }
 
-                string connId = "xc_" + Guid.NewGuid().ToString("N")[..10];
+                string normalizedServerUrl = TvXtreamService.NormalizeServerBaseUrl(serverUrl) ?? serverUrl.Trim().TrimEnd('/');
                 string cleanName = string.IsNullOrWhiteSpace(name) ? "Mi IPTV Xtream" : name.Trim();
+
+                // Reutilizar el Id de conexión existente para el mismo servidor y usuario/nombre si ya existe
+                string? matchedConnId = null;
+                foreach (var existing in TvXtreamStore.Shared.GetSummaries())
+                {
+                    string existingNorm = TvXtreamService.NormalizeServerBaseUrl(existing.ServerUrl) ?? existing.ServerUrl.Trim().TrimEnd('/');
+                    if (!string.Equals(existingNorm, normalizedServerUrl, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    var existingCreds = TvXtreamStore.Shared.GetCredentials(existing.Id);
+                    if (existingCreds != null && !string.IsNullOrWhiteSpace(existingCreds.Username))
+                    {
+                        if (string.Equals(existingCreds.Username, username, StringComparison.Ordinal))
+                        {
+                            matchedConnId = existing.Id;
+                            break;
+                        }
+                    }
+                    else if (string.Equals(existing.Name, cleanName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        matchedConnId = existing.Id;
+                        break;
+                    }
+                }
+                string connId = matchedConnId ?? ("xc_" + Guid.NewGuid().ToString("N")[..10]);
 
                 // 1. Obtener canales en vivo (independiente de catálogos VOD)
                 var channels = new List<TvChannel>();
                 try
                 {
-                    channels = await TvXtreamService.Shared.FetchLiveChannelsAsync(serverUrl, username, password, connId, cleanName, cts.Token);
+                    channels = await TvXtreamService.Shared.FetchLiveChannelsAsync(normalizedServerUrl, username, password, connId, cleanName, cts.Token);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    TvDiagLog.Write("xtream-connect", "Error cargando canales en vivo", $"{connId} | {ex.GetType().Name}: {ex.Message}");
+                }
 
                 // 2. Registrar en TvUserStateStore como playlist para que aparezca en el selector
                 TvUserStateStore.Shared.AddOrUpdatePlaylist(cleanName, $"xtream://{connId}", channels);
@@ -633,27 +667,35 @@ public static class TvStudioService
                 {
                     try
                     {
-                        var movies = await TvXtreamService.Shared.FetchVodMoviesAsync(serverUrl, username, password, connId, cts.Token);
+                        var movies = await TvXtreamService.Shared.FetchVodMoviesAsync(normalizedServerUrl, username, password, connId, cts.Token);
                         vodCount = movies.Count;
                         if (movies.Count > 0) TvVodStore.Shared.ImportItems(movies);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        TvDiagLog.Write("xtream-connect", "Error cargando películas VOD", $"{connId} | {ex.GetType().Name}: {ex.Message}");
+                    }
 
                     try
                     {
-                        var series = await TvXtreamService.Shared.FetchSeriesAsync(serverUrl, username, password, connId, cts.Token);
+                        var series = await TvXtreamService.Shared.FetchSeriesAsync(normalizedServerUrl, username, password, connId, cts.Token);
                         seriesCount = series.Count;
                         if (series.Count > 0) TvVodStore.Shared.ImportItems(series);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        TvDiagLog.Write("xtream-connect", "Error cargando series VOD", $"{connId} | {ex.GetType().Name}: {ex.Message}");
+                    }
                 }
+
+                TvDiagLog.Write("xtream-connect", $"Sincronizado {connId}", $"live={channels.Count} vod={vodCount} series={seriesCount} status={auth.UserInfo?.Status ?? "unknown"}");
 
                 // 4. Guardar conexión en TvXtreamStore
                 var conn = new TvXtreamConnection
                 {
                     Id = connId,
                     Name = cleanName,
-                    ServerUrl = serverUrl.Trim().TrimEnd('/'),
+                    ServerUrl = normalizedServerUrl,
                     AddedUtc = DateTime.UtcNow,
                     SaveCredentials = saveCreds,
                     LiveCount = channels.Count,
@@ -663,6 +705,8 @@ public static class TvStudioService
                     ExpirationDate = auth.UserInfo?.ExpDate
                 };
                 TvXtreamStore.Shared.AddOrUpdateConnection(conn, username.Trim(), password.Trim());
+                TvUserStateStore.Shared.ClearInternalXtreamDeadStreams();
+                TvStreamProxy.ClearProbeCache();
 
                 e.Response = CreateJsonResponse(env, 200, "OK", new
                 {
@@ -776,6 +820,26 @@ public static class TvStudioService
 
                 bool launched = TryLaunchVlc(safeUri);
                 e.Response = CreateJsonResponse(env, 200, "OK", new { launched, url = safeUri.AbsoluteUri });
+                return;
+            }
+
+            if (path.Equals("api/diag/log", StringComparison.OrdinalIgnoreCase))
+            {
+                int.TryParse(q["limit"], out int limit);
+                var entries = TvDiagLog.Shared.GetSnapshot(limit > 0 ? limit : 200);
+                e.Response = CreateJsonResponse(env, 200, "OK", new
+                {
+                    logPath = TvDiagLog.Shared.LogPath,
+                    count = entries.Count,
+                    entries
+                });
+                return;
+            }
+
+            if (path.Equals("api/diag/log/clear", StringComparison.OrdinalIgnoreCase))
+            {
+                TvDiagLog.Shared.Clear();
+                e.Response = CreateJsonResponse(env, 200, "OK", new { cleared = true });
                 return;
             }
 

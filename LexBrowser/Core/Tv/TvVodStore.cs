@@ -155,26 +155,119 @@ public sealed class TvVodStore
         }
     }
 
+    private static string NormalizeVodMatchKey(TvVodItem item)
+    {
+        string rawUrl = (item.Url ?? "").Trim();
+        int directIdx = rawUrl.IndexOf("&direct=", StringComparison.OrdinalIgnoreCase);
+        if (directIdx > 0)
+        {
+            rawUrl = rawUrl[..directIdx];
+        }
+        return rawUrl;
+    }
+
+    private static string? TryBuildXtreamFallbackKey(TvVodItem item)
+    {
+        string rawUrl = (item.Url ?? "").Trim();
+        if (!rawUrl.Contains("/api/xtream/", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (!Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri))
+            return null;
+
+        string path = uri.AbsolutePath.Trim('/').ToLowerInvariant();
+        string q = uri.Query;
+        string? streamId = null;
+        foreach (string part in q.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int eq = part.IndexOf('=');
+            if (eq > 0 && part[..eq].Equals("id", StringComparison.OrdinalIgnoreCase))
+            {
+                streamId = Uri.UnescapeDataString(part[(eq + 1)..]).Trim();
+                break;
+            }
+        }
+        if (string.IsNullOrWhiteSpace(streamId))
+            return null;
+
+        string title = (item.Title ?? "").Trim().ToLowerInvariant();
+        return $"{path}|{streamId}|{title}";
+    }
+
     public int ImportItems(IEnumerable<TvVodItem> newItems)
     {
         lock (_lock)
         {
             var lib = EnsureLibraryLoaded();
-            var existingUrls = new HashSet<string>(lib.Select(i => i.Url), StringComparer.OrdinalIgnoreCase);
+            var byBaseUrl = new Dictionary<string, TvVodItem>(StringComparer.OrdinalIgnoreCase);
+            var byId = new Dictionary<string, TvVodItem>(StringComparer.OrdinalIgnoreCase);
+            var byXtreamKey = new Dictionary<string, TvVodItem>(StringComparer.OrdinalIgnoreCase);
 
-            int addedCount = 0;
-            foreach (var item in newItems)
+            foreach (var existing in lib)
             {
-                if (lib.Count >= MaxVodItems) break;
-                if (string.IsNullOrWhiteSpace(item.Url)) continue;
-                if (existingUrls.Add(item.Url.Trim()))
-                {
-                    lib.Add(item);
-                    addedCount++;
-                }
+                string baseUrl = NormalizeVodMatchKey(existing);
+                if (!string.IsNullOrEmpty(baseUrl) && !byBaseUrl.ContainsKey(baseUrl))
+                    byBaseUrl[baseUrl] = existing;
+                if (!string.IsNullOrWhiteSpace(existing.Id) && !byId.ContainsKey(existing.Id))
+                    byId[existing.Id] = existing;
+                string? xKey = TryBuildXtreamFallbackKey(existing);
+                if (!string.IsNullOrEmpty(xKey) && !byXtreamKey.ContainsKey(xKey))
+                    byXtreamKey[xKey] = existing;
             }
 
-            if (addedCount > 0)
+            int addedCount = 0;
+            bool dirty = false;
+
+            foreach (var item in newItems)
+            {
+                if (string.IsNullOrWhiteSpace(item.Url)) continue;
+                string cleanUrl = item.Url.Trim();
+                string baseUrl = NormalizeVodMatchKey(item);
+                string? xKey = TryBuildXtreamFallbackKey(item);
+
+                TvVodItem? match = null;
+                if (!string.IsNullOrEmpty(baseUrl)) byBaseUrl.TryGetValue(baseUrl, out match);
+                if (match == null && !string.IsNullOrWhiteSpace(item.Id)) byId.TryGetValue(item.Id, out match);
+                if (match == null && !string.IsNullOrEmpty(xKey)) byXtreamKey.TryGetValue(xKey, out match);
+
+                if (match != null)
+                {
+                    if (!string.Equals(match.Url, cleanUrl, StringComparison.Ordinal))
+                    {
+                        match.Url = cleanUrl;
+                        dirty = true;
+                    }
+                    if (!string.IsNullOrWhiteSpace(item.Logo) && !string.Equals(match.Logo, item.Logo, StringComparison.Ordinal))
+                    {
+                        match.Logo = item.Logo;
+                        dirty = true;
+                    }
+                    if (string.IsNullOrWhiteSpace(match.Title) && !string.IsNullOrWhiteSpace(item.Title))
+                    {
+                        match.Title = item.Title;
+                        dirty = true;
+                    }
+                    if (!string.IsNullOrEmpty(xKey) && !string.IsNullOrWhiteSpace(item.Group) && !string.Equals(match.Group, item.Group, StringComparison.Ordinal))
+                    {
+                        match.Group = item.Group;
+                        dirty = true;
+                    }
+                    continue;
+                }
+
+                if (lib.Count >= MaxVodItems) break;
+
+                item.Url = cleanUrl;
+                lib.Add(item);
+                addedCount++;
+                dirty = true;
+
+                if (!string.IsNullOrEmpty(baseUrl)) byBaseUrl[baseUrl] = item;
+                if (!string.IsNullOrWhiteSpace(item.Id)) byId[item.Id] = item;
+                if (!string.IsNullOrEmpty(xKey)) byXtreamKey[xKey] = item;
+            }
+
+            if (dirty)
             {
                 SaveLibraryFileAtomic(lib);
             }
@@ -232,6 +325,23 @@ public sealed class TvVodStore
         {
             string json = File.ReadAllText(_libraryPath);
             _libraryCache = JsonSerializer.Deserialize<List<TvVodItem>>(json, JsonOptions) ?? new List<TvVodItem>();
+            foreach (var item in _libraryCache)
+            {
+                if (string.IsNullOrWhiteSpace(item.Logo)) continue;
+                if (item.Logo.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                    item.Logo.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string? normalizedLogo = TvXtreamService.NormalizePosterUrl(item.Logo, null);
+                if (!string.IsNullOrEmpty(normalizedLogo) &&
+                    (normalizedLogo.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                     normalizedLogo.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+                {
+                    item.Logo = normalizedLogo;
+                }
+            }
         }
         catch
         {

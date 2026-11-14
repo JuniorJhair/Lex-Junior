@@ -300,4 +300,40 @@ public class AuditRegressionTests
         ShieldLogger.LogForTab(normalTab, "REQUEST_BLOCKED_403", "adserver.com", "https://adserver.com/banner.js", "Script", "Blocked");
         Assert.Equal(initialCount + 1, ShieldLogger.Count);
     }
+
+    [Fact]
+    public void BrowserThemeManager_NormalizesAndAppliesThemes_Cleanly()
+    {
+        Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme(null));
+        Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme(""));
+        Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme("Dark"));
+        Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme("Oscuro"));
+        Assert.Equal(BrowserThemeManager.Light, BrowserThemeManager.NormalizeTheme("Light"));
+        Assert.Equal(BrowserThemeManager.Light, BrowserThemeManager.NormalizeTheme("Claro"));
+        Assert.Equal(BrowserThemeManager.Classic, BrowserThemeManager.NormalizeTheme("Classic"));
+        Assert.Equal(BrowserThemeManager.Classic, BrowserThemeManager.NormalizeTheme("Clásico"));
+        Assert.Equal(BrowserThemeManager.Classic, BrowserThemeManager.NormalizeTheme("Original"));
+
+        var dict = new System.Windows.ResourceDictionary();
+        BrowserThemeManager.ApplyThemePalette(dict, BrowserThemeManager.Light);
+        Assert.True(dict.Contains("BgDark"));
+        Assert.True(dict.Contains("SurfaceDark"));
+        Assert.True(dict.Contains("TextLight"));
+        Assert.True(dict.Contains("AccentColor"));
+
+        // New Tab Page refleja el tema activo en su HTML generado
+        string darkHtml = NewTabPage.GetHtml();
+        Assert.Contains("#0F0F12", darkHtml);
+
+        var s = SettingsManager.Current;
+        s.Theme = "Light";
+        string lightHtml = NewTabPage.GetHtml();
+        Assert.Contains("#F8FAFC", lightHtml);
+
+        s.Theme = "Classic";
+        string classicHtml = NewTabPage.GetHtml();
+        Assert.Contains("#000000", classicHtml);
+
+        s.Theme = "Dark";
+    }
 }

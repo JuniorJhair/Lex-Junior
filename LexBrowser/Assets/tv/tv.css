@@ -1,20 +1,95 @@
-:root {
+:root,
+html[data-theme="dark"] {
   --bg: #0b0f17;
   --panel: #121824;
   --panel-2: #182132;
+  --panel-hover: #1e293b;
   --border: #253047;
+  --border-subtle: rgba(37, 48, 71, 0.5);
   --text: #e8eef9;
   --muted: #8ea0bf;
   --accent: #3b82f6;
   --accent-hover: #2563eb;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent-soft-active: rgba(59, 130, 246, 0.24);
   --ok: #22c55e;
   --warn: #f59e0b;
   --bad: #ef4444;
   --codec: #a855f7;
+  --card-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  --modal-overlay: rgba(0, 0, 0, 0.85);
+  --scrollbar-thumb: #253047;
+  --scrollbar-track: #0b0f17;
+}
+
+html[data-theme="light"] {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --panel-2: #f1f5f9;
+  --panel-hover: #e2e8f0;
+  --border: #cbd5e1;
+  --border-subtle: rgba(203, 213, 225, 0.7);
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --accent-soft-active: rgba(37, 99, 235, 0.18);
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --codec: #7c3aed;
+  --card-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  --modal-overlay: rgba(15, 23, 42, 0.6);
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-track: #f1f5f9;
+}
+
+html[data-theme="classic"] {
+  --bg: #000000;
+  --panel: #111111;
+  --panel-2: #191919;
+  --panel-hover: #242424;
+  --border: #2c2c2c;
+  --border-subtle: rgba(55, 55, 55, 0.6);
+  --text: #ffffff;
+  --muted: #9e9e9e;
+  --accent: #ff6b00;
+  --accent-hover: #e05e00;
+  --accent-soft: rgba(255, 107, 0, 0.14);
+  --accent-soft-active: rgba(255, 107, 0, 0.28);
+  --ok: #00e676;
+  --warn: #ffab00;
+  --bad: #ff3d00;
+  --codec: #d500f9;
+  --card-shadow: 0 6px 20px rgba(0, 0, 0, 0.85);
+  --modal-overlay: rgba(0, 0, 0, 0.92);
+  --scrollbar-thumb: #333333;
+  --scrollbar-track: #000000;
 }
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 
 html, body {
@@ -26,6 +101,19 @@ html, body {
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 13px;
   overflow: hidden;
+}
+
+body,
+.topbar,
+.sidebar,
+.mode-card,
+.ctrl,
+.btn,
+.nav-tab,
+.section-nav,
+.sidebar-foot,
+.player-head {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 body {
@@ -108,7 +196,7 @@ body {
 
 .nav-tab:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--panel-hover);
 }
 
 .nav-tab.active {
@@ -178,7 +266,7 @@ body {
 
 .btn:hover:not(:disabled) {
   border-color: var(--accent);
-  background: #1d283d;
+  background: var(--panel-hover);
 }
 
 .btn:disabled {
@@ -253,17 +341,17 @@ body {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(37, 48, 71, 0.5);
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
   user-select: none;
 }
 
 .ch-row:hover {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--accent-soft);
 }
 
 .ch-row.active {
-  background: rgba(59, 130, 246, 0.22);
+  background: var(--accent-soft-active);
   border-left: 3px solid var(--accent);
   padding-left: 9px;
 }
@@ -301,7 +389,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #0f1623;
+  background: var(--panel-2);
 }
 
 .ch-info {
@@ -471,7 +559,7 @@ body {
   line-height: 1.35;
   color: var(--muted);
   border-top: 1px solid var(--border);
-  background: #0f141f;
+  background: var(--panel-2);
 }
 
 .stage {
@@ -479,7 +567,7 @@ body {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: #06080d;
+  background: var(--bg);
 }
 
 .player-head {
@@ -867,7 +955,7 @@ video {
 .mode-card:hover {
   transform: translateY(-3px);
   border-color: var(--accent);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--card-shadow);
 }
 .mode-card-icon {
   font-size: 38px;
@@ -1027,7 +1115,7 @@ video {
   margin-bottom: 20px;
 }
 .back-btn:hover {
-  background: var(--border);
+  background: var(--panel-hover);
 }
 .badge-feature {
   display: inline-block;

@@ -703,6 +703,8 @@ public static class WebShield
 
     const isKnownMediaSite = ends('dailymotion.com') ||
                              ends('youtube.com') ||
+                             ends('youtu.be') ||
+                             ends('youtube-nocookie.com') ||
                              ends('twitch.tv') ||
                              ends('vimeo.com');
 

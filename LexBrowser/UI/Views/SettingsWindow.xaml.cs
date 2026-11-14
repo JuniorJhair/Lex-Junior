@@ -73,6 +73,7 @@ public partial class SettingsWindow : Window
     private void LoadCurrentSettings()
     {
         var s = SettingsManager.Current;
+        if (CmbBrowserTheme != null) SetComboByTag(CmbBrowserTheme, s.Theme ?? "Dark");
         ChkFloatingPage.IsChecked = s.ShowFloatingPageButton;
         ChkAutoVideoPip.IsChecked = s.EnableAutoVideoPip;
         ChkBookmarksBar.IsChecked = s.ShowBookmarksBar;
@@ -80,6 +81,7 @@ public partial class SettingsWindow : Window
         ChkVideoPlayerDefuser.IsChecked = s.EnableVideoPlayerDefuser;
         ChkImaSdkStub.IsChecked = s.EnableImaSdkStub;
         ChkCosmeticShield.IsChecked = s.EnableCosmeticShield;
+        if (ChkYouTubeAdBlock != null) ChkYouTubeAdBlock.IsChecked = s.EnableYouTubeAdBlock;
         ChkSubframeWebShield.IsChecked = s.EnableWebShieldInSubframes;
         if (ChkDiagnosticMode != null) ChkDiagnosticMode.IsChecked = ShieldLogger.DiagnosticMode;
         UpdateAdBlockerSubTogglesEnabledState();
@@ -211,6 +213,11 @@ public partial class SettingsWindow : Window
         s.EnableVideoPlayerDefuser = ChkVideoPlayerDefuser.IsChecked == true;
         s.EnableImaSdkStub = ChkImaSdkStub.IsChecked == true;
         s.EnableCosmeticShield = ChkCosmeticShield.IsChecked == true;
+        if (ChkYouTubeAdBlock != null)
+        {
+            s.EnableYouTubeAdBlock = ChkYouTubeAdBlock.IsChecked == true;
+            s.Shield.Adapters.YouTube = s.EnableYouTubeAdBlock;
+        }
         s.EnableWebShieldInSubframes = ChkSubframeWebShield.IsChecked == true;
         if (ChkDiagnosticMode != null)
         {
@@ -957,6 +964,23 @@ public partial class SettingsWindow : Window
     }
 
     #endregion
+
+    private void CmbBrowserTheme_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isInitializing) return;
+        if (CmbBrowserTheme?.SelectedItem is ComboBoxItem item && item.Tag is string themeTag)
+        {
+            SettingsManager.Current.Theme = themeTag;
+            SettingsManager.Save();
+            BrowserThemeManager.ApplyTheme(themeTag);
+        }
+    }
+
+    public void UpdateThemeStyles(string? theme = null)
+    {
+        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current.Theme);
+        BrowserThemeManager.ApplyThemePalette(Resources, target);
+    }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
