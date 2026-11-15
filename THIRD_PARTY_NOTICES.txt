@@ -254,3 +254,22 @@ THE SOFTWARE.
    channel directories, catalogs, or media streams. Lex TV operates strictly
    as a local client media player for sources provided directly by the user.
 ========================================================================
+4. Brave Adblock Rust Semantics, Filter Snapshot & uAssets / Scriptlet Resources
+   Reference engine: adblock-rust (v0.13.5, Mozilla Public License 2.0 - MPL-2.0)
+   https://github.com/brave/adblock-rust
+   Compiler script: Tools/compile_brave_shield.py -> LexBrowser/Assets/shield/brave-shield.lex
+
+   Bundled precompiled bundle (`brave-shield.lex`) incorporates a frozen snapshot from
+   `adblock-rust-master/data/brave/`:
+     - brave-main-list.txt & brave-unbreak.txt: filter list snapshot aggregated by
+       Brave from uBlock Origin / uAssets, EasyList, Peter Lowe, etc.
+       (uAssets & EasyList are dual-licensed under GPLv3 / CC BY-SA 3.0 where applicable).
+     - coin-miners.txt: MIT / MPL-2.0 (Brave Software, Inc.).
+     - brave-resources.json: scriptlets and surrogate resources derived from
+       uBlock Origin resources (GPLv3) and Brave Software (MPL-2.0).
+
+   Note: `adblock-rust-master/data/update-lists.js` requires a `BRAVE_SERVICE_KEY`
+   and does not run automatically inside Lex Junior. To regenerate `brave-shield.lex`
+   after updating any list file under `adblock-rust-master/data/brave/`, run:
+       python Tools/compile_brave_shield.py
+========================================================================

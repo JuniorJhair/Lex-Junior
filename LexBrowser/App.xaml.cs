@@ -120,6 +120,7 @@ public partial class App : Application
         // y precarga asíncrona del historial y la bóveda para eliminar tirones al primer uso.
         _ = Task.Run(() =>
         {
+            try { LexBrowser.Core.AdBlock.ShieldRouter.PreloadIfConfigured(); } catch { }
             try { _ = HistoryManager.GetTotalCount(); } catch { }
             try { _ = PasswordManager.Store.GetTotalCount(); } catch { }
             try { InstallerService.RegisterAsDefaultBrowser(); } catch { }

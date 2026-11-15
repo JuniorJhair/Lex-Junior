@@ -27,7 +27,9 @@
     <None Update="Assets\pdf\**" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\tv\**" />
     <None Update="Assets\tv\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Assets\shield\brave-shield.lex" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\THIRD_PARTY_NOTICES.txt" Link="THIRD_PARTY_NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
+    <InternalsVisibleTo Include="LexBrowser.Tests" />
   </ItemGroup>
 
 </Project>

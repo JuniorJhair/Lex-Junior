@@ -306,10 +306,9 @@ public static class AdBlockFilter
         }
 
         // Regla especial de Dailymotion: permitir reproductor, API y streams CDN; bloquear solo servidor de banners dedicado
-        if (PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
-            PublicSuffix.HostMatchesDomain(host, "dmcdn.net"))
+        if (DailymotionRules.TryEvaluateNetwork(uri, out bool dmShouldBlock))
         {
-            return PublicSuffix.HostMatchesDomain(host, "dmads.dailymotion.com");
+            return dmShouldBlock;
         }
 
         // Regla especial de Google: Proteger búsquedas, respuestas IA (Gemini / Visión general IA / Lens)

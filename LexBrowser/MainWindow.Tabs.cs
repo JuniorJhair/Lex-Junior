@@ -724,9 +724,13 @@ public partial class MainWindow
 
                 if (originPolicy.ShieldEnabled && originPolicy.Popups && !isSensitiveAuthOrPay)
                 {
-                    bool shouldBlock = (originPolicy.Network && AdBlockFilter.ShouldBlock(uri, currentUri?.Host, CoreWebView2WebResourceContext.Document)) ||
-                                       AdBlockFilter.IsSuspiciousPopup(uri, currentUri);
-                    string blockReason = "AdBlockFilter domain or suspicious pattern";
+                    bool shouldBlock = ShieldRouter.ShouldBlockPopup(
+                        uri,
+                        currentUri,
+                        originPolicy,
+                        isFromSubframe,
+                        e.IsUserInitiated,
+                        out string blockReason);
 
                     if (!shouldBlock && isFromSubframe)
                     {
@@ -832,6 +836,10 @@ public partial class MainWindow
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Fetch);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Image);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Ping);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Stylesheet);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Font);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Websocket);
+        core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Media);
         core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Other);
         core.AddWebResourceRequestedFilter("https://pdf.lex.local/*", CoreWebView2WebResourceContext.All);
         core.AddWebResourceRequestedFilter("https://tv.lex.local/*", CoreWebView2WebResourceContext.All);
@@ -854,6 +862,7 @@ public partial class MainWindow
                 string frameDesc = e.ResourceContext.ToString();
 
                 string referer = string.Empty;
+                string? secFetchDest = null;
                 try
                 {
                     var reqHeaders = e.Request.Headers;
@@ -861,6 +870,12 @@ public partial class MainWindow
                         referer = reqHeaders.GetHeader("Referer");
                     else if (reqHeaders.Contains("Origin"))
                         referer = reqHeaders.GetHeader("Origin");
+
+                    if (e.ResourceContext == CoreWebView2WebResourceContext.Document &&
+                        reqHeaders.Contains("Sec-Fetch-Dest"))
+                    {
+                        secFetchDest = reqHeaders.GetHeader("Sec-Fetch-Dest");
+                    }
                 }
                 catch { }
 
@@ -887,31 +902,33 @@ public partial class MainWindow
                 if (!policy.ShieldEnabled)
                     return;
 
-                bool isDailymotionContext = PublicSuffix.HostMatchesDomain(mainTabHost, "dailymotion.com") ||
-                                            (Uri.TryCreate(tab.Url, UriKind.Absolute, out var dmTabUri) && PublicSuffix.HostMatchesDomain(dmTabUri.Host, "dailymotion.com")) ||
-                                            (Uri.TryCreate(referer, UriKind.Absolute, out var dmRefUri) && PublicSuffix.HostMatchesDomain(dmRefUri.Host, "dailymotion.com")) ||
-                                            PublicSuffix.HostMatchesDomain(uri.Host, "dailymotion.com") ||
-                                            PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com");
+                bool isDailymotionContext = DailymotionRules.IsDailymotionContext(
+                    uri, mainTabHost, tab.Url, referer, originHost);
 
                 if (isDailymotionContext && (originHost == "unknown" || !PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com")))
                 {
                     originHost = "geo.dailymotion.com";
                 }
 
-                byte[] stubBytes = Array.Empty<byte>();
-                string stubContentType = string.Empty;
-                bool isRedirectStub = false;
-                if (policy.Stubs)
-                {
-                    bool allowThisStub = policy.ImaStub || !uri.AbsolutePath.EndsWith("ima3.js", StringComparison.OrdinalIgnoreCase);
-                    if (allowThisStub)
-                    {
-                        isRedirectStub = AdBlockResources.TryGetRedirectStub(uri, out stubBytes, out stubContentType, originHost, e.ResourceContext);
-                    }
-                }
+                string? httpMethod = null;
+                try { httpMethod = e.Request.Method; } catch { }
 
-                bool isYouTubeContext = MediaShieldRules.IsServiceHost(policyHost) || MediaShieldRules.IsServiceOrStreamHost(uri.Host);
-                bool shouldBlockNetwork = !isRedirectStub && policy.Network && (!isYouTubeContext || policy.YouTubeAdapter) && AdBlockFilter.ShouldBlock(uri, originHost, e.ResourceContext);
+                var decision = ShieldRouter.EvaluateWebResource(
+                    uri,
+                    originHost,
+                    policyHost,
+                    mainTabHost,
+                    tab.Url,
+                    referer,
+                    policy,
+                    e.ResourceContext,
+                    secFetchDest,
+                    httpMethod);
+
+                bool isRedirectStub = decision.IsRedirectStub;
+                byte[] stubBytes = decision.RedirectBytes;
+                string stubContentType = decision.RedirectContentType;
+                bool shouldBlockNetwork = decision.ShouldBlock && !decision.IsRedirectStub;
 
                 if (isRedirectStub || shouldBlockNetwork)
                 {

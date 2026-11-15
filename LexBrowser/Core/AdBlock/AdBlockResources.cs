@@ -19,7 +19,6 @@ public static class AdBlockResources
         "(function(){try{delete window.PopAds;delete window.popns;Object.defineProperties(window,{PopAds:{value:{}},popns:{value:{}}});}catch(_){}})();");
     private static readonly byte[] NoopJsBytes = Encoding.UTF8.GetBytes("/* noop */\ntry{window.popMagic={init:function(){},pop:function(){},check:function(){return false;}};}catch(_){}");
     private static readonly byte[] InstreamStatusBytes = Encoding.UTF8.GetBytes("window.google_ad_status = 1;");
-    private static readonly byte[] DailymotionCanaryBytes = Encoding.UTF8.GetBytes("window.__NATIVEADS_CANARY__ = true;");
     private static readonly byte[] Gif1x1Bytes = new byte[] { 71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 255, 255, 255, 255, 255, 255, 33, 249, 4, 1, 10, 0, 1, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 76, 1, 0, 59 };
     private static readonly byte[] GoogleImaShimBytes = Encoding.UTF8.GetBytes(GoogleImaScript);
 
@@ -44,23 +43,16 @@ public static class AdBlockResources
         string path = uri.AbsolutePath;
         string full = uri.AbsoluteUri;
 
-        // 0. Dailymotion Canary Script (Anti-AdBlock Bypass de Brave: @@||dailymotion.com/nativeads.js^)
-        if ((PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
-             (!string.IsNullOrEmpty(originHost) && PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com"))) &&
-            (path.EndsWith("nativeads.js", StringComparison.OrdinalIgnoreCase) || path.Contains("/nativeads.", StringComparison.OrdinalIgnoreCase)))
+        // 0. Stubs aislados de Dailymotion (Canary nativeads.js + VMAP monetization)
+        if (DailymotionRules.TryGetRedirectStub(uri, out responseBytes, out contentType, originHost, resourceContext))
         {
-            responseBytes = DailymotionCanaryBytes;
-            contentType = "Content-Type: application/javascript; charset=utf-8";
             return true;
         }
 
         // 1. Google IMA SDK (ima3.js) - evita la pantalla negra en reproductores con ad-bidding.
         // Controlado por el interruptor independiente EnableImaSdkStub en Configuración.
         // Excepción: Dailymotion y los sitios grandes de ShieldExemptions quedan exentos para no romper reproductores ni servicios legítimos.
-        bool isDailymotion = PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
-                             PublicSuffix.HostMatchesDomain(host, "dmcdn.net") ||
-                             (!string.IsNullOrEmpty(originHost) && PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com")) ||
-                             full.Contains("dailymotion.com", StringComparison.OrdinalIgnoreCase);
+        bool isDailymotion = DailymotionRules.IsDailymotionRequestOrOrigin(uri, originHost);
 
         bool isExemptBigSite = !string.IsNullOrEmpty(originHost) && ShieldExemptions.IsBigSite(originHost);
 
@@ -76,16 +68,7 @@ public static class AdBlockResources
         }
 
         // Jamás devolver XML VMAP/VAST en navegaciones de documentos principales o subframes ni en sitios grandes exentos
-        bool isGoogleOrYouTubeContent =
-            PublicSuffix.HostMatchesDomain(host, "youtube.com") ||
-            PublicSuffix.HostMatchesDomain(host, "youtu.be") ||
-            PublicSuffix.HostMatchesDomain(host, "googlevideo.com") ||
-            PublicSuffix.HostMatchesDomain(host, "google.com") ||
-            PublicSuffix.HostMatchesDomain(host, "gstatic.com") ||
-            (!string.IsNullOrEmpty(originHost) &&
-             (PublicSuffix.HostMatchesDomain(originHost, "youtube.com") ||
-              PublicSuffix.HostMatchesDomain(originHost, "youtu.be") ||
-              PublicSuffix.HostMatchesDomain(originHost, "google.com")));
+        bool isGoogleOrYouTubeContent = ShieldIsolation.IsGoogleOrYouTubeContent(host, originHost);
 
         bool xmlStubContext = resourceContext is null
             or CoreWebView2WebResourceContext.XmlHttpRequest
@@ -93,21 +76,12 @@ public static class AdBlockResources
             or CoreWebView2WebResourceContext.Other
             or CoreWebView2WebResourceContext.Media;
 
-        // 2. VMAP / VAST Empty XML para reproductores de streaming (Fluid Player, VideoJS, JWPlayer, Dailymotion VMAP)
-        // Al responder '0 anuncios en VAST/VMAP' con 200 OK, el reproductor inicia inmediatamente el video principal
-        // sin reproducir comerciales pre-roll ni contar hacia atrás el reloj de espera.
+        // 2. VMAP / VAST Empty XML para reproductores de streaming (Fluid Player, VideoJS, JWPlayer)
         bool isVmap = xmlStubContext &&
                       !isGoogleOrYouTubeContent &&
-                      (isDailymotion || !isExemptBigSite) &&
-                      (full.Contains("format=vmap", StringComparison.OrdinalIgnoreCase) ||
-                       full.Contains("output=vmap", StringComparison.OrdinalIgnoreCase) ||
-                       full.Contains("type=vmap", StringComparison.OrdinalIgnoreCase) ||
-                       full.Contains("_VMAP_", StringComparison.OrdinalIgnoreCase) ||
-                       (isDailymotion && full.Contains("monetization", StringComparison.OrdinalIgnoreCase)) ||
-                       path.EndsWith("/vmap", StringComparison.OrdinalIgnoreCase) ||
-                       path.Contains("/vmap/", StringComparison.OrdinalIgnoreCase) ||
-                       path.Contains("/vmap.", StringComparison.OrdinalIgnoreCase) ||
-                       path.EndsWith("vmap.xml", StringComparison.OrdinalIgnoreCase));
+                      !isDailymotion &&
+                      !isExemptBigSite &&
+                      DailymotionRules.IsVmapUrl(full, path);
 
         if (isVmap)
         {

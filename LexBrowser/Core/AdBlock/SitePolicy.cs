@@ -66,12 +66,21 @@ public sealed class SiteShieldProfile
 /// </summary>
 public sealed class ShieldSettings
 {
+    public const string EngineLegacy = "Legacy";
+    public const string EngineBrave = "Brave";
+
     public int Version { get; set; } = 2;
     public bool Enabled { get; set; } = true;
     public bool DiagnosticMode { get; set; } = false;
+    public string Engine { get; set; } = EngineLegacy;
     public ShieldModulesConfig Modules { get; set; } = new();
     public ShieldAdaptersConfig Adapters { get; set; } = new();
     public Dictionary<string, SiteShieldProfile> Sites { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public static string NormalizeEngine(string? engine)
+        => string.Equals(engine, EngineBrave, StringComparison.OrdinalIgnoreCase)
+            ? EngineBrave
+            : EngineLegacy;
 }
 
 /// <summary>
