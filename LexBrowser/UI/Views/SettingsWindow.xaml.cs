@@ -78,6 +78,13 @@ public partial class SettingsWindow : Window
         ChkAutoVideoPip.IsChecked = s.EnableAutoVideoPip;
         ChkBookmarksBar.IsChecked = s.ShowBookmarksBar;
         ChkAdBlocker.IsChecked = s.EnableAdBlocker;
+        if (ChkUseBraveEngine != null)
+        {
+            ChkUseBraveEngine.IsChecked = string.Equals(
+                LexBrowser.Core.AdBlock.ShieldSettings.NormalizeEngine(s.Shield?.Engine),
+                LexBrowser.Core.AdBlock.ShieldSettings.EngineBrave,
+                StringComparison.OrdinalIgnoreCase);
+        }
         ChkVideoPlayerDefuser.IsChecked = s.EnableVideoPlayerDefuser;
         ChkImaSdkStub.IsChecked = s.EnableImaSdkStub;
         ChkCosmeticShield.IsChecked = s.EnableCosmeticShield;
@@ -201,11 +208,32 @@ public partial class SettingsWindow : Window
         }
     }
 
+    internal static void ApplyShieldEngineSelection(BrowserSettings settings, bool useBraveEngine)
+    {
+        if (settings == null) return;
+        settings.Shield ??= new LexBrowser.Core.AdBlock.ShieldSettings();
+        settings.Shield.Engine = useBraveEngine
+            ? LexBrowser.Core.AdBlock.ShieldSettings.EngineBrave
+            : LexBrowser.Core.AdBlock.ShieldSettings.EngineLegacy;
+    }
+
+    private void ChkUseBraveEngine_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing || ChkUseBraveEngine == null) return;
+
+        var s = SettingsManager.Current;
+        ApplyShieldEngineSelection(s, ChkUseBraveEngine.IsChecked == true);
+        SettingsManager.Save();
+    }
+
     private void SaveSettings_Click(object sender, RoutedEventArgs e)
     {
         if (_isInitializing) return;
 
         var s = SettingsManager.Current;
+        s.Shield ??= new LexBrowser.Core.AdBlock.ShieldSettings();
+        s.Shield.Modules ??= new LexBrowser.Core.AdBlock.ShieldModulesConfig();
+        s.Shield.Adapters ??= new LexBrowser.Core.AdBlock.ShieldAdaptersConfig();
         s.ShowFloatingPageButton = ChkFloatingPage.IsChecked == true;
         s.EnableAutoVideoPip = ChkAutoVideoPip.IsChecked == true;
         s.ShowBookmarksBar = ChkBookmarksBar.IsChecked == true;

@@ -9,7 +9,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
-[Collection("ShieldLoggerCollection")]
+[Collection("SettingsCollection")]
 public class AuditRegressionTests
 {
     [Fact]
@@ -206,8 +206,7 @@ public class AuditRegressionTests
         }
         finally
         {
-            SettingsManager.CustomSettingsPath = null;
-            SettingsManager.Load();
+            TestSettingsIsolation.ResetToIsolatedDefault();
             try { if (File.Exists(tempSettingsPath)) File.Delete(tempSettingsPath); } catch { }
         }
     }
@@ -235,8 +234,7 @@ public class AuditRegressionTests
         }
         finally
         {
-            SettingsManager.CustomSettingsPath = null;
-            SettingsManager.Load();
+            TestSettingsIsolation.ResetToIsolatedDefault();
             try { if (File.Exists(tempSettingsPath)) File.Delete(tempSettingsPath); } catch { }
         }
     }

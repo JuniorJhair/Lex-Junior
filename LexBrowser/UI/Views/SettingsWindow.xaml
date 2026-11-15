@@ -256,6 +256,17 @@
                         <StackPanel x:Name="PanelAdBlockSubModules">
                             <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                                 <StackPanel>
+                                    <CheckBox x:Name="ChkUseBraveEngine" Style="{StaticResource ModernToggle}" Click="ChkUseBraveEngine_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="Motor Declarativo Estilo Brave (Listas ABP/uBO + Scriptlets + EasyList ES)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Aplica listas declarativas de Brave, uBO y EasyList Spanish con scriptlets tempranos, $csp e iframes. YouTube y Dailymotion siguen estrictamente aislados." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
+                                <StackPanel>
                                     <CheckBox x:Name="ChkImaSdkStub" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                         <StackPanel>
                                             <TextBlock Text="Simulador de Google IMA SDK y Stubs VAST/VMAP (ima3.js)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>

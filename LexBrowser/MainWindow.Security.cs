@@ -73,7 +73,22 @@ public partial class MainWindow
         try
         {
             string? tabFilter = (onlyActiveTab && _activeTab != null) ? $"Tab:{_activeTab.TabId} " : null;
-            string dump = ShieldLogger.DumpLog(tabFilter);
+            var s = SettingsManager.Current;
+            bool braveActive = LexBrowser.Core.AdBlock.ShieldRouter.IsBraveActive;
+            bool braveLoaded = braveActive
+                ? LexBrowser.Core.AdBlock.Brave.BraveShieldData.TryGetDefault() != null
+                : LexBrowser.Core.AdBlock.Brave.BraveShieldData.IsDefaultLoaded;
+            LexBrowser.Core.AdBlock.EffectiveSitePolicy? activePolicy = _activeTab != null
+                ? LexBrowser.Core.AdBlock.SitePolicy.Resolve(_activeTab.CurrentUri, _activeTab.TemporaryCompatMode)
+                : (LexBrowser.Core.AdBlock.EffectiveSitePolicy?)null;
+            string header =
+                $"Engine={s.Shield?.Engine ?? "Legacy"} | IsBraveActive={braveActive} | BraveDataLoaded={braveLoaded} | " +
+                $"AdBlocker={s.EnableAdBlocker} | Cosmetic={s.EnableCosmeticShield} | SubframesGlobal={s.EnableWebShieldInSubframes} | " +
+                $"DiagnosticMode={ShieldLogger.DiagnosticMode}" +
+                (_activeTab != null ? $" | ActiveTabUrl={_activeTab.CurrentUri} | CompatMode={_activeTab.TemporaryCompatMode}" : "") +
+                (activePolicy.HasValue ? $" | SiteMode={activePolicy.Value.Mode} | SiteShield={activePolicy.Value.ShieldEnabled} | SiteNet={activePolicy.Value.Network} | SiteCos={activePolicy.Value.Cosmetic} | SitePopups={activePolicy.Value.Popups}" : "") +
+                Environment.NewLine;
+            string dump = header + ShieldLogger.DumpLog(tabFilter);
             int count = ShieldLogger.Count;
 
             try

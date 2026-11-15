@@ -1,8 +1,10 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
 
 namespace LexBrowser.Core.AdBlock.Brave;
@@ -54,6 +56,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
         _dataProvider = dataProvider ?? BraveShieldData.TryGetDefault;
     }
 
+    internal BraveShieldData? GetShieldData() => _dataProvider();
+
     public ShieldNetworkDecision EvaluateNetwork(
         Uri uri,
         string? originHost,
@@ -62,6 +66,26 @@ public sealed class BraveNetworkEngine : IShieldEngine
         string? secFetchDest = null,
         string? httpMethod = null)
     {
+        return EvaluateNetworkCore(
+            uri,
+            originHost,
+            policy,
+            resourceContext,
+            secFetchDest,
+            httpMethod,
+            out _);
+    }
+
+    private ShieldNetworkDecision EvaluateNetworkCore(
+        Uri uri,
+        string? originHost,
+        EffectiveSitePolicy policy,
+        CoreWebView2WebResourceContext resourceContext,
+        string? secFetchDest,
+        string? httpMethod,
+        out bool hadException)
+    {
+        hadException = false;
         if (uri is null || !policy.ShieldEnabled || !policy.Network)
             return ShieldNetworkDecision.Allow;
 
@@ -85,6 +109,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 return ShieldNetworkDecision.Allow;
 
             var redir = new RedirectCollector();
+            var trace = RuleMatchTrace.Empty;
 
             EvaluateRules(
                 data,
@@ -93,11 +118,21 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 out bool hasImportantBlock,
                 out bool hasNormalBlock,
                 out bool hasException,
-                ref redir);
+                ref redir,
+                ref trace);
+
+            hadException = hasException;
 
             bool shouldBlock = hasImportantBlock || (hasNormalBlock && !hasException);
             if (!shouldBlock)
+            {
+                if (hasException && ShieldLogger.DiagnosticMode)
+                {
+                    string excRule = FormatMatchedRule(data, in ctx, isImportant: false, isException: true, in trace);
+                    return ShieldNetworkDecision.AllowWithReason($"Brave exception ({excRule})", hasException: true);
+                }
                 return ShieldNetworkDecision.Allow;
+            }
 
             if (policy.Stubs && !redir.CancelAll && redir.CandCount > 0)
             {
@@ -106,10 +141,16 @@ public sealed class BraveNetworkEngine : IShieldEngine
                     return redirectDecision;
             }
 
+            string matchedRule = FormatMatchedRule(data, in ctx, isImportant: hasImportantBlock, isException: false, in trace);
             if (hasImportantBlock)
-                return ShieldNetworkDecision.Block("Brave network ($important)", isImportant: true);
+            {
+                return ShieldNetworkDecision.Block(
+                    string.IsNullOrEmpty(matchedRule) ? "Brave network ($important)" : $"Brave network ($important: {matchedRule})",
+                    isImportant: true);
+            }
 
-            return ShieldNetworkDecision.Block("Brave network");
+            return ShieldNetworkDecision.Block(
+                string.IsNullOrEmpty(matchedRule) ? "Brave network" : $"Brave network ({matchedRule})");
         }
         finally
         {
@@ -143,12 +184,13 @@ public sealed class BraveNetworkEngine : IShieldEngine
         if (data == null)
             return false;
 
+        bool excPopup = false;
         Span<char> urlScratch = stackalloc char[UrlStackLimit];
         Span<ulong> tokBuf = stackalloc ulong[MaxTokensPerUrl];
         Span<ulong> orgBuf = stackalloc ulong[MaxOriginHashes];
         Span<ulong> tgtBuf = stackalloc ulong[MaxOriginHashes];
 
-        // 1. Reglas declarativas $popup de Brave (ej. ||popunder.net^$popup)
+        // 1. Reglas declarativas $popup de Brave (ej. ||popunder.net^$popup y /regex/$popup)
         if (TryBuildRequestContext(
                 targetUri, originHost, CoreWebView2WebResourceContext.Document,
                 secFetchDest: null, httpMethod: "GET",
@@ -159,18 +201,23 @@ public sealed class BraveNetworkEngine : IShieldEngine
             try
             {
                 var dummyRedir = default(RedirectCollector);
+                var trace = RuleMatchTrace.Empty;
                 EvaluateRules(
                     data,
                     in ctx,
                     EvalMode.Popup,
                     out bool impPopup,
                     out bool normPopup,
-                    out bool excPopup,
-                    ref dummyRedir);
+                    out excPopup,
+                    ref dummyRedir,
+                    ref trace);
 
                 if (impPopup || (normPopup && !excPopup))
                 {
-                    reason = impPopup ? "Brave $popup ($important)" : "Brave $popup";
+                    string matched = FormatMatchedRule(data, in ctx, isImportant: impPopup, isException: false, in trace);
+                    reason = impPopup
+                        ? (string.IsNullOrEmpty(matched) ? "Brave $popup ($important)" : $"Brave $popup ($important: {matched})")
+                        : (string.IsNullOrEmpty(matched) ? "Brave $popup" : $"Brave $popup ({matched})");
                     return true;
                 }
             }
@@ -182,13 +229,17 @@ public sealed class BraveNetworkEngine : IShieldEngine
         }
 
         // 2. Reglas de bloqueo Document si el módulo Network está activo
+        bool hasDocException = false;
         if (policy.Network)
         {
-            var navDecision = EvaluateNetwork(
+            var navDecision = EvaluateNetworkCore(
                 targetUri,
                 originHost,
                 policy,
-                CoreWebView2WebResourceContext.Document);
+                CoreWebView2WebResourceContext.Document,
+                secFetchDest: null,
+                httpMethod: null,
+                out hasDocException);
             if (navDecision.ShouldBlock)
             {
                 reason = navDecision.Reason ?? "Brave popup document block";
@@ -196,6 +247,228 @@ public sealed class BraveNetworkEngine : IShieldEngine
             }
         }
 
+        if (excPopup || hasDocException)
+            return false;
+
+        // 3. Si el documento origen tiene regla $csp=sandbox sin allow-popups, bloquear el popup
+        if (originUri != null && policy.Network)
+        {
+            EvaluateCspPolicies(originUri, originUri.Host, isFromSubframe, policy, out bool originSandboxNoPopups);
+            if (originSandboxNoPopups)
+            {
+                reason = "Brave $csp=sandbox (no allow-popups)";
+                return true;
+            }
+        }
+
+        // 4. Salvaguardas seguras cuando no existe excepción explícita $popup/$document
+        bool isSafeDest = AdBlockFilter.IsGoogleDomain(targetUri.Host) ||
+                          AdBlockFilter.IsTrustedDomain(targetUri.Host);
+        if (!isSafeDest)
+        {
+            if (!isUserInitiated &&
+                originUri != null &&
+                !PublicSuffix.IsSameRegistrableDomain(targetUri.Host, originUri.Host))
+            {
+                reason = "Brave popup: cross-origin unsolicited";
+                return true;
+            }
+
+            if ((!isUserInitiated || isFromSubframe) && AdBlockFilter.IsSuspiciousPopup(targetUri, originUri))
+            {
+                reason = "Brave popup: suspicious tracking/popunder";
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public IReadOnlyList<string> EvaluateCspPolicies(
+        Uri documentUri,
+        string? originHost,
+        bool isSubdocument,
+        EffectiveSitePolicy policy,
+        out bool enforceSandboxNoPopups)
+    {
+        enforceSandboxNoPopups = false;
+        if (documentUri is null || !policy.ShieldEnabled || !policy.Network)
+            return Array.Empty<string>();
+
+        var data = _dataProvider();
+        if (data == null)
+            return Array.Empty<string>();
+
+        var cspRules = data.GetCspRules();
+        if (cspRules.Length == 0)
+            return Array.Empty<string>();
+
+        string effOrigin = string.IsNullOrWhiteSpace(originHost) ? documentUri.Host : originHost;
+        Span<char> urlScratch = stackalloc char[UrlStackLimit];
+        Span<ulong> tokBuf = stackalloc ulong[MaxTokensPerUrl];
+        Span<ulong> orgBuf = stackalloc ulong[MaxOriginHashes];
+        Span<ulong> tgtBuf = stackalloc ulong[MaxOriginHashes];
+
+        if (!TryBuildRequestContext(
+                documentUri,
+                effOrigin,
+                CoreWebView2WebResourceContext.Document,
+                secFetchDest: isSubdocument ? "iframe" : "document",
+                httpMethod: "GET",
+                urlScratch,
+                tokBuf,
+                orgBuf,
+                tgtBuf,
+                out var ctx,
+                out char[]? rentedBuf,
+                overrideTypeMask: isSubdocument ? BraveNetworkMask.FromSubdocument : BraveNetworkMask.FromDocument))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            bool wildcardException = false;
+            HashSet<string>? cancelledDirectives = null;
+            List<string>? importantDirectives = null;
+            List<string>? normalDirectives = null;
+
+            for (int i = 0; i < cspRules.Length; i++)
+            {
+                ref readonly var rec = ref cspRules[i];
+                var mask = (BraveNetworkMask)rec.Mask;
+
+                if ((mask & ctx.TypeMask) == 0)
+                    continue;
+                if ((mask & ctx.PartyMask) == 0)
+                    continue;
+                if ((mask & BraveNetworkMask.FromSchemeMask) != 0 && (mask & ctx.SchemeMask) == 0)
+                    continue;
+                if ((mask & BraveNetworkMask.FromAnyMethods) != 0 && (mask & ctx.MethodMask) == 0)
+                    continue;
+                if (!MatchesDomainConstraints(data, in rec, ctx.OriginHashes, ctx.TargetHashes))
+                    continue;
+
+                bool matched = (mask & BraveNetworkMask.IsFullRegex) != 0
+                    ? MatchesFullRegex(data, in rec, i, isCsp: true, in ctx)
+                    : MatchesUrlPattern(data, in rec, ctx.UrlLower, ctx.ReqHost, ctx.HostStart);
+                if (!matched)
+                    continue;
+
+                string mod = rec.ModLen > 0
+                    ? Encoding.UTF8.GetString(data.StrBlob, rec.ModOff, rec.ModLen).Trim()
+                    : string.Empty;
+
+                bool isException = (mask & BraveNetworkMask.IsException) != 0;
+                bool isImportant = (mask & BraveNetworkMask.IsImportant) != 0;
+
+                if (isException)
+                {
+                    if (string.IsNullOrEmpty(mod))
+                    {
+                        wildcardException = true;
+                    }
+                    else
+                    {
+                        cancelledDirectives ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        cancelledDirectives.Add(mod);
+                    }
+                }
+                else if (!string.IsNullOrEmpty(mod))
+                {
+                    if (isImportant)
+                    {
+                        importantDirectives ??= new List<string>(2);
+                        importantDirectives.Add(mod);
+                    }
+                    else
+                    {
+                        normalDirectives ??= new List<string>(4);
+                        normalDirectives.Add(mod);
+                    }
+                }
+            }
+
+            if (importantDirectives == null && (wildcardException || normalDirectives == null))
+                return Array.Empty<string>();
+
+            var result = new List<string>(4);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (importantDirectives != null)
+            {
+                foreach (string d in importantDirectives)
+                {
+                    if (seen.Add(d))
+                        result.Add(d);
+                }
+            }
+
+            if (!wildcardException && normalDirectives != null)
+            {
+                foreach (string d in normalDirectives)
+                {
+                    if (cancelledDirectives != null && cancelledDirectives.Contains(d))
+                        continue;
+                    if (seen.Add(d))
+                        result.Add(d);
+                }
+            }
+
+            if (result.Count == 0)
+                return Array.Empty<string>();
+
+            for (int i = 0; i < result.Count; i++)
+            {
+                if (HasSandboxWithoutPopups(result[i]))
+                {
+                    enforceSandboxNoPopups = true;
+                    break;
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (rentedBuf != null)
+                ArrayPool<char>.Shared.Return(rentedBuf);
+        }
+    }
+
+    public string? EvaluateCspHeader(
+        Uri documentUri,
+        string? originHost,
+        bool isSubdocument,
+        EffectiveSitePolicy policy,
+        out bool enforceSandboxNoPopups)
+    {
+        var policies = EvaluateCspPolicies(documentUri, originHost, isSubdocument, policy, out enforceSandboxNoPopups);
+        return policies.Count > 0 ? string.Join(", ", policies) : null;
+    }
+
+    private static bool HasSandboxWithoutPopups(string cspPolicy)
+    {
+        if (string.IsNullOrWhiteSpace(cspPolicy))
+            return false;
+
+        int start = 0;
+        while (start < cspPolicy.Length)
+        {
+            int semi = cspPolicy.IndexOf(';', start);
+            var part = (semi >= 0 ? cspPolicy.AsSpan(start, semi - start) : cspPolicy.AsSpan(start)).Trim();
+            if (part.Equals("sandbox", StringComparison.OrdinalIgnoreCase) ||
+                (part.StartsWith("sandbox", StringComparison.OrdinalIgnoreCase) &&
+                 part.Length > 7 &&
+                 char.IsWhiteSpace(part[7])))
+            {
+                if (part.IndexOf("allow-popups", StringComparison.OrdinalIgnoreCase) < 0)
+                    return true;
+            }
+            if (semi < 0)
+                break;
+            start = semi + 1;
+        }
         return false;
     }
 
@@ -226,7 +499,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 return false;
 
             var dummyRedir = default(RedirectCollector);
-            EvaluateRules(data, in ctx, EvalMode.GenericHide, out bool matched, out _, out _, ref dummyRedir);
+            var trace = RuleMatchTrace.Empty;
+            EvaluateRules(data, in ctx, EvalMode.GenericHide, out bool matched, out _, out _, ref dummyRedir, ref trace);
             return matched;
         }
         finally
@@ -245,6 +519,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
 
     private ref struct RequestEvalContext
     {
+        public Uri? OriginalUri;
         public ReadOnlySpan<char> UrlLower;
         public ReadOnlySpan<char> ReqHost;
         public string CleanOriginStr;
@@ -294,6 +569,98 @@ public sealed class BraveNetworkEngine : IShieldEngine
             if (ExcCount < 8 && span.IndexOf(ridx) < 0)
                 _excs[ExcCount++] = ridx;
         }
+    }
+
+    private struct RuleMatchTrace
+    {
+        public const int UnsetIndex = int.MinValue;
+        public int PureHostPos;
+        public int ImpEncodedIdx;
+        public int NormEncodedIdx;
+        public int ExcEncodedIdx;
+
+        public static RuleMatchTrace Empty => new()
+        {
+            PureHostPos = -1,
+            ImpEncodedIdx = UnsetIndex,
+            NormEncodedIdx = UnsetIndex,
+            ExcEncodedIdx = UnsetIndex
+        };
+    }
+
+    private static string FormatMatchedRule(
+        BraveShieldData data,
+        in RequestEvalContext ctx,
+        bool isImportant,
+        bool isException,
+        in RuleMatchTrace trace)
+    {
+        if (isException)
+        {
+            return trace.ExcEncodedIdx != RuleMatchTrace.UnsetIndex
+                ? FormatPatRecRule(data, trace.ExcEncodedIdx)
+                : string.Empty;
+        }
+
+        if (isImportant)
+        {
+            return trace.ImpEncodedIdx != RuleMatchTrace.UnsetIndex
+                ? FormatPatRecRule(data, trace.ImpEncodedIdx)
+                : string.Empty;
+        }
+
+        if (trace.PureHostPos >= 0 && trace.PureHostPos < ctx.ReqHost.Length)
+        {
+            return $"purehost:{ctx.ReqHost.Slice(trace.PureHostPos).ToString()}";
+        }
+
+        if (trace.NormEncodedIdx != RuleMatchTrace.UnsetIndex)
+        {
+            return FormatPatRecRule(data, trace.NormEncodedIdx);
+        }
+
+        return string.Empty;
+    }
+
+    private static string FormatPatRecRule(BraveShieldData data, int encodedIdx)
+    {
+        ref readonly var rec = ref GetRuleByEncodedIndex(data, encodedIdx);
+        var mask = (BraveNetworkMask)rec.Mask;
+
+        string host = rec.HostLen > 0 ? Encoding.UTF8.GetString(data.StrBlob, rec.HostOff, rec.HostLen) : string.Empty;
+        string pat = rec.PatLen > 0 ? Encoding.UTF8.GetString(data.StrBlob, rec.PatOff, rec.PatLen) : string.Empty;
+
+        var sb = new StringBuilder(64);
+        if ((mask & BraveNetworkMask.IsException) != 0)
+            sb.Append("@@");
+
+        if ((mask & BraveNetworkMask.IsFullRegex) != 0)
+        {
+            sb.Append('/').Append(pat).Append('/');
+        }
+        else
+        {
+            if ((mask & BraveNetworkMask.IsHostnameAnchor) != 0)
+                sb.Append("||");
+            else if ((mask & BraveNetworkMask.IsLeftAnchor) != 0)
+                sb.Append('|');
+
+            if (string.IsNullOrEmpty(pat))
+                sb.Append(host);
+            else if (!string.IsNullOrEmpty(host) && !pat.Contains(host, StringComparison.Ordinal))
+                sb.Append(host).Append(pat);
+            else
+                sb.Append(pat);
+
+            if ((mask & BraveNetworkMask.IsRightAnchor) != 0)
+                sb.Append('|');
+        }
+
+        if ((mask & BraveNetworkMask.IsImportant) != 0)
+            sb.Append("$important");
+
+        string res = sb.ToString();
+        return res.Length > 96 ? res[..96] + "..." : res;
     }
 
     private static bool TryBuildRequestContext(
@@ -389,6 +756,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
 
         ctx = new RequestEvalContext
         {
+            OriginalUri = uri,
             UrlLower = urlSpan,
             ReqHost = urlSpan.Slice(hostStart, hostEnd - hostStart),
             CleanOriginStr = cleanOriginStr,
@@ -433,7 +801,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
         out bool hasImportantBlock,
         out bool hasNormalBlock,
         out bool hasException,
-        scoped ref RedirectCollector redir)
+        scoped ref RedirectCollector redir,
+        scoped ref RuleMatchTrace trace)
     {
         hasImportantBlock = false;
         hasNormalBlock = false;
@@ -442,8 +811,11 @@ public sealed class BraveNetworkEngine : IShieldEngine
         // Nivel 1: PureHosts (||exact_host^) — solo en evaluación Network
         if (mode == EvalMode.Network && data.PureHashes.Length > 0)
         {
-            if (CheckPureHosts(data, in ctx))
+            if (CheckPureHosts(data, in ctx, out int purePos))
+            {
                 hasNormalBlock = true;
+                trace.PureHostPos = purePos;
+            }
         }
 
         // Nivel 2: PatternRules indexadas por OptKeys (dominio origen único), TokKeys (token más raro) y FallbackRules
@@ -457,7 +829,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 {
                     var range = data.OptRanges[bucketIdx];
                     EvaluateBucketRange(data, in ctx, mode, data.OptVals, (int)range.Offset, (int)range.Count,
-                        ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir);
+                        ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir, ref trace);
                 }
             }
         }
@@ -472,7 +844,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 {
                     var range = data.TokRanges[bucketIdx];
                     EvaluateBucketRange(data, in ctx, mode, data.TokVals, (int)range.Offset, (int)range.Count,
-                        ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir);
+                        ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir, ref trace);
                 }
             }
         }
@@ -481,8 +853,27 @@ public sealed class BraveNetworkEngine : IShieldEngine
         if (data.FallbackRules.Length > 0)
         {
             EvaluateBucketRange(data, in ctx, mode, data.FallbackRules, 0, data.FallbackRules.Length,
-                ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir);
+                ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir, ref trace);
         }
+
+        // 4. Reglas /regex/ completas (pre-filtradas por máscara, dominio y literal obligatorio)
+        if (mode == EvalMode.GenericHide && hasImportantBlock)
+            return;
+
+        var regexRules = data.GetRegexRules();
+        if (regexRules.Length > 0)
+        {
+            EvaluateRegexRules(data, in ctx, mode, regexRules,
+                ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir, ref trace);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ref readonly BravePatRec GetRuleByEncodedIndex(BraveShieldData data, int encodedIdx)
+    {
+        if (encodedIdx < 0)
+            return ref data.GetRegexRules()[~encodedIdx];
+        return ref data.PatternRules[encodedIdx];
     }
 
     private static ShieldNetworkDecision ResolveBestRedirect(
@@ -508,7 +899,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
             var excIndices = redir.ExcIndices;
             for (int i = 0; i < excIndices.Length; i++)
             {
-                ref readonly var excRec = ref data.PatternRules[excIndices[i]];
+                ref readonly var excRec = ref GetRuleByEncodedIndex(data, excIndices[i]);
                 if (excRec.ModLen <= 0)
                     continue;
                 string mod = Encoding.UTF8.GetString(data.StrBlob, excRec.ModOff, excRec.ModLen);
@@ -524,7 +915,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
         var candIndices = redir.CandIndices;
         for (int i = 0; i < candIndices.Length; i++)
         {
-            ref readonly var rec = ref data.PatternRules[candIndices[i]];
+            ref readonly var rec = ref GetRuleByEncodedIndex(data, candIndices[i]);
             if (rec.ModLen <= 0)
                 continue;
 
@@ -564,7 +955,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
             isImportant: isImportant);
     }
 
-    private static bool CheckPureHosts(BraveShieldData data, in RequestEvalContext ctx)
+    private static bool CheckPureHosts(BraveShieldData data, in RequestEvalContext ctx, out int matchedPos)
     {
         var reqHost = ctx.ReqHost;
         int pos = 0;
@@ -579,6 +970,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                     (mask & ctx.PartyMask) != 0 &&
                     ((mask & BraveNetworkMask.FromSchemeMask) == 0 || (mask & ctx.SchemeMask) != 0))
                 {
+                    matchedPos = pos;
                     return true;
                 }
             }
@@ -588,6 +980,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 break;
             pos += dot + 1;
         }
+        matchedPos = -1;
         return false;
     }
 
@@ -601,114 +994,257 @@ public sealed class BraveNetworkEngine : IShieldEngine
         ref bool hasImportantBlock,
         ref bool hasNormalBlock,
         ref bool hasException,
-        scoped ref RedirectCollector redir)
+        scoped ref RedirectCollector redir,
+        scoped ref RuleMatchTrace trace)
     {
         int end = offset + count;
         for (int i = offset; i < end; i++)
         {
             int ridx = indices[i];
             ref readonly var rec = ref data.PatternRules[ridx];
-            var mask = (BraveNetworkMask)rec.Mask;
-
-            bool isException = (mask & BraveNetworkMask.IsException) != 0;
-            bool isImportant = (mask & BraveNetworkMask.IsImportant) != 0;
-            bool isRedirect = (mask & BraveNetworkMask.IsRedirect) != 0;
-
-            switch (mode)
-            {
-                case EvalMode.GenericHide:
-                    if ((mask & BraveNetworkMask.IsGenericHide) == 0)
-                        continue;
-                    break;
-
-                case EvalMode.Popup:
-                    if ((mask & BraveNetworkMask.IsGenericHide) != 0)
-                        continue;
-                    if (!isException)
-                    {
-                        if ((mask & BraveNetworkMask.FromPopup) == 0)
-                            continue;
-                    }
-                    else
-                    {
-                        // @@...$popup o @@...$document desactivan bloqueo de popup (no @@...$redirect)
-                        if (isRedirect)
-                            continue;
-                        if ((mask & (BraveNetworkMask.FromPopup | BraveNetworkMask.FromDocument)) == 0)
-                            continue;
-                    }
-                    break;
-
-                case EvalMode.Network:
-                    if ((mask & BraveNetworkMask.IsGenericHide) != 0)
-                        continue;
-                    if ((mask & BraveNetworkMask.FromPopup) != 0)
-                        continue;
-                    if (!isRedirect)
-                    {
-                        if (!isImportant && !isException && (hasNormalBlock || hasImportantBlock))
-                            continue;
-                        if (isException && (hasException || hasImportantBlock))
-                            continue;
-                    }
-                    if ((mask & ctx.TypeMask) == 0)
-                        continue;
-                    break;
-            }
-
-            if ((mask & ctx.PartyMask) == 0)
-                continue;
-
-            if ((mask & BraveNetworkMask.FromSchemeMask) != 0 && (mask & ctx.SchemeMask) == 0)
-                continue;
-
-            if ((mask & BraveNetworkMask.FromAnyMethods) != 0 && (mask & ctx.MethodMask) == 0)
-                continue;
-
-            if (!MatchesDomainConstraints(data, in rec, ctx.OriginHashes, ctx.TargetHashes))
-                continue;
-
-            if (!MatchesUrlPattern(data, in rec, ctx.UrlLower, ctx.ReqHost, ctx.HostStart))
-                continue;
-
-            if (mode == EvalMode.GenericHide)
-            {
-                hasImportantBlock = true;
+            EvaluateSingleRule(
+                data,
+                in ctx,
+                mode,
+                in rec,
+                encodedIdx: ridx,
+                ruleIndex: ridx,
+                isFullRegex: false,
+                ref hasImportantBlock,
+                ref hasNormalBlock,
+                ref hasException,
+                ref redir,
+                ref trace);
+            if (mode == EvalMode.GenericHide && hasImportantBlock)
                 return;
-            }
+        }
+    }
 
-            if (mode == EvalMode.Network && isRedirect)
-            {
-                if (isException)
+    private static void EvaluateRegexRules(
+        BraveShieldData data,
+        scoped in RequestEvalContext ctx,
+        EvalMode mode,
+        BravePatRec[] regexRules,
+        ref bool hasImportantBlock,
+        ref bool hasNormalBlock,
+        ref bool hasException,
+        scoped ref RedirectCollector redir,
+        scoped ref RuleMatchTrace trace)
+    {
+        for (int i = 0; i < regexRules.Length; i++)
+        {
+            ref readonly var rec = ref regexRules[i];
+            EvaluateSingleRule(
+                data,
+                in ctx,
+                mode,
+                in rec,
+                encodedIdx: ~i,
+                ruleIndex: i,
+                isFullRegex: true,
+                ref hasImportantBlock,
+                ref hasNormalBlock,
+                ref hasException,
+                ref redir,
+                ref trace);
+            if (mode == EvalMode.GenericHide && hasImportantBlock)
+                return;
+        }
+    }
+
+    private static void EvaluateSingleRule(
+        BraveShieldData data,
+        scoped in RequestEvalContext ctx,
+        EvalMode mode,
+        in BravePatRec rec,
+        int encodedIdx,
+        int ruleIndex,
+        bool isFullRegex,
+        ref bool hasImportantBlock,
+        ref bool hasNormalBlock,
+        ref bool hasException,
+        scoped ref RedirectCollector redir,
+        scoped ref RuleMatchTrace trace)
+    {
+        var mask = (BraveNetworkMask)rec.Mask;
+
+        bool isException = (mask & BraveNetworkMask.IsException) != 0;
+        bool isImportant = (mask & BraveNetworkMask.IsImportant) != 0;
+        bool isRedirect = (mask & BraveNetworkMask.IsRedirect) != 0;
+
+        switch (mode)
+        {
+            case EvalMode.GenericHide:
+                if ((mask & BraveNetworkMask.IsGenericHide) == 0)
+                    return;
+                break;
+
+            case EvalMode.Popup:
+                if ((mask & BraveNetworkMask.IsGenericHide) != 0)
+                    return;
+                if (!isException)
                 {
-                    redir.AddException(ridx, rec.ModLen);
+                    if ((mask & BraveNetworkMask.FromPopup) == 0)
+                        return;
                 }
                 else
                 {
-                    redir.AddCandidate(ridx);
-                    if ((mask & BraveNetworkMask.IsAlsoBlockRedirect) != 0)
+                    // @@...$popup o @@...$document desactivan bloqueo de popup (no @@...$redirect)
+                    if (isRedirect)
+                        return;
+                    if ((mask & (BraveNetworkMask.FromPopup | BraveNetworkMask.FromDocument)) == 0)
+                        return;
+                }
+                break;
+
+            case EvalMode.Network:
+                if ((mask & BraveNetworkMask.IsGenericHide) != 0)
+                    return;
+                if ((mask & BraveNetworkMask.FromPopup) != 0)
+                    return;
+                if (!isRedirect)
+                {
+                    if (!isImportant && !isException && (hasNormalBlock || hasImportantBlock))
+                        return;
+                    if (isException && (hasException || hasImportantBlock))
+                        return;
+                }
+                if ((mask & ctx.TypeMask) == 0)
+                    return;
+                break;
+        }
+
+        if ((mask & ctx.PartyMask) == 0)
+            return;
+
+        if ((mask & BraveNetworkMask.FromSchemeMask) != 0 && (mask & ctx.SchemeMask) == 0)
+            return;
+
+        if ((mask & BraveNetworkMask.FromAnyMethods) != 0 && (mask & ctx.MethodMask) == 0)
+            return;
+
+        if (!MatchesDomainConstraints(data, in rec, ctx.OriginHashes, ctx.TargetHashes))
+            return;
+
+        bool patternMatched = isFullRegex
+            ? MatchesFullRegex(data, in rec, ruleIndex, isCsp: false, in ctx)
+            : MatchesUrlPattern(data, in rec, ctx.UrlLower, ctx.ReqHost, ctx.HostStart);
+        if (!patternMatched)
+            return;
+
+        if (mode == EvalMode.GenericHide)
+        {
+            hasImportantBlock = true;
+            return;
+        }
+
+        if (mode == EvalMode.Network && isRedirect)
+        {
+            if (isException)
+            {
+                redir.AddException(encodedIdx, rec.ModLen);
+            }
+            else
+            {
+                redir.AddCandidate(encodedIdx);
+                if ((mask & BraveNetworkMask.IsAlsoBlockRedirect) != 0)
+                {
+                    if (isImportant)
                     {
-                        if (isImportant)
-                            hasImportantBlock = true;
-                        else
-                            hasNormalBlock = true;
+                        hasImportantBlock = true;
+                        if (trace.ImpEncodedIdx == RuleMatchTrace.UnsetIndex)
+                            trace.ImpEncodedIdx = encodedIdx;
+                    }
+                    else
+                    {
+                        hasNormalBlock = true;
+                        if (trace.NormEncodedIdx == RuleMatchTrace.UnsetIndex)
+                            trace.NormEncodedIdx = encodedIdx;
                     }
                 }
-                continue;
             }
+            return;
+        }
 
-            if (isImportant && !isException)
+        if (isImportant && !isException)
+        {
+            hasImportantBlock = true;
+            if (trace.ImpEncodedIdx == RuleMatchTrace.UnsetIndex)
+                trace.ImpEncodedIdx = encodedIdx;
+            return;
+        }
+
+        if (isException)
+        {
+            hasException = true;
+            if (trace.ExcEncodedIdx == RuleMatchTrace.UnsetIndex)
+                trace.ExcEncodedIdx = encodedIdx;
+        }
+        else
+        {
+            hasNormalBlock = true;
+            if (trace.NormEncodedIdx == RuleMatchTrace.UnsetIndex)
+                trace.NormEncodedIdx = encodedIdx;
+        }
+    }
+
+    private static bool MatchesFullRegex(
+        BraveShieldData data,
+        in BravePatRec rec,
+        int ruleIndex,
+        bool isCsp,
+        scoped in RequestEvalContext ctx)
+    {
+        if (rec.HostLen > 0)
+        {
+            Span<char> preScratch = stackalloc char[128];
+            ReadOnlySpan<char> prefilter = ReadBlobSlice(data.StrBlob, rec.HostOff, rec.HostLen, preScratch, out _);
+            if (!prefilter.IsEmpty && ctx.UrlLower.IndexOf(prefilter, StringComparison.Ordinal) < 0)
+                return false;
+        }
+
+        var regex = data.GetOrCompileRegex(isCsp, ruleIndex);
+        if (regex == null)
+            return false;
+
+        try
+        {
+            if (((BraveNetworkMask)rec.Mask & BraveNetworkMask.IsMatchCase) != 0 && ctx.OriginalUri != null)
             {
-                hasImportantBlock = true;
-                if (mode != EvalMode.Network)
-                    return;
-                continue;
+                string pathAndQuery = ctx.OriginalUri.PathAndQuery;
+                int prefixLen = ctx.HostEnd;
+                int port = !ctx.OriginalUri.IsDefaultPort && ctx.OriginalUri.Port > 0 ? ctx.OriginalUri.Port : -1;
+                int portDigits = port > 0 ? CountDigits(port) + 1 : 0;
+                int totalLen = prefixLen + portDigits + pathAndQuery.Length;
+                char[]? rented = null;
+                Span<char> buf = totalLen <= UrlStackLimit
+                    ? stackalloc char[UrlStackLimit]
+                    : (rented = ArrayPool<char>.Shared.Rent(totalLen));
+                try
+                {
+                    ctx.UrlLower.Slice(0, prefixLen).CopyTo(buf);
+                    int pos = prefixLen;
+                    if (port > 0)
+                    {
+                        buf[pos++] = ':';
+                        port.TryFormat(buf.Slice(pos), out int written);
+                        pos += written;
+                    }
+                    pathAndQuery.AsSpan().CopyTo(buf.Slice(pos));
+                    return regex.IsMatch(buf.Slice(0, totalLen));
+                }
+                finally
+                {
+                    if (rented != null)
+                        ArrayPool<char>.Shared.Return(rented);
+                }
             }
 
-            if (isException)
-                hasException = true;
-            else
-                hasNormalBlock = true;
+            return regex.IsMatch(ctx.UrlLower);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
         }
     }
 

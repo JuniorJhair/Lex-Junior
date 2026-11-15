@@ -24,6 +24,16 @@ public readonly struct ShieldNetworkDecision
         RedirectContentType = string.Empty
     };
 
+    public static ShieldNetworkDecision AllowWithReason(string reason, bool hasException = false) => new()
+    {
+        ShouldBlock = false,
+        IsRedirectStub = false,
+        HasException = hasException,
+        RedirectBytes = Array.Empty<byte>(),
+        RedirectContentType = string.Empty,
+        Reason = reason
+    };
+
     public static ShieldNetworkDecision Block(string? reason = null, bool isImportant = false) => new()
     {
         ShouldBlock = true,

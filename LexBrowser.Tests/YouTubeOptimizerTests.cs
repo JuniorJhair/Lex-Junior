@@ -9,6 +9,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
+[Collection("SettingsCollection")]
 public class YouTubeOptimizerTests
 {
     [Fact]

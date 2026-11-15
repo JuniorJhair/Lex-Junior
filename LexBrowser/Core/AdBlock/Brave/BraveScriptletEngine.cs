@@ -179,7 +179,7 @@ public static class BraveScriptletEngine
             inner.AppendLine(mainBody);
         }
 
-        scriptletJs = $"try{{(function(){{'use strict';var scriptletGlobals={{}};\n{inner}\n}})();}}catch(_e){{}}\n";
+        scriptletJs = $"try{{(function(){{'use strict';var scriptletGlobals={{}};\n{inner}\n}})();}}catch(_e){{try{{var _d=window.__lexBraveDiag;if(_d&&_d.scriptletErrs)_d.scriptletErrs.push(String(_e));}}catch(_){{}}}}\n";
         return true;
     }
 
@@ -279,46 +279,54 @@ public static class BraveScriptletEngine
         if (kept.Count == 0)
             return string.Empty;
 
-        return string.Join(",", kept) + "{display:none!important;}";
+        return BraveCosmeticEngine.FormatHideCssChunks(kept);
     }
 
-    private static string BuildHostCss(HostCosmeticResources cosmetic)
+    internal static string BuildScriptletsBundle(
+        HostCosmeticResources cosmetic,
+        BraveResourceStore resources,
+        bool allowPrivileged = false)
     {
-        var sb = new StringBuilder();
-        if (cosmetic.HideSelectors.Count > 0)
-        {
-            // Dividir en lotes para evitar límites patológicos de regla CSS única
-            int chunk = 0;
-            int chunkLen = 0;
-            for (int i = 0; i < cosmetic.HideSelectors.Count; i++)
-            {
-                if (chunk > 0)
-                {
-                    sb.Append(',');
-                    chunkLen++;
-                }
-                string sel = cosmetic.HideSelectors[i];
-                sb.Append(sel);
-                chunk++;
-                chunkLen += sel.Length;
-                if (chunk >= 120 || chunkLen > MaxStyleRuleSize)
-                {
-                    sb.Append("{display:none!important;}\n");
-                    chunk = 0;
-                    chunkLen = 0;
-                }
-            }
-            if (chunk > 0)
-                sb.Append("{display:none!important;}\n");
-        }
+        if (cosmetic == null || resources == null || cosmetic.Scriptlets.Count == 0)
+            return string.Empty;
 
+        var sb = new StringBuilder(1024);
+        for (int i = 0; i < cosmetic.Scriptlets.Count; i++)
+        {
+            if (TryBuildScriptletCall(cosmetic.Scriptlets[i], resources, out string callJs, allowPrivileged))
+                sb.Append(callJs);
+        }
+        return sb.ToString();
+    }
+
+    internal static string BuildHostHideCss(HostCosmeticResources cosmetic)
+        => cosmetic?.HideSelectors.Count > 0
+            ? BraveCosmeticEngine.FormatHideCssChunks(cosmetic.HideSelectors, maxBatchCount: 20, maxBatchChars: MaxStyleRuleSize)
+            : string.Empty;
+
+    internal static string BuildHostStyleCss(HostCosmeticResources cosmetic)
+    {
+        if (cosmetic == null || cosmetic.StyleCssRules.Count == 0)
+            return string.Empty;
+
+        var sb = new StringBuilder();
         for (int i = 0; i < cosmetic.StyleCssRules.Count; i++)
         {
             sb.Append(cosmetic.StyleCssRules[i]);
             sb.Append('\n');
         }
-
         return sb.ToString();
+    }
+
+    private static string BuildHostCss(HostCosmeticResources cosmetic)
+    {
+        string hide = BuildHostHideCss(cosmetic);
+        string style = BuildHostStyleCss(cosmetic);
+        if (string.IsNullOrEmpty(hide))
+            return style;
+        if (string.IsNullOrEmpty(style))
+            return hide;
+        return hide + "\n" + style;
     }
 
     private static bool TryResolveJsResource(
@@ -449,53 +457,172 @@ public static class BraveScriptletEngine
 
     /// <summary>
     /// Script ligero compartido en pestañas no aisladas cuando el motor Brave está activo:
-    /// consulta bajo demanda clases/IDs genéricos al host C# y ejecuta filtros procedurales.
+    /// obtiene el plan del documento síncronamente vía HostObject COM (<c>lexShield</c>),
+    /// ejecuta scriptlets antes del &lt;head&gt;, aplica CSP/estilos en el primer nodo del DOM,
+    /// consulta selectores genéricos bajo demanda y ejecuta filtros procedurales.
     /// </summary>
-    public static string BootstrapScript => """
+    public static string BootstrapScript { get; } = BuildBootstrapScript(string.Empty);
+
+    public static string BuildBootstrapScript(string bridgeToken)
+    {
+        string escapedToken = EscapeJsRawStringBody(bridgeToken ?? string.Empty);
+        return BootstrapScriptTemplate.Replace("__LEX_BRIDGE_TOKEN__", escapedToken, StringComparison.Ordinal);
+    }
+
+    private const string BootstrapScriptTemplate = """
 (function(){
 'use strict';
 if(window.__lexBraveBootstrapped)return;
 window.__lexBraveBootstrapped=true;
+var __lexTok="__LEX_BRIDGE_TOKEN__";
 var __isTop=(window.top===window);
 var __host=(location.hostname||'').toLowerCase().replace(/\.+$/,'');
-if(!__host)return;
-if(/(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com|youtubekids\.com|googlevideo\.com|ytimg\.com|dailymotion\.com|dmcdn\.net|dmxleo\.com)$/.test(__host))return;
+var __parentHref='';
+if(!__isTop){
+  try{__parentHref=window.parent.location.href||'';}catch(_){}
+  if(!__parentHref)try{__parentHref=document.referrer||'';}catch(_){}
+}
+var __effectiveHost=__host;
+if(!__effectiveHost&&__parentHref){
+  var __pm=/^https?:\/\/([^\/:?#]+)/i.exec(__parentHref);
+  if(__pm&&__pm[1])__effectiveHost=__pm[1].toLowerCase().replace(/\.+$/,'');
+}
+if(!__effectiveHost)return;
+if(/(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com|youtubekids\.com|googlevideo\.com|ytimg\.com|dailymotion\.com|dmcdn\.net|dmxleo\.com)$/.test(__effectiveHost))return;
 
 var __seenCls=new Set(),__seenIds=new Set();
 var __pendCls=[],__pendIds=[];
 var __initialSent=false,__scanTimer=0,__procTimer=0;
 var __countedEls=new WeakSet();
 var __styleTexts={};
+var __pendingStyles={};
+var __pendingCsp=[];
+var __cspInserted=false;
+var __genericAllowed=true;
+var __enableOverlayDefuser=false;
+var __diag=window.__lexBraveDiag={host:__effectiveHost,isTop:__isTop,hasBridge:false,hostObjType:'undefined',planOk:false,enabled:null,cosmetic:null,ghide:false,scriptletLen:0,scriptletsOk:false,scriptletErrs:[],hostCss:false,styleCss:false,mgCss:false,cspCount:0,noPopup:false,ovl:false,errs:[]};
 
+function __applyStyleEl(id,cssText,root){
+  var el=document.getElementById(id);
+  if(!el){
+    el=document.createElement('style');
+    el.id=id;
+    el.type='text/css';
+    root.appendChild(el);
+  }
+  if(el.textContent!==cssText)el.textContent=cssText;
+  if(el.isConnected){
+    __styleTexts[id]=cssText;
+    delete __pendingStyles[id];
+  }
+}
 function __ensureStyle(id,cssText){
   if(!cssText)return;
-  var prev=__styleTexts[id]||'';
-  if(prev===cssText)return;
-  __styleTexts[id]=cssText;
+  var el=document.getElementById(id);
+  if(el&&el.isConnected&&__styleTexts[id]===cssText&&el.textContent===cssText)return;
+  __pendingStyles[id]=cssText;
   var root=document.head||document.documentElement;
   if(!root)return;
-  var el=document.getElementById(id);
-  if(!el){el=document.createElement('style');el.id=id;root.appendChild(el);}
-  if(el.textContent!==cssText)el.textContent=cssText;
+  __applyStyleEl(id,cssText,root);
 }
 function __appendStyle(id,cssText){
   if(!cssText)return;
-  var cur=__styleTexts[id]||'';
+  var cur=__pendingStyles[id]||__styleTexts[id]||'';
   if(cur.indexOf(cssText)!==-1)return;
   __ensureStyle(id,cur?cur+'\n'+cssText:cssText);
 }
 function __removeStyle(id){
+  delete __pendingStyles[id];
   delete __styleTexts[id];
   var el=document.getElementById(id);
   if(el&&el.parentNode)el.parentNode.removeChild(el);
 }
-function __reportCosmetic(count,reason){
+function __flushCsp(){
+  if(__cspInserted||!__pendingCsp.length)return;
+  var h=document.head;
+  if(!h)return;
+  __cspInserted=true;
+  var list=__pendingCsp;
+  __pendingCsp=[];
+  for(var i=list.length-1;i>=0;i--){
+    var c=list[i];
+    if(!c)continue;
+    try{
+      var m=document.createElement('meta');
+      m.httpEquiv='Content-Security-Policy';
+      m.content=c;
+      h.insertBefore(m,h.firstChild);
+      __diag.cspCount++;
+    }catch(e){__diag.errs.push('csp:'+String(e));}
+  }
+}
+function __reportShield(category,count,reason){
   if(!__isTop||count<=0)return;
   try{
-    if(window.chrome&&window.chrome.webview){
-      window.chrome.webview.postMessage({type:'ad_blocked',category:'cosmetic',reason:reason||'brave_cosmetic',url:location.href});
+    if(window.chrome&&window.chrome.webview&&typeof window.chrome.webview.postMessage==='function'){
+      window.chrome.webview.postMessage({type:'ad_blocked',category:category||'cosmetic',reason:reason||'brave_cosmetic',url:location.href});
     }
   }catch(_){}
+}
+function __reportCosmetic(count,reason){
+  __reportShield('cosmetic',count,reason);
+}
+function __installNoPopup(){
+  try{
+    window.open=function(){__reportShield('popup',1,'brave_csp_sandbox');return null;};
+  }catch(_){}
+  try{
+    document.addEventListener('click',function(ev){
+      var t=ev&&ev.target;
+      var a=t&&t.closest?t.closest('a[target]'):null;
+      if(!a)return;
+      var tgt=(a.getAttribute('target')||'').toLowerCase();
+      if(tgt==='_blank'||tgt==='new'){
+        ev.preventDefault();
+        ev.stopPropagation();
+        __reportShield('popup',1,'brave_csp_sandbox_blank');
+      }
+    },true);
+  }catch(_){}
+}
+
+var __bridge=null;
+try{
+  var __ho=window.chrome&&window.chrome.webview&&window.chrome.webview.hostObjects&&window.chrome.webview.hostObjects.sync;
+  __diag.hostObjType=typeof (__ho&&__ho.lexShield);
+  __bridge=(__ho&&__ho.lexShield)||null;
+  __diag.hasBridge=!!__bridge;
+}catch(e){__bridge=null;__diag.errs.push('bridge:'+String(e));}
+
+var __plan=null;
+if(__bridge&&__lexTok&&typeof __bridge.GetDocumentPlanJson==='function'){
+  try{
+    var __rawPlan=__bridge.GetDocumentPlanJson(__lexTok,location.href||'',__parentHref,__isTop);
+    if(__rawPlan){__plan=JSON.parse(__rawPlan);__diag.planOk=true;__diag.enabled=__plan.enabled!==false;}
+  }catch(e){__plan=null;__diag.errs.push('plan:'+String(e));}
+}
+if(__plan){
+  if(__plan.enabled===false)return;
+  if(__plan.host)__effectiveHost=__plan.host;
+  if(__plan.cosmetic===false)__genericAllowed=false;
+  __diag.cosmetic=__genericAllowed;
+  if(__plan.ghide){window.__lexBraveGenericHide=true;__diag.ghide=true;}
+  if(__plan.scriptlets){
+    __diag.scriptletLen=__plan.scriptlets.length;
+    try{(new Function(__plan.scriptlets))();__diag.scriptletsOk=true;}catch(e){__diag.errs.push('scriptlet:'+String(e));}
+  }
+  if(__plan.noPopup){__installNoPopup();__diag.noPopup=true;}
+  if(__plan.hostCss){__ensureStyle('lex-brave-host',__plan.hostCss);__diag.hostCss=true;}
+  if(__plan.styleCss){__ensureStyle('lex-brave-style',__plan.styleCss);__diag.styleCss=true;}
+  if(__plan.mgCss&&!__plan.ghide&&__genericAllowed){__ensureStyle('lex-brave-mg',__plan.mgCss);__diag.mgCss=true;}
+  if(__plan.csp&&__plan.csp.length){
+    __pendingCsp=__plan.csp.slice();
+    __flushCsp();
+  }
+  if(__plan.proc&&__plan.proc.length){
+    window.__lexBravePendingProcedural=(window.__lexBravePendingProcedural||[]).concat(__plan.proc);
+  }
+  if(__plan.ovl&&!__plan.ghide){__enableOverlayDefuser=true;__diag.ovl=true;}
 }
 
 function __parseMatcher(arg){
@@ -773,29 +900,71 @@ function __drainBounded(src,budget){
   }
   return out;
 }
+function __countHideCssHits(cssText,reason){
+  if(!cssText)return;
+  var blocks=cssText.split(/\{display:none!important;\}\s*/);
+  var newHits=0;
+  for(var bi=0;bi<blocks.length;bi++){
+    var sel=blocks[bi].trim();if(!sel)continue;
+    var matched=__safeQsa(document,sel);
+    for(var mi=0;mi<matched.length;mi++){
+      if(!__countedEls.has(matched[mi])){__countedEls.add(matched[mi]);newHits++;}
+    }
+  }
+  if(newHits>0)__reportCosmetic(newHits,reason);
+}
+function __applyGenericReply(d){
+  if(!d||d.type!=='brave_cosmetic_apply')return;
+  if(d.host&&d.host!==__effectiveHost)return;
+  if(d.ghide){
+    window.__lexBraveGenericHide=true;
+    __removeStyle('lex-brave-gen');
+    __removeStyle('lex-brave-mg');
+    __pendCls.length=0;__pendIds.length=0;
+    return;
+  }
+  if(d.mgCss)__ensureStyle('lex-brave-mg',d.mgCss);
+  if(d.css){
+    __appendStyle('lex-brave-gen',d.css);
+    __countHideCssHits(d.css,'brave_generic_cosmetic');
+  }
+}
 function __flushGeneric(){
   __scanTimer=0;
-  if(!__isTop||window.__lexBraveGenericHide===true)return;
-  if(!window.chrome||!window.chrome.webview)return;
+  if(!__genericAllowed||window.__lexBraveGenericHide===true)return;
   if(__initialSent&&__pendCls.length===0&&__pendIds.length===0)return;
+  if(__bridge&&__lexTok&&typeof __bridge.QueryCosmeticsJson==='function'){
+    do{
+      var clsBatch=__drainBounded(__pendCls,1400);
+      var idBatch=__drainBounded(__pendIds,1000);
+      var isInit=!__initialSent;
+      __initialSent=true;
+      try{
+        var raw=__bridge.QueryCosmeticsJson(__lexTok,location.href||'',__parentHref,__isTop,isInit,JSON.stringify(clsBatch),JSON.stringify(idBatch));
+        if(raw)__applyGenericReply(JSON.parse(raw));
+      }catch(e){__diag.errs.push('cos:'+String(e));break;}
+    }while(__pendCls.length>0||__pendIds.length>0);
+    return;
+  }
+  if(!__isTop||!window.chrome||!window.chrome.webview||typeof window.chrome.webview.postMessage!=='function')return;
   do{
-    var clsBatch=__drainBounded(__pendCls,1400);
-    var idBatch=__drainBounded(__pendIds,1000);
-    var isInit=!__initialSent;
+    var clsB=__drainBounded(__pendCls,1400);
+    var idB=__drainBounded(__pendIds,1000);
+    var isIni=!__initialSent;
     __initialSent=true;
     try{
       window.chrome.webview.postMessage({
         type:'brave_cosmetic_query',
-        host:__host,
-        initial:isInit,
-        classes:clsBatch,
-        ids:idBatch
+        host:__effectiveHost,
+        initial:isIni,
+        classes:clsB,
+        ids:idB
       });
-    }catch(_){break;}
+    }catch(e){__diag.errs.push('pm:'+String(e));break;}
   }while(__pendCls.length>0||__pendIds.length>0);
 }
 function __scheduleScan(){
-  if(__isTop&&!window.__lexBraveGenericHide&&!__scanTimer){
+  if(__genericAllowed&&!window.__lexBraveGenericHide&&!__scanTimer){
     __scanTimer=setTimeout(__flushGeneric,28);
   }
   if(!__procTimer&&(__compiledProc.length>0||(window.__lexBravePendingProcedural&&window.__lexBravePendingProcedural.length>0))){
@@ -803,49 +972,81 @@ function __scheduleScan(){
   }
 }
 
-if(__isTop&&window.chrome&&window.chrome.webview){
+if(!(__bridge&&__lexTok)&&__isTop&&window.chrome&&window.chrome.webview&&typeof window.chrome.webview.addEventListener==='function'){
   window.chrome.webview.addEventListener('message',function(ev){
-    var d=ev&&ev.data;
-    if(!d||d.type!=='brave_cosmetic_apply')return;
-    if(d.host&&d.host!==__host)return;
-    if(d.ghide){
-      window.__lexBraveGenericHide=true;
-      __removeStyle('lex-brave-gen');
-      __removeStyle('lex-brave-mg');
-      __pendCls.length=0;__pendIds.length=0;
-      return;
-    }
-    if(d.mgCss)__ensureStyle('lex-brave-mg',d.mgCss);
-    if(d.css){
-      __appendStyle('lex-brave-gen',d.css);
-      var sels=d.css.replace(/\{display:none!important;\}\s*$/,'');
-      if(sels){
-        var matched=__safeQsa(document,sels),newHits=0;
-        for(var mi=0;mi<matched.length;mi++){
-          if(!__countedEls.has(matched[mi])){__countedEls.add(matched[mi]);newHits++;}
-        }
-        if(newHits>0)__reportCosmetic(newHits,'brave_generic_cosmetic');
-      }
-    }
+    __applyGenericReply(ev&&ev.data);
   });
 }
 
 function __reapplyCachedStyles(){
-  var keys=Object.keys(__styleTexts);
-  for(var i=0;i<keys.length;i++){
-    var id=keys[i],el=document.getElementById(id),root=document.head||document.documentElement;
-    if(!el&&root){el=document.createElement('style');el.id=id;root.appendChild(el);el.textContent=__styleTexts[id];}
+  var root=document.head||document.documentElement;
+  if(!root)return;
+  var pKeys=Object.keys(__pendingStyles);
+  for(var i=0;i<pKeys.length;i++){
+    var pk=pKeys[i];
+    __applyStyleEl(pk,__pendingStyles[pk],root);
+  }
+  var aKeys=Object.keys(__styleTexts);
+  for(var j=0;j<aKeys.length;j++){
+    var ak=aKeys[j],el=document.getElementById(ak);
+    if(!el||el.textContent!==__styleTexts[ak]){
+      __applyStyleEl(ak,__styleTexts[ak],root);
+    }
   }
 }
 
+function __defuseClickjackTarget(el){
+  if(!__enableOverlayDefuser||window.__lexBraveGenericHide||!el||el.nodeType!==1)return false;
+  var tag=(el.tagName||'').toUpperCase();
+  if(tag!=='DIV'&&tag!=='A'&&tag!=='SPAN'&&tag!=='SECTION')return false;
+  if(el.childElementCount!==0)return false;
+  if((el.textContent||'').trim()!=='')return false;
+  try{
+    var cs=getComputedStyle(el);
+    if(!cs)return false;
+    var pos=cs.position;
+    if(pos!=='fixed'&&pos!=='absolute')return false;
+    var z=parseInt(cs.zIndex,10);
+    if(!(z>=9999))return false;
+    var bg=cs.backgroundColor||'';
+    var isInvisible=(cs.opacity==='0'||bg==='transparent'||bg==='rgba(0, 0, 0, 0)');
+    if(!isInvisible)return false;
+    var rect=el.getBoundingClientRect();
+    var vw=window.innerWidth||0,vh=window.innerHeight||0;
+    if(vw<100||vh<100)return false;
+    if(rect.width>=vw*0.85&&rect.height>=vh*0.85){
+      el.style.setProperty('display','none','important');
+      el.style.setProperty('pointer-events','none','important');
+      __reportShield('overlay',1,'brave_clickjack_overlay');
+      return true;
+    }
+  }catch(_){}
+  return false;
+}
+
+if(__enableOverlayDefuser&&typeof document.addEventListener==='function'){
+  try{
+    document.addEventListener('mousedown',function(ev){
+      if(!__enableOverlayDefuser||window.__lexBraveGenericHide)return;
+      var hit=ev&&ev.target;
+      if(__defuseClickjackTarget(hit)){ev.preventDefault();ev.stopPropagation();}
+    },true);
+  }catch(_){}
+}
+
 function __onDomStart(){
+  __flushCsp();
   __reapplyCachedStyles();
-  if(__isTop&&document.documentElement)__collectTokens(document.documentElement,{n:2000});
+  if(__genericAllowed&&document.documentElement)__collectTokens(document.documentElement,{n:2000});
+  if(__plan&&__plan.proc&&__plan.proc.length&&document.documentElement){
+    try{window.__lexBraveApplyProcedural();}catch(_){}
+  }
   __scheduleScan();
   try{
     var mo=new MutationObserver(function(muts){
+      __flushCsp();
       __reapplyCachedStyles();
-      if(__isTop&&!window.__lexBraveGenericHide){
+      if(__genericAllowed&&!window.__lexBraveGenericHide){
         var budget={n:800};
         for(var i=0;i<muts.length&&budget.n>0;i++){
           var m=muts[i];
@@ -867,10 +1068,16 @@ function __onDomStart(){
 __onDomStart();
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',function(){
-    if(__isTop&&document.documentElement)__collectTokens(document.documentElement,{n:2000});
-    if(__isTop&&!window.__lexBraveGenericHide)__flushGeneric();
+    __flushCsp();
+    __reapplyCachedStyles();
+    if(__genericAllowed&&document.documentElement)__collectTokens(document.documentElement,{n:2000});
+    if(__genericAllowed&&!window.__lexBraveGenericHide)__flushGeneric();
+    if(__plan&&__plan.hostCss)__countHideCssHits(__plan.hostCss,'brave_host_cosmetic');
     try{window.__lexBraveApplyProcedural();}catch(_){}
   },{once:true});
+}else{
+  if(__genericAllowed&&!window.__lexBraveGenericHide)__flushGeneric();
+  if(__plan&&__plan.hostCss)__countHideCssHits(__plan.hostCss,'brave_host_cosmetic');
 }
 })();
 """;

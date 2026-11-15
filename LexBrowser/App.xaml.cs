@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using LexBrowser.Core;
+using LexBrowser.Core.AdBlock;
 
 namespace LexBrowser;
 
@@ -24,6 +25,10 @@ public partial class App : Application
         DispatcherUnhandledException += (s, e) =>
         {
             System.Diagnostics.Debug.WriteLine($"[CRASH PREVENTED] Unhandled exception: {e.Exception}");
+            if (ShieldLogger.DiagnosticMode)
+            {
+                ShieldLogger.Log("UI_DISPATCHER_ERROR", "app", "", "Dispatcher", $"{e.Exception.GetType().Name}: {e.Exception.Message}");
+            }
             e.Handled = true; // Previene cierres inesperados por excepciones de UI
         };
     }

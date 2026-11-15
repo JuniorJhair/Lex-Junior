@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -59,19 +60,34 @@ internal readonly struct CompressedTailSlice
 /// </summary>
 public sealed class BraveShieldData
 {
+    internal sealed class CompiledRegexBox
+    {
+        public CompiledRegexBox(Regex? value) => Value = value;
+        public Regex? Value { get; }
+    }
+
     private const string Magic = "LEXSHLD2";
     private const uint SupportedVersion = 2;
-    private const int ExpectedSectionCount = 22;
+    private const int BaseSectionCount = 22;
     private const int TailStartSection = 13;
+    private const int CspSectionIndex = 22;
+    private const int RegexSectionIndex = 23;
+    private static readonly TimeSpan RegexEvalTimeout = TimeSpan.FromMilliseconds(2);
 
     private static readonly object InitLock = new();
     private static BraveShieldData? _cachedDefault;
     private static bool _defaultLoadAttempted;
     private static Task? _preloadTask;
 
+    public static bool IsDefaultLoaded => Volatile.Read(ref _cachedDefault) != null;
+
     private readonly CompressedTailSlice[] _tailSections;
     private readonly Lazy<BraveResourceStore> _resourceStoreLazy;
     private readonly Lazy<BraveCosmeticEngine> _cosmeticEngineLazy;
+    private readonly Lazy<BravePatRec[]> _cspRulesLazy;
+    private readonly Lazy<BravePatRec[]> _regexRulesLazy;
+    private readonly Lazy<CompiledRegexBox?[]> _cspRegexCacheLazy;
+    private readonly Lazy<CompiledRegexBox?[]> _netRegexCacheLazy;
 
     public string MetaJson { get; }
     public ulong[] PureHashes { get; }
@@ -101,7 +117,9 @@ public sealed class BraveShieldData
         BraveBucketRange[] optRanges,
         int[] optVals,
         int[] fallbackRules,
-        CompressedTailSlice[] tailSections)
+        CompressedTailSlice[] tailSections,
+        BravePatRec[]? cspOverride = null,
+        BravePatRec[]? regexOverride = null)
     {
         MetaJson = metaJson;
         PureHashes = pureHashes;
@@ -137,11 +155,76 @@ public sealed class BraveShieldData
                 DecompressTailSection(18),
                 DecompressTailSection(19));
         }, LazyThreadSafetyMode.ExecutionAndPublication);
+        _cspRulesLazy = new Lazy<BravePatRec[]>(() =>
+        {
+            if (cspOverride != null)
+                return cspOverride;
+            int rel = CspSectionIndex - TailStartSection;
+            if (rel >= _tailSections.Length)
+                return Array.Empty<BravePatRec>();
+            return ReadStructArray<BravePatRec>(DecompressTailSection(CspSectionIndex));
+        }, LazyThreadSafetyMode.ExecutionAndPublication);
+        _regexRulesLazy = new Lazy<BravePatRec[]>(() =>
+        {
+            if (regexOverride != null)
+                return regexOverride;
+            int rel = RegexSectionIndex - TailStartSection;
+            if (rel >= _tailSections.Length)
+                return Array.Empty<BravePatRec>();
+            return ReadStructArray<BravePatRec>(DecompressTailSection(RegexSectionIndex));
+        }, LazyThreadSafetyMode.ExecutionAndPublication);
+        _cspRegexCacheLazy = new Lazy<CompiledRegexBox?[]>(
+            () => new CompiledRegexBox?[_cspRulesLazy.Value.Length],
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        _netRegexCacheLazy = new Lazy<CompiledRegexBox?[]>(
+            () => new CompiledRegexBox?[_regexRulesLazy.Value.Length],
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public BraveResourceStore GetResourceStore() => _resourceStoreLazy.Value;
 
     public BraveCosmeticEngine GetCosmeticEngine() => _cosmeticEngineLazy.Value;
+
+    public BravePatRec[] GetCspRules() => _cspRulesLazy.Value;
+
+    public BravePatRec[] GetRegexRules() => _regexRulesLazy.Value;
+
+    public static Regex? TryCompileRegex(string pattern, bool matchCase)
+    {
+        if (string.IsNullOrEmpty(pattern))
+            return null;
+
+        try
+        {
+            var opts = RegexOptions.CultureInvariant;
+            if (!matchCase)
+                opts |= RegexOptions.IgnoreCase;
+            return new Regex(pattern, opts, RegexEvalTimeout);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    internal Regex? GetOrCompileRegex(bool isCsp, int index)
+    {
+        var rules = isCsp ? _cspRulesLazy.Value : _regexRulesLazy.Value;
+        if ((uint)index >= (uint)rules.Length)
+            return null;
+
+        var cache = isCsp ? _cspRegexCacheLazy.Value : _netRegexCacheLazy.Value;
+        var existing = Volatile.Read(ref cache[index]);
+        if (existing != null)
+            return existing.Value;
+
+        ref readonly var rec = ref rules[index];
+        string pat = rec.PatLen > 0 ? Encoding.UTF8.GetString(StrBlob, rec.PatOff, rec.PatLen) : string.Empty;
+        bool matchCase = (rec.Mask & (uint)BraveNetworkMask.IsMatchCase) != 0;
+        var box = new CompiledRegexBox(TryCompileRegex(pat, matchCase));
+        Volatile.Write(ref cache[index], box);
+        return box.Value;
+    }
 
     public static BraveShieldData CreateForTests(
         ulong[]? pureHashes = null,
@@ -155,7 +238,9 @@ public sealed class BraveShieldData
         ulong[]? optKeys = null,
         BraveBucketRange[]? optRanges = null,
         int[]? optVals = null,
-        int[]? fallbackRules = null)
+        int[]? fallbackRules = null,
+        BravePatRec[]? cspRules = null,
+        BravePatRec[]? regexRules = null)
     {
         return new BraveShieldData(
             metaJson: "{}",
@@ -171,7 +256,9 @@ public sealed class BraveShieldData
             optRanges: optRanges ?? Array.Empty<BraveBucketRange>(),
             optVals: optVals ?? Array.Empty<int>(),
             fallbackRules: fallbackRules ?? Array.Empty<int>(),
-            tailSections: new CompressedTailSlice[ExpectedSectionCount - TailStartSection]);
+            tailSections: new CompressedTailSlice[BaseSectionCount - TailStartSection],
+            cspOverride: cspRules,
+            regexOverride: regexRules);
     }
 
     public static BraveShieldData? TryGetDefault()
@@ -293,11 +380,12 @@ public sealed class BraveShieldData
             throw new InvalidDataException($"Unsupported brave-shield version {version}.");
 
         uint sectionCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(12, 4));
-        if (sectionCount < ExpectedSectionCount)
+        if (sectionCount < BaseSectionCount)
             throw new InvalidDataException($"Unexpected brave-shield section count {sectionCount}.");
 
         byte[][] headRaw = new byte[TailStartSection][];
-        CompressedTailSlice[] tail = new CompressedTailSlice[ExpectedSectionCount - TailStartSection];
+        int tailCount = Math.Max((int)sectionCount, BaseSectionCount) - TailStartSection;
+        CompressedTailSlice[] tail = new CompressedTailSlice[tailCount];
 
         Span<byte> secHdr = stackalloc byte[8];
         for (int i = 0; i < sectionCount; i++)
@@ -315,7 +403,7 @@ public sealed class BraveShieldData
             {
                 headRaw[i] = InflateExact(compBytes, rawLen);
             }
-            else if (i < ExpectedSectionCount)
+            else
             {
                 tail[i - TailStartSection] = new CompressedTailSlice(compBytes, rawLen);
             }
@@ -354,7 +442,7 @@ public sealed class BraveShieldData
 
     internal byte[] DecompressTailSection(int sectionIndex)
     {
-        if (sectionIndex < TailStartSection || sectionIndex >= ExpectedSectionCount)
+        if (sectionIndex < TailStartSection || sectionIndex >= TailStartSection + _tailSections.Length)
             throw new ArgumentOutOfRangeException(nameof(sectionIndex));
 
         var slice = _tailSections[sectionIndex - TailStartSection];

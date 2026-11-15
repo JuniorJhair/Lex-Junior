@@ -4,6 +4,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
+[Collection("SettingsCollection")]
 public class AdBlockFilterTests
 {
     private static bool Blocked(string url) => AdBlockFilter.ShouldBlock(new Uri(url));

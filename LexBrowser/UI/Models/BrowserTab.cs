@@ -148,6 +148,8 @@ public class BrowserTab : INotifyPropertyChanged
     public string? DailymotionScriptId { get; set; }
     public string? YouTubeScriptId { get; set; }
     public string? BraveBootstrapScriptId { get; set; }
+    public LexBrowser.Core.AdBlock.Brave.BraveBridgeHostObject? BraveBridge { get; set; }
+    public Uri? PendingMainNavigationUri { get; set; }
 
     private readonly List<(string HostKey, string ScriptId)> _braveHostScripts = new();
 

@@ -26,6 +26,7 @@ public enum BraveNetworkMask : uint
     FromHttps = 1u << 12,
     IsImportant = 1u << 13,
     FromPopup = 1u << 14,
+    IsMatchCase = 1u << 15,
 
     ThirdParty = 1u << 16,
     FirstParty = 1u << 17,
@@ -42,6 +43,7 @@ public enum BraveNetworkMask : uint
     IsHostWildcard = 1u << 28,
     FromDocument = 1u << 29,
     FromPost = 1u << 30,
+    IsFullRegex = 1u << 31,
 
     FromAnyMethods = FromGet | FromHead | FromPost,
     FromNetworkTypes = FromImage | FromMedia | FromObject | FromOther | FromPing |

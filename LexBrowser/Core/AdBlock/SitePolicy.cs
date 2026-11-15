@@ -304,6 +304,19 @@ public static class SitePolicy
         }
     }
 
+    public static bool IsSiteModuleExplicitlyDisabled(string? host, string moduleName)
+    {
+        string regDomain = PublicSuffix.GetRegistrableDomain(host);
+        if (string.IsNullOrEmpty(regDomain) || string.IsNullOrWhiteSpace(moduleName))
+            return false;
+
+        var sites = SettingsManager.Current.Shield?.Sites;
+        if (sites == null || !sites.TryGetValue(regDomain, out var profile) || profile?.Disabled == null)
+            return false;
+
+        return profile.Disabled.Exists(d => string.Equals(d, moduleName, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static void CleanupDefaultProfileIfNeeded(string regDomain, SiteShieldProfile profile)
     {
         if (string.Equals(profile.Mode, ModeNormal, StringComparison.OrdinalIgnoreCase) &&

@@ -107,10 +107,31 @@ public static class SettingsManager
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        AllowTrailingCommas = true,
         NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals
     };
 
-    public static string? CustomSettingsPath { get; set; }
+    private static string? GetEnvTempSettingsPath()
+    {
+        try
+        {
+            string? raw = Environment.GetEnvironmentVariable("LEX_TEST_SETTINGS_PATH");
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            string tempRoot = Path.GetFullPath(Path.GetTempPath())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            string fullCandidate = Path.GetFullPath(raw);
+            if (fullCandidate.StartsWith(tempRoot, StringComparison.OrdinalIgnoreCase))
+                return fullCandidate;
+        }
+        catch { }
+        return null;
+    }
+
+    public static string? CustomSettingsPath { get; set; } = GetEnvTempSettingsPath();
     public static string SettingsPath => CustomSettingsPath ?? DefaultSettingsPath;
 
     public static string SecuritySetupMarkerPath => Path.Combine(
@@ -202,6 +223,7 @@ public static class SettingsManager
         }
 
         settings.Shield.Enabled = settings.EnableAdBlocker;
+        settings.Shield.Engine = ShieldSettings.NormalizeEngine(settings.Shield.Engine);
         settings.Shield.Modules.Cosmetic = settings.EnableCosmeticShield;
         settings.Shield.Modules.Subframes = settings.EnableWebShieldInSubframes;
         settings.Shield.Modules.VideoDefuser = settings.EnableVideoPlayerDefuser;
@@ -237,7 +259,9 @@ public static class SettingsManager
         {
             if (File.Exists(filePath))
             {
-                string json = File.ReadAllText(filePath);
+                using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(fs);
+                string json = reader.ReadToEnd();
                 if (!string.IsNullOrWhiteSpace(json))
                 {
                     var loaded = JsonSerializer.Deserialize<BrowserSettings>(json, JsonOptions);
@@ -431,9 +455,12 @@ public static class SettingsManager
         try
         {
             string line = $"[{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}";
-            string? dir = Path.GetDirectoryName(LogPath);
+            string effectiveLogPath = !string.IsNullOrEmpty(CustomSettingsPath)
+                ? Path.Combine(Path.GetDirectoryName(CustomSettingsPath) ?? Path.GetTempPath(), "settings.log")
+                : LogPath;
+            string? dir = Path.GetDirectoryName(effectiveLogPath);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            File.AppendAllText(LogPath, line);
+            File.AppendAllText(effectiveLogPath, line);
         }
         catch { }
     }

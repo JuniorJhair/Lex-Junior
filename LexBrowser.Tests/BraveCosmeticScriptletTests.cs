@@ -45,11 +45,13 @@ public sealed class BraveCosmeticScriptletTests
         var data = LoadRealBraveData();
         var cos = data.GetCosmeticEngine();
 
-        Assert.Equal(8897, cos.SimpleClassCount);
-        Assert.Equal(4263, cos.SimpleIdCount);
-        Assert.Equal(33940, cos.HostCount);
-        Assert.Equal(21886, cos.PayloadCount);
-        Assert.Equal(532, cos.MiscGenericHide.Count);
+        Assert.Equal(9075, cos.SimpleClassCount);
+        Assert.Equal(4326, cos.SimpleIdCount);
+        Assert.Equal(35275, cos.HostCount);
+        Assert.Equal(23356, cos.PayloadCount);
+        Assert.Equal(552, cos.MiscGenericHide.Count);
+        Assert.Equal(93, data.GetCspRules().Length);
+        Assert.Equal(433, data.GetRegexRules().Length);
 
         Assert.True(cos.HasHostRules("animeyt.es"));
         Assert.True(cos.HasHostRules("hentaila.com"));

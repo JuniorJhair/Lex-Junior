@@ -470,7 +470,59 @@ public sealed class BraveCosmeticEngine
         if (matched.Count == 0)
             return string.Empty;
 
-        return string.Join(",", matched) + "{display:none!important;}";
+        return FormatHideCssChunks(matched);
+    }
+
+    internal static string FormatHideCssChunks(
+        IReadOnlyList<string> selectors,
+        int maxBatchCount = 20,
+        int maxBatchChars = 16 * 1024)
+    {
+        if (selectors == null || selectors.Count == 0)
+            return string.Empty;
+
+        if (selectors.Count <= maxBatchCount)
+        {
+            int total = 0;
+            for (int i = 0; i < selectors.Count; i++)
+                total += selectors[i].Length + 1;
+            if (total <= maxBatchChars)
+                return string.Join(",", selectors) + "{display:none!important;}";
+        }
+
+        var sb = new StringBuilder(Math.Min(selectors.Count * 24, 65536));
+        int batchCount = 0;
+        int batchChars = 0;
+        for (int i = 0; i < selectors.Count; i++)
+        {
+            string sel = selectors[i];
+            if (string.IsNullOrWhiteSpace(sel))
+                continue;
+
+            if (batchCount > 0)
+            {
+                if (batchCount >= maxBatchCount || batchChars + sel.Length + 1 > maxBatchChars)
+                {
+                    sb.Append("{display:none!important;}\n");
+                    batchCount = 0;
+                    batchChars = 0;
+                }
+                else
+                {
+                    sb.Append(',');
+                    batchChars++;
+                }
+            }
+
+            sb.Append(sel);
+            batchCount++;
+            batchChars += sel.Length;
+        }
+
+        if (batchCount > 0)
+            sb.Append("{display:none!important;}");
+
+        return sb.ToString();
     }
 
     internal static bool TrySplitPlainCssStyleRule(string rule, out string cssRule)

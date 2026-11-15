@@ -8,6 +8,7 @@ using Xunit;
 
 namespace LexBrowser.Tests;
 
+[Collection("SettingsCollection")]
 public sealed class ShieldParityComparisonTests
 {
     private static EffectiveSitePolicy PolicyFor(string host, bool compat = false)

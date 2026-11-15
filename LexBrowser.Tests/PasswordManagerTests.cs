@@ -38,8 +38,7 @@ public class PasswordManagerTests : IDisposable
         catch { }
         finally
         {
-            SettingsManager.CustomSettingsPath = null;
-            SettingsManager.Load();
+            TestSettingsIsolation.ResetToIsolatedDefault();
         }
     }
 
