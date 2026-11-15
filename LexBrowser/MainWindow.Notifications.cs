@@ -580,7 +580,9 @@ public partial class MainWindow
 
         try
         {
-            if (!string.IsNullOrWhiteSpace(uriStr) && AdBlockFilter.ShouldBlock(new Uri(uriStr)))
+            if (!string.IsNullOrWhiteSpace(uriStr) &&
+                Uri.TryCreate(uriStr, UriKind.Absolute, out var notifOriginUri) &&
+                ShieldRouter.ShouldBlockUrl(notifOriginUri, host, tab.ResolveCachedPolicy(host), CoreWebView2WebResourceContext.Document))
             {
                 e.State = CoreWebView2PermissionState.Deny;
                 e.SavesInProfile = false;

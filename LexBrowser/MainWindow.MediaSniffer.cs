@@ -368,7 +368,8 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(url)) return;
 
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
-            if (AdBlockFilter.ShouldBlock(uri)) return;
+            string mediaOrigin = tab.CurrentUri?.Host ?? uri.Host;
+            if (ShieldRouter.ShouldBlockUrl(uri, tab.CurrentUri?.Host, tab.ResolveCachedPolicy(mediaOrigin), CoreWebView2WebResourceContext.Media)) return;
 
             string contentType = "";
             long contentLength = 0;
@@ -430,7 +431,8 @@ public partial class MainWindow
     {
         if (tab == null || tab.IsDisposed || !tab.IsMediaSnifferActive) return;
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)) return;
-        if (AdBlockFilter.ShouldBlock(uri)) return;
+        string regOrigin = tab.CurrentUri?.Host ?? uri.Host;
+        if (ShieldRouter.ShouldBlockUrl(uri, tab.CurrentUri?.Host, tab.ResolveCachedPolicy(regOrigin), CoreWebView2WebResourceContext.Media)) return;
         if (MediaExtractorService.IsGarbageMediaUrl(url, contentType, contentLength, categoryHint)) return;
 
         string pathLower = uri.AbsolutePath.ToLowerInvariant();

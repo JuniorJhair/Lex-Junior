@@ -87,6 +87,34 @@ public static class ShieldRouter
             uri, originHost, policy, resourceContext, secFetchDest, httpMethod);
     }
 
+    public static bool ShouldBlockUrl(
+        Uri? uri,
+        string? originHost = null,
+        EffectiveSitePolicy? policy = null,
+        CoreWebView2WebResourceContext resourceContext = CoreWebView2WebResourceContext.Other,
+        string? engineOverride = null)
+    {
+        if (uri == null)
+            return false;
+
+        string policyHost = !string.IsNullOrWhiteSpace(originHost) ? originHost : uri.Host;
+        var resolved = policy ?? SitePolicy.Resolve(policyHost);
+        if (!resolved.ShieldEnabled || !resolved.Network)
+            return false;
+
+        var decision = EvaluateWebResource(
+            uri,
+            originHost,
+            policyHost,
+            originHost,
+            tabUrl: null,
+            referer: null,
+            resolved,
+            resourceContext,
+            engineOverride: engineOverride);
+        return decision.ShouldBlock;
+    }
+
     public static bool ShouldBlockPopup(
         Uri targetUri,
         Uri? originUri,

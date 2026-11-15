@@ -1770,7 +1770,7 @@ public partial class MainWindow
                     var targetPolicy = SitePolicy.Resolve(targetUri, tab.TemporaryCompatMode);
 
                     if (originPolicy.ShieldEnabled && originPolicy.Network &&
-                        AdBlockFilter.ShouldBlock(targetUri, currentUri?.Host, CoreWebView2WebResourceContext.Document))
+                        ShieldRouter.ShouldBlockUrl(targetUri, currentUri?.Host, originPolicy, CoreWebView2WebResourceContext.Document))
                     {
                         e.Cancel = true;
                         ShieldLogger.LogForTab(tab, "NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Blocked ad/malware domain on navigation", FormatTabDesc());
@@ -1790,7 +1790,7 @@ public partial class MainWindow
                             return;
                         }
 
-                        if (AdBlockFilter.IsSuspiciousPopup(targetUri, currentUri))
+                        if (ShieldRouter.ShouldBlockPopup(targetUri, currentUri, originPolicy, isFromSubframe: false, e.IsUserInitiated, out _))
                         {
                             e.Cancel = true;
                             ShieldLogger.LogForTab(tab, "NAVIGATION_CANCELLED", currentUri?.Host ?? "unknown", targetUri.AbsoluteUri, "MainFrame", "Suspicious script-initiated cross-origin redirect", FormatTabDesc());
@@ -3212,7 +3212,11 @@ public partial class MainWindow
                 ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "YouTubeOptimizer", "", "Refresh", ex.Message);
             }
         }
-        if (s.EnableAdBlocker && s.EnableDailymotionAdBlock && (s.Shield?.Adapters?.Dailymotion ?? true))
+        string dmHost = (tab.CurrentUri != null && DailymotionRules.IsDailymotionDomain(tab.CurrentUri.Host))
+            ? tab.CurrentUri.Host
+            : "dailymotion.com";
+        var dmPolicy = SitePolicy.Resolve(dmHost, tab.TemporaryCompatMode);
+        if (dmPolicy.DailymotionAdapter)
         {
             try
             {
