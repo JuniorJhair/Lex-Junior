@@ -70,6 +70,7 @@ public sealed class BraveShieldData
     private static Task? _preloadTask;
 
     private readonly CompressedTailSlice[] _tailSections;
+    private readonly Lazy<BraveResourceStore> _resourceStoreLazy;
 
     public string MetaJson { get; }
     public ulong[] PureHashes { get; }
@@ -115,7 +116,15 @@ public sealed class BraveShieldData
         OptVals = optVals;
         FallbackRules = fallbackRules;
         _tailSections = tailSections;
+        _resourceStoreLazy = new Lazy<BraveResourceStore>(() =>
+        {
+            byte[] idx = DecompressTailSection(20);
+            byte[] blob = DecompressTailSection(21);
+            return BraveResourceStore.LoadFromSections(idx, blob);
+        }, LazyThreadSafetyMode.ExecutionAndPublication);
     }
+
+    public BraveResourceStore GetResourceStore() => _resourceStoreLazy.Value;
 
     public static BraveShieldData CreateForTests(
         ulong[]? pureHashes = null,
@@ -159,7 +168,6 @@ public sealed class BraveShieldData
             if (_cachedDefault != null || _defaultLoadAttempted)
                 return _cachedDefault;
 
-            _defaultLoadAttempted = true;
             try
             {
                 string? assetPath = ResolveDefaultAssetPath();
@@ -188,6 +196,10 @@ public sealed class BraveShieldData
             catch (Exception ex)
             {
                 ShieldLogger.Log("BRAVE_LOAD_ERROR", "local", "brave-shield.lex", "Startup", ex.Message, "ShieldData");
+            }
+            finally
+            {
+                Volatile.Write(ref _defaultLoadAttempted, true);
             }
 
             return null;

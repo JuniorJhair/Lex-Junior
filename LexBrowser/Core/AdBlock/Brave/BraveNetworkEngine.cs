@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Web.WebView2.Core;
 
@@ -83,23 +84,32 @@ public sealed class BraveNetworkEngine : IShieldEngine
             if (data == null)
                 return ShieldNetworkDecision.Allow;
 
-            // Fase 2: Evaluación de red ($important > normal > @@) excluyendo reglas $redirect-rule puro,
-            // @@...$redirect, $popup y $generichide. (Fase 3 adjuntará stubs $redirect / $redirect-rule).
+            var redir = new RedirectCollector();
+
             EvaluateRules(
                 data,
                 in ctx,
                 EvalMode.Network,
                 out bool hasImportantBlock,
                 out bool hasNormalBlock,
-                out bool hasException);
+                out bool hasException,
+                ref redir);
+
+            bool shouldBlock = hasImportantBlock || (hasNormalBlock && !hasException);
+            if (!shouldBlock)
+                return ShieldNetworkDecision.Allow;
+
+            if (policy.Stubs && !redir.CancelAll && redir.CandCount > 0)
+            {
+                var redirectDecision = ResolveBestRedirect(data, uri, in ctx, policy, in redir, hasImportantBlock);
+                if (redirectDecision.IsRedirectStub)
+                    return redirectDecision;
+            }
 
             if (hasImportantBlock)
                 return ShieldNetworkDecision.Block("Brave network ($important)", isImportant: true);
 
-            if (hasNormalBlock && !hasException)
-                return ShieldNetworkDecision.Block("Brave network");
-
-            return ShieldNetworkDecision.Allow;
+            return ShieldNetworkDecision.Block("Brave network");
         }
         finally
         {
@@ -148,13 +158,15 @@ public sealed class BraveNetworkEngine : IShieldEngine
         {
             try
             {
+                var dummyRedir = default(RedirectCollector);
                 EvaluateRules(
                     data,
                     in ctx,
                     EvalMode.Popup,
                     out bool impPopup,
                     out bool normPopup,
-                    out bool excPopup);
+                    out bool excPopup,
+                    ref dummyRedir);
 
                 if (impPopup || (normPopup && !excPopup))
                 {
@@ -213,7 +225,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
             if (data == null)
                 return false;
 
-            EvaluateRules(data, in ctx, EvalMode.GenericHide, out bool matched, out _, out _);
+            var dummyRedir = default(RedirectCollector);
+            EvaluateRules(data, in ctx, EvalMode.GenericHide, out bool matched, out _, out _, ref dummyRedir);
             return matched;
         }
         finally
@@ -234,6 +247,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
     {
         public ReadOnlySpan<char> UrlLower;
         public ReadOnlySpan<char> ReqHost;
+        public string CleanOriginStr;
         public int HostStart;
         public int HostEnd;
         public BraveNetworkMask TypeMask;
@@ -243,6 +257,43 @@ public sealed class BraveNetworkEngine : IShieldEngine
         public ReadOnlySpan<ulong> TokenHashes;
         public ReadOnlySpan<ulong> OriginHashes;
         public ReadOnlySpan<ulong> TargetHashes;
+    }
+
+    [InlineArray(16)]
+    private struct CandInline16 { private int _e0; }
+
+    [InlineArray(8)]
+    private struct ExcInline8 { private int _e0; }
+
+    private struct RedirectCollector
+    {
+        private CandInline16 _cands;
+        private ExcInline8 _excs;
+        public int CandCount;
+        public int ExcCount;
+        public bool CancelAll;
+
+        public readonly ReadOnlySpan<int> CandIndices => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in _cands[0]), CandCount);
+        public readonly ReadOnlySpan<int> ExcIndices => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.AsRef(in _excs[0]), ExcCount);
+
+        public void AddCandidate(int ridx)
+        {
+            var span = MemoryMarshal.CreateReadOnlySpan(ref _cands[0], CandCount);
+            if (CandCount < 16 && span.IndexOf(ridx) < 0)
+                _cands[CandCount++] = ridx;
+        }
+
+        public void AddException(int ridx, int modLen)
+        {
+            if (modLen <= 0)
+            {
+                CancelAll = true;
+                return;
+            }
+            var span = MemoryMarshal.CreateReadOnlySpan(ref _excs[0], ExcCount);
+            if (ExcCount < 8 && span.IndexOf(ridx) < 0)
+                _excs[ExcCount++] = ridx;
+        }
     }
 
     private static bool TryBuildRequestContext(
@@ -340,6 +391,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
         {
             UrlLower = urlSpan,
             ReqHost = urlSpan.Slice(hostStart, hostEnd - hostStart),
+            CleanOriginStr = cleanOriginStr,
             HostStart = hostStart,
             HostEnd = hostEnd,
             TypeMask = overrideTypeMask ?? BraveRequestContextMapper.ToResourceTypeMask(resourceContext, secFetchDest),
@@ -376,11 +428,12 @@ public sealed class BraveNetworkEngine : IShieldEngine
 
     private static void EvaluateRules(
         BraveShieldData data,
-        in RequestEvalContext ctx,
+        scoped in RequestEvalContext ctx,
         EvalMode mode,
         out bool hasImportantBlock,
         out bool hasNormalBlock,
-        out bool hasException)
+        out bool hasException,
+        scoped ref RedirectCollector redir)
     {
         hasImportantBlock = false;
         hasNormalBlock = false;
@@ -404,9 +457,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 {
                     var range = data.OptRanges[bucketIdx];
                     EvaluateBucketRange(data, in ctx, mode, data.OptVals, (int)range.Offset, (int)range.Count,
-                        ref hasImportantBlock, ref hasNormalBlock, ref hasException);
-                    if (hasImportantBlock)
-                        return;
+                        ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir);
                 }
             }
         }
@@ -421,9 +472,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 {
                     var range = data.TokRanges[bucketIdx];
                     EvaluateBucketRange(data, in ctx, mode, data.TokVals, (int)range.Offset, (int)range.Count,
-                        ref hasImportantBlock, ref hasNormalBlock, ref hasException);
-                    if (hasImportantBlock)
-                        return;
+                        ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir);
                 }
             }
         }
@@ -432,8 +481,87 @@ public sealed class BraveNetworkEngine : IShieldEngine
         if (data.FallbackRules.Length > 0)
         {
             EvaluateBucketRange(data, in ctx, mode, data.FallbackRules, 0, data.FallbackRules.Length,
-                ref hasImportantBlock, ref hasNormalBlock, ref hasException);
+                ref hasImportantBlock, ref hasNormalBlock, ref hasException, ref redir);
         }
+    }
+
+    private static ShieldNetworkDecision ResolveBestRedirect(
+        BraveShieldData data,
+        Uri uri,
+        in RequestEvalContext ctx,
+        EffectiveSitePolicy policy,
+        in RedirectCollector redir,
+        bool isImportant)
+    {
+        var store = data.GetResourceStore();
+        if (store.Count == 0)
+            return ShieldNetworkDecision.Allow;
+
+        bool isExemptBigSite = !string.IsNullOrEmpty(ctx.CleanOriginStr) &&
+                               ShieldExemptions.IsBigSite(ctx.CleanOriginStr);
+        bool allowIma = policy.ImaStub && !isExemptBigSite;
+
+        System.Collections.Generic.HashSet<string>? cancelledNames = null;
+        if (redir.ExcCount > 0)
+        {
+            cancelledNames = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var excIndices = redir.ExcIndices;
+            for (int i = 0; i < excIndices.Length; i++)
+            {
+                ref readonly var excRec = ref data.PatternRules[excIndices[i]];
+                if (excRec.ModLen <= 0)
+                    continue;
+                string mod = Encoding.UTF8.GetString(data.StrBlob, excRec.ModOff, excRec.ModLen);
+                cancelledNames.Add(mod);
+                cancelledNames.Add(store.ResolveCanonicalName(mod));
+            }
+        }
+
+        BraveResourceEntry? bestEntry = null;
+        short bestPriority = short.MinValue;
+        bool hasBest = false;
+
+        var candIndices = redir.CandIndices;
+        for (int i = 0; i < candIndices.Length; i++)
+        {
+            ref readonly var rec = ref data.PatternRules[candIndices[i]];
+            if (rec.ModLen <= 0)
+                continue;
+
+            string mod = Encoding.UTF8.GetString(data.StrBlob, rec.ModOff, rec.ModLen);
+            if (!store.TryGetRedirectResource(mod, out var entry, allowPrivileged: false) || entry == null)
+                continue;
+
+            if (cancelledNames != null &&
+                (cancelledNames.Contains(mod) || cancelledNames.Contains(entry.Name)))
+            {
+                continue;
+            }
+
+            bool isIma = BraveResourceStore.IsImaResource(entry.Name) ||
+                         uri.AbsolutePath.EndsWith("ima3.js", StringComparison.OrdinalIgnoreCase);
+            if (isIma && !allowIma)
+                continue;
+
+            if (BraveResourceStore.IsVastOrVmapResource(entry.Name) && isExemptBigSite)
+                continue;
+
+            if (!hasBest || rec.RedirectPriority > bestPriority)
+            {
+                bestEntry = entry;
+                bestPriority = rec.RedirectPriority;
+                hasBest = true;
+            }
+        }
+
+        if (!hasBest || bestEntry == null)
+            return ShieldNetworkDecision.Allow;
+
+        return ShieldNetworkDecision.Redirect(
+            bestEntry.Bytes,
+            bestEntry.ContentTypeHeader,
+            $"Brave redirect ({bestEntry.Name})",
+            isImportant: isImportant);
     }
 
     private static bool CheckPureHosts(BraveShieldData data, in RequestEvalContext ctx)
@@ -465,14 +593,15 @@ public sealed class BraveNetworkEngine : IShieldEngine
 
     private static void EvaluateBucketRange(
         BraveShieldData data,
-        in RequestEvalContext ctx,
+        scoped in RequestEvalContext ctx,
         EvalMode mode,
         int[] indices,
         int offset,
         int count,
         ref bool hasImportantBlock,
         ref bool hasNormalBlock,
-        ref bool hasException)
+        ref bool hasException,
+        scoped ref RedirectCollector redir)
     {
         int end = offset + count;
         for (int i = offset; i < end; i++)
@@ -483,6 +612,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
 
             bool isException = (mask & BraveNetworkMask.IsException) != 0;
             bool isImportant = (mask & BraveNetworkMask.IsImportant) != 0;
+            bool isRedirect = (mask & BraveNetworkMask.IsRedirect) != 0;
 
             switch (mode)
             {
@@ -502,7 +632,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                     else
                     {
                         // @@...$popup o @@...$document desactivan bloqueo de popup (no @@...$redirect)
-                        if ((mask & BraveNetworkMask.IsRedirect) != 0)
+                        if (isRedirect)
                             continue;
                         if ((mask & (BraveNetworkMask.FromPopup | BraveNetworkMask.FromDocument)) == 0)
                             continue;
@@ -514,17 +644,13 @@ public sealed class BraveNetworkEngine : IShieldEngine
                         continue;
                     if ((mask & BraveNetworkMask.FromPopup) != 0)
                         continue;
-                    if ((mask & BraveNetworkMask.IsRedirect) != 0)
+                    if (!isRedirect)
                     {
-                        // @@...$redirect solo cancela redirecciones, nunca el bloqueo de red.
-                        // $redirect-rule (sin IsAlsoBlockRedirect) no bloquea por sí mismo.
-                        if (isException || (mask & BraveNetworkMask.IsAlsoBlockRedirect) == 0)
+                        if (!isImportant && !isException && (hasNormalBlock || hasImportantBlock))
+                            continue;
+                        if (isException && (hasException || hasImportantBlock))
                             continue;
                     }
-                    if (!isImportant && !isException && hasNormalBlock)
-                        continue;
-                    if (isException && hasException)
-                        continue;
                     if ((mask & ctx.TypeMask) == 0)
                         continue;
                     break;
@@ -551,10 +677,32 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 return;
             }
 
+            if (mode == EvalMode.Network && isRedirect)
+            {
+                if (isException)
+                {
+                    redir.AddException(ridx, rec.ModLen);
+                }
+                else
+                {
+                    redir.AddCandidate(ridx);
+                    if ((mask & BraveNetworkMask.IsAlsoBlockRedirect) != 0)
+                    {
+                        if (isImportant)
+                            hasImportantBlock = true;
+                        else
+                            hasNormalBlock = true;
+                    }
+                }
+                continue;
+            }
+
             if (isImportant && !isException)
             {
                 hasImportantBlock = true;
-                return;
+                if (mode != EvalMode.Network)
+                    return;
+                continue;
             }
 
             if (isException)
