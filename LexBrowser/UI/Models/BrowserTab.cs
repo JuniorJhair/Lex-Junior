@@ -147,6 +147,55 @@ public class BrowserTab : INotifyPropertyChanged
     public string? MediaRuntimeScriptId { get; set; }
     public string? DailymotionScriptId { get; set; }
     public string? YouTubeScriptId { get; set; }
+    public string? BraveBootstrapScriptId { get; set; }
+
+    private readonly List<(string HostKey, string ScriptId)> _braveHostScripts = new();
+
+    public bool HasActiveBraveHostScript(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return false;
+        string normalized = host.Trim().TrimEnd('.').ToLowerInvariant();
+        for (int i = 0; i < _braveHostScripts.Count; i++)
+        {
+            if (string.Equals(_braveHostScripts[i].HostKey, normalized, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    public string? RecordActiveBraveHostScript(string hostKey, string scriptId, int maxEntries = 8)
+    {
+        string normalized = (hostKey ?? string.Empty).Trim().TrimEnd('.').ToLowerInvariant();
+        string? removedId = null;
+
+        for (int i = _braveHostScripts.Count - 1; i >= 0; i--)
+        {
+            if (string.Equals(_braveHostScripts[i].HostKey, normalized, StringComparison.Ordinal))
+            {
+                removedId = _braveHostScripts[i].ScriptId;
+                _braveHostScripts.RemoveAt(i);
+                break;
+            }
+        }
+
+        _braveHostScripts.Add((normalized, scriptId));
+        if (removedId == null && _braveHostScripts.Count > maxEntries)
+        {
+            removedId = _braveHostScripts[0].ScriptId;
+            _braveHostScripts.RemoveAt(0);
+        }
+        return removedId;
+    }
+
+    public List<string> DrainBraveHostScriptIds()
+    {
+        var ids = new List<string>(_braveHostScripts.Count);
+        for (int i = 0; i < _braveHostScripts.Count; i++)
+            ids.Add(_braveHostScripts[i].ScriptId);
+        _braveHostScripts.Clear();
+        return ids;
+    }
 
     private readonly object _policyCacheLock = new();
     private string? _cachedPolicyHost;

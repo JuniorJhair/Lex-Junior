@@ -71,6 +71,7 @@ public sealed class BraveShieldData
 
     private readonly CompressedTailSlice[] _tailSections;
     private readonly Lazy<BraveResourceStore> _resourceStoreLazy;
+    private readonly Lazy<BraveCosmeticEngine> _cosmeticEngineLazy;
 
     public string MetaJson { get; }
     public ulong[] PureHashes { get; }
@@ -122,9 +123,25 @@ public sealed class BraveShieldData
             byte[] blob = DecompressTailSection(21);
             return BraveResourceStore.LoadFromSections(idx, blob);
         }, LazyThreadSafetyMode.ExecutionAndPublication);
+        _cosmeticEngineLazy = new Lazy<BraveCosmeticEngine>(() =>
+        {
+            if (_tailSections.Length == 0 || _tailSections[0].Compressed == null || _tailSections[0].Compressed.Length == 0)
+                return BraveCosmeticEngine.Empty;
+
+            return BraveCosmeticEngine.LoadFromSections(
+                DecompressTailSection(13),
+                DecompressTailSection(14),
+                DecompressTailSection(15),
+                DecompressTailSection(16),
+                DecompressTailSection(17),
+                DecompressTailSection(18),
+                DecompressTailSection(19));
+        }, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public BraveResourceStore GetResourceStore() => _resourceStoreLazy.Value;
+
+    public BraveCosmeticEngine GetCosmeticEngine() => _cosmeticEngineLazy.Value;
 
     public static BraveShieldData CreateForTests(
         ulong[]? pureHashes = null,

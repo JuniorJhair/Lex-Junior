@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using LexBrowser.Core.AdBlock.Brave;
 using Microsoft.Web.WebView2.Core;
 
@@ -122,5 +124,138 @@ public static class ShieldRouter
             return false;
 
         return GetGeneralEngine(engineOverride).IsGenericHideEnabled(documentUri, originHost);
+    }
+
+    /// <summary>
+    /// Determina de forma rápida si la respuesta Document debe diferirse brevemente para
+    /// registrar scriptlets / reglas cosméticas específicas del dominio antes del parsing HTML.
+    /// </summary>
+    public static bool ShouldDeferDocumentForBraveScriptlets(
+        Uri? documentUri,
+        string? originHost,
+        EffectiveSitePolicy policy,
+        bool isSubframe,
+        string? engineOverride = null)
+    {
+        if (!IsEngineBrave(engineOverride) || documentUri == null)
+            return false;
+
+        if (!policy.ShieldEnabled || !policy.Cosmetic)
+            return false;
+
+        if (isSubframe && !policy.Subframes)
+            return false;
+
+        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) || ShieldIsolation.IsIsolatedHost(originHost))
+            return false;
+
+        var data = BraveShieldData.TryGetDefault();
+        if (data == null)
+            return false;
+
+        return data.GetCosmeticEngine().HasHostRules(documentUri.Host);
+    }
+
+    public static string? BuildDocumentInjectionScript(
+        Uri? documentUri,
+        string? originHost,
+        EffectiveSitePolicy policy,
+        string? engineOverride = null)
+    {
+        if (!IsEngineBrave(engineOverride) || documentUri == null)
+            return null;
+
+        if (!policy.ShieldEnabled || !policy.Cosmetic)
+            return null;
+
+        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) || ShieldIsolation.IsIsolatedHost(originHost))
+            return null;
+
+        var data = BraveShieldData.TryGetDefault();
+        if (data == null)
+            return null;
+
+        bool ghide = IsGenericHideEnabled(documentUri, originHost, engineOverride);
+        var resources = data.GetResourceStore();
+        var cos = data.GetCosmeticEngine().EvaluateHost(documentUri.Host, ghide, resources);
+        return BraveScriptletEngine.BuildHostInjectionScript(documentUri.Host, cos, resources, policy);
+    }
+
+    public static string BuildCosmeticQueryResponseJson(
+        string? host,
+        bool initial,
+        IReadOnlyList<string>? classes,
+        IReadOnlyList<string>? ids,
+        Uri? tabUri,
+        EffectiveSitePolicy policy,
+        string? engineOverride = null)
+    {
+        string normalizedHost = (host ?? string.Empty).Trim().TrimEnd('.').ToLowerInvariant();
+        if (!IsEngineBrave(engineOverride) ||
+            string.IsNullOrEmpty(normalizedHost) ||
+            ShieldIsolation.IsIsolatedHost(normalizedHost) ||
+            ShieldIsolation.IsIsolatedHost(tabUri?.Host) ||
+            !policy.ShieldEnabled ||
+            !policy.Cosmetic)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                type = "brave_cosmetic_apply",
+                host = normalizedHost,
+                ghide = true
+            });
+        }
+
+        Uri? evalUri = tabUri;
+        if (evalUri == null)
+            Uri.TryCreate("https://" + normalizedHost + "/", UriKind.Absolute, out evalUri);
+
+        bool genericHide = IsGenericHideEnabled(evalUri, normalizedHost, engineOverride);
+        if (genericHide)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                type = "brave_cosmetic_apply",
+                host = normalizedHost,
+                ghide = true
+            });
+        }
+
+        var data = BraveShieldData.TryGetDefault();
+        if (data == null)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                type = "brave_cosmetic_apply",
+                host = normalizedHost,
+                ghide = false
+            });
+        }
+
+        var cosEngine = data.GetCosmeticEngine();
+        string css = cosEngine.QueryGenericCss(normalizedHost, classes, ids, genericHide: false, policy);
+        string? mgCss = null;
+        if (initial)
+        {
+            var hostCos = cosEngine.EvaluateHost(normalizedHost, genericHide: false, data.GetResourceStore());
+            mgCss = BraveScriptletEngine.BuildMiscGenericCss(cosEngine, hostCos);
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            type = "brave_cosmetic_apply",
+            host = normalizedHost,
+            ghide = false,
+            css = string.IsNullOrEmpty(css) ? null : css,
+            mgCss = string.IsNullOrEmpty(mgCss) ? null : mgCss
+        });
+    }
+
+    private static bool IsEngineBrave(string? engineOverride)
+    {
+        string engine = string.IsNullOrWhiteSpace(engineOverride)
+            ? GetConfiguredEngineName()
+            : ShieldSettings.NormalizeEngine(engineOverride);
+        return string.Equals(engine, ShieldSettings.EngineBrave, StringComparison.Ordinal);
     }
 }

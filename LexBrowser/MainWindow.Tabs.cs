@@ -16,6 +16,7 @@ using System.Windows.Shell;
 using System.Windows.Threading;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
+using LexBrowser.Core.AdBlock.Brave;
 using LexBrowser.Core.Engine;
 using LexBrowser.Core.Interop;
 using LexBrowser.Core.Notifications;
@@ -1035,6 +1036,29 @@ public partial class MainWindow
                         });
                     }
 
+                    if (!isDailymotionContext &&
+                        !ShieldIsolation.IsYouTubeContext(policyHost, uri.Host) &&
+                        e.ResourceContext == CoreWebView2WebResourceContext.Document &&
+                        ShieldRouter.IsBraveActive)
+                    {
+                        bool isSubframeDoc =
+                            string.Equals(secFetchDest, "iframe", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(secFetchDest, "frame", StringComparison.OrdinalIgnoreCase) ||
+                            frameDesc.StartsWith("Subframe", StringComparison.OrdinalIgnoreCase);
+
+                        string docPolicyHost = isSubframeDoc ? policyHost : uri.Host;
+                        var docPolicy = string.Equals(docPolicyHost, policyHost, StringComparison.OrdinalIgnoreCase)
+                            ? policy
+                            : tab.ResolveCachedPolicy(docPolicyHost);
+
+                        if (ShieldRouter.ShouldDeferDocumentForBraveScriptlets(uri, originHost, docPolicy, isSubframeDoc) &&
+                            !tab.HasActiveBraveHostScript(uri.Host))
+                        {
+                            var deferral = e.GetDeferral();
+                            _ = RegisterBraveDocumentScriptAsync(core, tab, uri, originHost, docPolicy, deferral);
+                        }
+                    }
+
                     if (ShieldLogger.DiagnosticMode)
                     {
                         string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
@@ -1274,12 +1298,41 @@ public partial class MainWindow
             try
             {
                 string rawJson = e.WebMessageAsJson;
-                if (string.IsNullOrEmpty(rawJson) || rawJson.Length > 4096) return;
+                if (string.IsNullOrEmpty(rawJson) || rawJson.Length > 32768) return;
 
                 using var doc = JsonDocument.Parse(rawJson);
                 var root = doc.RootElement;
                 if (!root.TryGetProperty("type", out var typeProp)) return;
                 string type = typeProp.GetString() ?? "";
+
+                if (type == "brave_cosmetic_query")
+                {
+                    string host = root.TryGetProperty("host", out var hProp) ? (hProp.GetString() ?? "") : "";
+                    bool initial = root.TryGetProperty("initial", out var initProp) && initProp.ValueKind == JsonValueKind.True;
+                    List<string>? clsList = ReadJsonStringList(root, "classes", maxItems: 200);
+                    List<string>? idList = ReadJsonStringList(root, "ids", maxItems: 200);
+
+                    Uri? tabUri = tab.CurrentUri;
+                    string policyHost = !string.IsNullOrEmpty(host) ? host : (tabUri?.Host ?? string.Empty);
+                    var policy = tab.ResolveCachedPolicy(policyHost);
+
+                    string responseJson = ShieldRouter.BuildCosmeticQueryResponseJson(
+                        host, initial, clsList, idList, tabUri, policy);
+
+                    if (win.Dispatcher.CheckAccess())
+                    {
+                        try { core.PostWebMessageAsJson(responseJson); } catch { }
+                    }
+                    else
+                    {
+                        _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+                        {
+                            if (tab.IsDisposed) return;
+                            try { core.PostWebMessageAsJson(responseJson); } catch { }
+                        });
+                    }
+                    return;
+                }
 
                 if (type == "ad_blocked")
                 {
@@ -3128,6 +3181,15 @@ public partial class MainWindow
             try { core.RemoveScriptToExecuteOnDocumentCreated(tab.WebShieldScriptId); } catch { }
             tab.WebShieldScriptId = null;
         }
+        if (!string.IsNullOrEmpty(tab.BraveBootstrapScriptId))
+        {
+            try { core.RemoveScriptToExecuteOnDocumentCreated(tab.BraveBootstrapScriptId); } catch { }
+            tab.BraveBootstrapScriptId = null;
+        }
+        foreach (string hostScriptId in tab.DrainBraveHostScriptIds())
+        {
+            try { core.RemoveScriptToExecuteOnDocumentCreated(hostScriptId); } catch { }
+        }
         if (!string.IsNullOrEmpty(tab.CookieBannerScriptId))
         {
             try { core.RemoveScriptToExecuteOnDocumentCreated(tab.CookieBannerScriptId); } catch { }
@@ -3164,13 +3226,27 @@ public partial class MainWindow
 
         if (s.EnableAdBlocker)
         {
-            try
+            if (ShieldRouter.IsBraveActive)
             {
-                tab.WebShieldScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(WebShield.InjectedScript);
+                try
+                {
+                    tab.BraveBootstrapScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(BraveScriptletEngine.BootstrapScript);
+                }
+                catch (Exception ex)
+                {
+                    ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "BraveBootstrap", "", "Refresh", ex.Message);
+                }
             }
-            catch (Exception ex)
+            else
             {
-                ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "WebShield", "", "Refresh", ex.Message);
+                try
+                {
+                    tab.WebShieldScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(WebShield.InjectedScript);
+                }
+                catch (Exception ex)
+                {
+                    ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "WebShield", "", "Refresh", ex.Message);
+                }
             }
         }
 
@@ -3196,6 +3272,73 @@ public partial class MainWindow
                 await RefreshTabShieldScriptsAsync(tab);
             }
         }
+    }
+
+    private static async Task RegisterBraveDocumentScriptAsync(
+        Microsoft.Web.WebView2.Core.CoreWebView2 core,
+        BrowserTab tab,
+        Uri documentUri,
+        string? originHost,
+        EffectiveSitePolicy policy,
+        Microsoft.Web.WebView2.Core.CoreWebView2Deferral deferral)
+    {
+        try
+        {
+            if (tab.IsDisposed)
+                return;
+
+            string? script = ShieldRouter.BuildDocumentInjectionScript(documentUri, originHost, policy);
+            if (string.IsNullOrEmpty(script))
+                return;
+
+            string hostKey = documentUri.Host.Trim().TrimEnd('.').ToLowerInvariant();
+            if (tab.HasActiveBraveHostScript(hostKey))
+                return;
+
+            string scriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(script);
+            if (tab.IsDisposed)
+            {
+                try { core.RemoveScriptToExecuteOnDocumentCreated(scriptId); } catch { }
+                return;
+            }
+
+            string? evictedId = tab.RecordActiveBraveHostScript(hostKey, scriptId, maxEntries: 8);
+            if (!string.IsNullOrEmpty(evictedId))
+            {
+                try { core.RemoveScriptToExecuteOnDocumentCreated(evictedId); } catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "BraveScriptlet", documentUri.Host, "Document", ex.Message);
+        }
+        finally
+        {
+            try { deferral.Complete(); } catch { }
+        }
+    }
+
+    private static List<string>? ReadJsonStringList(JsonElement root, string propName, int maxItems)
+    {
+        if (!root.TryGetProperty(propName, out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return null;
+        int len = arr.GetArrayLength();
+        if (len == 0)
+            return null;
+
+        var list = new List<string>(Math.Min(len, maxItems));
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (list.Count >= maxItems)
+                break;
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                string? s = el.GetString();
+                if (!string.IsNullOrEmpty(s))
+                    list.Add(s);
+            }
+        }
+        return list;
     }
 
     private void MenuCloseTab_Click(object sender, RoutedEventArgs e)
