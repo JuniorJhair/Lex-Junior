@@ -4,16 +4,31 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace LexBrowser.Core;
+
+public sealed record ActiveDownloadSummary(
+    int ActiveCount,
+    int InProgressCount,
+    int PausedCount,
+    int TotalProgressPercent,
+    bool HasIndeterminate)
+{
+    public bool HasActive => ActiveCount > 0;
+}
 
 public class DownloadEntry : INotifyPropertyChanged
 {
     private long _totalBytes;
     private long _bytesReceived;
     private string _state = "Completado";
+    private string? _interruptReason;
+    private double _speedBytesPerSec;
+    private double? _estimatedSecondsRemaining;
+    private bool _canResume;
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string FileName { get; set; } = string.Empty;
@@ -29,8 +44,7 @@ public class DownloadEntry : INotifyPropertyChanged
             {
                 _totalBytes = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(ProgressPercent));
-                OnPropertyChanged(nameof(StatusDisplay));
+                NotifyDerivedProperties();
             }
         }
     }
@@ -44,8 +58,7 @@ public class DownloadEntry : INotifyPropertyChanged
             {
                 _bytesReceived = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(ProgressPercent));
-                OnPropertyChanged(nameof(StatusDisplay));
+                NotifyDerivedProperties();
             }
         }
     }
@@ -59,9 +72,20 @@ public class DownloadEntry : INotifyPropertyChanged
             {
                 _state = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(IsCompleted));
-                OnPropertyChanged(nameof(IsInProgress));
-                OnPropertyChanged(nameof(ProgressPercent));
+                NotifyDerivedProperties();
+            }
+        }
+    }
+
+    public string? InterruptReason
+    {
+        get => _interruptReason;
+        set
+        {
+            if (_interruptReason != value)
+            {
+                _interruptReason = value;
+                OnPropertyChanged();
                 OnPropertyChanged(nameof(StatusDisplay));
             }
         }
@@ -76,10 +100,26 @@ public class DownloadEntry : INotifyPropertyChanged
         OnPropertyChanged(nameof(BytesReceived));
         OnPropertyChanged(nameof(TotalBytes));
         OnPropertyChanged(nameof(State));
+        OnPropertyChanged(nameof(InterruptReason));
+        NotifyDerivedProperties();
+    }
+
+    private void NotifyDerivedProperties()
+    {
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsInProgress));
+        OnPropertyChanged(nameof(IsPaused));
+        OnPropertyChanged(nameof(IsInterrupted));
+        OnPropertyChanged(nameof(IsCanceled));
+        OnPropertyChanged(nameof(IsActive));
+        OnPropertyChanged(nameof(IsIndeterminateProgress));
         OnPropertyChanged(nameof(ProgressPercent));
         OnPropertyChanged(nameof(StatusDisplay));
+        OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(CanResumeAction));
+        OnPropertyChanged(nameof(CanCancel));
+        OnPropertyChanged(nameof(CanRetry));
+        OnPropertyChanged(nameof(CanOpen));
     }
 
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
@@ -89,10 +129,97 @@ public class DownloadEntry : INotifyPropertyChanged
     public bool IsIncognito { get; set; }
 
     [JsonIgnore]
+    public double SpeedBytesPerSec
+    {
+        get => _speedBytesPerSec;
+        set
+        {
+            if (Math.Abs(_speedBytesPerSec - value) > 1.0)
+            {
+                _speedBytesPerSec = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(StatusDisplay));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public double? EstimatedSecondsRemaining
+    {
+        get => _estimatedSecondsRemaining;
+        set
+        {
+            if (_estimatedSecondsRemaining != value)
+            {
+                _estimatedSecondsRemaining = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(StatusDisplay));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public bool CanResume
+    {
+        get => _canResume;
+        set
+        {
+            if (_canResume != value)
+            {
+                _canResume = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CanResumeAction));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public Action? PauseAction { get; set; }
+
+    [JsonIgnore]
+    public Action? ResumeAction { get; set; }
+
+    [JsonIgnore]
+    public Action? CancelAction { get; set; }
+
+    [JsonIgnore]
+    public Action? RetryAction { get; set; }
+
+    [JsonIgnore]
     public bool IsCompleted => State == "Completado";
 
     [JsonIgnore]
     public bool IsInProgress => State == "En progreso";
+
+    [JsonIgnore]
+    public bool IsPaused => State == "Pausado";
+
+    [JsonIgnore]
+    public bool IsInterrupted => State == "Interrumpido" || State == "Error";
+
+    [JsonIgnore]
+    public bool IsCanceled => State == "Cancelado";
+
+    [JsonIgnore]
+    public bool IsActive => IsInProgress || IsPaused;
+
+    [JsonIgnore]
+    public bool IsIndeterminateProgress => IsInProgress && TotalBytes <= 0;
+
+    [JsonIgnore]
+    public bool CanPause => IsInProgress && PauseAction != null;
+
+    [JsonIgnore]
+    public bool CanResumeAction => (IsPaused || (IsInterrupted && CanResume)) && ResumeAction != null;
+
+    [JsonIgnore]
+    public bool CanCancel => IsActive && CancelAction != null;
+
+    [JsonIgnore]
+    public bool CanRetry => (IsInterrupted || IsCanceled) && RetryAction != null && !string.IsNullOrWhiteSpace(Url);
+
+    [JsonIgnore]
+    public bool CanOpen => IsCompleted && !string.IsNullOrWhiteSpace(FilePath);
 
     [JsonIgnore]
     public int ProgressPercent =>
@@ -129,9 +256,22 @@ public class DownloadEntry : INotifyPropertyChanged
 
             if (IsInProgress)
             {
+                string speedPart = SpeedBytesPerSec >= 1024 ? $" · {FormatSize((long)SpeedBytesPerSec)}/s" : string.Empty;
                 if (TotalBytes > 0)
-                    return $"⏳ {ProgressPercent}% · {FormatSize(BytesReceived)} / {FormatSize(TotalBytes)}";
-                return $"⏳ Descargando... {FormatSize(BytesReceived)}";
+                {
+                    string etaPart = EstimatedSecondsRemaining.HasValue && EstimatedSecondsRemaining.Value >= 1
+                        ? $" · {FormatEta(EstimatedSecondsRemaining.Value)}"
+                        : string.Empty;
+                    return $"⏳ {ProgressPercent}% · {FormatSize(BytesReceived)} / {FormatSize(TotalBytes)}{speedPart}{etaPart}";
+                }
+                return $"⏳ Descargando... {FormatSize(BytesReceived)}{speedPart}";
+            }
+
+            if (IsPaused)
+            {
+                if (TotalBytes > 0)
+                    return $"⏸ Pausado ({ProgressPercent}%) · {FormatSize(BytesReceived)} / {FormatSize(TotalBytes)}";
+                return $"⏸ Pausado · {FormatSize(BytesReceived)}";
             }
 
             if (IsCompleted)
@@ -141,7 +281,13 @@ public class DownloadEntry : INotifyPropertyChanged
                 return $"✅ {sizeStr}{timeLabel}";
             }
 
-            return $"⚠️ {State} · {timeLabel}";
+            if (IsCanceled)
+            {
+                return $"⛔ Cancelado · {timeLabel}";
+            }
+
+            string reason = !string.IsNullOrWhiteSpace(InterruptReason) ? $" ({InterruptReason})" : string.Empty;
+            return $"⚠️ {State}{reason} · {timeLabel}";
         }
     }
 
@@ -153,26 +299,155 @@ public class DownloadEntry : INotifyPropertyChanged
         if (bytes >= 1024L) return $"{bytes / 1024.0:0} KB";
         return $"{bytes} B";
     }
+
+    public static string FormatEta(double seconds)
+    {
+        if (seconds < 60) return $"{Math.Max(1, (int)Math.Round(seconds))}s";
+        int mins = (int)(seconds / 60);
+        int secs = (int)(seconds % 60);
+        if (mins < 60) return $"{mins}m {secs:00}s";
+        int hrs = mins / 60;
+        mins %= 60;
+        return $"{hrs}h {mins:00}m";
+    }
 }
 
 public class DownloadStore
 {
     public const int MaxEntries = 300;
 
-    private readonly string _filePath;
+    private sealed class SpeedTracker
+    {
+        public DateTime LastUtc;
+        public long LastBytes;
+        public double EmaBytesPerSec;
+    }
+
+    private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
+
+    private string _filePath;
     private readonly object _lock = new();
     private List<DownloadEntry> _entries = new();
+    private readonly Dictionary<string, SpeedTracker> _speedTrackers = new(StringComparer.Ordinal);
     private bool _loaded;
 
     public event Action? DownloadsChanged;
+
+    public string FilePath => _filePath;
 
     public DownloadStore(string filePath)
     {
         _filePath = filePath;
     }
 
+    public void RebindFilePath(string filePath, bool reload = true)
+    {
+        lock (_lock)
+        {
+            _filePath = filePath;
+            _loaded = false;
+            _entries.Clear();
+            _speedTrackers.Clear();
+        }
+        if (reload)
+            Load();
+    }
+
+    public static string SanitizeFileName(string? suggestedFileName, string? fallbackUrl = null)
+    {
+        string raw = suggestedFileName ?? string.Empty;
+        raw = raw.Replace('\\', '/');
+        int slash = raw.LastIndexOf('/');
+        if (slash >= 0)
+            raw = raw[(slash + 1)..];
+
+        raw = raw.Trim();
+        if (string.IsNullOrWhiteSpace(raw) && !string.IsNullOrWhiteSpace(fallbackUrl) &&
+            Uri.TryCreate(fallbackUrl, UriKind.Absolute, out var uri))
+        {
+            string seg = Path.GetFileName(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(seg))
+            {
+                try { raw = Uri.UnescapeDataString(seg); } catch { raw = seg; }
+            }
+        }
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var sb = new StringBuilder(raw.Length);
+        foreach (char c in raw)
+        {
+            if (char.IsControl(c) || Array.IndexOf(invalid, c) >= 0)
+                sb.Append('_');
+            else
+                sb.Append(c);
+        }
+
+        string cleaned = sb.ToString().Trim().Trim('.');
+        if (string.IsNullOrWhiteSpace(cleaned))
+            cleaned = "descarga";
+
+        string stem = Path.GetFileNameWithoutExtension(cleaned);
+        string ext = Path.GetExtension(cleaned);
+        if (string.IsNullOrWhiteSpace(stem))
+            stem = "descarga";
+        if (ReservedDeviceNames.Contains(stem))
+            stem = "_" + stem;
+
+        if (stem.Length + ext.Length > 180)
+        {
+            int maxStem = Math.Max(8, 180 - ext.Length);
+            stem = stem[..Math.Min(stem.Length, maxStem)].TrimEnd('.', ' ');
+            if (string.IsNullOrEmpty(stem))
+                stem = "descarga";
+        }
+
+        return stem + ext;
+    }
+
+    public static string SanitizeAndMakeUniquePath(
+        string targetDirectory,
+        string? suggestedFileName,
+        string? fallbackUrl = null,
+        IEnumerable<string>? activePaths = null,
+        Func<string, bool>? fileExists = null)
+    {
+        string dirFull = Path.GetFullPath(string.IsNullOrWhiteSpace(targetDirectory)
+            ? Path.GetTempPath()
+            : targetDirectory);
+
+        string safeName = SanitizeFileName(suggestedFileName, fallbackUrl);
+        string stem = Path.GetFileNameWithoutExtension(safeName);
+        string ext = Path.GetExtension(safeName);
+
+        var activeSet = activePaths != null
+            ? new HashSet<string>(activePaths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(Path.GetFullPath), StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        Func<string, bool> existsFn = fileExists ?? File.Exists;
+
+        for (int i = 0; i < 10000; i++)
+        {
+            string fileName = i == 0 ? safeName : $"{stem} ({i}){ext}";
+            string candidate = Path.GetFullPath(Path.Combine(dirFull, fileName));
+            if (!candidate.StartsWith(dirFull, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Ruta de descarga inválida fuera del directorio destino.");
+
+            if (!activeSet.Contains(candidate) && !existsFn(candidate))
+                return candidate;
+        }
+
+        string uniqueFallback = $"{stem}_{Guid.NewGuid().ToString("N")[..6]}{ext}";
+        return Path.GetFullPath(Path.Combine(dirFull, uniqueFallback));
+    }
+
     public void Load()
     {
+        bool sanitizedStaleEntries = false;
         lock (_lock)
         {
             if (_loaded) return;
@@ -185,6 +460,19 @@ public class DownloadStore
                     var loaded = JsonSerializer.Deserialize<List<DownloadEntry>>(json);
                     if (loaded != null)
                     {
+                        foreach (var e in loaded)
+                        {
+                            // Jamás dejar descargas de una sesión anterior bloqueadas como "En progreso" o "Pausado"
+                            if (e.State == "En progreso" || e.State == "Pausado")
+                            {
+                                e.State = "Interrumpido";
+                                e.InterruptReason = string.IsNullOrWhiteSpace(e.InterruptReason)
+                                    ? "Sesión cerrada antes de completar"
+                                    : e.InterruptReason;
+                                sanitizedStaleEntries = true;
+                            }
+                        }
+
                         _entries = loaded
                             .OrderByDescending(e => e.StartedAt)
                             .Take(MaxEntries)
@@ -197,6 +485,11 @@ public class DownloadStore
                 _entries = new List<DownloadEntry>();
             }
         }
+
+        if (sanitizedStaleEntries)
+        {
+            Flush();
+        }
     }
 
     public void Flush()
@@ -204,9 +497,9 @@ public class DownloadStore
         List<DownloadEntry> snapshot;
         lock (_lock)
         {
-            // Jamás persistir descargas de pestañas en Modo Incógnito en disco
+            // Jamás persistir descargas de pestañas en Modo Incógnito en disco, ni guardar estados activos transitorios como "En progreso"
             snapshot = _entries
-                .Where(e => !e.IsIncognito)
+                .Where(e => !e.IsIncognito && e.State != "En progreso" && e.State != "Pausado")
                 .OrderByDescending(e => e.StartedAt)
                 .Take(MaxEntries)
                 .ToList();
@@ -228,7 +521,13 @@ public class DownloadStore
         catch { }
     }
 
-    public DownloadEntry RegisterDownload(string fileName, string filePath, string url, long totalBytes, string state = "En progreso", bool isIncognito = false)
+    public DownloadEntry RegisterDownload(
+        string fileName,
+        string filePath,
+        string url,
+        long totalBytes,
+        string state = "En progreso",
+        bool isIncognito = false)
     {
         Load();
         var entry = new DownloadEntry
@@ -250,9 +549,18 @@ public class DownloadStore
             {
                 _entries.RemoveRange(MaxEntries, _entries.Count - MaxEntries);
             }
+            if (state == "En progreso")
+            {
+                _speedTrackers[entry.Id] = new SpeedTracker
+                {
+                    LastUtc = DateTime.UtcNow,
+                    LastBytes = 0,
+                    EmaBytesPerSec = 0
+                };
+            }
         }
 
-        if (!isIncognito && state != "En progreso")
+        if (!isIncognito && state != "En progreso" && state != "Pausado")
         {
             Flush();
         }
@@ -262,20 +570,92 @@ public class DownloadStore
     }
 
     public void UpdateDownload(string id, long bytesReceived, long totalBytes, string state)
+        => UpdateDownloadProgress(id, bytesReceived, totalBytes, state);
+
+    public void UpdateDownloadProgress(
+        string id,
+        long bytesReceived,
+        long totalBytes,
+        string state,
+        string? interruptReason = null,
+        bool canResume = false,
+        double? estimatedSecondsRemaining = null,
+        DateTime? nowUtc = null)
     {
         Load();
         bool shouldFlush = false;
+        DateTime utcNow = nowUtc ?? DateTime.UtcNow;
+
         lock (_lock)
         {
             var entry = _entries.FirstOrDefault(e => e.Id == id);
             if (entry == null) return;
 
-            entry.BytesReceived = Math.Max(0, bytesReceived);
-            if (totalBytes > 0) entry.TotalBytes = totalBytes;
+            long clampedReceived = Math.Max(0, bytesReceived);
+            if (totalBytes > 0)
+                entry.TotalBytes = totalBytes;
+            else if (state == "Completado" && clampedReceived > entry.TotalBytes)
+                entry.TotalBytes = clampedReceived;
+
+            entry.BytesReceived = clampedReceived;
+            if (!string.IsNullOrWhiteSpace(interruptReason) || state == "En progreso" || state == "Completado")
+            {
+                entry.InterruptReason = state == "Interrumpido" || state == "Error" ? interruptReason : null;
+            }
+
+            if (state == "En progreso")
+            {
+                if (!_speedTrackers.TryGetValue(id, out var tracker))
+                {
+                    tracker = new SpeedTracker { LastUtc = utcNow, LastBytes = clampedReceived };
+                    _speedTrackers[id] = tracker;
+                }
+                else
+                {
+                    double dt = (utcNow - tracker.LastUtc).TotalSeconds;
+                    if (dt >= 0.15)
+                    {
+                        long dBytes = Math.Max(0, clampedReceived - tracker.LastBytes);
+                        double instSpeed = dBytes / dt;
+                        tracker.EmaBytesPerSec = tracker.EmaBytesPerSec <= 0
+                            ? instSpeed
+                            : (tracker.EmaBytesPerSec * 0.65) + (instSpeed * 0.35);
+                        tracker.LastUtc = utcNow;
+                        tracker.LastBytes = clampedReceived;
+                    }
+                }
+
+                entry.SpeedBytesPerSec = tracker.EmaBytesPerSec;
+                if (estimatedSecondsRemaining.HasValue)
+                {
+                    entry.EstimatedSecondsRemaining = estimatedSecondsRemaining.Value;
+                }
+                else if (entry.TotalBytes > entry.BytesReceived && tracker.EmaBytesPerSec > 64)
+                {
+                    entry.EstimatedSecondsRemaining = (entry.TotalBytes - entry.BytesReceived) / tracker.EmaBytesPerSec;
+                }
+                else
+                {
+                    entry.EstimatedSecondsRemaining = null;
+                }
+                entry.CanResume = false;
+            }
+            else
+            {
+                entry.SpeedBytesPerSec = 0;
+                entry.EstimatedSecondsRemaining = null;
+                entry.CanResume = canResume;
+                if (state != "Pausado")
+                {
+                    _speedTrackers.Remove(id);
+                }
+            }
+
             bool stateChanged = entry.State != state;
             entry.State = state;
+            entry.NotifyProgressUpdated();
 
-            if (stateChanged && state != "En progreso" && !entry.IsIncognito)
+            if (stateChanged && state != "En progreso" && state != "Pausado" && !entry.IsIncognito)
             {
                 shouldFlush = true;
             }
@@ -306,11 +686,87 @@ public class DownloadStore
         }
     }
 
+    public List<string> GetActiveDestinationPaths()
+    {
+        Load();
+        lock (_lock)
+        {
+            return _entries
+                .Where(e => e.IsActive && !string.IsNullOrWhiteSpace(e.FilePath))
+                .Select(e => e.FilePath)
+                .ToList();
+        }
+    }
+
+    public ActiveDownloadSummary GetActiveSummary()
+    {
+        Load();
+        lock (_lock)
+        {
+            int active = 0;
+            int inProgress = 0;
+            int paused = 0;
+            long knownReceived = 0;
+            long knownTotal = 0;
+            bool hasIndeterminate = false;
+
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                var e = _entries[i];
+                if (!e.IsActive) continue;
+                active++;
+                if (e.IsInProgress) inProgress++;
+                if (e.IsPaused) paused++;
+
+                if (e.TotalBytes > 0)
+                {
+                    knownTotal += e.TotalBytes;
+                    knownReceived += Math.Clamp(e.BytesReceived, 0, e.TotalBytes);
+                }
+                else
+                {
+                    hasIndeterminate = true;
+                }
+            }
+
+            int pct = knownTotal > 0
+                ? (int)Math.Clamp((knownReceived * 100L) / knownTotal, 0, 100)
+                : 0;
+
+            return new ActiveDownloadSummary(active, inProgress, paused, pct, hasIndeterminate && knownTotal == 0);
+        }
+    }
+
+    public void CancelAllActive()
+    {
+        List<DownloadEntry> activeEntries;
+        lock (_lock)
+        {
+            activeEntries = _entries.Where(e => e.IsActive).ToList();
+        }
+
+        foreach (var entry in activeEntries)
+        {
+            try
+            {
+                entry.CancelAction?.Invoke();
+            }
+            catch { }
+            try
+            {
+                if (entry.IsActive)
+                    UpdateDownloadProgress(entry.Id, entry.BytesReceived, entry.TotalBytes, "Cancelado", "Cancelada al cerrar");
+            }
+            catch { }
+        }
+    }
+
     public void DeleteEntry(string id)
     {
         Load();
         lock (_lock)
         {
+            _speedTrackers.Remove(id);
             _entries.RemoveAll(e => e.Id == id);
         }
         Flush();
@@ -322,6 +778,7 @@ public class DownloadStore
         Load();
         lock (_lock)
         {
+            _speedTrackers.Clear();
             _entries.Clear();
         }
         Flush();
@@ -331,13 +788,33 @@ public class DownloadStore
 
 public static class DownloadManager
 {
-    private static readonly string DownloadsFilePath = Path.Combine(
+    private static readonly string DefaultDownloadsFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "LexBrowser",
         "downloads.json"
     );
 
-    private static readonly DownloadStore _store = new(DownloadsFilePath);
+    private static string ResolveConfiguredPath()
+    {
+        string? envOverride = Environment.GetEnvironmentVariable("LEX_TEST_DOWNLOADS_PATH");
+        return !string.IsNullOrWhiteSpace(envOverride) ? envOverride : DefaultDownloadsFilePath;
+    }
+
+    private static readonly DownloadStore _store = new(ResolveConfiguredPath());
+
+    public static string DownloadsPath => _store.FilePath;
+
+    public static string CustomDownloadsPath
+    {
+        get => _store.FilePath;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                _store.RebindFilePath(DefaultDownloadsFilePath, reload: false);
+            else
+                _store.RebindFilePath(value, reload: false);
+        }
+    }
 
     public static event Action? DownloadsChanged
     {
@@ -348,14 +825,41 @@ public static class DownloadManager
     public static void Load() => _store.Load();
     public static void Flush() => _store.Flush();
 
+    public static string SanitizeAndMakeUniquePath(
+        string targetDirectory,
+        string? suggestedFileName,
+        string? fallbackUrl = null,
+        IEnumerable<string>? activePaths = null,
+        Func<string, bool>? fileExists = null)
+        => DownloadStore.SanitizeAndMakeUniquePath(targetDirectory, suggestedFileName, fallbackUrl, activePaths ?? _store.GetActiveDestinationPaths(), fileExists);
+
     public static DownloadEntry RegisterDownload(string fileName, string filePath, string url, long totalBytes, string state = "En progreso", bool isIncognito = false)
         => _store.RegisterDownload(fileName, filePath, url, totalBytes, state, isIncognito);
 
     public static void UpdateDownload(string id, long bytesReceived, long totalBytes, string state)
         => _store.UpdateDownload(id, bytesReceived, totalBytes, state);
 
+    public static void UpdateDownloadProgress(
+        string id,
+        long bytesReceived,
+        long totalBytes,
+        string state,
+        string? interruptReason = null,
+        bool canResume = false,
+        double? estimatedSecondsRemaining = null)
+        => _store.UpdateDownloadProgress(id, bytesReceived, totalBytes, state, interruptReason, canResume, estimatedSecondsRemaining);
+
     public static List<DownloadEntry> GetEntries(string? searchFilter = null)
         => _store.GetEntries(searchFilter);
+
+    public static List<string> GetActiveDestinationPaths()
+        => _store.GetActiveDestinationPaths();
+
+    public static ActiveDownloadSummary GetActiveSummary()
+        => _store.GetActiveSummary();
+
+    public static void CancelAllActive()
+        => _store.CancelAllActive();
 
     public static void DeleteEntry(string id)
         => _store.DeleteEntry(id);
@@ -363,4 +867,3 @@ public static class DownloadManager
     public static void ClearAll()
         => _store.ClearAll();
 }
-
