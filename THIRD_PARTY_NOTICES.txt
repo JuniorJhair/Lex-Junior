@@ -255,21 +255,41 @@ THE SOFTWARE.
    as a local client media player for sources provided directly by the user.
 ========================================================================
 4. Brave Adblock Rust Semantics, Filter Snapshot & uAssets / Scriptlet Resources
-   Reference engine: adblock-rust (v0.13.5, Mozilla Public License 2.0 - MPL-2.0)
+   Engine design reference: adblock-rust (Mozilla Public License 2.0 - MPL-2.0)
    https://github.com/brave/adblock-rust
-   Compiler script: Tools/compile_brave_shield.py -> LexBrowser/Assets/shield/brave-shield.lex
+   Compiler script: tools/compile_brave_shield.py -> LexBrowser/Assets/shield/brave-shield.lex
 
-   Bundled precompiled bundle (`brave-shield.lex`) incorporates a frozen snapshot from
-   `adblock-rust-master/data/brave/`:
-     - brave-main-list.txt & brave-unbreak.txt: filter list snapshot aggregated by
-       Brave from uBlock Origin / uAssets, EasyList, Peter Lowe, etc.
-       (uAssets & EasyList are dual-licensed under GPLv3 / CC BY-SA 3.0 where applicable).
-     - coin-miners.txt: MIT / MPL-2.0 (Brave Software, Inc.).
-     - brave-resources.json: scriptlets and surrogate resources derived from
-       uBlock Origin resources (GPLv3) and Brave Software (MPL-2.0).
+   License audit summary (all bundled sources allow redistribution):
+   The precompiled bundle `LexBrowser/Assets/shield/brave-shield.lex` embeds
+   normalized binary rules and surrogate resources compiled from the following
+   third-party snapshots under their respective upstream licenses:
 
-   Note: `adblock-rust-master/data/update-lists.js` requires a `BRAVE_SERVICE_KEY`
-   and does not run automatically inside Lex Junior. To regenerate `brave-shield.lex`
-   after updating any list file under `adblock-rust-master/data/brave/`, run:
-       python Tools/compile_brave_shield.py
+   - Brave Adblock Lists & Unbreak (`adblock-lists-master`):
+     * brave-unbreak.txt, brave-firstparty.txt, brave-firstparty-regional.txt,
+       brave-cookie-specific.txt, brave-specific.txt, brave-sugarcoat.txt
+     * coin-miners.txt (NoCoin Filter List, Brave Software, Inc.)
+     License: Mozilla Public License 2.0 (MPL-2.0)
+     https://github.com/brave/adblock-lists/blob/master/LICENSE
+
+   - Brave Adblock Resources & Scriptlets (`adblock-resources-master` & `brave-resources.json`):
+     * `brave-resources.json` and `dist/resources.json` (surrogates/scriptlets)
+     License: Mozilla Public License 2.0 (MPL-2.0) and uBlock Origin derived
+     resources under GNU General Public License v3.0 (GPL-3.0)
+     https://github.com/brave/adblock-resources/blob/master/LICENSE
+
+   - EasyList, EasyPrivacy & EasyList Spanish (`easylist.to`):
+     * easylist.txt, easyprivacy.txt, easylistspanish.txt
+     License: Dual-licensed under GPL-3.0 OR Creative Commons Attribution-ShareAlike 3.0
+     Unported (CC BY-SA 3.0)
+     https://easylist.to/pages/licence.html
+
+   - uBlock Origin / uAssets (`uBlockOrigin` & `brave-main-list.txt`):
+     * brave-main-list.txt, filters.txt, badware.txt, resource-abuse.txt, unbreak.txt
+     License: GNU General Public License v3.0 (GPL-3.0)
+     https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE
+
+   Note: `update-lists.js` requires a `BRAVE_SERVICE_KEY` and does not run
+   automatically inside Lex Junior. To regenerate `brave-shield.lex` from local
+   snapshots, run:
+       python tools/compile_brave_shield.py
 ========================================================================

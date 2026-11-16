@@ -8,9 +8,9 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.3.0</Version>
-    <AssemblyVersion>2.3.0.0</AssemblyVersion>
-    <FileVersion>2.3.0.0</FileVersion>
+    <Version>2.4.0</Version>
+    <AssemblyVersion>2.4.0.0</AssemblyVersion>
+    <FileVersion>2.4.0.0</FileVersion>
     <Product>Lex Junior Browser</Product>
     <Company>Lex Junior</Company>
   </PropertyGroup>
@@ -27,6 +27,7 @@
     <None Update="Assets\pdf\**" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\tv\**" />
     <None Update="Assets\tv\**" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Assets\shield\brave-shield.lex" />
     <None Update="Assets\shield\brave-shield.lex" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\THIRD_PARTY_NOTICES.txt" Link="THIRD_PARTY_NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="LexBrowser.Tests" />
