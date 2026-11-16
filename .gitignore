@@ -10,3 +10,15 @@ lmjnegcaeklhafolokijcfjliaokphfk/
 adblock-rust-master/
 *.pdf
 _backups/
+_release/
+tools/__pycache__/
+COMO BLOQUEA BRAVE/
+Magma.apk_Decompiler.com/
+.gemini/
+*.pfx
+*.snk
+*.key
+*.pem
+*.p12
+.env
+.env.*
