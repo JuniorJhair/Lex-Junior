@@ -16,7 +16,7 @@ public class BrowserSettings
     public bool EnableVideoPlayerDefuser { get; set; } = false;
     public bool EnableImaSdkStub { get; set; } = true;
     public bool EnableCosmeticShield { get; set; } = true;
-    public bool EnableWebShieldInSubframes { get; set; } = false;
+    public bool EnableWebShieldInSubframes { get; set; } = true;
     public bool EnableYouTubeAdBlock { get; set; } = true;
     public bool EnableDailymotionAdBlock { get; set; } = true;
     public ShieldSettings Shield { get; set; } = new();
@@ -196,7 +196,10 @@ public static class SettingsManager
             return;
         }
 
-        Current = new BrowserSettings { SettingsSchemaVersion = 2 };
+        Current = new BrowserSettings { SettingsSchemaVersion = 3 };
+        Current.Shield.Version = 3;
+        Current.Shield.Engine = ShieldSettings.EngineBrave;
+        Current.Shield.EngineMigratedToBrave = true;
         MigrateAndSyncShieldSettings(Current);
         BumpSettingsRevision();
         SyncSecurityMarker();
@@ -214,11 +217,33 @@ public static class SettingsManager
         if (settings.SettingsSchemaVersion < 2)
         {
             // Migración a esquema v2 (Auditoría LexShield):
-            // Desactivar por defecto el desarmador genérico de reproductor y la inyección en subframes
-            // para evitar reinicios de velocidad en YouTube/Dailymotion y roturas de iframes de terceros.
+            // Desactivar por defecto el desarmador genérico de reproductor.
             settings.EnableVideoPlayerDefuser = false;
-            settings.EnableWebShieldInSubframes = false;
             settings.SettingsSchemaVersion = 2;
+            migrated = true;
+        }
+
+        if (!settings.Shield.EngineMigratedToBrave)
+        {
+            bool wasLegacy = string.Equals(
+                ShieldSettings.NormalizeEngine(settings.Shield.Engine),
+                ShieldSettings.EngineLegacy,
+                StringComparison.Ordinal);
+
+            settings.Shield.Engine = ShieldSettings.EngineBrave;
+            if (settings.SettingsSchemaVersion < 3 && wasLegacy)
+            {
+                settings.EnableWebShieldInSubframes = true;
+            }
+            settings.Shield.EngineMigratedToBrave = true;
+            settings.Shield.Version = Math.Max(3, settings.Shield.Version);
+            settings.SettingsSchemaVersion = Math.Max(3, settings.SettingsSchemaVersion);
+            migrated = true;
+        }
+        else if (settings.SettingsSchemaVersion < 3 || settings.Shield.Version < 3)
+        {
+            settings.Shield.Version = Math.Max(3, settings.Shield.Version);
+            settings.SettingsSchemaVersion = Math.Max(3, settings.SettingsSchemaVersion);
             migrated = true;
         }
 
@@ -373,7 +398,11 @@ public static class SettingsManager
                     catch { }
                 }
 
-                Current.SettingsSchemaVersion = Math.Max(2, Current.SettingsSchemaVersion);
+                Current.SettingsSchemaVersion = Math.Max(3, Current.SettingsSchemaVersion);
+        if (Current.Shield != null)
+        {
+            Current.Shield.Version = Math.Max(3, Current.Shield.Version);
+        }
                 MigrateAndSyncShieldSettings(Current);
         BumpSettingsRevision();
 

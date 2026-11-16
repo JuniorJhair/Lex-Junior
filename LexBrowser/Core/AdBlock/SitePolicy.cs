@@ -16,7 +16,7 @@ public sealed class ShieldModulesConfig
     public bool Overlays { get; set; } = true;
     public bool Cosmetic { get; set; } = true;
     public bool AntiWall { get; set; } = true;
-    public bool Subframes { get; set; } = false;
+    public bool Subframes { get; set; } = true;
     public bool VideoDefuser { get; set; } = false;
 }
 
@@ -69,18 +69,19 @@ public sealed class ShieldSettings
     public const string EngineLegacy = "Legacy";
     public const string EngineBrave = "Brave";
 
-    public int Version { get; set; } = 2;
+    public int Version { get; set; } = 3;
     public bool Enabled { get; set; } = true;
     public bool DiagnosticMode { get; set; } = false;
-    public string Engine { get; set; } = EngineLegacy;
+    public string Engine { get; set; } = EngineBrave;
+    public bool EngineMigratedToBrave { get; set; } = false;
     public ShieldModulesConfig Modules { get; set; } = new();
     public ShieldAdaptersConfig Adapters { get; set; } = new();
     public Dictionary<string, SiteShieldProfile> Sites { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static string NormalizeEngine(string? engine)
-        => string.Equals(engine, EngineBrave, StringComparison.OrdinalIgnoreCase)
-            ? EngineBrave
-            : EngineLegacy;
+        => string.Equals(engine, EngineLegacy, StringComparison.OrdinalIgnoreCase)
+            ? EngineLegacy
+            : EngineBrave;
 }
 
 /// <summary>
@@ -208,8 +209,9 @@ public static class SitePolicy
         bool overlays = !isCompat && shield.Modules.Overlays && !IsModDisabled(ModOverlays);
         bool cosmetic = !isCompat && (appSettings?.EnableCosmeticShield ?? true) && shield.Modules.Cosmetic && !IsModDisabled(ModCosmetic);
         bool antiWall = !isCompat && shield.Modules.AntiWall && !IsModDisabled(ModAntiWall);
-        bool subframes = !isCompat && (appSettings?.EnableWebShieldInSubframes ?? false) && shield.Modules.Subframes && !IsModDisabled(ModSubframes);
-        bool videoDefuser = !isCompat && (appSettings?.EnableVideoPlayerDefuser ?? false) && shield.Modules.VideoDefuser && !IsModDisabled(ModVideoDefuser);
+        bool isLegacyEngine = string.Equals(ShieldSettings.NormalizeEngine(shield.Engine), ShieldSettings.EngineLegacy, StringComparison.Ordinal);
+        bool subframes = !isCompat && (appSettings?.EnableWebShieldInSubframes ?? true) && shield.Modules.Subframes && !IsModDisabled(ModSubframes);
+        bool videoDefuser = isLegacyEngine && !isCompat && (appSettings?.EnableVideoPlayerDefuser ?? false) && shield.Modules.VideoDefuser && !IsModDisabled(ModVideoDefuser);
 
         bool adapterEnabled = !isCompat && !IsModDisabled(ModAdapter);
         bool ytAdapter = adapterEnabled && (appSettings?.EnableYouTubeAdBlock ?? true) && shield.Adapters.YouTube;
@@ -274,17 +276,28 @@ public static class SitePolicy
             return;
 
         var profile = GetOrCreateSiteProfile(regDomain);
-        profile.Disabled.RemoveAll(m => string.Equals(m, moduleName, StringComparison.OrdinalIgnoreCase));
-        if (!enabled)
+        var moduleDef = ShieldModuleRegistry.Find(moduleName);
+        if (moduleDef?.ApplySiteToggle != null)
         {
-            profile.Disabled.Add(moduleName);
+            moduleDef.ApplySiteToggle(profile, SettingsManager.Current, enabled);
+        }
+        else
+        {
+            profile.SetModuleEnabled(moduleName, enabled);
+
+            // Si el usuario activa explícitamente el desarmador de video en este sitio, aseguramos que pueda ejecutarse
+            if (enabled && string.Equals(moduleName, ModVideoDefuser, StringComparison.OrdinalIgnoreCase))
+            {
+                SettingsManager.Current.EnableVideoPlayerDefuser = true;
+                SettingsManager.Current.Shield.Modules.VideoDefuser = true;
+            }
         }
 
-        // Si el usuario activa explícitamente el desarmador de video en este sitio, aseguramos que pueda ejecutarse
-        if (enabled && string.Equals(moduleName, ModVideoDefuser, StringComparison.OrdinalIgnoreCase))
+        // Si el sitio estaba pausado (ModeOff) y el usuario reactiva un módulo individual, reactivamos el escudo del sitio
+        // conservando intacto el estado del resto de módulos guardados.
+        if (enabled && string.Equals(profile.Mode, ModeOff, StringComparison.OrdinalIgnoreCase))
         {
-            SettingsManager.Current.EnableVideoPlayerDefuser = true;
-            SettingsManager.Current.Shield.Modules.VideoDefuser = true;
+            profile.Mode = ModeNormal;
         }
 
         CleanupDefaultProfileIfNeeded(regDomain, profile);

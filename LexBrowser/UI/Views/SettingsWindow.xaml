@@ -291,8 +291,8 @@
                                 <StackPanel>
                                     <CheckBox x:Name="ChkYouTubeAdBlock" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                         <StackPanel>
-                                            <TextBlock Text="Bloqueador de Anuncios en YouTube (Motor Brave)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                            <TextBlock Text="Elimina anuncios de video, Shorts patrocinados y espacios publicitarios en YouTube antes de que carguen en el reproductor, sin alterar la velocidad ni el audio." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Text="Bloqueador de Anuncios en YouTube (Módulo Aislado)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Elimina anuncios de video, Shorts patrocinados y espacios publicitarios en YouTube con el módulo aislado antes de que carguen en el reproductor, sin alterar la velocidad ni el audio." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>
@@ -302,8 +302,8 @@
                                 <StackPanel>
                                     <CheckBox x:Name="ChkVideoPlayerDefuser" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                         <StackPanel>
-                                            <TextBlock Text="Experimental: Acelerador de Anuncios en Reproductores Externos (JW Player / Video.js / Fluid)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                            <TextBlock Text="Intenta saltar cuentas regresivas pre-roll en reproductores de terceros restaurando tu velocidad y volumen al terminar el anuncio (no afecta a YouTube ni Dailymotion)." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Text="Acelerador en Reproductores Externos (Solo Motor Legacy — inactivo en Brave)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Solo se activa al usar Motor Legacy (JW Player / Video.js / Fluid). Permanecerá deshabilitado con Motor Brave activo; no afecta a YouTube ni Dailymotion." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>
@@ -313,8 +313,8 @@
                                 <StackPanel>
                                     <CheckBox x:Name="ChkSubframeWebShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                         <StackPanel>
-                                            <TextBlock Text="Experimental: Inyección de WebShield en Submarcos e Iframes" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                            <TextBlock Text="Inyecta la defensa DOM también dentro de marcos secundarios (desactivado por defecto para máxima compatibilidad con pasarelas de pago, CAPTCHAs y SSO)." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Text="Protección de Escudo en Submarcos e Iframes (Recomendado en Brave)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Aplica bloqueo declarativo, scriptlets y defensa cosmética también dentro de submarcos e iframes embebidos (activado por defecto en Brave; respeta pasarelas de pago, SSO, YouTube y Dailymotion)." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>

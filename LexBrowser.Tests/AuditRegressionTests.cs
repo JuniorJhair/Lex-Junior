@@ -191,7 +191,7 @@ public class AuditRegressionTests
             Assert.True(normal.Overlays);
             Assert.True(normal.Cosmetic);
             Assert.False(normal.VideoDefuser);
-            Assert.False(normal.Subframes);
+            Assert.True(normal.Subframes);
 
             var compat = SitePolicy.Resolve("example.com", temporaryCompatMode: true);
             Assert.True(compat.ShieldEnabled);
@@ -203,6 +203,7 @@ public class AuditRegressionTests
             Assert.False(compat.Overlays);
             Assert.False(compat.Cosmetic);
             Assert.False(compat.VideoDefuser);
+            Assert.False(compat.Subframes);
         }
         finally
         {

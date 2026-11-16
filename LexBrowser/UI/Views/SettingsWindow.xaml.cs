@@ -201,10 +201,17 @@ public partial class SettingsWindow : Window
     private void UpdateAdBlockerSubTogglesEnabledState()
     {
         bool masterEnabled = ChkAdBlocker.IsChecked == true;
+        bool useBrave = ChkUseBraveEngine?.IsChecked == true;
         if (PanelAdBlockSubModules != null)
         {
-            PanelAdBlockSubModules.IsEnabled = masterEnabled;
-            PanelAdBlockSubModules.Opacity = masterEnabled ? 1.0 : 0.45;
+            // Atenuar visualmente cuando el maestro está desactivado, sin deshabilitar los controles hijos
+            PanelAdBlockSubModules.IsEnabled = true;
+            PanelAdBlockSubModules.Opacity = masterEnabled ? 1.0 : 0.55;
+        }
+        if (ChkVideoPlayerDefuser != null)
+        {
+            ChkVideoPlayerDefuser.IsEnabled = !useBrave;
+            ChkVideoPlayerDefuser.Opacity = useBrave ? 0.55 : 1.0;
         }
     }
 
@@ -215,6 +222,7 @@ public partial class SettingsWindow : Window
         settings.Shield.Engine = useBraveEngine
             ? LexBrowser.Core.AdBlock.ShieldSettings.EngineBrave
             : LexBrowser.Core.AdBlock.ShieldSettings.EngineLegacy;
+        settings.Shield.EngineMigratedToBrave = true;
     }
 
     private void ChkUseBraveEngine_Click(object sender, RoutedEventArgs e)
@@ -222,13 +230,31 @@ public partial class SettingsWindow : Window
         if (_isInitializing || ChkUseBraveEngine == null) return;
 
         var s = SettingsManager.Current;
+        if (ChkUseBraveEngine.IsChecked == true && !s.EnableAdBlocker && ChkAdBlocker != null)
+        {
+            ChkAdBlocker.IsChecked = true;
+            s.EnableAdBlocker = true;
+        }
         ApplyShieldEngineSelection(s, ChkUseBraveEngine.IsChecked == true);
+        UpdateAdBlockerSubTogglesEnabledState();
         SettingsManager.Save();
     }
 
     private void SaveSettings_Click(object sender, RoutedEventArgs e)
     {
         if (_isInitializing) return;
+
+        // Si el usuario activa un submódulo individual cuando el Escudo Maestro estaba apagado, reactivamos el maestro
+        if (!ReferenceEquals(sender, ChkAdBlocker) &&
+            sender is System.Windows.Controls.CheckBox toggled &&
+            toggled.IsChecked == true &&
+            ChkAdBlocker != null &&
+            ChkAdBlocker.IsChecked != true &&
+            PanelAdBlockSubModules != null &&
+            PanelAdBlockSubModules.IsAncestorOf(toggled))
+        {
+            ChkAdBlocker.IsChecked = true;
+        }
 
         var s = SettingsManager.Current;
         s.Shield ??= new LexBrowser.Core.AdBlock.ShieldSettings();
@@ -237,7 +263,7 @@ public partial class SettingsWindow : Window
         s.ShowFloatingPageButton = ChkFloatingPage.IsChecked == true;
         s.EnableAutoVideoPip = ChkAutoVideoPip.IsChecked == true;
         s.ShowBookmarksBar = ChkBookmarksBar.IsChecked == true;
-        s.EnableAdBlocker = ChkAdBlocker.IsChecked == true;
+        s.EnableAdBlocker = ChkAdBlocker?.IsChecked == true;
         s.EnableVideoPlayerDefuser = ChkVideoPlayerDefuser.IsChecked == true;
         s.EnableImaSdkStub = ChkImaSdkStub.IsChecked == true;
         s.EnableCosmeticShield = ChkCosmeticShield.IsChecked == true;

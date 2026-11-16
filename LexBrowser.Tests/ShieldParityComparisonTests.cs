@@ -15,11 +15,13 @@ public sealed class ShieldParityComparisonTests
         => SitePolicy.Resolve(host, temporaryCompatMode: compat);
 
     [Fact]
-    public void DefaultEngineRemainsLegacyUntilParitySignoff()
+    public void DefaultEngineIsBraveAndNormalizeDefaultsToBrave()
     {
         var fresh = new ShieldSettings();
-        Assert.Equal(ShieldSettings.EngineLegacy, fresh.Engine);
-        Assert.Equal(ShieldSettings.EngineLegacy, ShieldSettings.NormalizeEngine(null));
+        Assert.Equal(ShieldSettings.EngineBrave, fresh.Engine);
+        Assert.Equal(3, fresh.Version);
+        Assert.Equal(ShieldSettings.EngineBrave, ShieldSettings.NormalizeEngine(null));
+        Assert.Equal(ShieldSettings.EngineLegacy, ShieldSettings.NormalizeEngine("legacy"));
         Assert.Equal(ShieldSettings.EngineBrave, ShieldSettings.NormalizeEngine("brave"));
     }
 

@@ -132,4 +132,123 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
         Assert.Equal(ShieldSettings.EngineLegacy, s.Shield.Engine);
         Assert.True(s.Shield.DiagnosticMode);
     }
+
+    [Fact]
+    public void NewProfile_DefaultsToBraveEngine_AlignedDefaults_AndVersion3()
+    {
+        File.WriteAllText(_tempPath, "");
+        File.Delete(_tempPath);
+
+        SettingsManager.Load();
+        var s = SettingsManager.Current;
+
+        Assert.Equal(3, s.SettingsSchemaVersion);
+        Assert.Equal(3, s.Shield.Version);
+        Assert.Equal(ShieldSettings.EngineBrave, s.Shield.Engine);
+        Assert.True(s.Shield.EngineMigratedToBrave);
+        Assert.True(ShieldRouter.IsBraveActive);
+        Assert.True(s.EnableWebShieldInSubframes);
+        Assert.True(s.Shield.Modules.Subframes);
+        Assert.False(s.Shield.DiagnosticMode);
+        Assert.False(ShieldLogger.DiagnosticMode);
+        Assert.False(s.EnableVideoPlayerDefuser);
+        Assert.False(s.Shield.Modules.VideoDefuser);
+        Assert.True(s.EnableYouTubeAdBlock);
+        Assert.True(s.EnableDailymotionAdBlock);
+        Assert.True(s.Shield.Adapters.YouTube);
+        Assert.True(s.Shield.Adapters.Dailymotion);
+    }
+
+    [Fact]
+    public void ExistingLegacyProfile_MigratesOnceToBraveWithoutClobberingPrefs_AndSubsequentLegacyChoicePersists()
+    {
+        File.WriteAllText(_tempPath, """
+        {
+          "SettingsSchemaVersion": 2,
+          "EnableCosmeticShield": false,
+          "EnableWebShieldInSubframes": false,
+          "Shield": {
+            "Version": 2,
+            "Engine": "Legacy",
+            "DiagnosticMode": true,
+            "Sites": {
+              "example.org": { "Mode": "Off" }
+            }
+          }
+        }
+        """);
+
+        // 1. Primera carga migra Legacy -> Brave una sola vez sin pisar otras preferencias
+        SettingsManager.Load();
+        var firstLoad = SettingsManager.Current;
+        Assert.Equal(ShieldSettings.EngineBrave, firstLoad.Shield.Engine);
+        Assert.True(firstLoad.Shield.EngineMigratedToBrave);
+        Assert.Equal(3, firstLoad.Shield.Version);
+        Assert.Equal(3, firstLoad.SettingsSchemaVersion);
+        Assert.True(firstLoad.EnableWebShieldInSubframes);
+        Assert.True(firstLoad.Shield.Modules.Subframes);
+        Assert.True(firstLoad.Shield.DiagnosticMode);
+        Assert.False(firstLoad.EnableCosmeticShield);
+        Assert.Equal(SitePolicy.ModeOff, firstLoad.Shield.Sites["example.org"].Mode);
+
+        // 2. Usuario elige volver a Legacy manualmente y guarda
+        SettingsWindow.ApplyShieldEngineSelection(firstLoad, useBraveEngine: false);
+        SettingsManager.Save();
+
+        // 3. Reapertura posterior respeta Legacy y no vuelve a migrar ni al cambiar otros flags
+        SettingsManager.Load();
+        Assert.Equal(ShieldSettings.EngineLegacy, SettingsManager.Current.Shield.Engine);
+        Assert.False(ShieldRouter.IsBraveActive);
+
+        SettingsManager.Current.Shield.DiagnosticMode = false;
+        SettingsManager.Current.EnableWebShieldInSubframes = true;
+        SettingsManager.Save();
+        SettingsManager.Load();
+        Assert.Equal(ShieldSettings.EngineLegacy, SettingsManager.Current.Shield.Engine);
+        Assert.False(SettingsManager.Current.Shield.DiagnosticMode);
+        Assert.True(SettingsManager.Current.EnableWebShieldInSubframes);
+    }
+
+    [Fact]
+    public void BraveDefault_KeepsYouTubeAndDailymotionStrictlyOnIsolatedLegacy()
+    {
+        SettingsManager.Load();
+        Assert.True(ShieldRouter.IsBraveActive);
+
+        var ytPolicy = SitePolicy.Resolve("youtube.com");
+        var ytAdDecision = ShieldRouter.EvaluateWebResource(
+            new Uri("https://ads.youtube.com/api/stats"),
+            "www.youtube.com",
+            "youtube.com",
+            "youtube.com",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            ytPolicy,
+            Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.XmlHttpRequest);
+        Assert.True(ytAdDecision.ShouldBlock);
+        Assert.Equal("Blocked ad domain or pattern", ytAdDecision.Reason);
+
+        var dmPolicy = SitePolicy.Resolve("dailymotion.com");
+        var dmAdDecision = ShieldRouter.EvaluateWebResource(
+            new Uri("https://dmads.dailymotion.com/ad/vast.xml"),
+            "www.dailymotion.com",
+            "dailymotion.com",
+            "dailymotion.com",
+            "https://www.dailymotion.com/video/x8abcde",
+            "https://www.dailymotion.com/video/x8abcde",
+            dmPolicy,
+            Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.XmlHttpRequest);
+        Assert.True(dmAdDecision.ShouldBlock);
+        Assert.Equal("Blocked ad domain or pattern", dmAdDecision.Reason);
+
+        string ytPlan = ShieldRouter.BuildDocumentPlanJson(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "", true,
+            new Uri("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), temporaryCompatMode: false);
+        Assert.Equal("""{"enabled":false}""", ytPlan);
+
+        string dmPlan = ShieldRouter.BuildDocumentPlanJson(
+            "https://www.dailymotion.com/video/x8abcde", "", true,
+            new Uri("https://www.dailymotion.com/video/x8abcde"), temporaryCompatMode: false);
+        Assert.Equal("""{"enabled":false}""", dmPlan);
+    }
 }
