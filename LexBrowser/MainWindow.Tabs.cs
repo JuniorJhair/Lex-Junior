@@ -577,6 +577,12 @@ public partial class MainWindow
                 return;
             }
 
+            if (e.Key == Key.Escape && win.CloseOpenToolbarPopups())
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (e.Key == Key.F12 || (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I))
             {
                 e.Handled = true;
@@ -1073,35 +1079,31 @@ public partial class MainWindow
                             });
                         }
 
-                        if (ShieldLogger.DiagnosticMode)
+                        string engineName = ShieldRouter.GetConfiguredEngineName();
+                        if (ShieldRouter.TryFormatAllowedNetworkLog(
+                                in decision,
+                                uri,
+                                policyHost,
+                                tab.CurrentUri?.Host,
+                                frameDesc,
+                                e.ResourceContext,
+                                engineName,
+                                ShieldLogger.DiagnosticMode,
+                                out string reasonText,
+                                out bool bypassDiag))
                         {
-                            string engineName = ShieldRouter.GetConfiguredEngineName();
-                            string tabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
-                            string reqHost = uri.Host;
-                            string? currentHost = tab.CurrentUri?.Host;
-                            string? effectiveMainHost = !string.IsNullOrEmpty(currentHost)
-                                ? currentHost
-                                : (!string.IsNullOrEmpty(policyHost) ? policyHost : null);
-                            bool isSubframeReq = frameDesc.StartsWith("Subframe", StringComparison.OrdinalIgnoreCase);
-
-                            string? allowKind = null;
-                            if (isSubframeReq)
-                                allowKind = "Subframe network request";
-                            else if (e.ResourceContext == CoreWebView2WebResourceContext.Document)
-                                allowKind = "Document navigation request";
-                            else if (decision.HasException)
-                                allowKind = "Exception rule matched";
-                            else if (!string.IsNullOrEmpty(effectiveMainHost) &&
-                                     !PublicSuffix.HostMatchesDomain(reqHost, effectiveMainHost) &&
-                                     !AdBlockFilter.IsTrustedDomain(reqHost))
-                                allowKind = "External third-party resource";
-
-                            if (allowKind != null)
-                            {
-                                string reasonText = ShieldRouter.FormatNetworkDecisionLogReason(
-                                    in decision, uri, frameDesc, e.ResourceContext, engineName, $"{allowKind} (no match)");
-                                ShieldLogger.LogForTab(tab, "REQUEST_ALLOWED", originHost, uri.AbsoluteUri, frameDesc, reasonText, tabDesc);
-                            }
+                            string tabDesc = ShieldLogger.DiagnosticMode
+                                ? $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})"
+                                : $"Tab:{tab.TabId}";
+                            ShieldLogger.LogForTab(
+                                tab,
+                                "REQUEST_ALLOWED",
+                                originHost,
+                                uri.AbsoluteUri,
+                                frameDesc,
+                                reasonText,
+                                tabDesc,
+                                bypassDiagnosticFilter: bypassDiag);
                         }
                     }
                 }
@@ -1250,9 +1252,67 @@ public partial class MainWindow
             {
                 frame.NavigationStarting += (fs, fe) =>
                 {
-                    if (!ShieldLogger.DiagnosticMode) return;
                     string fTabDesc = $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})";
-                    ShieldLogger.LogForTab(tab, "SUBFRAME_NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "unknown", fe.Uri, "Subframe", $"IsUserInitiated={fe.IsUserInitiated}, IsRedirected={fe.IsRedirected}", fTabDesc);
+                    if (ShieldLogger.DiagnosticMode)
+                    {
+                        ShieldLogger.LogForTab(tab, "SUBFRAME_NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "unknown", fe.Uri, "Subframe", $"IsUserInitiated={fe.IsUserInitiated}, IsRedirected={fe.IsRedirected}", fTabDesc);
+                    }
+
+                    if (!SettingsManager.Current.EnableAdBlocker ||
+                        string.IsNullOrWhiteSpace(fe.Uri) ||
+                        !Uri.TryCreate(fe.Uri, UriKind.Absolute, out var fUri) ||
+                        (fUri.Scheme != Uri.UriSchemeHttp && fUri.Scheme != Uri.UriSchemeHttps))
+                    {
+                        return;
+                    }
+
+                    var mainUri = tab.PendingMainNavigationUri ?? tab.CurrentUri;
+                    string originHost = mainUri?.Host ?? "unknown";
+                    var policy = tab.ResolveCachedPolicy(originHost);
+                    if (!policy.ShieldEnabled || !policy.Network)
+                        return;
+
+                    if (ShieldExemptions.IsPaymentOrAuthHost(fUri.Host) ||
+                        ShieldExemptions.IsPaymentOrAuthHost(originHost) ||
+                        ShieldIsolation.IsIsolatedHost(fUri.Host) ||
+                        ShieldIsolation.IsIsolatedHost(originHost))
+                    {
+                        return;
+                    }
+
+                    var subDecision = ShieldRouter.EvaluateWebResource(
+                        fUri,
+                        originHost,
+                        originHost,
+                        mainUri?.Host,
+                        tab.Url,
+                        tab.Url,
+                        policy,
+                        CoreWebView2WebResourceContext.Document,
+                        secFetchDest: "iframe",
+                        httpMethod: "GET");
+
+                    if (subDecision.ShouldBlock && !subDecision.IsRedirectStub)
+                    {
+                        fe.Cancel = true;
+                        ShieldLogger.LogForTab(
+                            tab,
+                            "SUBFRAME_BLOCKED",
+                            originHost,
+                            fUri.AbsoluteUri,
+                            "Subframe",
+                            ShieldRouter.FormatNetworkDecisionLogReason(in subDecision, fUri, "Subframe", CoreWebView2WebResourceContext.Document, ShieldRouter.GetConfiguredEngineName(), "Ad iframe blocked at navigation"),
+                            fTabDesc);
+
+                        var win = tab.OwnerWindow ?? this;
+                        _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                        {
+                            if (tab.IsDisposed) return;
+                            tab.RecordShieldBlock(ShieldBlockCategory.Network);
+                            if (win._activeTab == tab)
+                                win.UpdateShieldBadgeText();
+                        });
+                    }
                 };
             }
             catch { }
@@ -1690,54 +1750,154 @@ public partial class MainWindow
             try
             {
                 var op = e.DownloadOperation;
-                string resultPath = e.ResultFilePath ?? string.Empty;
+                string downloadsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                if (!Directory.Exists(downloadsDir))
+                {
+                    try { Directory.CreateDirectory(downloadsDir); }
+                    catch { downloadsDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory); }
+                }
+
+                string suggestedName = !string.IsNullOrWhiteSpace(e.ResultFilePath)
+                    ? Path.GetFileName(e.ResultFilePath)
+                    : Path.GetFileName(op.ResultFilePath);
+                string resultPath = DownloadManager.SanitizeAndMakeUniquePath(downloadsDir, suggestedName, op.Uri);
+                e.ResultFilePath = resultPath;
+                e.Handled = true;
+                try { if (core.IsDefaultDownloadDialogOpen) core.CloseDefaultDownloadDialog(); } catch { }
+
                 string fileName = Path.GetFileName(resultPath);
                 long total = (long)(op.TotalBytesToReceive ?? 0UL);
-                var entry = DownloadManager.RegisterDownload(fileName, resultPath, op.Uri, total, "En progreso", tab.IsIncognito || tab.IsGuest);
-
+                bool isPrivate = tab.IsIncognito || tab.IsGuest;
+                var entry = DownloadManager.RegisterDownload(fileName, resultPath, op.Uri, total, "En progreso", isPrivate);
                 var win = tab.OwnerWindow ?? this;
-                win.Dispatcher.Invoke(() =>
+
+                entry.PauseAction = () => _ = win.Dispatcher.BeginInvoke(() => { try { op.Pause(); } catch { } });
+                entry.ResumeAction = () => _ = win.Dispatcher.BeginInvoke(() => { try { op.Resume(); } catch { } });
+                entry.CancelAction = () => _ = win.Dispatcher.BeginInvoke(() => { try { op.Cancel(); } catch { } });
+                entry.RetryAction = () => _ = win.Dispatcher.BeginInvoke(() =>
                 {
-                    win.RefreshDownloadsPopupUI();
-                    win.PopupDownloads.IsOpen = true;
-                    win.ShowToast($"⬇️ Descargando: {fileName}", "Detalles ⬇", () =>
+                    try
                     {
-                        win.RefreshDownloadsPopupUI();
-                        win.PopupDownloads.IsOpen = true;
-                    });
+                        if (!tab.IsDisposed && tab.WebView?.CoreWebView2 != null && !string.IsNullOrWhiteSpace(entry.Url))
+                            tab.WebView.CoreWebView2.Navigate(entry.Url);
+                    }
+                    catch { }
                 });
 
-                op.BytesReceivedChanged += (senderOp, args) =>
+                _ = win.Dispatcher.BeginInvoke(() =>
                 {
-                    long received = op.BytesReceived;
-                    long tot = (long)(op.TotalBytesToReceive ?? 0UL);
-                    DownloadManager.UpdateDownload(entry.Id, received, tot, "En progreso");
-                };
+                    win.UpdateDownloadsToolbarIndicator();
+                    if (win.PopupDownloads != null && win.PopupDownloads.IsOpen)
+                        win.RefreshDownloadsPopupUI();
 
-                op.StateChanged += (senderOp, args) =>
+                    win.ShowToast($"⬇️ Descargando: {fileName}", "Ver descargas", () =>
+                    {
+                        win.RefreshDownloadsPopupUI();
+                        if (win.PopupDownloads != null) win.PopupDownloads.IsOpen = true;
+                    }, durationSeconds: 4);
+                });
+
+                long lastReportTick = 0;
+                int handlersDetached = 0;
+
+                void DetachHandlers()
                 {
-                    long received = op.BytesReceived;
-                    long tot = (long)(op.TotalBytesToReceive ?? 0UL);
-                    string stateStr = op.State switch
+                    if (System.Threading.Interlocked.Exchange(ref handlersDetached, 1) != 0)
+                        return;
+                    try
                     {
-                        CoreWebView2DownloadState.Completed => "Completado",
-                        CoreWebView2DownloadState.Interrupted => "Cancelado",
-                        _ => "En progreso"
-                    };
-                    DownloadManager.UpdateDownload(entry.Id, received, tot, stateStr);
+                        op.BytesReceivedChanged -= OnBytesReceived;
+                        op.StateChanged -= OnStateChanged;
+                    }
+                    catch { }
+                }
 
-                    if (op.State == CoreWebView2DownloadState.Completed)
+                void OnBytesReceived(object? sender, object args)
+                {
+                    var senderOp = sender as CoreWebView2DownloadOperation ?? op;
+                    if (tab.IsDisposed) { DetachHandlers(); return; }
+                    long received = senderOp.BytesReceived;
+                    long tot = (long)(senderOp.TotalBytesToReceive ?? 0UL);
+                    long now = Environment.TickCount64;
+                    if (now - lastReportTick < 250 && (tot <= 0 || received < tot))
+                        return;
+
+                    lastReportTick = now;
+                    double? etaSec = null;
+                    try
                     {
-                        win.Dispatcher.Invoke(() =>
+                        DateTime estEnd = senderOp.EstimatedEndTime;
+                        if (estEnd > DateTime.Now)
+                            etaSec = (estEnd - DateTime.Now).TotalSeconds;
+                    }
+                    catch { }
+
+                    DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "En progreso", estimatedSecondsRemaining: etaSec);
+                }
+
+                void OnStateChanged(object? sender, object args)
+                {
+                    var senderOp = sender as CoreWebView2DownloadOperation ?? op;
+                    long received = senderOp.BytesReceived;
+                    long tot = (long)(senderOp.TotalBytesToReceive ?? 0UL);
+
+                    if (senderOp.State == CoreWebView2DownloadState.Completed)
+                    {
+                        DetachHandlers();
+                        long finalTotal = tot > 0 ? tot : received;
+                        DownloadManager.UpdateDownloadProgress(entry.Id, received > 0 ? received : finalTotal, finalTotal, "Completado");
+                        _ = win.Dispatcher.BeginInvoke(() =>
                         {
-                            win.ShowToast($"✅ Descarga completada: {fileName}", "Ver archivo 📂", () =>
-                            {
+                            win.UpdateDownloadsToolbarIndicator();
+                            if (win.PopupDownloads != null && win.PopupDownloads.IsOpen)
                                 win.RefreshDownloadsPopupUI();
-                                win.PopupDownloads.IsOpen = true;
+
+                            win.ShowToast($"✅ Descarga completada: {fileName}", "Abrir carpeta 📂", () =>
+                            {
+                                win.RevealFileInExplorer(resultPath);
+                            }, durationSeconds: 6);
+                        });
+                        return;
+                    }
+
+                    if (senderOp.State == CoreWebView2DownloadState.Interrupted)
+                    {
+                        var reason = senderOp.InterruptReason;
+                        if (reason == CoreWebView2DownloadInterruptReason.UserPaused && senderOp.CanResume)
+                        {
+                            DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "Pausado", canResume: true);
+                        }
+                        else if (reason == CoreWebView2DownloadInterruptReason.UserCanceled)
+                        {
+                            DetachHandlers();
+                            DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "Cancelado", "Cancelada por el usuario");
+                        }
+                        else
+                        {
+                            if (!senderOp.CanResume) DetachHandlers();
+                            string reasonLabel = FormatDownloadInterruptReason(reason);
+                            DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "Interrumpido", reasonLabel, canResume: senderOp.CanResume);
+                            _ = win.Dispatcher.BeginInvoke(() =>
+                            {
+                                win.ShowToast($"⚠️ Descarga interrumpida: {fileName} ({reasonLabel})", "Ver descargas", () =>
+                                {
+                                    win.RefreshDownloadsPopupUI();
+                                    if (win.PopupDownloads != null) win.PopupDownloads.IsOpen = true;
+                                });
                             });
+                        }
+
+                        _ = win.Dispatcher.BeginInvoke(() =>
+                        {
+                            win.UpdateDownloadsToolbarIndicator();
+                            if (win.PopupDownloads != null && win.PopupDownloads.IsOpen)
+                                win.RefreshDownloadsPopupUI();
                         });
                     }
-                };
+                }
+
+                op.BytesReceivedChanged += OnBytesReceived;
+                op.StateChanged += OnStateChanged;
             }
             catch { }
         };
@@ -1936,6 +2096,9 @@ public partial class MainWindow
                     win.LoadingProgressBar.Visibility = Visibility.Collapsed;
                     win.UpdateNavigationButtons();
                     win.UpdateCurrentTabBookmarkUI();
+                    win.UpdateShieldBadgeText();
+                    if (win.PopupShieldPanel != null && win.PopupShieldPanel.IsOpen)
+                        win.UpdateShieldPopupUI();
                 }
 
                 if (tab.VolumeBoostPercent != 100)
@@ -2235,6 +2398,8 @@ public partial class MainWindow
                 }
                 PopupOmniboxSuggestions.IsOpen = false;
                 UpdateShieldBadgeText();
+                if (PopupShieldPanel != null && PopupShieldPanel.IsOpen)
+                    UpdateShieldPopupUI();
                 LoadingProgressBar.Visibility = tab.IsLoading ? Visibility.Visible : Visibility.Collapsed;
             }
             UpdateNavigationButtons();
@@ -3403,6 +3568,35 @@ public partial class MainWindow
             CloseTab(t);
         }
     }
+
+    internal static string FormatDownloadInterruptReason(CoreWebView2DownloadInterruptReason reason) => reason switch
+    {
+        CoreWebView2DownloadInterruptReason.UserPaused => "Pausada por el usuario",
+        CoreWebView2DownloadInterruptReason.UserCanceled => "Cancelada por el usuario",
+        CoreWebView2DownloadInterruptReason.NetworkDisconnected => "Conexión perdida",
+        CoreWebView2DownloadInterruptReason.NetworkTimeout => "Tiempo de espera agotado",
+        CoreWebView2DownloadInterruptReason.NetworkServerDown => "Servidor no disponible",
+        CoreWebView2DownloadInterruptReason.NetworkInvalidRequest => "Solicitud inválida",
+        CoreWebView2DownloadInterruptReason.NetworkFailed => "Error de red",
+        CoreWebView2DownloadInterruptReason.FileNoSpace => "Espacio insuficiente en disco",
+        CoreWebView2DownloadInterruptReason.FileAccessDenied => "Acceso denegado al archivo",
+        CoreWebView2DownloadInterruptReason.FileNameTooLong => "Nombre de archivo demasiado largo",
+        CoreWebView2DownloadInterruptReason.FileTooLarge => "Archivo demasiado grande",
+        CoreWebView2DownloadInterruptReason.FileMalicious => "Bloqueado por seguridad",
+        CoreWebView2DownloadInterruptReason.FileBlockedByPolicy => "Bloqueado por directiva",
+        CoreWebView2DownloadInterruptReason.FileSecurityCheckFailed => "Falló verificación de seguridad",
+        CoreWebView2DownloadInterruptReason.FileTransientError => "Archivo en uso o error temporal",
+        CoreWebView2DownloadInterruptReason.FileFailed => "Error al escribir archivo",
+        CoreWebView2DownloadInterruptReason.ServerForbidden => "Acceso prohibido (403)",
+        CoreWebView2DownloadInterruptReason.ServerUnauthorized => "No autorizado (401)",
+        CoreWebView2DownloadInterruptReason.ServerNoRange => "El servidor no soporta reanudación",
+        CoreWebView2DownloadInterruptReason.ServerBadContent or
+        CoreWebView2DownloadInterruptReason.ServerUnexpectedResponse or
+        CoreWebView2DownloadInterruptReason.ServerContentLengthMismatch or
+        CoreWebView2DownloadInterruptReason.ServerFailed => "Error del servidor",
+        CoreWebView2DownloadInterruptReason.DownloadProcessCrashed => "Proceso de descarga detenido",
+        _ => reason.ToString()
+    };
 
     private void MenuReopenClosedTab_Click(object sender, RoutedEventArgs e)
     {

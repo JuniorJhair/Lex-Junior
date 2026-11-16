@@ -122,10 +122,18 @@ public partial class MainWindow : Window
 
         // Escuchar cambios de configuración, descargas y notificaciones
         SettingsManager.SettingsChanged += ApplySettings;
+        DownloadManager.Load();
         DownloadManager.DownloadsChanged += OnDownloadsChanged;
         NotificationManager.OnNotificationsChanged += UpdateNotificationBadge;
         ApplySettings();
+        UpdateDownloadsToolbarIndicator();
         UpdateNotificationBadge();
+        Deactivated += (_, _) => HideToast();
+        StateChanged += (_, _) =>
+        {
+            if (WindowState == WindowState.Minimized)
+                HideToast();
+        };
 
         // Callback cuando el usuario pulsa "⇱ Volver" en la Página Flotante manual
         _pipWindow.OnReturnToTabRequested = (tab) =>
@@ -228,7 +236,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            bool hasActiveDownloads = DownloadManager.GetEntries().Any(d => d.IsInProgress);
+            bool hasActiveDownloads = DownloadManager.GetActiveSummary().HasActive;
             if (hasActiveDownloads)
             {
                 var confirm = MessageBox.Show(
@@ -242,6 +250,8 @@ public partial class MainWindow : Window
                     e.Cancel = true;
                     return;
                 }
+
+                DownloadManager.CancelAllActive();
             }
         }
         catch { }
@@ -714,10 +724,40 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     // GESTOR DE ATAJOS DE TECLADO GLOBALES (UNIVERSALES)
     // ─────────────────────────────────────────────────────────────────────
+    internal bool CloseOpenToolbarPopups()
+    {
+        bool closedAny = false;
+        void ClosePopup(System.Windows.Controls.Primitives.Popup? popup)
+        {
+            if (popup != null && popup.IsOpen)
+            {
+                popup.IsOpen = false;
+                closedAny = true;
+            }
+        }
+
+        ClosePopup(PopupShieldPanel);
+        ClosePopup(PopupDownloads);
+        ClosePopup(PopupSitePermissions);
+        ClosePopup(PopupVolumeBooster);
+        ClosePopup(PopupMediaSniffer);
+        ClosePopup(PopupNotifications);
+        ClosePopup(PopupTranslate);
+        ClosePopup(PopupOmniboxSuggestions);
+        ClosePopup(PopupZoomWidget);
+        return closedAny;
+    }
+
     private async void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (IsLocked)
         {
+            return;
+        }
+
+        if (e.Key == Key.Escape && CloseOpenToolbarPopups())
+        {
+            e.Handled = true;
             return;
         }
 

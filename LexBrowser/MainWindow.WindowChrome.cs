@@ -282,6 +282,7 @@ public partial class MainWindow
     private static readonly SolidColorBrush BrushShieldOffText = CreateFrozenBrush(0x9C, 0xA3, 0xAF);
     private static readonly SolidColorBrush BrushShieldGreen = CreateFrozenBrush(0x10, 0xB9, 0x81);
     private bool _isUpdatingShieldPopupUI = false;
+    private long _lastShieldPopupClosedTick = 0;
 
     private void UpdateShieldBadgeText()
     {
@@ -329,14 +330,24 @@ public partial class MainWindow
         return null;
     }
 
-    private void BorderShieldBadge_Click(object sender, MouseButtonEventArgs e)
+    private void PopupShieldPanel_Closed(object? sender, EventArgs e)
+    {
+        _lastShieldPopupClosedTick = Environment.TickCount64;
+    }
+
+    private void BorderShieldBadge_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
         if (PopupShieldPanel == null) return;
 
+        // Evitar rebote inmediato si StaysOpen="False" acaba de cerrar el popup al hacer clic sobre el propio botón
         if (PopupShieldPanel.IsOpen)
         {
             PopupShieldPanel.IsOpen = false;
+            return;
+        }
+        if ((Environment.TickCount64 - _lastShieldPopupClosedTick) < 220)
+        {
             return;
         }
 
@@ -352,12 +363,8 @@ public partial class MainWindow
 
     private void UpdateShieldPopupCounters()
     {
-        if (_activeTab == null) return;
-        if (TxtShieldCountNetwork != null) TxtShieldCountNetwork.Text = _activeTab.BlockedNetworkCount.ToString();
-        if (TxtShieldCountStubs != null) TxtShieldCountStubs.Text = _activeTab.BlockedStubsCount.ToString();
-        if (TxtShieldCountPopups != null) TxtShieldCountPopups.Text = _activeTab.BlockedPopupsCount.ToString();
-        if (TxtShieldCountOverlays != null) TxtShieldCountOverlays.Text = (_activeTab.BlockedOverlaysCount + _activeTab.BlockedCosmeticCount + _activeTab.BlockedAdapterCount).ToString();
-        if (TxtShieldCountTelemetry != null) TxtShieldCountTelemetry.Text = _activeTab.BlockedTelemetry204Count.ToString();
+        if (ItemsShieldCounters == null) return;
+        ItemsShieldCounters.ItemsSource = ShieldModuleRegistry.BuildCounterRows(_activeTab);
     }
 
     private void UpdateShieldPopupUI()
@@ -376,7 +383,9 @@ public partial class MainWindow
 
             ChkShieldSiteEnabled.IsEnabled = hasSite && SettingsManager.Current.EnableAdBlocker;
             ChkShieldSiteEnabled.IsChecked = policy.ShieldEnabled;
-            PanelShieldSiteModules.IsEnabled = hasSite && policy.ShieldEnabled;
+            // Atenuar visualmente cuando está pausado, pero mantener los módulos interactivos para poder reactivarlos individualmente
+            PanelShieldSiteModules.IsEnabled = hasSite && SettingsManager.Current.EnableAdBlocker;
+            PanelShieldSiteModules.Opacity = !hasSite ? 0.45 : (policy.ShieldEnabled ? 1.0 : 0.55);
             BtnShieldCompatMode.IsEnabled = hasSite && SettingsManager.Current.EnableAdBlocker;
 
             if (!SettingsManager.Current.EnableAdBlocker)
@@ -406,26 +415,11 @@ public partial class MainWindow
                 TxtShieldSiteModeStatus.Foreground = BrushShieldGreen;
             }
 
-            ChkSiteModNetwork.IsChecked = policy.Network;
-            ChkSiteModStubs.IsChecked = policy.Stubs;
-            ChkSiteModPopups.IsChecked = policy.Popups;
-            ChkSiteModOverlays.IsChecked = policy.Overlays;
-            ChkSiteModCosmetic.IsChecked = policy.Cosmetic;
-            if (ChkSiteModCookieBanners != null)
+            if (ItemsShieldSiteModules != null)
             {
-                SiteShieldProfile? cookieProfile = null;
-                if (hasSite && SettingsManager.Current.Shield?.Sites != null)
-                {
-                    SettingsManager.Current.Shield.Sites.TryGetValue(domain!, out cookieProfile);
-                }
-                ChkSiteModCookieBanners.IsChecked =
-                    SettingsManager.Current.EnableCookieBannerHiding &&
-                    policy.ShieldEnabled &&
-                    !policy.IsCompatMode &&
-                    (cookieProfile?.CookieBanners ?? true);
+                ItemsShieldSiteModules.ItemsSource = ShieldModuleRegistry.BuildPopupModuleItems(
+                    domain, policy, SettingsManager.Current, hasSite);
             }
-            ChkSiteModVideoDefuser.IsChecked = policy.VideoDefuser;
-            ChkSiteModAdapter.IsChecked = policy.Adapter;
         }
         finally
         {
@@ -442,9 +436,8 @@ public partial class MainWindow
         bool enabled = ChkShieldSiteEnabled.IsChecked == true;
         if (_activeTab != null) _activeTab.TemporaryCompatMode = false;
 
-        var profile = SitePolicy.GetOrCreateSiteProfile(domain);
-        profile.Mode = enabled ? SitePolicy.ModeNormal : SitePolicy.ModeOff;
-        SettingsManager.Save();
+        // Solo cambia Mode del sitio; conserva intactos los módulos individuales guardados en Disabled
+        SitePolicy.SetSiteMode(domain, enabled ? SitePolicy.ModeNormal : SitePolicy.ModeOff, save: true);
 
         await RefreshAllTabsShieldScriptsAsync();
         UpdateShieldPopupUI();
@@ -456,20 +449,15 @@ public partial class MainWindow
         if (_isUpdatingShieldPopupUI) return;
         string? domain = GetActiveTabDomainForShield();
         if (string.IsNullOrEmpty(domain)) return;
+        if (sender is not CheckBox chk || chk.Tag is not string moduleId || string.IsNullOrWhiteSpace(moduleId))
+            return;
 
-        var profile = SitePolicy.GetOrCreateSiteProfile(domain);
-        profile.Network = ChkSiteModNetwork.IsChecked == true;
-        profile.Stubs = ChkSiteModStubs.IsChecked == true;
-        profile.Popups = ChkSiteModPopups.IsChecked == true;
-        profile.Overlays = ChkSiteModOverlays.IsChecked == true;
-        profile.Cosmetic = ChkSiteModCosmetic.IsChecked == true;
-        if (ChkSiteModCookieBanners != null)
+        if (_activeTab != null && _activeTab.TemporaryCompatMode)
         {
-            profile.CookieBanners = ChkSiteModCookieBanners.IsChecked == true;
+            _activeTab.TemporaryCompatMode = false;
         }
-        profile.VideoDefuser = ChkSiteModVideoDefuser.IsChecked == true;
-        profile.Adapter = ChkSiteModAdapter.IsChecked == true;
-        SettingsManager.Save();
+
+        SitePolicy.SetSiteModuleEnabled(domain, moduleId, chk.IsChecked == true, save: true);
 
         await RefreshAllTabsShieldScriptsAsync();
         UpdateShieldPopupUI();

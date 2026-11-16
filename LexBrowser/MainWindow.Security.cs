@@ -86,7 +86,7 @@ public partial class MainWindow
                 $"AdBlocker={s.EnableAdBlocker} | Cosmetic={s.EnableCosmeticShield} | SubframesGlobal={s.EnableWebShieldInSubframes} | " +
                 $"DiagnosticMode={ShieldLogger.DiagnosticMode}" +
                 (_activeTab != null ? $" | ActiveTabUrl={_activeTab.CurrentUri} | CompatMode={_activeTab.TemporaryCompatMode}" : "") +
-                (activePolicy.HasValue ? $" | SiteMode={activePolicy.Value.Mode} | SiteShield={activePolicy.Value.ShieldEnabled} | SiteNet={activePolicy.Value.Network} | SiteCos={activePolicy.Value.Cosmetic} | SitePopups={activePolicy.Value.Popups}" : "") +
+                LexBrowser.Core.AdBlock.ShieldModuleRegistry.BuildDiagnosticHeaderSummary(activePolicy, s) +
                 Environment.NewLine;
             string dump = header + ShieldLogger.DumpLog(tabFilter);
             int count = ShieldLogger.Count;

@@ -714,13 +714,14 @@ public partial class MainWindow
         string displayName = Path.GetFileName(targetPath);
         bool isIncog = _activeTab?.IsIncognito == true;
         var dlEntry = DownloadManager.RegisterDownload(displayName, targetPath, item.Url, item.SizeBytes, "En progreso", isIncog);
-        RefreshDownloadsPopupUI();
-        PopupDownloads.IsOpen = true;
-        ShowToast($"⬇️ Descargando: {displayName}", "Detalles ⬇", () =>
+        UpdateDownloadsToolbarIndicator();
+        if (PopupDownloads != null && PopupDownloads.IsOpen)
+            RefreshDownloadsPopupUI();
+        ShowToast($"⬇️ Descargando: {displayName}", "Ver descargas", () =>
         {
             RefreshDownloadsPopupUI();
-            PopupDownloads.IsOpen = true;
-        });
+            if (PopupDownloads != null) PopupDownloads.IsOpen = true;
+        }, durationSeconds: 4);
 
         try
         {
@@ -746,7 +747,7 @@ public partial class MainWindow
                 onProgress: (received, total) =>
                 {
                     long now = Environment.TickCount64;
-                    if (now - lastReportTick >= 200 || (total > 0 && received >= total))
+                    if (now - lastReportTick >= 250 || (total > 0 && received >= total))
                     {
                         lastReportTick = now;
                         DownloadManager.UpdateDownload(dlEntry.Id, received, total > 0 ? total : item.SizeBytes, "En progreso");
@@ -754,19 +755,19 @@ public partial class MainWindow
                 });
 
             DownloadManager.UpdateDownload(dlEntry.Id, finalSize, finalSize, "Completado");
-            ShowToast($"✅ Descarga completada: {displayName}", "Ver archivo 📂", () =>
-            {
+            UpdateDownloadsToolbarIndicator();
+            if (PopupDownloads != null && PopupDownloads.IsOpen)
                 RefreshDownloadsPopupUI();
-                PopupDownloads.IsOpen = true;
-            });
+            ShowToast($"✅ Descarga completada: {displayName}", "Abrir carpeta 📂", () => RevealFileInExplorer(targetPath), durationSeconds: 6);
         }
         catch (Exception ex)
         {
-            DownloadManager.UpdateDownload(dlEntry.Id, 0, item.SizeBytes, "Error");
-            ShowToast($"⚠️ Error al descargar: {ex.Message}", "Detalles ⬇", () =>
+            DownloadManager.UpdateDownloadProgress(dlEntry.Id, dlEntry.BytesReceived, item.SizeBytes, "Interrumpido", ex.Message);
+            UpdateDownloadsToolbarIndicator();
+            ShowToast($"⚠️ Error al descargar: {ex.Message}", "Ver descargas", () =>
             {
                 RefreshDownloadsPopupUI();
-                PopupDownloads.IsOpen = true;
+                if (PopupDownloads != null) PopupDownloads.IsOpen = true;
             });
         }
     }
