@@ -11,6 +11,8 @@ namespace LexBrowser.Core.AdBlock;
 public sealed class ShieldLogEntry
 {
     public DateTime Timestamp { get; } = DateTime.Now;
+    public DateTime LastTimestamp { get; set; }
+    public int RepeatCount { get; set; } = 1;
     public string EventType { get; set; } = string.Empty;
     public string SourceDomain { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
@@ -18,10 +20,24 @@ public sealed class ShieldLogEntry
     public string Reason { get; set; } = string.Empty;
     public string TabName { get; set; } = string.Empty;
 
+    public ShieldLogEntry()
+    {
+        LastTimestamp = Timestamp;
+    }
+
+    internal bool IsIdenticalContentTo(ShieldLogEntry other)
+        => string.Equals(EventType, other.EventType, StringComparison.Ordinal) &&
+           string.Equals(SourceDomain, other.SourceDomain, StringComparison.Ordinal) &&
+           string.Equals(Url, other.Url, StringComparison.Ordinal) &&
+           string.Equals(Frame, other.Frame, StringComparison.Ordinal) &&
+           string.Equals(Reason, other.Reason, StringComparison.Ordinal) &&
+           string.Equals(TabName, other.TabName, StringComparison.Ordinal);
+
     public override string ToString()
     {
         string tabPart = string.IsNullOrEmpty(TabName) ? "" : $"[{TabName}] ";
-        return $"[{Timestamp:HH:mm:ss.fff}] [{EventType}] {tabPart}[{Frame}] Origin: {SourceDomain} | Url: {Url} | Reason: {Reason}";
+        string repeatPart = RepeatCount > 1 ? $" (x{RepeatCount}, last={LastTimestamp:HH:mm:ss.fff})" : string.Empty;
+        return $"[{Timestamp:HH:mm:ss.fff}] [{EventType}] {tabPart}[{Frame}] Origin: {SourceDomain} | Url: {Url} | Reason: {Reason}{repeatPart}";
     }
 }
 
@@ -34,6 +50,7 @@ public static class ShieldLogger
     private const int MaxEntries = 2000;
     private static readonly Queue<ShieldLogEntry> Entries = new(MaxEntries);
     private static readonly object SyncLock = new();
+    private static ShieldLogEntry? _lastEntry;
 
     /// <summary>
     /// Cuando está desactivado (valor por defecto), omite eventos ruidosos de tráfico permitido
@@ -127,11 +144,19 @@ public static class ShieldLogger
 
         lock (SyncLock)
         {
+            if (_lastEntry != null && _lastEntry.IsIdenticalContentTo(entry))
+            {
+                _lastEntry.RepeatCount++;
+                _lastEntry.LastTimestamp = entry.Timestamp;
+                return;
+            }
+
             if (Entries.Count >= MaxEntries)
             {
                 Entries.Dequeue();
             }
             Entries.Enqueue(entry);
+            _lastEntry = entry;
         }
     }
 
@@ -151,7 +176,11 @@ public static class ShieldLogger
     /// </summary>
     public static void Clear()
     {
-        lock (SyncLock) Entries.Clear();
+        lock (SyncLock)
+        {
+            Entries.Clear();
+            _lastEntry = null;
+        }
     }
 
     /// <summary>

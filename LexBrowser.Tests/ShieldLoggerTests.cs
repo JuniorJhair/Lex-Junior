@@ -83,5 +83,31 @@ public class ShieldLoggerTests
         Assert.DoesNotContain(massiveReason, dump);
         Assert.DoesNotContain(massiveSource, dump);
     }
+
+    [Fact]
+    public void ShieldLogger_Deduplicates_Consecutive_Identical_Entries_Without_Collapsing_NonConsecutive()
+    {
+        ShieldLogger.Clear();
+
+        for (int i = 0; i < 5; i++)
+        {
+            ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "Brave network (purehost:adtng.com)", "Tab:t1");
+        }
+        Assert.Equal(1, ShieldLogger.Count);
+
+        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://cdn.tsyndicate.com/sdk/v1/p.js", "Script", "Brave network (||tsyndicate.com|)", "Tab:t1");
+        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "Brave network (purehost:adtng.com)", "Tab:t1");
+
+        Assert.Equal(3, ShieldLogger.Count);
+
+        string dump = ShieldLogger.DumpLog();
+        Assert.Contains("(x5, last=", dump, StringComparison.Ordinal);
+
+        // Clear debe limpiar _lastEntry para que la siguiente entrada idéntica vuelva a entrar normal (x1)
+        ShieldLogger.Clear();
+        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "Brave network (purehost:adtng.com)", "Tab:t1");
+        Assert.Equal(1, ShieldLogger.Count);
+        Assert.DoesNotContain("(x", ShieldLogger.DumpLog(), StringComparison.Ordinal);
+    }
 }
 

@@ -859,7 +859,7 @@ public partial class MainWindow
         {
             try
             {
-                core.AddWebResourceRequestedFilter("*", ctx);
+                core.AddWebResourceRequestedFilter("*", ctx, CoreWebView2WebResourceRequestSourceKinds.All);
             }
             catch (Exception ex)
             {
