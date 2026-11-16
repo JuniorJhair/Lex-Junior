@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using Microsoft.Web.WebView2.Core;
 using Xunit;
 
@@ -15,14 +15,15 @@ public sealed class ShieldParityComparisonTests
         => SitePolicy.Resolve(host, temporaryCompatMode: compat);
 
     [Fact]
-    public void DefaultEngineIsBraveAndNormalizeDefaultsToBrave()
+    public void DefaultEngineIsLexShieldCoreAndNormalizeAlwaysResolvesUnifiedEngine()
     {
         var fresh = new ShieldSettings();
-        Assert.Equal(ShieldSettings.EngineBrave, fresh.Engine);
-        Assert.Equal(3, fresh.Version);
-        Assert.Equal(ShieldSettings.EngineBrave, ShieldSettings.NormalizeEngine(null));
-        Assert.Equal(ShieldSettings.EngineLegacy, ShieldSettings.NormalizeEngine("legacy"));
-        Assert.Equal(ShieldSettings.EngineBrave, ShieldSettings.NormalizeEngine("brave"));
+        Assert.Equal(ShieldSettings.EngineLexShield, fresh.Engine);
+        Assert.Equal(ShieldSettings.CurrentShieldVersion, fresh.Version);
+        Assert.Equal(ShieldSettings.EngineLexShield, ShieldSettings.NormalizeEngine(null));
+        Assert.Equal(ShieldSettings.EngineLexShield, ShieldSettings.NormalizeEngine(ShieldSettings.LegacyEngineLegacyAlias));
+        Assert.Equal(ShieldSettings.EngineLexShield, ShieldSettings.NormalizeEngine(ShieldSettings.LegacyEngineBraveAlias));
+        Assert.Equal(ShieldSettings.EngineLexShield, ShieldRouter.GetConfiguredEngineName());
     }
 
     [Fact]
@@ -40,96 +41,84 @@ public sealed class ShieldParityComparisonTests
     }
 
     [Fact]
-    public void ShieldRouter_ShouldBlockUrl_RoutesAcrossBothEnginesAndPreservesIsolation()
+    public void ShieldRouter_ShouldBlockUrl_EvaluatesUnifiedEngineAndPreservesIsolation()
     {
         var adUri = new Uri("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js");
         var safeUri = new Uri("https://github.com/features");
         var policy = PolicyFor("news.example");
 
-        // Ambos motores bloquean o redirigen con stub (ShouldBlockUrl retorna false para redirect stubs 200 OK y true para bloqueos duros; probemos tracker de bloqueo duro)
         var hardBlockUri = new Uri("https://stats.g.doubleclick.net/r/collect");
-        Assert.True(ShieldRouter.ShouldBlockUrl(hardBlockUri, "news.example", policy, CoreWebView2WebResourceContext.XmlHttpRequest, ShieldSettings.EngineLegacy));
-        Assert.True(ShieldRouter.ShouldBlockUrl(hardBlockUri, "news.example", policy, CoreWebView2WebResourceContext.XmlHttpRequest, ShieldSettings.EngineBrave));
+        Assert.True(ShieldRouter.ShouldBlockUrl(hardBlockUri, "news.example", policy, CoreWebView2WebResourceContext.XmlHttpRequest));
+        Assert.False(ShieldRouter.ShouldBlockUrl(safeUri, "news.example", policy, CoreWebView2WebResourceContext.Document));
 
-        Assert.False(ShieldRouter.ShouldBlockUrl(safeUri, "news.example", policy, CoreWebView2WebResourceContext.Document, ShieldSettings.EngineLegacy));
-        Assert.False(ShieldRouter.ShouldBlockUrl(safeUri, "news.example", policy, CoreWebView2WebResourceContext.Document, ShieldSettings.EngineBrave));
-
-        // URL normal de página YT / DM jamás bloqueada por Brave
+        // URL normal de página YT / DM jamás bloqueada
         var ytWatch = new Uri("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
         var dmWatch = new Uri("https://www.dailymotion.com/video/x8abcde");
-        Assert.False(ShieldRouter.ShouldBlockUrl(ytWatch, "youtube.com", PolicyFor("youtube.com"), CoreWebView2WebResourceContext.Document, ShieldSettings.EngineBrave));
-        Assert.False(ShieldRouter.ShouldBlockUrl(dmWatch, "dailymotion.com", PolicyFor("dailymotion.com"), CoreWebView2WebResourceContext.Document, ShieldSettings.EngineBrave));
+        Assert.False(ShieldRouter.ShouldBlockUrl(ytWatch, "youtube.com", PolicyFor("youtube.com"), CoreWebView2WebResourceContext.Document));
+        Assert.False(ShieldRouter.ShouldBlockUrl(dmWatch, "dailymotion.com", PolicyFor("dailymotion.com"), CoreWebView2WebResourceContext.Document));
         _ = adUri;
     }
 
     [Fact]
-    public void ParityMatrix_YouTubeDailymotionBigSitesAndAds()
+    public void UnifiedMatrix_YouTubeDailymotionBigSitesAndAds()
     {
-        var cases = new (Uri Uri, string Origin, CoreWebView2WebResourceContext Ctx, bool ExpectIdenticalBlockState)[]
+        var cases = new (Uri Uri, string Origin, CoreWebView2WebResourceContext Ctx, bool ExpectedBlock)[]
         {
-            // YouTube aislado: comportamiento 100% idéntico entre Legacy y Brave
+            // YouTube aislado
             (new Uri("https://ads.youtube.com/api/stats"), "www.youtube.com", CoreWebView2WebResourceContext.XmlHttpRequest, true),
             (new Uri("https://www.youtube.com/pagead/viewthroughconversion/123"), "www.youtube.com", CoreWebView2WebResourceContext.XmlHttpRequest, true),
-            (new Uri("https://www.youtube.com/watch?v=abc"), "www.youtube.com", CoreWebView2WebResourceContext.Document, true),
+            (new Uri("https://www.youtube.com/watch?v=abc"), "www.youtube.com", CoreWebView2WebResourceContext.Document, false),
 
-            // Dailymotion aislado: comportamiento 100% idéntico entre Legacy y Brave (incluyendo canary nativeads.js permitido)
+            // Dailymotion aislado (incluyendo canary nativeads.js stub)
             (new Uri("https://dmads.dailymotion.com/ad"), "www.dailymotion.com", CoreWebView2WebResourceContext.XmlHttpRequest, true),
             (new Uri("https://www.dailymotion.com/nativeads.js"), "www.dailymotion.com", CoreWebView2WebResourceContext.Script, true),
-            (new Uri("https://www.dailymotion.com/embed/video/x999"), "animeyt.es", CoreWebView2WebResourceContext.Document, true),
+            (new Uri("https://www.dailymotion.com/embed/video/x999"), "animeyt.es", CoreWebView2WebResourceContext.Document, false),
 
-            // BigSites y pagos: sin falsos positivos en ambos motores
-            (new Uri("https://www.google.com/search?q=lex"), "www.google.com", CoreWebView2WebResourceContext.Document, true),
-            (new Uri("https://github.com/login"), "github.com", CoreWebView2WebResourceContext.Document, true),
-            (new Uri("https://accounts.google.com/o/oauth2/auth"), "news.example", CoreWebView2WebResourceContext.Document, true),
-            (new Uri("https://www.paypal.com/checkoutnow"), "shop.example", CoreWebView2WebResourceContext.Document, true),
+            // BigSites y pagos: sin falsos positivos
+            (new Uri("https://www.google.com/search?q=lex"), "www.google.com", CoreWebView2WebResourceContext.Document, false),
+            (new Uri("https://github.com/login"), "github.com", CoreWebView2WebResourceContext.Document, false),
+            (new Uri("https://accounts.google.com/o/oauth2/auth"), "news.example", CoreWebView2WebResourceContext.Document, false),
+            (new Uri("https://www.paypal.com/checkoutnow"), "shop.example", CoreWebView2WebResourceContext.Document, false),
 
-            // Ad networks conocidas: bloqueadas o redirigidas con stub en ambos motores
+            // Ad networks conocidas: bloqueadas o redirigidas con stub
             (new Uri("https://securepubads.g.doubleclick.net/tag/js/gpt.js"), "news.example", CoreWebView2WebResourceContext.Script, true),
             (new Uri("https://www.google-analytics.com/analytics.js"), "news.example", CoreWebView2WebResourceContext.Script, true),
         };
 
-        foreach (var (uri, origin, ctx, expectIdenticalBlockState) in cases)
+        foreach (var (uri, origin, ctx, expectedBlock) in cases)
         {
             var policy = PolicyFor(origin);
-            var legacy = ShieldRouter.EvaluateWebResource(
-                uri, origin, origin, origin, null, null, policy, ctx, engineOverride: ShieldSettings.EngineLegacy);
-            var brave = ShieldRouter.EvaluateWebResource(
-                uri, origin, origin, origin, null, null, policy, ctx, engineOverride: ShieldSettings.EngineBrave);
+            var decision = ShieldRouter.EvaluateWebResource(
+                uri, origin, origin, origin, null, null, policy, ctx);
 
-            if (expectIdenticalBlockState)
-            {
-                Assert.True(legacy.ShouldBlock == brave.ShouldBlock,
-                    $"Divergencia Legacy vs Brave en {uri} ({ctx}): Legacy={legacy.ShouldBlock} ({legacy.Reason}), Brave={brave.ShouldBlock} ({brave.Reason})");
-            }
+            Assert.True(decision.ShouldBlock == expectedBlock,
+                $"LexShield Core fallo en {uri} ({ctx}): ShouldBlock={decision.ShouldBlock} ({decision.Reason}), esperado={expectedBlock}");
         }
     }
 
     [Fact]
-    public void ParityMatrix_AnimeYtHentailaHaveBraveScriptletsWhileLegacyDoesNot()
+    public void UnifiedMatrix_AnimeYtHentailaHaveScriptletsAndAllowMainDocument()
     {
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
         var cos = data!.GetCosmeticEngine();
         var res = data.GetResourceStore();
 
-        var animeBrave = cos.EvaluateHost("animeyt.es", false, res);
-        var hentailaBrave = cos.EvaluateHost("hentaila.com", false, res);
+        var animeCos = cos.EvaluateHost("animeyt.es", false, res);
+        var hentailaCos = cos.EvaluateHost("hentaila.com", false, res);
 
-        Assert.NotEmpty(animeBrave.Scriptlets);
-        Assert.NotEmpty(hentailaBrave.Scriptlets);
+        Assert.NotEmpty(animeCos.Scriptlets);
+        Assert.NotEmpty(hentailaCos.Scriptlets);
 
-        // El documento inicial HTTPS mismo se permite cargar (sin bloquear la página), pero recibe scriptlets Brave
         var animeDocPolicy = PolicyFor("animeyt.es");
-        var animeBraveNet = ShieldRouter.EvaluateWebResource(
+        var animeNet = ShieldRouter.EvaluateWebResource(
             new Uri("https://animeyt.es/"), "animeyt.es", "animeyt.es", "animeyt.es", null, null,
-            animeDocPolicy, CoreWebView2WebResourceContext.Document, secFetchDest: "document", httpMethod: "GET",
-            engineOverride: ShieldSettings.EngineBrave);
-        Assert.False(animeBraveNet.ShouldBlock);
+            animeDocPolicy, CoreWebView2WebResourceContext.Document, secFetchDest: "document", httpMethod: "GET");
+        Assert.False(animeNet.ShouldBlock);
 
-        var hentailaBraveNet = ShieldRouter.EvaluateWebResource(
+        var hentailaNet = ShieldRouter.EvaluateWebResource(
             new Uri("https://hentaila.com/"), "hentaila.com", "hentaila.com", "hentaila.com", null, null,
-            PolicyFor("hentaila.com"), CoreWebView2WebResourceContext.Document, secFetchDest: "document", httpMethod: "GET",
-            engineOverride: ShieldSettings.EngineBrave);
-        Assert.False(hentailaBraveNet.ShouldBlock);
+            PolicyFor("hentaila.com"), CoreWebView2WebResourceContext.Document, secFetchDest: "document", httpMethod: "GET");
+        Assert.False(hentailaNet.ShouldBlock);
     }
 }

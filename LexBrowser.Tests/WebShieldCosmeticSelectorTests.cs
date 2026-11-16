@@ -1,54 +1,55 @@
 using System;
 using System.IO;
 using LexBrowser.Core.AdBlock;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using Xunit;
 
 namespace LexBrowser.Tests;
 
 public class WebShieldCosmeticSelectorTests
 {
-    // Selectores antiguos por subcadena: ocultaban "download-box", "upload-zone", "read-more", "thread-list", etc.
     [Theory]
-    [InlineData("div[class*='ad-']")]
-    [InlineData("div[id*='ad-']")]
-    [InlineData("div[class*='ads-']")]
-    [InlineData("div[id*='ads-']")]
-    [InlineData("div[class*='adv-']")]
-    [InlineData("div[id*='adv-']")]
-    [InlineData("div[class*='ad-box']")]
-    [InlineData("div[id*='ad-box']")]
-    [InlineData("div[class*='ad_box']")]
-    [InlineData("div[id*='ad_box']")]
-    [InlineData("div[class*='ad-zone']")]
-    [InlineData("div[id*='ad-zone']")]
-    [InlineData("div[class*='ad-slot']")]
-    [InlineData("div[id*='ad-slot']")]
-    [InlineData("div[class*='ad-block']")]
-    [InlineData("div[id*='ad-block']")]
-    [InlineData("div[class*='ads-holder']")]
-    [InlineData("div[class*='ad-placement']")]
-    public void BaseScript_NoLongerUsesBroadSubstringAdSelectors(string oldSelector)
+    [InlineData("download-box")]
+    [InlineData("upload-zone")]
+    [InlineData("read-more")]
+    [InlineData("thread-list")]
+    public void LexShieldCosmetic_DoesNotOverMatchBenignClassNames(string benignClass)
     {
-        Assert.DoesNotContain(oldSelector, WebShield.BaseScript);
+        var data = LexShieldData.TryGetDefault();
+        Assert.NotNull(data);
+        string css = data!.GetCosmeticEngine().QueryGenericCss(
+            "example.org",
+            new[] { benignClass },
+            Array.Empty<string>(),
+            genericHide: false,
+            SitePolicy.Resolve("example.org"));
+
+        Assert.DoesNotContain(benignClass, css, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void BaseScript_BuildsWordBoundaryAdSelectors()
+    public void WebShield_EliminatesDuplicateGenericCssAndBlanketShims()
     {
-        string script = WebShield.BaseScript;
-        Assert.Contains("const adWord", script);
-        Assert.Contains("generatedAdSelectors", script);
-        // Separadores permitidos antes del token: inicio, espacio, guion y guion bajo
-        Assert.Contains("[' ', '-', '_']", script);
+        string script = WebShield.GetVideoDefuserScript(enableVideoDefuser: true);
+        Assert.DoesNotContain("__lex_cosmetic_shield", script);
+        Assert.DoesNotContain("popMagic", script);
+        Assert.DoesNotContain("ZorDon", script);
+        Assert.DoesNotContain("vastUrl", script);
     }
 
-    [Fact]
-    public void BaseScript_HasValidJavaScriptSyntax()
+    [Theory]
+    [InlineData("bootstrap")]
+    [InlineData("defuser")]
+    public void ShieldScripts_HaveValidJavaScriptSyntax(string target)
     {
-        string tempJs = Path.Combine(Path.GetTempPath(), $"lex_webshield_syntax_{Guid.NewGuid():N}.js");
+        string js = target == "bootstrap"
+            ? LexShieldScriptletEngine.BuildBootstrapScript("syntax-check")
+            : WebShield.GetVideoDefuserScript(enableVideoDefuser: true);
+
+        string tempJs = Path.Combine(Path.GetTempPath(), $"lex_{target}_syntax_{Guid.NewGuid():N}.js");
         try
         {
-            File.WriteAllText(tempJs, WebShield.BaseScript);
+            File.WriteAllText(tempJs, js);
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "node",
@@ -61,7 +62,7 @@ public class WebShieldCosmeticSelectorTests
             Assert.NotNull(proc);
             string stderr = proc!.StandardError.ReadToEnd();
             proc.WaitForExit(5000);
-            Assert.True(proc.ExitCode == 0, $"JavaScript SyntaxError en WebShield.BaseScript:\n{stderr}");
+            Assert.True(proc.ExitCode == 0, $"JavaScript SyntaxError en {target}:\n{stderr}");
         }
         finally
         {

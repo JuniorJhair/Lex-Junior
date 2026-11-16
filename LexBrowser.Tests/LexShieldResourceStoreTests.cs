@@ -7,13 +7,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using Microsoft.Web.WebView2.Core;
 using Xunit;
 
 namespace LexBrowser.Tests;
 
-public class BraveResourceStoreTests
+public class LexShieldResourceStoreTests
 {
     private static EffectiveSitePolicy ActivePolicy(bool stubs = true, bool imaStub = true, bool network = true) => new()
     {
@@ -39,19 +39,19 @@ public class BraveResourceStoreTests
         private readonly List<(string Name, string[] Aliases, string Mime, bool IsTpl, int Perm, byte[] Bytes)> _resources = new();
 
         public void AddPureHost(string host)
-            => _pure[BraveHash.Fnv1a64(host.ToLowerInvariant())] =
-               (uint)(BraveNetworkMask.FromAllTypes | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask);
+            => _pure[LexShieldHash.Fnv1a64(host.ToLowerInvariant())] =
+               (uint)(LexShieldMask.FromAllTypes | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask);
 
-        public void AddRule(BraveNetworkMask mask, string host, string pat = "", short prio = 0, string mod = "")
+        public void AddRule(LexShieldMask mask, string host, string pat = "", short prio = 0, string mod = "")
             => _rules.Add(((uint)mask, host.ToLowerInvariant(), pat.ToLowerInvariant(), prio, mod));
 
         public void AddResource(string name, string mime, string contentUtf8, string[]? aliases = null, bool isTemplate = false, int perm = 0)
             => _resources.Add((name, aliases ?? Array.Empty<string>(), mime, isTemplate, perm, Encoding.UTF8.GetBytes(contentUtf8)));
 
-        public BraveShieldData Build()
+        public LexShieldData Build()
         {
             var blob = new List<byte>();
-            var recs = new BravePatRec[_rules.Count];
+            var recs = new LexShieldPatRec[_rules.Count];
             var fallback = new List<int>();
 
             int InternStr(string s, out int len)
@@ -67,7 +67,7 @@ public class BraveResourceStoreTests
             for (int i = 0; i < _rules.Count; i++)
             {
                 var r = _rules[i];
-                recs[i] = new BravePatRec
+                recs[i] = new LexShieldPatRec
                 {
                     Mask = r.Mask,
                     HostOff = InternStr(r.Host, out int hLen),
@@ -133,14 +133,14 @@ public class BraveResourceStoreTests
             }
 
             ms.Position = 0;
-            return BraveShieldData.LoadFromStream(ms);
+            return LexShieldData.LoadFromStream(ms);
         }
     }
 
     [Fact]
     public void RealResourceStore_LoadsAll211Resources_And_BlocksTrustedByDefault()
     {
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
 
         var store = data!.GetResourceStore();
@@ -191,31 +191,31 @@ public class BraveResourceStoreTests
         b.AddResource("high-noop.js", "application/javascript", "// high", aliases: new[] { "highjs" });
         b.AddResource("trusted-hack.js", "application/javascript", "// trusted", perm: 1);
 
-        var common = BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor |
-                     BraveNetworkMask.FromScript | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask;
+        var common = LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor |
+                     LexShieldMask.FromScript | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask;
 
         // 1. Prioridad: 10 > 2
-        b.AddRule(common | BraveNetworkMask.IsRedirect | BraveNetworkMask.IsAlsoBlockRedirect, "prio.ad", prio: 2, mod: "lowjs");
-        b.AddRule(common | BraveNetworkMask.IsRedirect, "prio.ad", prio: 10, mod: "highjs");
+        b.AddRule(common | LexShieldMask.IsRedirect | LexShieldMask.IsAlsoBlockRedirect, "prio.ad", prio: 2, mod: "lowjs");
+        b.AddRule(common | LexShieldMask.IsRedirect, "prio.ad", prio: 10, mod: "highjs");
 
         // 2. Cancelación por alias de redirect específico -> cae al de menor prioridad
-        b.AddRule(common | BraveNetworkMask.IsRedirect | BraveNetworkMask.IsAlsoBlockRedirect, "cancelone.ad", prio: 1, mod: "lowjs");
-        b.AddRule(common | BraveNetworkMask.IsRedirect, "cancelone.ad", prio: 10, mod: "highjs");
-        b.AddRule(common | BraveNetworkMask.IsException | BraveNetworkMask.IsRedirect, "cancelone.ad", mod: "high-noop.js");
+        b.AddRule(common | LexShieldMask.IsRedirect | LexShieldMask.IsAlsoBlockRedirect, "cancelone.ad", prio: 1, mod: "lowjs");
+        b.AddRule(common | LexShieldMask.IsRedirect, "cancelone.ad", prio: 10, mod: "highjs");
+        b.AddRule(common | LexShieldMask.IsException | LexShieldMask.IsRedirect, "cancelone.ad", mod: "high-noop.js");
 
         // 3. Cancelación total @@...$redirect (mod="") -> bloquea sin devolver stub
-        b.AddRule(common | BraveNetworkMask.IsRedirect | BraveNetworkMask.IsAlsoBlockRedirect, "cancelall.ad", prio: 5, mod: "highjs");
-        b.AddRule(common | BraveNetworkMask.IsException | BraveNetworkMask.IsRedirect, "cancelall.ad", mod: "");
+        b.AddRule(common | LexShieldMask.IsRedirect | LexShieldMask.IsAlsoBlockRedirect, "cancelall.ad", prio: 5, mod: "highjs");
+        b.AddRule(common | LexShieldMask.IsException | LexShieldMask.IsRedirect, "cancelall.ad", mod: "");
 
         // 4. $redirect-rule puro sin bloqueo -> Allow; con PureHost -> Redirect
-        b.AddRule(common | BraveNetworkMask.IsRedirect, "unblocked-rule.ad", prio: 5, mod: "highjs");
+        b.AddRule(common | LexShieldMask.IsRedirect, "unblocked-rule.ad", prio: 5, mod: "highjs");
         b.AddPureHost("blocked-rule.ad");
-        b.AddRule(common | BraveNetworkMask.IsRedirect, "blocked-rule.ad", prio: 5, mod: "highjs");
+        b.AddRule(common | LexShieldMask.IsRedirect, "blocked-rule.ad", prio: 5, mod: "highjs");
 
         // 5. trusted-* nunca se sirve como stub, solo bloquea
-        b.AddRule(common | BraveNetworkMask.IsRedirect | BraveNetworkMask.IsAlsoBlockRedirect, "priv.ad", prio: 20, mod: "trusted-hack.js");
+        b.AddRule(common | LexShieldMask.IsRedirect | LexShieldMask.IsAlsoBlockRedirect, "priv.ad", prio: 20, mod: "trusted-hack.js");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         var d1 = engine.EvaluateNetwork(new Uri("https://prio.ad/a.js"), "site.org", policy, CoreWebView2WebResourceContext.Script);
@@ -254,15 +254,15 @@ public class BraveResourceStoreTests
         b.AddResource("noop-vast3.xml", "text/xml", "<VAST version=\"3.0\"/>");
         b.AddResource("noop.js", "application/javascript", "// noop stub");
 
-        var mask = BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor |
-                   BraveNetworkMask.FromNetworkTypes | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask |
-                   BraveNetworkMask.IsRedirect | BraveNetworkMask.IsAlsoBlockRedirect;
+        var mask = LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor |
+                   LexShieldMask.FromNetworkTypes | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask |
+                   LexShieldMask.IsRedirect | LexShieldMask.IsAlsoBlockRedirect;
 
         b.AddRule(mask, "imasdk.googleapis.com", mod: "google-ima.js");
         b.AddRule(mask, "vast.ads.example", mod: "noop-vast3.xml");
         b.AddRule(mask, "tracker.example", mod: "noop.js");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
 
         // Normal: sirve IMA y VAST en sitios de streaming
         var dImaNormal = engine.EvaluateNetwork(new Uri("https://imasdk.googleapis.com/js/sdkloader/ima3.js"), "animeyt.es", ActivePolicy(), CoreWebView2WebResourceContext.Script);
@@ -291,9 +291,9 @@ public class BraveResourceStoreTests
     [Fact]
     public void RealCompiledBundle_ServesRedirectsForGoogleAnalyticsAndIma()
     {
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
-        var engine = new BraveNetworkEngine(() => data);
+        var engine = new LexShieldCoreEngine(() => data);
         var policy = ActivePolicy();
 
         var ga = engine.EvaluateNetwork(

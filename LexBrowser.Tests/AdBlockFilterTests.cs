@@ -199,14 +199,24 @@ public class AdBlockFilterTests
     }
 
     [Fact]
-    public void WebShield_cosmetics_and_defuser_include_enhanced_collapse_and_skip_logic()
+    public void WebShield_defuser_and_cosmetic_engine_cover_banner_hiding_and_skip_logic()
     {
-        string script = WebShield.GetInjectedScript(enableVideoDefuser: true, enableSubframes: true, enableCosmetic: true);
-        Assert.Contains("banner-container", script);
-        Assert.Contains("banner-wrapper", script);
-        Assert.Contains("ad-slot", script);
-        Assert.Contains("trySkipPreRoll", script);
-        Assert.Contains("videoAdUiSkipButton", script);
+        string defuserScript = WebShield.GetVideoDefuserScript(enableVideoDefuser: true);
+        Assert.Contains("trySkipPreRoll", defuserScript);
+        Assert.Contains("videoAdUiSkipButton", defuserScript);
+        Assert.Contains("tv.lex.local", defuserScript);
+        Assert.DoesNotContain("__lex_cosmetic_shield", defuserScript);
+
+        var data = LexBrowser.Core.AdBlock.ShieldCore.LexShieldData.TryGetDefault();
+        Assert.NotNull(data);
+        string css = data!.GetCosmeticEngine().QueryGenericCss(
+            "example.org",
+            new[] { "bannerad", "ad-slot" },
+            Array.Empty<string>(),
+            genericHide: false,
+            SitePolicy.Resolve("example.org"));
+        Assert.Contains(".bannerad", css);
+        Assert.Contains(".ad-slot", css);
     }
 
     [Fact]

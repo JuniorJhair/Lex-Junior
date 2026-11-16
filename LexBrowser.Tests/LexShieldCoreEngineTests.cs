@@ -7,13 +7,13 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using Microsoft.Web.WebView2.Core;
 using Xunit;
 
 namespace LexBrowser.Tests;
 
-public class BraveNetworkEngineTests
+public class LexShieldCoreEngineTests
 {
     private static EffectiveSitePolicy ActivePolicy(bool network = true, bool stubs = true, bool popups = true, bool ytAdapter = true) => new()
     {
@@ -39,13 +39,13 @@ public class BraveNetworkEngineTests
         private readonly Dictionary<ulong, uint> _pure = new();
         private readonly List<(uint Mask, string Host, string Pat, string[] IncDom, string[] ExcDom, string[] IncTo, string[] ExcTo, short Prio, string Mod)> _rules = new();
 
-        public void AddPureHost(string host, BraveNetworkMask mask = BraveNetworkMask.FromAllTypes | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask)
+        public void AddPureHost(string host, LexShieldMask mask = LexShieldMask.FromAllTypes | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask)
         {
-            _pure[BraveHash.Fnv1a64(host.ToLowerInvariant())] = (uint)mask;
+            _pure[LexShieldHash.Fnv1a64(host.ToLowerInvariant())] = (uint)mask;
         }
 
         public void AddPattern(
-            BraveNetworkMask mask,
+            LexShieldMask mask,
             string host = "",
             string pat = "",
             string[]? incDom = null,
@@ -64,11 +64,11 @@ public class BraveNetworkEngineTests
                 mod));
         }
 
-        public BraveShieldData Build()
+        public LexShieldData Build()
         {
             var blob = new List<byte>();
             var hashPool = new List<ulong>();
-            var recs = new BravePatRec[_rules.Count];
+            var recs = new LexShieldPatRec[_rules.Count];
             var fallback = new List<int>();
 
             int InternStr(string s, out int len)
@@ -86,7 +86,7 @@ public class BraveNetworkEngineTests
                 if (list.Length == 0) { len = 0; return 0; }
                 int off = hashPool.Count;
                 foreach (var d in list)
-                    hashPool.Add(BraveHash.Fnv1a64(d.ToLowerInvariant()));
+                    hashPool.Add(LexShieldHash.Fnv1a64(d.ToLowerInvariant()));
                 len = (ushort)list.Length;
                 return off;
             }
@@ -102,7 +102,7 @@ public class BraveNetworkEngineTests
                 int itOff = InternHashes(r.IncTo, out ushort itLen);
                 int etOff = InternHashes(r.ExcTo, out ushort etLen);
 
-                recs[i] = new BravePatRec
+                recs[i] = new LexShieldPatRec
                 {
                     Mask = r.Mask,
                     HostOff = hOff,
@@ -162,7 +162,7 @@ public class BraveNetworkEngineTests
             }
 
             ms.Position = 0;
-            return BraveShieldData.LoadFromStream(ms);
+            return LexShieldData.LoadFromStream(ms);
         }
     }
 
@@ -171,7 +171,7 @@ public class BraveNetworkEngineTests
     {
         var b = new SyntheticLexBuilder();
         b.AddPureHost("tracker.example");
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         Assert.True(engine.EvaluateNetwork(new Uri("https://tracker.example/p.js"), "news.org", policy, CoreWebView2WebResourceContext.Script).ShouldBlock);
@@ -186,21 +186,21 @@ public class BraveNetworkEngineTests
         // Normal block + exception -> allowed
         b.AddPureHost("norm.ad");
         b.AddPattern(
-            BraveNetworkMask.IsException | BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor |
-            BraveNetworkMask.FromAllTypes | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsException | LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor |
+            LexShieldMask.FromAllTypes | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask,
             host: "norm.ad");
 
         // $important block + exception -> blocked!
         b.AddPattern(
-            BraveNetworkMask.IsImportant | BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor |
-            BraveNetworkMask.FromAllTypes | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsImportant | LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor |
+            LexShieldMask.FromAllTypes | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask,
             host: "imp.ad");
         b.AddPattern(
-            BraveNetworkMask.IsException | BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor |
-            BraveNetworkMask.FromAllTypes | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsException | LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor |
+            LexShieldMask.FromAllTypes | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask,
             host: "imp.ad");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         var dNorm = engine.EvaluateNetwork(new Uri("https://imp.ad/x.js"), "site.org", policy, CoreWebView2WebResourceContext.Script);
@@ -217,11 +217,11 @@ public class BraveNetworkEngineTests
         var b = new SyntheticLexBuilder();
         b.AddPureHost("ads.site.com");
         b.AddPattern(
-            BraveNetworkMask.IsException | BraveNetworkMask.IsGenericHide | BraveNetworkMask.IsHostnameAnchor |
-            BraveNetworkMask.IsRightAnchor | BraveNetworkMask.FromNetworkTypes | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsException | LexShieldMask.IsGenericHide | LexShieldMask.IsHostnameAnchor |
+            LexShieldMask.IsRightAnchor | LexShieldMask.FromNetworkTypes | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask,
             host: "site.com");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         Assert.True(engine.IsGenericHideEnabled(new Uri("https://www.site.com/article"), "www.site.com"));
@@ -236,16 +236,16 @@ public class BraveNetworkEngineTests
     {
         var b = new SyntheticLexBuilder();
         b.AddPattern(
-            BraveNetworkMask.IsRedirect | BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor |
-            BraveNetworkMask.FromScript | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsRedirect | LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor |
+            LexShieldMask.FromScript | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask,
             host: "onlyrule.example", mod: "noopjs");
         b.AddPureHost("blocked.example");
         b.AddPattern(
-            BraveNetworkMask.IsException | BraveNetworkMask.IsRedirect | BraveNetworkMask.IsHostnameAnchor |
-            BraveNetworkMask.IsRightAnchor | BraveNetworkMask.FromScript | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsException | LexShieldMask.IsRedirect | LexShieldMask.IsHostnameAnchor |
+            LexShieldMask.IsRightAnchor | LexShieldMask.FromScript | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask,
             host: "blocked.example", mod: "noopjs");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         // $redirect-rule por sí sola no bloquea
@@ -260,14 +260,14 @@ public class BraveNetworkEngineTests
         var b = new SyntheticLexBuilder();
         // ||ad*.cdn.net/b^?v=*
         b.AddPattern(
-            BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsHostWildcard | BraveNetworkMask.IsLeftAnchor |
-            BraveNetworkMask.IsRegex | BraveNetworkMask.FromScript | BraveNetworkMask.ThirdParty | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsHostnameAnchor | LexShieldMask.IsHostWildcard | LexShieldMask.IsLeftAnchor |
+            LexShieldMask.IsRegex | LexShieldMask.FromScript | LexShieldMask.ThirdParty | LexShieldMask.FromSchemeMask,
             host: "ad", pat: "*.cdn.net/b^v=");
 
         // ||beacon.org^$method=post,domain=shop.*|~sub.shop.org,denyallow=ok.beacon.org
         b.AddPattern(
-            BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor | BraveNetworkMask.FromPing |
-            BraveNetworkMask.FromPost | BraveNetworkMask.ThirdParty | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor | LexShieldMask.FromPing |
+            LexShieldMask.FromPost | LexShieldMask.ThirdParty | LexShieldMask.FromSchemeMask,
             host: "beacon.org",
             incDom: new[] { "shop.*" },
             excDom: new[] { "sub.shop.org" },
@@ -275,11 +275,11 @@ public class BraveNetworkEngineTests
 
         // |https://strict.org/px.gif|
         b.AddPattern(
-            BraveNetworkMask.IsLeftAnchor | BraveNetworkMask.IsRightAnchor | BraveNetworkMask.FromImage |
-            BraveNetworkMask.PartyMask | BraveNetworkMask.FromHttps,
+            LexShieldMask.IsLeftAnchor | LexShieldMask.IsRightAnchor | LexShieldMask.FromImage |
+            LexShieldMask.PartyMask | LexShieldMask.FromHttps,
             pat: "https://strict.org/px.gif");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         Assert.True(engine.EvaluateNetwork(new Uri("https://ad9.cdn.net/b?v=1"), "host.org", policy, CoreWebView2WebResourceContext.Script).ShouldBlock);
@@ -299,10 +299,10 @@ public class BraveNetworkEngineTests
     public void FetchMapsToXhr_And_SecFetchDestDistinguishesSubdocument()
     {
         var b = new SyntheticLexBuilder();
-        b.AddPureHost("xhr.ad", BraveNetworkMask.FromXmlHttpRequest | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask);
-        b.AddPureHost("frame.ad", BraveNetworkMask.FromSubdocument | BraveNetworkMask.PartyMask | BraveNetworkMask.FromSchemeMask);
+        b.AddPureHost("xhr.ad", LexShieldMask.FromXmlHttpRequest | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask);
+        b.AddPureHost("frame.ad", LexShieldMask.FromSubdocument | LexShieldMask.PartyMask | LexShieldMask.FromSchemeMask);
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         Assert.True(engine.EvaluateNetwork(new Uri("https://xhr.ad/api"), "site.org", policy, CoreWebView2WebResourceContext.Fetch).ShouldBlock);
@@ -315,11 +315,11 @@ public class BraveNetworkEngineTests
     {
         var b = new SyntheticLexBuilder();
         b.AddPattern(
-            BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor | BraveNetworkMask.FromPopup |
-            BraveNetworkMask.ThirdParty | BraveNetworkMask.FromSchemeMask,
+            LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor | LexShieldMask.FromPopup |
+            LexShieldMask.ThirdParty | LexShieldMask.FromSchemeMask,
             host: "pop.evil");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         Assert.False(engine.EvaluateNetwork(new Uri("https://pop.evil/open"), "anime.org", policy, CoreWebView2WebResourceContext.Script).ShouldBlock);
@@ -340,7 +340,7 @@ public class BraveNetworkEngineTests
         b.AddPureHost("stripe.com");
         b.AddPureHost("paypal.com");
 
-        var engine = new BraveNetworkEngine(() => b.Build());
+        var engine = new LexShieldCoreEngine(() => b.Build());
         var policy = ActivePolicy();
 
         Assert.False(engine.EvaluateNetwork(new Uri("https://www.youtube.com/watch?v=1"), "www.youtube.com", policy, CoreWebView2WebResourceContext.Script).ShouldBlock);
@@ -354,67 +354,61 @@ public class BraveNetworkEngineTests
     }
 
     [Fact]
-    public void ShieldRouter_RoutesYouTubeAndDailymotionToIsolatedLegacyEvenInBraveMode()
+    public void ShieldRouter_RoutesYouTubeAndDailymotionToIsolatedPathEvenInUnifiedMode()
     {
         var b = new SyntheticLexBuilder();
-        b.AddPureHost("custom-brave-only-block.com");
-        ShieldRouter.SetBraveEngineForTests(new BraveNetworkEngine(() => b.Build()));
+        b.AddPureHost("custom-lexshield-block.com");
+        ShieldRouter.SetCoreEngineForTests(new LexShieldCoreEngine(() => b.Build()));
         try
         {
             var policy = ActivePolicy();
 
-            // Motor Brave bloquea dominio general cuando engineOverride="Brave"
+            // Motor unificado bloquea dominio general
             Assert.True(ShieldRouter.EvaluateWebResource(
-                new Uri("https://custom-brave-only-block.com/ad.js"),
+                new Uri("https://custom-lexshield-block.com/ad.js"),
                 "news.org", "news.org", "news.org", "https://news.org", "",
-                policy, CoreWebView2WebResourceContext.Script, engineOverride: ShieldSettings.EngineBrave).ShouldBlock);
+                policy, CoreWebView2WebResourceContext.Script).ShouldBlock);
 
-            // Motor Legacy no bloquea custom-brave-only-block.com
-            Assert.False(ShieldRouter.EvaluateWebResource(
-                new Uri("https://custom-brave-only-block.com/ad.js"),
-                "news.org", "news.org", "news.org", "https://news.org", "",
-                policy, CoreWebView2WebResourceContext.Script, engineOverride: ShieldSettings.EngineLegacy).ShouldBlock);
-
-            // Dailymotion usa DailymotionRules aislado incluso en modo Brave: canary + dmads bloqueado, dmcdn permitido
+            // Dailymotion usa DailymotionRules aislado bajo el pipeline único: canary + dmads bloqueado, dmcdn permitido
             var dmCanary = ShieldRouter.EvaluateWebResource(
                 new Uri("https://www.dailymotion.com/nativeads.js"),
                 "www.dailymotion.com", "dailymotion.com", "www.dailymotion.com", "https://www.dailymotion.com/video/x", "",
-                policy, CoreWebView2WebResourceContext.Script, engineOverride: ShieldSettings.EngineBrave);
+                policy, CoreWebView2WebResourceContext.Script);
             Assert.True(dmCanary.IsRedirectStub);
             Assert.Contains("__NATIVEADS_CANARY__", Encoding.UTF8.GetString(dmCanary.RedirectBytes));
 
             Assert.True(ShieldRouter.EvaluateWebResource(
                 new Uri("https://dmads.dailymotion.com/banner.js"),
                 "www.dailymotion.com", "dailymotion.com", "www.dailymotion.com", "https://www.dailymotion.com/video/x", "",
-                policy, CoreWebView2WebResourceContext.Script, engineOverride: ShieldSettings.EngineBrave).ShouldBlock);
+                policy, CoreWebView2WebResourceContext.Script).ShouldBlock);
 
             Assert.False(ShieldRouter.EvaluateWebResource(
                 new Uri("https://vod3.dmcdn.net/manifest.m3u8"),
                 "www.dailymotion.com", "dailymotion.com", "www.dailymotion.com", "https://www.dailymotion.com/video/x", "",
-                policy, CoreWebView2WebResourceContext.Fetch, engineOverride: ShieldSettings.EngineBrave).ShouldBlock);
+                policy, CoreWebView2WebResourceContext.Fetch).ShouldBlock);
 
-            // YouTube: si YouTubeAdapter=false, permite tráfico aunque engineOverride="Brave"
+            // YouTube: si YouTubeAdapter=false, permite tráfico en la ruta aislada
             var ytOffPolicy = ActivePolicy(ytAdapter: false);
             Assert.False(ShieldRouter.EvaluateWebResource(
                 new Uri("https://www.youtube.com/youtubei/v1/player/ad_break"),
                 "www.youtube.com", "youtube.com", "www.youtube.com", "https://www.youtube.com/watch?v=1", "",
-                ytOffPolicy, CoreWebView2WebResourceContext.Fetch, engineOverride: ShieldSettings.EngineBrave).ShouldBlock);
+                ytOffPolicy, CoreWebView2WebResourceContext.Fetch).ShouldBlock);
         }
         finally
         {
-            ShieldRouter.SetBraveEngineForTests(null);
+            ShieldRouter.SetCoreEngineForTests(null);
         }
     }
 
     [Fact]
     public void RealCompiledBundle_LoadsCleanly_BlocksKnownTrackers_ProtectsSafeSites()
     {
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
         Assert.True(data!.PureHashes.Length > 95_000, $"Expected >95k pure hosts, got {data.PureHashes.Length}");
         Assert.True(data.PatternRules.Length > 20_000, $"Expected >20k pattern rules, got {data.PatternRules.Length}");
 
-        var engine = new BraveNetworkEngine(() => data);
+        var engine = new LexShieldCoreEngine(() => data);
         var policy = ActivePolicy();
 
         Assert.True(engine.EvaluateNetwork(new Uri("https://securepubads.g.doubleclick.net/tag/js/gpt.js"), "news.example", policy, CoreWebView2WebResourceContext.Script).ShouldBlock);

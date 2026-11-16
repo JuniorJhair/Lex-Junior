@@ -390,7 +390,8 @@ public class TvModuleTests
 
         // Escudos no inyectan lógica sobre tv.lex.local
         Assert.Contains("tv.lex.local", CookieBannerShield.BaseScript);
-        Assert.Contains("tv.lex.local", WebShield.BaseScript);
+        Assert.Contains("tv.lex.local", WebShield.VideoPlayerDefuserScript);
+        Assert.Contains("tv.lex.local", LexBrowser.Core.AdBlock.ShieldCore.LexShieldScriptletEngine.BootstrapScript);
     }
 
     [Fact]

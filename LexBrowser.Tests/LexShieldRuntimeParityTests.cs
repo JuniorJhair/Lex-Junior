@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using LexBrowser.UI.Models;
 using Microsoft.Web.WebView2.Core;
 using Xunit;
@@ -14,12 +14,12 @@ using Xunit;
 namespace LexBrowser.Tests;
 
 [Collection("SettingsCollection")]
-public sealed class BraveV2RuntimeParityTests
+public sealed class LexShieldRuntimeParityTests
 {
     private static EffectiveSitePolicy NormalPolicy(string host = "example.com")
         => SitePolicy.Resolve(host, temporaryCompatMode: false);
 
-    private static (BraveShieldData Data, BraveNetworkEngine Engine) BuildSyntheticData(
+    private static (LexShieldData Data, LexShieldCoreEngine Engine) BuildSyntheticData(
         (uint Mask, string Host, string Pat, string Mod, string[]? IncDom, string[]? ExcDom)[]? cspDefs = null,
         (uint Mask, string Host, string Pat, string Mod, string[]? IncDom, string[]? ExcDom)[]? regexDefs = null)
     {
@@ -42,15 +42,15 @@ public sealed class BraveV2RuntimeParityTests
                 return (0, 0);
             int off = pool.Count;
             foreach (string d in doms)
-                pool.Add(BraveHash.Fnv1a64(d.ToLowerInvariant().AsSpan()));
+                pool.Add(LexShieldHash.Fnv1a64(d.ToLowerInvariant().AsSpan()));
             return (off, (ushort)doms.Length);
         }
 
-        BravePatRec[] BuildRecs((uint Mask, string Host, string Pat, string Mod, string[]? IncDom, string[]? ExcDom)[]? defs)
+        LexShieldPatRec[] BuildRecs((uint Mask, string Host, string Pat, string Mod, string[]? IncDom, string[]? ExcDom)[]? defs)
         {
             if (defs == null || defs.Length == 0)
-                return Array.Empty<BravePatRec>();
-            var arr = new BravePatRec[defs.Length];
+                return Array.Empty<LexShieldPatRec>();
+            var arr = new LexShieldPatRec[defs.Length];
             for (int i = 0; i < defs.Length; i++)
             {
                 var d = defs[i];
@@ -59,7 +59,7 @@ public sealed class BraveV2RuntimeParityTests
                 var (mOff, mLen) = AddStr(d.Mod);
                 var (idOff, idLen) = AddDoms(d.IncDom);
                 var (edOff, edLen) = AddDoms(d.ExcDom);
-                arr[i] = new BravePatRec
+                arr[i] = new LexShieldPatRec
                 {
                     Mask = d.Mask,
                     HostOff = hOff,
@@ -79,42 +79,42 @@ public sealed class BraveV2RuntimeParityTests
 
         var cspRecs = BuildRecs(cspDefs);
         var rgxRecs = BuildRecs(regexDefs);
-        var data = BraveShieldData.CreateForTests(
+        var data = LexShieldData.CreateForTests(
             strBlob: blob.ToArray(),
             hashPool: pool.ToArray(),
             cspRules: cspRecs,
             regexRules: rgxRecs);
-        return (data, new BraveNetworkEngine(() => data));
+        return (data, new LexShieldCoreEngine(() => data));
     }
 
     [Fact]
     public void RealBraveLex_CompilesAllRegexAndCspRegexRulesWithoutError()
     {
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
 
-        BravePatRec[] regexRules = data!.GetRegexRules();
+        LexShieldPatRec[] regexRules = data!.GetRegexRules();
         Assert.NotEmpty(regexRules);
 
         for (int i = 0; i < regexRules.Length; i++)
         {
             ref readonly var rec = ref regexRules[i];
             string pat = rec.PatLen > 0 ? Encoding.UTF8.GetString(data.StrBlob, rec.PatOff, rec.PatLen) : string.Empty;
-            bool matchCase = (rec.Mask & (uint)BraveNetworkMask.IsMatchCase) != 0;
-            Assert.NotNull(BraveShieldData.TryCompileRegex(pat, matchCase));
+            bool matchCase = (rec.Mask & (uint)LexShieldMask.IsMatchCase) != 0;
+            Assert.NotNull(LexShieldData.TryCompileRegex(pat, matchCase));
         }
 
-        BravePatRec[] cspRules = data.GetCspRules();
+        LexShieldPatRec[] cspRules = data.GetCspRules();
         Assert.NotEmpty(cspRules);
 
         for (int i = 0; i < cspRules.Length; i++)
         {
             ref readonly var rec = ref cspRules[i];
-            if ((rec.Mask & (uint)BraveNetworkMask.IsFullRegex) != 0)
+            if ((rec.Mask & (uint)LexShieldMask.IsFullRegex) != 0)
             {
                 string pat = rec.PatLen > 0 ? Encoding.UTF8.GetString(data.StrBlob, rec.PatOff, rec.PatLen) : string.Empty;
-                bool matchCase = (rec.Mask & (uint)BraveNetworkMask.IsMatchCase) != 0;
-                Assert.NotNull(BraveShieldData.TryCompileRegex(pat, matchCase));
+                bool matchCase = (rec.Mask & (uint)LexShieldMask.IsMatchCase) != 0;
+                Assert.NotNull(LexShieldData.TryCompileRegex(pat, matchCase));
             }
         }
     }
@@ -122,7 +122,7 @@ public sealed class BraveV2RuntimeParityTests
     [Fact]
     public void RealBraveLex_IncludesEasyListSpanishRulesForHentailaAndAnimeyt()
     {
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
         var cos = data!.GetCosmeticEngine();
         var res = data.GetResourceStore();
@@ -132,7 +132,7 @@ public sealed class BraveV2RuntimeParityTests
         Assert.Contains(hentaila.Scriptlets, s => s.Contains("popMagic", StringComparison.OrdinalIgnoreCase));
 
         // Reglas de EasyList Spanish para animeyt.es: regex de dominio 3p (>=8 alnum + .com) y ||truepush.com^$third-party
-        var engine = new BraveNetworkEngine(() => data);
+        var engine = new LexShieldCoreEngine(() => data);
         var policy = NormalPolicy("animeyt.es");
         var animeRegexBlock = engine.EvaluateNetwork(
             new Uri("https://abcdefgh12.com/pop.js"),
@@ -159,20 +159,20 @@ public sealed class BraveV2RuntimeParityTests
     [Fact]
     public void CspRules_MergeExceptionsImportantAndSandboxPopupEnforcement()
     {
-        uint baseDoc = (uint)(BraveNetworkMask.FromDocument | BraveNetworkMask.FromSubdocument |
-                              BraveNetworkMask.FirstParty | BraveNetworkMask.ThirdParty |
-                              BraveNetworkMask.FromHttp | BraveNetworkMask.FromHttps |
-                              BraveNetworkMask.IsHostnameAnchor | BraveNetworkMask.IsRightAnchor);
+        uint baseDoc = (uint)(LexShieldMask.FromDocument | LexShieldMask.FromSubdocument |
+                              LexShieldMask.FirstParty | LexShieldMask.ThirdParty |
+                              LexShieldMask.FromHttp | LexShieldMask.FromHttps |
+                              LexShieldMask.IsHostnameAnchor | LexShieldMask.IsRightAnchor);
 
         var (data, engine) = BuildSyntheticData(cspDefs: new[]
         {
             (baseDoc, "stream.example", "", "script-src 'self'", (string[]?)null, (string[]?)null),
             (baseDoc, "stream.example", "", "sandbox allow-forms allow-same-origin allow-scripts", (string[]?)null, (string[]?)null),
-            (baseDoc | (uint)BraveNetworkMask.IsException, "stream.example", "", "script-src 'self'", (string[]?)null, (string[]?)null),
-            (baseDoc | (uint)BraveNetworkMask.IsImportant, "stream.example", "", "worker-src 'none'", (string[]?)null, (string[]?)null),
-            (baseDoc | (uint)BraveNetworkMask.IsException, "allowall.example", "", "", (string[]?)null, (string[]?)null),
+            (baseDoc | (uint)LexShieldMask.IsException, "stream.example", "", "script-src 'self'", (string[]?)null, (string[]?)null),
+            (baseDoc | (uint)LexShieldMask.IsImportant, "stream.example", "", "worker-src 'none'", (string[]?)null, (string[]?)null),
+            (baseDoc | (uint)LexShieldMask.IsException, "allowall.example", "", "", (string[]?)null, (string[]?)null),
             (baseDoc, "allowall.example", "", "script-src 'none'", (string[]?)null, (string[]?)null),
-            (baseDoc | (uint)BraveNetworkMask.IsImportant, "allowall.example", "", "worker-src 'none'", (string[]?)null, (string[]?)null),
+            (baseDoc | (uint)LexShieldMask.IsImportant, "allowall.example", "", "worker-src 'none'", (string[]?)null, (string[]?)null),
         });
 
         var streamPolicy = NormalPolicy("stream.example");
@@ -215,20 +215,20 @@ public sealed class BraveV2RuntimeParityTests
     [Fact]
     public void FullRegexRules_RespectMatchCasePrefilterAndPopupSafeFallback()
     {
-        uint netScript = (uint)(BraveNetworkMask.FromScript | BraveNetworkMask.IsFullRegex |
-                                BraveNetworkMask.FirstParty | BraveNetworkMask.ThirdParty |
-                                BraveNetworkMask.FromHttp | BraveNetworkMask.FromHttps);
-        uint netPopup = (uint)(BraveNetworkMask.FromPopup | BraveNetworkMask.IsFullRegex |
-                               BraveNetworkMask.FirstParty | BraveNetworkMask.ThirdParty |
-                               BraveNetworkMask.FromHttp | BraveNetworkMask.FromHttps);
-        uint docExc = (uint)(BraveNetworkMask.FromDocument | BraveNetworkMask.FromPopup |
-                             BraveNetworkMask.IsException | BraveNetworkMask.IsFullRegex |
-                             BraveNetworkMask.FirstParty | BraveNetworkMask.ThirdParty |
-                             BraveNetworkMask.FromHttp | BraveNetworkMask.FromHttps);
+        uint netScript = (uint)(LexShieldMask.FromScript | LexShieldMask.IsFullRegex |
+                                LexShieldMask.FirstParty | LexShieldMask.ThirdParty |
+                                LexShieldMask.FromHttp | LexShieldMask.FromHttps);
+        uint netPopup = (uint)(LexShieldMask.FromPopup | LexShieldMask.IsFullRegex |
+                               LexShieldMask.FirstParty | LexShieldMask.ThirdParty |
+                               LexShieldMask.FromHttp | LexShieldMask.FromHttps);
+        uint docExc = (uint)(LexShieldMask.FromDocument | LexShieldMask.FromPopup |
+                             LexShieldMask.IsException | LexShieldMask.IsFullRegex |
+                             LexShieldMask.FirstParty | LexShieldMask.ThirdParty |
+                             LexShieldMask.FromHttp | LexShieldMask.FromHttps);
 
         var (_, engine) = BuildSyntheticData(regexDefs: new[]
         {
-            (netScript | (uint)BraveNetworkMask.IsMatchCase, "sensitivescript", @"SensitiveScript/[0-9]+\.js$", "", new[] { "site.example" }, (string[]?)null),
+            (netScript | (uint)LexShieldMask.IsMatchCase, "sensitivescript", @"SensitiveScript/[0-9]+\.js$", "", new[] { "site.example" }, (string[]?)null),
             (netPopup, "rotpop-", @"^https?://[a-z0-9.-]+/rotpop-[0-9]+\.html$", "", (string[]?)null, (string[]?)null),
             (docExc, "trusted-pop.example", @"^https?://trusted-pop\.example/", "", (string[]?)null, (string[]?)null),
         });
@@ -289,7 +289,7 @@ public sealed class BraveV2RuntimeParityTests
         for (int i = 0; i < 45; i++)
             selectors.Add($".ad-slot-{i}");
 
-        string css = BraveCosmeticEngine.FormatHideCssChunks(selectors, maxBatchCount: 20);
+        string css = LexShieldCosmeticEngine.FormatHideCssChunks(selectors, maxBatchCount: 20);
         string[] lines = css.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(3, lines.Length);
         Assert.EndsWith("{display:none!important;}", lines[0]);
@@ -353,7 +353,7 @@ public sealed class BraveV2RuntimeParityTests
         bool origModCosmetic = s.Shield.Modules.Cosmetic;
         bool origSubframes = s.EnableWebShieldInSubframes;
         bool origModSubframes = s.Shield.Modules.Subframes;
-        s.Shield.Engine = ShieldSettings.EngineBrave;
+        s.Shield.Engine = ShieldSettings.EngineLexShield;
         s.EnableAdBlocker = true;
         s.Shield.Enabled = true;
         s.EnableCosmeticShield = true;
@@ -364,7 +364,7 @@ public sealed class BraveV2RuntimeParityTests
         try
         {
             Uri? activeMain = new Uri("https://hentaila.com/ver/1");
-            var bridge = new BraveBridgeHostObject(
+            var bridge = new LexShieldBridgeHostObject(
                 "secret-tok",
                 () => activeMain,
                 () => false);
@@ -397,20 +397,20 @@ public sealed class BraveV2RuntimeParityTests
             }
 
             // En Modo Compatible sí se omiten subframes en Brave
-            var compatBridge = new BraveBridgeHostObject("secret-tok", () => activeMain, () => true);
+            var compatBridge = new LexShieldBridgeHostObject("secret-tok", () => activeMain, () => true);
             using (var blankFrameCompat = JsonDocument.Parse(compatBridge.GetDocumentPlanJson("secret-tok", "about:blank", "https://hentaila.com/ver/1", false)))
             {
                 Assert.False(blankFrameCompat.RootElement.GetProperty("enabled").GetBoolean());
             }
 
-            // Fallo en delegado no se traga en silencio: registra BRAVE_BRIDGE_PLAN_ERROR en ShieldLogger
+            // Fallo en delegado no se traga en silencio: registra LEXSHIELD_BRIDGE_PLAN_ERROR en ShieldLogger
             ShieldLogger.Clear();
-            var brokenBridge = new BraveBridgeHostObject("secret-tok", () => throw new InvalidOperationException("boom_uri"), () => false);
+            var brokenBridge = new LexShieldBridgeHostObject("secret-tok", () => throw new InvalidOperationException("boom_uri"), () => false);
             using (var brokenDoc = JsonDocument.Parse(brokenBridge.GetDocumentPlanJson("secret-tok", "https://hentaila.com/", "", true)))
             {
                 Assert.False(brokenDoc.RootElement.GetProperty("enabled").GetBoolean());
             }
-            Assert.Contains("BRAVE_BRIDGE_PLAN_ERROR", ShieldLogger.DumpLog(), StringComparison.Ordinal);
+            Assert.Contains("LEXSHIELD_BRIDGE_PLAN_ERROR", ShieldLogger.DumpLog(), StringComparison.Ordinal);
 
             // Aislamiento estricto: YouTube, Dailymotion y about:blank bajo Dailymotion jamás reciben Brave
             activeMain = new Uri("https://www.dailymotion.com/video/x123");
@@ -439,7 +439,7 @@ public sealed class BraveV2RuntimeParityTests
     [Fact]
     public void NodeVm_BootstrapScript_RunsSyncPlanDefersStyleWaitForHeadAndSupportsIframes()
     {
-        string js = BraveScriptletEngine.BuildBootstrapScript("vm-tok");
+        string js = LexShieldScriptletEngine.BuildBootstrapScript("vm-tok");
 
         // 1. Verificar sintaxis limpia con node --check + VM con head inicialmente null
         string tempJs = Path.Combine(Path.GetTempPath(), $"lex_boot_{Guid.NewGuid():N}.js");
@@ -523,7 +523,7 @@ function runScenario(opts) {
               QueryCosmeticsJson(tok, href, parentHref, isTop, initial, clsJson, idJson) {
                 queries.push({ href, parentHref, isTop, initial });
                 return JSON.stringify({
-                  type: 'brave_cosmetic_apply',
+                  type: 'lex_shield_cosmetic_apply',
                   host: 'hentaila.com',
                   ghide: false,
                   css: '.banner-hit{display:none!important;}\n.other-hit{display:none!important;}'
@@ -572,7 +572,7 @@ function runScenario(opts) {
     ranBeforeHead: ranBeforeHead,
     headChildren: headEl.children.map(c => ({ tag: c.tagName, id: c.id || '', httpEquiv: c.httpEquiv || '', content: c.content || '', text: c.textContent || '' })),
     windowOpenBlocked: sandbox.window.open('https://pop.example') === null,
-    diag: sandbox.__lexBraveDiag || null,
+    diag: sandbox.__lexShieldDiag || null,
     queries,
     posted
   };
@@ -633,16 +633,16 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                     c.GetProperty("httpEquiv").GetString() == "Content-Security-Policy" &&
                     c.GetProperty("content").GetString() == "script-src 'self'")
                     hasCspMeta = true;
-                if (c.GetProperty("id").GetString() == "lex-brave-host" &&
+                if (c.GetProperty("id").GetString() == "lex-shield-host" &&
                     (c.GetProperty("text").GetString() ?? "").Contains("#onhsl"))
                     hasHostStyle = true;
-                if (c.GetProperty("id").GetString() == "lex-brave-gen" &&
+                if (c.GetProperty("id").GetString() == "lex-shield-gen" &&
                     (c.GetProperty("text").GetString() ?? "").Contains(".banner-hit"))
                     hasGenStyle = true;
             }
             Assert.True(hasCspMeta, "Missing CSP <meta> inserted when head appeared");
-            Assert.True(hasHostStyle, "Missing #lex-brave-host after null-head delay (bug fix verification)");
-            Assert.True(hasGenStyle, "Missing #lex-brave-gen cosmetic CSS");
+            Assert.True(hasHostStyle, "Missing #lex-shield-host after null-head delay (bug fix verification)");
+            Assert.True(hasGenStyle, "Missing #lex-shield-gen cosmetic CSS");
 
             var subRes = outDoc.RootElement.GetProperty("subRes");
             Assert.NotEmpty(subRes.GetProperty("queries").EnumerateArray());
@@ -651,7 +651,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
             var fbRes = outDoc.RootElement.GetProperty("fbRes");
             Assert.False(fbRes.GetProperty("windowOpenBlocked").GetBoolean());
             Assert.Contains(fbRes.GetProperty("posted").EnumerateArray(),
-                m => m.GetProperty("type").GetString() == "brave_cosmetic_query");
+                m => m.GetProperty("type").GetString() == "lex_shield_cosmetic_query");
         }
         finally
         {
@@ -683,7 +683,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
         var s = SettingsManager.Current;
         string origEngine = s.Shield.Engine;
         bool origDiag = ShieldLogger.DiagnosticMode;
-        s.Shield.Engine = ShieldSettings.EngineBrave;
+        s.Shield.Engine = ShieldSettings.EngineLexShield;
         ShieldLogger.DiagnosticMode = true;
 
         try
@@ -702,10 +702,10 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                 resourceContext: CoreWebView2WebResourceContext.Document,
                 secFetchDest: "iframe",
                 httpMethod: "GET",
-                engineOverride: ShieldSettings.EngineBrave);
+                engineOverride: ShieldSettings.EngineLexShield);
 
             Assert.True(blockDecision.ShouldBlock);
-            Assert.Contains("Brave network", blockDecision.Reason ?? "", StringComparison.Ordinal);
+            Assert.Contains("LexShield network", blockDecision.Reason ?? "", StringComparison.Ordinal);
             Assert.Contains("adtng.com", blockDecision.Reason ?? "", StringComparison.OrdinalIgnoreCase);
 
             string blockLogReason = ShieldRouter.FormatNetworkDecisionLogReason(
@@ -713,9 +713,9 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                 adIframeUri,
                 "Subframe:hentaila.com|Document",
                 CoreWebView2WebResourceContext.Document,
-                ShieldSettings.EngineBrave,
+                ShieldSettings.EngineLexShield,
                 "Blocked ad domain or pattern");
-            Assert.Contains("Engine=Brave", blockLogReason, StringComparison.Ordinal);
+            Assert.Contains("Engine=LexShield Core", blockLogReason, StringComparison.Ordinal);
             Assert.Contains("Ctx=Document", blockLogReason, StringComparison.Ordinal);
             Assert.Contains("Subframe=True", blockLogReason, StringComparison.Ordinal);
             Assert.Contains("Host=a.adtng.com", blockLogReason, StringComparison.Ordinal);
@@ -733,7 +733,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                 resourceContext: CoreWebView2WebResourceContext.Document,
                 secFetchDest: "iframe",
                 httpMethod: "GET",
-                engineOverride: ShieldSettings.EngineBrave);
+                engineOverride: ShieldSettings.EngineLexShield);
 
             Assert.False(allowDecision.ShouldBlock);
             string allowLogReason = ShieldRouter.FormatNetworkDecisionLogReason(
@@ -741,17 +741,17 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                 playerUri,
                 "Subframe:hentaila.com|Document",
                 CoreWebView2WebResourceContext.Document,
-                ShieldSettings.EngineBrave,
+                ShieldSettings.EngineLexShield,
                 "Subframe network request (no match)");
-            Assert.Contains("Engine=Brave", allowLogReason, StringComparison.Ordinal);
+            Assert.Contains("Engine=LexShield Core", allowLogReason, StringComparison.Ordinal);
             Assert.Contains("Ctx=Document", allowLogReason, StringComparison.Ordinal);
             Assert.Contains("Subframe=True", allowLogReason, StringComparison.Ordinal);
             Assert.Contains("Host=cdn.dotanborito.net", allowLogReason, StringComparison.Ordinal);
 
             // Verificar atribución de excepción @@ en modo diagnóstico (asegurando que primero bloquearía sin la excepción)
-            uint baseNet = (uint)(BraveNetworkMask.FromScript | BraveNetworkMask.ThirdParty |
-                                  BraveNetworkMask.FromHttps | BraveNetworkMask.IsHostnameAnchor |
-                                  BraveNetworkMask.IsRightAnchor);
+            uint baseNet = (uint)(LexShieldMask.FromScript | LexShieldMask.ThirdParty |
+                                  LexShieldMask.FromHttps | LexShieldMask.IsHostnameAnchor |
+                                  LexShieldMask.IsRightAnchor);
             var (_, synBlockEngine) = BuildSyntheticDataWithPatterns(
                 new (uint Mask, string Host, string Pat, string Mod)[]
                 {
@@ -769,7 +769,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                 new (uint Mask, string Host, string Pat, string Mod)[]
                 {
                     (baseNet, "tracker.example", "/beacon.js", ""),
-                    (baseNet | (uint)BraveNetworkMask.IsException, "tracker.example", "/beacon.js", "")
+                    (baseNet | (uint)LexShieldMask.IsException, "tracker.example", "/beacon.js", "")
                 });
             var excDecision = synEngine.EvaluateNetwork(
                 new Uri("https://tracker.example/beacon.js"),
@@ -787,7 +787,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
         }
     }
 
-    private static (BraveShieldData Data, BraveNetworkEngine Engine) BuildSyntheticDataWithPatterns(
+    private static (LexShieldData Data, LexShieldCoreEngine Engine) BuildSyntheticDataWithPatterns(
         (uint Mask, string Host, string Pat, string Mod)[] patDefs)
     {
         var blob = new List<byte>();
@@ -800,7 +800,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
             return (off, b.Length);
         }
 
-        var recs = new BravePatRec[patDefs.Length];
+        var recs = new LexShieldPatRec[patDefs.Length];
         var fallback = new int[patDefs.Length];
         for (int i = 0; i < patDefs.Length; i++)
         {
@@ -808,7 +808,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
             var (hOff, hLen) = AddStr(d.Host);
             var (pOff, pLen) = AddStr(d.Pat);
             var (mOff, mLen) = AddStr(d.Mod);
-            recs[i] = new BravePatRec
+            recs[i] = new LexShieldPatRec
             {
                 Mask = d.Mask,
                 HostOff = hOff,
@@ -821,15 +821,15 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
             fallback[i] = i;
         }
 
-        var data = BraveShieldData.CreateForTests(
+        var data = LexShieldData.CreateForTests(
             patternRules: recs,
             strBlob: blob.ToArray(),
             fallbackRules: fallback);
-        return (data, new BraveNetworkEngine(() => data));
+        return (data, new LexShieldCoreEngine(() => data));
     }
 
     [Fact]
-    public void BraveNetworkEngine_WhenDataIsNull_MarksUnavailableAndLogsRequestAllowedEvenWithoutDiagnosticMode()
+    public void LexShieldCoreEngine_WhenDataIsNull_MarksUnavailableAndLogsRequestAllowedEvenWithoutDiagnosticMode()
     {
         bool origDiag = ShieldLogger.DiagnosticMode;
         ShieldLogger.DiagnosticMode = false;
@@ -837,7 +837,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
 
         try
         {
-            var nullEngine = new BraveNetworkEngine(() => null);
+            var nullEngine = new LexShieldCoreEngine(() => null);
             var firstPartyScript = new Uri("https://example.com/app.js");
             var decision = nullEngine.EvaluateNetwork(
                 firstPartyScript,
@@ -856,13 +856,13 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                 currentHost: "example.com",
                 frameDesc: "Script",
                 resourceContext: CoreWebView2WebResourceContext.Script,
-                engineName: ShieldSettings.EngineBrave,
+                engineName: ShieldSettings.EngineLexShield,
                 diagnosticMode: false,
                 out string reasonText,
                 out bool bypassDiag));
 
             Assert.True(bypassDiag);
-            Assert.Contains("Brave data == null", reasonText, StringComparison.Ordinal);
+            Assert.Contains("LexShield data == null", reasonText, StringComparison.Ordinal);
 
             var guestTab = new BrowserTab { IsGuest = true };
             ShieldLogger.LogForTab(
@@ -888,7 +888,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
 
             string dump = ShieldLogger.DumpLog();
             Assert.Contains("[REQUEST_ALLOWED]", dump, StringComparison.Ordinal);
-            Assert.Contains("Brave data == null", dump, StringComparison.Ordinal);
+            Assert.Contains("LexShield data == null", dump, StringComparison.Ordinal);
 
             var normalAllow = ShieldNetworkDecision.Allow;
             Assert.False(ShieldRouter.TryFormatAllowedNetworkLog(
@@ -898,7 +898,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
                 currentHost: "example.com",
                 frameDesc: "Script",
                 resourceContext: CoreWebView2WebResourceContext.Script,
-                engineName: ShieldSettings.EngineBrave,
+                engineName: ShieldSettings.EngineLexShield,
                 diagnosticMode: false,
                 out _,
                 out _));

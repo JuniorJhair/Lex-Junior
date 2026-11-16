@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using LexBrowser.UI.Models;
 using Xunit;
 
@@ -115,16 +115,16 @@ public sealed class ShieldModuleRegistryAndPopupTests : IDisposable
     }
 
     [Fact]
-    public void BraveScriptletEngine_And_DocumentPlan_ContainZeroNewFunctionOrEval()
+    public void LexShieldScriptletEngine_And_DocumentPlan_ContainZeroNewFunctionOrEval()
     {
-        string bootstrap = BraveScriptletEngine.BuildBootstrapScript("unit-token");
+        string bootstrap = LexShieldScriptletEngine.BuildBootstrapScript("unit-token");
         Assert.DoesNotContain("new Function", bootstrap, StringComparison.Ordinal);
         Assert.Contains("__runStaticScriptlet", bootstrap, StringComparison.Ordinal);
         Assert.Contains("__getLexReg", bootstrap, StringComparison.Ordinal);
 
         // Verificar en código fuente C# que el bootstrap propio no usa new Function ni eval(
         string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
-        string engineCsPath = Path.Combine(repoRoot, "LexBrowser", "Core", "AdBlock", "Brave", "BraveScriptletEngine.cs");
+        string engineCsPath = Path.Combine(repoRoot, "LexBrowser", "Core", "AdBlock", "Core", "LexShieldScriptletEngine.cs");
         if (File.Exists(engineCsPath))
         {
             string csSrc = File.ReadAllText(engineCsPath);
@@ -133,9 +133,9 @@ public sealed class ShieldModuleRegistryAndPopupTests : IDisposable
         }
 
         SettingsManager.Current.Shield ??= new ShieldSettings();
-        SettingsManager.Current.Shield.Engine = ShieldSettings.EngineBrave;
+        SettingsManager.Current.Shield.Engine = ShieldSettings.EngineLexShield;
 
-        var bridge = new BraveBridgeHostObject(
+        var bridge = new LexShieldBridgeHostObject(
             "tok",
             () => new Uri("https://hentaila.com/ver/1"),
             () => false);
@@ -147,25 +147,32 @@ public sealed class ShieldModuleRegistryAndPopupTests : IDisposable
     }
 
     [Fact]
-    public void BravePopupAndBundledLex_MarksVideoDefuserInactiveInBrave_AndEmbedsLexResource()
+    public void UnifiedPopupAndBundledLex_EnablesVideoDefuserControl_AndEmbedsLexResource()
     {
         SettingsManager.Current.Shield ??= new ShieldSettings();
-        SettingsManager.Current.Shield.Engine = ShieldSettings.EngineBrave;
+        SettingsManager.Current.Shield.Engine = ShieldSettings.EngineLexShield;
         SettingsManager.Current.EnableAdBlocker = true;
+        SettingsManager.Current.EnableVideoPlayerDefuser = false;
+        SettingsManager.Current.Shield.Modules.VideoDefuser = false;
 
-        var braveItems = ShieldModuleRegistry.BuildPopupModuleItems(
+        var defaultItems = ShieldModuleRegistry.BuildPopupModuleItems(
             "hentaila.com", SitePolicy.Resolve("hentaila.com"), SettingsManager.Current, hasSite: true);
-        var defuserBrave = braveItems.Single(x => x.Id == SitePolicy.ModVideoDefuser);
-        Assert.False(defuserBrave.IsChecked);
-        Assert.False(defuserBrave.IsControlEnabled);
+        var defuserDefault = defaultItems.Single(x => x.Id == SitePolicy.ModVideoDefuser);
+        Assert.False(defuserDefault.IsChecked);
+        Assert.True(defuserDefault.IsControlEnabled);
 
-        SettingsManager.Current.Shield.Engine = ShieldSettings.EngineLegacy;
-        var legacyItems = ShieldModuleRegistry.BuildPopupModuleItems(
-            "hentaila.com", SitePolicy.Resolve("hentaila.com"), SettingsManager.Current, hasSite: true);
-        var defuserLegacy = legacyItems.Single(x => x.Id == SitePolicy.ModVideoDefuser);
-        Assert.True(defuserLegacy.IsControlEnabled);
+        SettingsManager.Current.EnableVideoPlayerDefuser = true;
+        SettingsManager.Current.Shield.Modules.VideoDefuser = true;
+        var activePolicy = SitePolicy.Resolve("hentaila.com");
+        Assert.True(activePolicy.VideoDefuser);
 
-        string[] resources = typeof(BraveShieldData).Assembly.GetManifestResourceNames();
-        Assert.Contains(resources, n => n.EndsWith("Assets.shield.brave-shield.lex", StringComparison.OrdinalIgnoreCase));
+        var enabledItems = ShieldModuleRegistry.BuildPopupModuleItems(
+            "hentaila.com", activePolicy, SettingsManager.Current, hasSite: true);
+        var defuserEnabled = enabledItems.Single(x => x.Id == SitePolicy.ModVideoDefuser);
+        Assert.True(defuserEnabled.IsChecked);
+        Assert.True(defuserEnabled.IsControlEnabled);
+
+        string[] resources = typeof(LexShieldData).Assembly.GetManifestResourceNames();
+        Assert.Contains(resources, n => n.EndsWith("Assets.shield.lex-shield.lex", StringComparison.OrdinalIgnoreCase));
     }
 }

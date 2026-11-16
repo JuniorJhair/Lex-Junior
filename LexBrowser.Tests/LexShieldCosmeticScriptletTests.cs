@@ -5,16 +5,16 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using Xunit;
 
 namespace LexBrowser.Tests;
 
-public sealed class BraveCosmeticScriptletTests
+public sealed class LexShieldCosmeticScriptletTests
 {
-    private static BraveShieldData LoadRealBraveData()
+    private static LexShieldData LoadRealBraveData()
     {
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
         return data!;
     }
@@ -73,9 +73,9 @@ public sealed class BraveCosmeticScriptletTests
             var h = cos.EvaluateHost(host, genericHide: false, res);
             Assert.False(h.HasAnyInjection);
             Assert.Empty(cos.QueryGenericCss(host, new[] { "bannerad", "AdSense" }, new[] { "ads" }, genericHide: false, policy));
-            Assert.Null(BraveScriptletEngine.BuildHostInjectionScript(host, h, res, policy));
-            Assert.False(ShieldRouter.ShouldDeferDocumentForBraveScriptlets(
-                new Uri($"https://{host}/watch"), host, policy, isSubframe: false, engineOverride: ShieldSettings.EngineBrave));
+            Assert.Null(LexShieldScriptletEngine.BuildHostInjectionScript(host, h, res, policy));
+            Assert.False(ShieldRouter.ShouldDeferDocumentForScriptlets(
+                new Uri($"https://{host}/watch"), host, policy, isSubframe: false, engineOverride: ShieldSettings.EngineLexShield));
         }
     }
 
@@ -89,14 +89,14 @@ public sealed class BraveCosmeticScriptletTests
 
         var anime = cos.EvaluateHost("animeyt.es", genericHide: false, res);
         Assert.Contains(anime.Scriptlets, s => s.Contains("rmnt", StringComparison.Ordinal) && s.Contains("popundersPerIP", StringComparison.Ordinal));
-        string? animeJs = BraveScriptletEngine.BuildHostInjectionScript("animeyt.es", anime, res, policy);
+        string? animeJs = LexShieldScriptletEngine.BuildHostInjectionScript("animeyt.es", anime, res, policy);
         Assert.NotNull(animeJs);
         Assert.Contains("removeNodeText", animeJs);
         Assert.Contains("replaceNodeTextFn", animeJs);
 
         var hentaila = cos.EvaluateHost("hentaila.com", genericHide: false, res);
         Assert.Contains(hentaila.Scriptlets, s => s.Contains("acs", StringComparison.Ordinal) && s.Contains("popMagic", StringComparison.Ordinal));
-        string? hentailaJs = BraveScriptletEngine.BuildHostInjectionScript("hentaila.com", hentaila, res, NormalPolicy("hentaila.com"));
+        string? hentailaJs = LexShieldScriptletEngine.BuildHostInjectionScript("hentaila.com", hentaila, res, NormalPolicy("hentaila.com"));
         Assert.NotNull(hentailaJs);
         Assert.Contains("abortCurrentScript", hentailaJs);
         Assert.Contains("abortCurrentScriptFn", hentailaJs);
@@ -138,8 +138,8 @@ public sealed class BraveCosmeticScriptletTests
     {
         const string host = "testsite.example";
         const string sub = "sub.testsite.example";
-        ulong hostHash = BraveHash.Fnv1a64(host.AsSpan());
-        ulong clsHash = BraveHash.Fnv1a64("adbox".AsSpan());
+        ulong hostHash = LexShieldHash.Fnv1a64(host.AsSpan());
+        ulong clsHash = LexShieldHash.Fnv1a64("adbox".AsSpan());
 
         var payloads = new[]
         {
@@ -161,7 +161,7 @@ public sealed class BraveCosmeticScriptletTests
             [host] = new[] { "set", "acs, c, d" }
         };
 
-        var engine = new BraveCosmeticEngine(
+        var engine = new LexShieldCosmeticEngine(
             new[] { clsHash },
             Array.Empty<ulong>(),
             new[] { hostHash },
@@ -189,7 +189,7 @@ public sealed class BraveCosmeticScriptletTests
         // QueryGenericCss tampoco debe re-ocultar .adbox porque está en Unhidden
         Assert.Equal(string.Empty, engine.QueryGenericCss(host, new[] { "adbox" }, null, false, NormalPolicy(host)));
         // MiscGenericCss también excluye .adbox
-        string mg = BraveScriptletEngine.BuildMiscGenericCss(engine, rootRes);
+        string mg = LexShieldScriptletEngine.BuildMiscGenericCss(engine, rootRes);
         Assert.Equal("[href*=\"bad\"]{display:none!important;}", mg);
 
         // Subdominio excluido por nh=[sub]
@@ -202,25 +202,25 @@ public sealed class BraveCosmeticScriptletTests
     [Fact]
     public void ParseScriptletArgs_HandlesQuotesEscapedCommasAndRegex()
     {
-        var a = BraveScriptletEngine.ParseScriptletArgs("rmnt, script, /h=decodeURIComponent|popundersPerIP/");
+        var a = LexShieldScriptletEngine.ParseScriptletArgs("rmnt, script, /h=decodeURIComponent|popundersPerIP/");
         Assert.Equal(new[] { "rmnt", "script", "/h=decodeURIComponent|popundersPerIP/" }, a);
 
-        var b = BraveScriptletEngine.ParseScriptletArgs("set, foo.bar, 'hello, world', \"a\\\"b\"");
+        var b = LexShieldScriptletEngine.ParseScriptletArgs("set, foo.bar, 'hello, world', \"a\\\"b\"");
         Assert.Equal(new[] { "set", "foo.bar", "hello, world", "a\"b" }, b);
 
-        var c = BraveScriptletEngine.ParseScriptletArgs(@"rpnt, script, a\,b, '/*start*/x("".y"")/*end*/'");
+        var c = LexShieldScriptletEngine.ParseScriptletArgs(@"rpnt, script, a\,b, '/*start*/x("".y"")/*end*/'");
         Assert.Equal(new[] { "rpnt", "script", "a,b", "/*start*/x(\".y\")/*end*/" }, c);
     }
 
     [Fact]
     public void StyleRuleSplitter_DistinguishesPureCssFromProcedural()
     {
-        Assert.True(BraveCosmeticEngine.TrySplitPlainCssStyleRule(
+        Assert.True(LexShieldCosmeticEngine.TrySplitPlainCssStyleRule(
             "div.banner:style(transform: translateX(0px) !important; margin: 0)",
             out string css));
         Assert.Equal("div.banner{transform: translateX(0px) !important; margin: 0}", css);
 
-        Assert.False(BraveCosmeticEngine.TrySplitPlainCssStyleRule(
+        Assert.False(LexShieldCosmeticEngine.TrySplitPlainCssStyleRule(
             "div.banner:has-text(Sponsored):style(display: none !important)",
             out _));
     }
@@ -232,12 +232,12 @@ public sealed class BraveCosmeticScriptletTests
         var cos = data.GetCosmeticEngine();
         var res = data.GetResourceStore();
 
-        string? animeJs = BraveScriptletEngine.BuildHostInjectionScript(
+        string? animeJs = LexShieldScriptletEngine.BuildHostInjectionScript(
             "animeyt.es",
             cos.EvaluateHost("animeyt.es", false, res),
             res,
             NormalPolicy("animeyt.es"));
-        string? hentailaJs = BraveScriptletEngine.BuildHostInjectionScript(
+        string? hentailaJs = LexShieldScriptletEngine.BuildHostInjectionScript(
             "hentaila.com",
             cos.EvaluateHost("hentaila.com", false, res),
             res,
@@ -245,12 +245,12 @@ public sealed class BraveCosmeticScriptletTests
 
         Assert.NotNull(animeJs);
         Assert.NotNull(hentailaJs);
-        Assert.True(BraveScriptletEngine.TryBuildScriptletCall("set, lexTestFlag, false", res, out string setJs));
-        Assert.True(BraveScriptletEngine.TryBuildScriptletCall("aeld, click, popMagic", res, out string aeldJs));
-        Assert.True(BraveScriptletEngine.TryBuildScriptletCall("nowoif", res, out string nowoifJs));
+        Assert.True(LexShieldScriptletEngine.TryBuildScriptletCall("set, lexTestFlag, false", res, out string setJs));
+        Assert.True(LexShieldScriptletEngine.TryBuildScriptletCall("aeld, click, popMagic", res, out string aeldJs));
+        Assert.True(LexShieldScriptletEngine.TryBuildScriptletCall("nowoif", res, out string nowoifJs));
 
         string harness = BuildNodeVerificationScript(
-            BraveScriptletEngine.BootstrapScript,
+            LexShieldScriptletEngine.BootstrapScript,
             animeJs!,
             hentailaJs!,
             setJs,
@@ -484,7 +484,7 @@ function makeBrowserCtx(host, extra) {
     Math, Object, Array, RegExp, Error, Proxy, Reflect, Set, Map, WeakSet, WeakMap,
     JSON, parseInt, setTimeout, clearTimeout,
     MutationObserver: class { observe() {} disconnect() {} },
-    __lexBravePendingProcedural: [
+    __lexShieldPendingProcedural: [
       '.card:has-text(/Promoted/):remove-class(ad-cls)',
       'a[href]:remove-attr(href)'
     ],
@@ -507,7 +507,7 @@ function makeBrowserCtx(host, extra) {
   ctx.globalThis = ctx;
   ctx.window.top = ctx.window;
   vm.runInNewContext({{JsonSerializer.Serialize(bootstrapJs)}}, ctx);
-  ctx.window.__lexBraveApplyProcedural();
+  ctx.window.__lexShieldApplyProcedural();
   assert.strictEqual(card.classList.contains('ad-cls'), false);
   assert.strictEqual(badLink.hasAttribute('href'), false);
 }

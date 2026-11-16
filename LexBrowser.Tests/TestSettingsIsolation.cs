@@ -85,23 +85,24 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
     }
 
     [Fact]
-    public void SettingsManager_Load_AcceptsCaseInsensitiveKeysAndPreservesBraveAcrossDiagnosticToggle()
+    public void SettingsManager_Load_AcceptsCaseInsensitiveKeysAndMigratesLegacyBraveToV4AcrossDiagnosticToggle()
     {
         File.WriteAllText(_tempPath, """
         {
           "SettingsSchemaVersion": 2,
           "Shield": {
             "engine": "brave",
-            "DiagnosticMode": false,
-          },
+            "DiagnosticMode": false
+          }
         }
         """);
 
         SettingsManager.Load();
-        Assert.True(ShieldRouter.IsBraveActive);
-        Assert.Equal(ShieldSettings.EngineBrave, ShieldRouter.GetConfiguredEngineName());
+        Assert.Equal(ShieldSettings.EngineLexShield, ShieldRouter.GetConfiguredEngineName());
+        Assert.Equal(4, SettingsManager.Current.SettingsSchemaVersion);
+        Assert.Equal(4, SettingsManager.Current.Shield.Version);
 
-        // Simula activar Modo Diagnóstico + guardar sin pasar por el selector de motor
+        // Simula activar Modo Diagnóstico + guardar
         SettingsManager.Current.Shield.DiagnosticMode = true;
         ShieldLogger.DiagnosticMode = true;
         SettingsManager.Save();
@@ -109,32 +110,19 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
         SettingsManager.Load();
         Assert.True(ShieldLogger.DiagnosticMode);
         Assert.True(SettingsManager.Current.Shield.DiagnosticMode);
-        Assert.True(ShieldRouter.IsBraveActive);
-        Assert.Equal(ShieldSettings.EngineBrave, SettingsManager.Current.Shield.Engine);
+        Assert.Equal(ShieldSettings.EngineLexShield, SettingsManager.Current.Shield.Engine);
     }
 
     [Fact]
-    public void SettingsWindow_ExposesDedicatedChkUseBraveEngineClickHandler_DecoupledFromSaveSettings()
+    public void SettingsWindow_RemovedDualEngineSelector_WhileKeepingBraveSearchOption()
     {
-        var braveHandler = typeof(SettingsWindow).GetMethod(
-            "ChkUseBraveEngine_Click",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.NotNull(braveHandler);
-
-        var s = new BrowserSettings();
-        s.Shield.DiagnosticMode = true;
-
-        SettingsWindow.ApplyShieldEngineSelection(s, useBraveEngine: true);
-        Assert.Equal(ShieldSettings.EngineBrave, s.Shield.Engine);
-        Assert.True(s.Shield.DiagnosticMode);
-
-        SettingsWindow.ApplyShieldEngineSelection(s, useBraveEngine: false);
-        Assert.Equal(ShieldSettings.EngineLegacy, s.Shield.Engine);
-        Assert.True(s.Shield.DiagnosticMode);
+        Assert.Null(typeof(SettingsWindow).GetMethod("ChkUseBraveEngine_Click", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.Null(typeof(SettingsWindow).GetField("ChkUseBraveEngine", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.NotNull(typeof(SettingsWindow).GetField("RbBrave", BindingFlags.Instance | BindingFlags.NonPublic));
     }
 
     [Fact]
-    public void NewProfile_DefaultsToBraveEngine_AlignedDefaults_AndVersion3()
+    public void NewProfile_DefaultsToLexShieldCore_AlignedDefaults_AndVersion4()
     {
         File.WriteAllText(_tempPath, "");
         File.Delete(_tempPath);
@@ -142,11 +130,9 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
         SettingsManager.Load();
         var s = SettingsManager.Current;
 
-        Assert.Equal(3, s.SettingsSchemaVersion);
-        Assert.Equal(3, s.Shield.Version);
-        Assert.Equal(ShieldSettings.EngineBrave, s.Shield.Engine);
-        Assert.True(s.Shield.EngineMigratedToBrave);
-        Assert.True(ShieldRouter.IsBraveActive);
+        Assert.Equal(ShieldSettings.CurrentShieldVersion, s.SettingsSchemaVersion);
+        Assert.Equal(ShieldSettings.CurrentShieldVersion, s.Shield.Version);
+        Assert.Equal(ShieldSettings.EngineLexShield, s.Shield.Engine);
         Assert.True(s.EnableWebShieldInSubframes);
         Assert.True(s.Shield.Modules.Subframes);
         Assert.False(s.Shield.DiagnosticMode);
@@ -160,8 +146,9 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
     }
 
     [Fact]
-    public void ExistingLegacyProfile_MigratesOnceToBraveWithoutClobberingPrefs_AndSubsequentLegacyChoicePersists()
+    public void ExistingLegacyAndBraveProfiles_MigrateToV4WithoutClobberingSitePrefs()
     {
+        // 1. Perfil pre-v3 en "Legacy" -> migra a v4 y habilita subframes pre-v3 preservando sitios y cosmética
         File.WriteAllText(_tempPath, """
         {
           "SettingsSchemaVersion": 2,
@@ -178,42 +165,54 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
         }
         """);
 
-        // 1. Primera carga migra Legacy -> Brave una sola vez sin pisar otras preferencias
         SettingsManager.Load();
         var firstLoad = SettingsManager.Current;
-        Assert.Equal(ShieldSettings.EngineBrave, firstLoad.Shield.Engine);
-        Assert.True(firstLoad.Shield.EngineMigratedToBrave);
-        Assert.Equal(3, firstLoad.Shield.Version);
-        Assert.Equal(3, firstLoad.SettingsSchemaVersion);
+        Assert.Equal(ShieldSettings.EngineLexShield, firstLoad.Shield.Engine);
+        Assert.Equal(ShieldSettings.CurrentShieldVersion, firstLoad.Shield.Version);
+        Assert.Equal(ShieldSettings.CurrentShieldVersion, firstLoad.SettingsSchemaVersion);
         Assert.True(firstLoad.EnableWebShieldInSubframes);
         Assert.True(firstLoad.Shield.Modules.Subframes);
         Assert.True(firstLoad.Shield.DiagnosticMode);
         Assert.False(firstLoad.EnableCosmeticShield);
         Assert.Equal(SitePolicy.ModeOff, firstLoad.Shield.Sites["example.org"].Mode);
 
-        // 2. Usuario elige volver a Legacy manualmente y guarda
-        SettingsWindow.ApplyShieldEngineSelection(firstLoad, useBraveEngine: false);
-        SettingsManager.Save();
+        // 2. Perfil v3 en "Brave" con subframes=false, Theme="Dark", Search="Brave" y defuser=true -> migra a v4 intacto
+        File.WriteAllText(_tempPath, """
+        {
+          "SettingsSchemaVersion": 3,
+          "Theme": "Light",
+          "DefaultSearchEngine": "Brave",
+          "EnableVideoPlayerDefuser": true,
+          "EnableWebShieldInSubframes": false,
+          "Shield": {
+            "Version": 3,
+            "Engine": "Brave",
+            "EngineMigratedToBrave": true,
+            "DiagnosticMode": false,
+            "Sites": {
+              "hentaila.com": { "Mode": "Compat" }
+            }
+          }
+        }
+        """);
 
-        // 3. Reapertura posterior respeta Legacy y no vuelve a migrar ni al cambiar otros flags
         SettingsManager.Load();
-        Assert.Equal(ShieldSettings.EngineLegacy, SettingsManager.Current.Shield.Engine);
-        Assert.False(ShieldRouter.IsBraveActive);
-
-        SettingsManager.Current.Shield.DiagnosticMode = false;
-        SettingsManager.Current.EnableWebShieldInSubframes = true;
-        SettingsManager.Save();
-        SettingsManager.Load();
-        Assert.Equal(ShieldSettings.EngineLegacy, SettingsManager.Current.Shield.Engine);
-        Assert.False(SettingsManager.Current.Shield.DiagnosticMode);
-        Assert.True(SettingsManager.Current.EnableWebShieldInSubframes);
+        var v3Load = SettingsManager.Current;
+        Assert.Equal(ShieldSettings.EngineLexShield, v3Load.Shield.Engine);
+        Assert.Equal(ShieldSettings.CurrentShieldVersion, v3Load.Shield.Version);
+        Assert.Equal(ShieldSettings.CurrentShieldVersion, v3Load.SettingsSchemaVersion);
+        Assert.Equal("Light", v3Load.Theme);
+        Assert.Equal("Brave", v3Load.DefaultSearchEngine);
+        Assert.True(v3Load.EnableVideoPlayerDefuser);
+        Assert.False(v3Load.EnableWebShieldInSubframes);
+        Assert.Equal(SitePolicy.ModeCompat, v3Load.Shield.Sites["hentaila.com"].Mode);
     }
 
     [Fact]
-    public void BraveDefault_KeepsYouTubeAndDailymotionStrictlyOnIsolatedLegacy()
+    public void UnifiedDefault_KeepsYouTubeAndDailymotionStrictlyIsolated()
     {
         SettingsManager.Load();
-        Assert.True(ShieldRouter.IsBraveActive);
+        Assert.Equal(ShieldSettings.EngineLexShield, ShieldRouter.GetConfiguredEngineName());
 
         var ytPolicy = SitePolicy.Resolve("youtube.com");
         var ytAdDecision = ShieldRouter.EvaluateWebResource(

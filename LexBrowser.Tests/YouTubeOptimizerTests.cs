@@ -17,7 +17,7 @@ public class YouTubeOptimizerTests
     {
         string script = YouTubeOptimizer.InjectedScript;
 
-        // Endpoints cubiertos por la estrategia de Brave / uBlock Origin
+        // Endpoints cubiertos por la estrategia declarativa estándar (uBO / EasyList)
         Assert.Contains("'/youtubei/v1/player'", script);
         Assert.Contains("'/youtubei/v1/get_watch'", script);
         Assert.Contains("'/youtubei/v1/reel/reel_watch_sequence'", script);
@@ -55,7 +55,7 @@ public class YouTubeOptimizerTests
         Assert.Contains("Object.defineProperty", script);
         Assert.Contains("enumerable: false", script);
 
-        // El script no debe ocultar #player-ads (excepción explícita de Brave)
+        // El script no debe ocultar #player-ads (excepción explícita declarativa)
         Assert.DoesNotContain("#player-ads", script);
     }
 
@@ -71,7 +71,7 @@ public class YouTubeOptimizerTests
     [InlineData("https://m.youtube.com/yts/jsbin/ad.js", "m.youtube.com", CoreWebView2WebResourceContext.Script, true)]
     [InlineData("https://rr1---sn-xxx.googlevideo.com/initplayback?source=youtube&c=TVHTML5&oad=1", "www.youtube.com", CoreWebView2WebResourceContext.XmlHttpRequest, true)]
     [InlineData("https://rr1---sn-xxx.googlevideo.com/videoplayback?id=123_ad_456", "www.youtube.com", CoreWebView2WebResourceContext.Media, true)]
-    // Permitidos (criterio Brave: nunca romper reproducción, estadísticas legítimas ni atr/log_event)
+    // Permitidos (criterio de aislamiento: nunca romper reproducción, estadísticas legítimas ni atr/log_event)
     [InlineData("https://rr1---sn-xxx.googlevideo.com/videoplayback?id=123", "www.youtube.com", CoreWebView2WebResourceContext.Media, false)]
     [InlineData("https://www.youtube.com/youtubei/v1/player", "www.youtube.com", CoreWebView2WebResourceContext.Fetch, false)]
     [InlineData("https://www.youtube.com/watch?v=33CtMX77KNc", "www.youtube.com", CoreWebView2WebResourceContext.Document, false)]
@@ -84,7 +84,7 @@ public class YouTubeOptimizerTests
     [InlineData("https://www.youtube.com/youtubei/v1/log_event?alt=json", "www.youtube.com", CoreWebView2WebResourceContext.Fetch, false)]
     [InlineData("https://www.youtube.com/youtubei/v1/next", "www.youtube.com", CoreWebView2WebResourceContext.Fetch, false)]
     [InlineData("https://example.com/pagead/test.js", "example.com", CoreWebView2WebResourceContext.Script, false)]
-    public void MediaShieldRules_EvaluatesBraveNetworkRulesCorrectly(
+    public void MediaShieldRules_EvaluatesDeclarativeNetworkRulesCorrectly(
         string url,
         string originHost,
         CoreWebView2WebResourceContext context,
@@ -115,7 +115,7 @@ public class YouTubeOptimizerTests
         Assert.Contains(".ytp-ad-progress", css);
         Assert.Contains("display: none !important;", css);
 
-        // Excepción explícita de Brave (youtube.com#@##player-ads) y estanterías de contenido legítimo
+        // Excepción explícita (youtube.com#@##player-ads) y estanterías de contenido legítimo
         Assert.DoesNotContain("#player-ads", css);
         Assert.DoesNotContain("ytd-merch-shelf-renderer", css);
         Assert.DoesNotContain("ytd-statement-banner-renderer", css);
