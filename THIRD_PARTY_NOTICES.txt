@@ -1,52 +1,148 @@
-THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-Lex Junior Browser — Lex TV Module
-
-This software incorporates third-party open-source components and public directory metadata listed below.
-
 ========================================================================
-1. hls.js (dist/hls.light.min.js) - Version 1.7.4
-   License: Apache License 2.0
-   Origin: https://registry.npmjs.org/hls.js/-/hls.js-1.7.4.tgz
-   Bundled file: LexBrowser/Assets/tv/vendor/hls.light.min.js
-   SHA256: 482CCCB3A224554F64D8C2CF0D335DBA4A3819BDB726AFBFDDFE15DE4C277D82
+LEX JUNIOR BROWSER — AVISOS LEGALES, LICENCIAS Y CRÉDITOS OFICIALES
 ========================================================================
-Copyright (c) 2017 Dailymotion (http://www.dailymotion.com)
+Producto:    Lex Junior Browser
+Creador:     Junior Pacherrez
+Copyright:   Copyright (c) 2026 Junior Pacherrez
+Plataforma:  Windows 10 / Windows 11 (x64 · .NET 8 WPF + WebView2)
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+EXENCIÓN DE RESPONSABILIDAD GENERAL (SOFTWARE ORIGINAL):
+Lex Junior Browser y sus módulos propios (LexShield Core, Lex TV como
+reproductor cliente local, Lex PDF Studio, Bóveda de contraseñas local
+y gestor de historial/descargas) se proporcionan "TAL CUAL" ("AS IS"),
+sin garantías expresas ni implícitas de ningún tipo respecto a la
+disponibilidad de sitios web o fuentes multimedia externas aportadas por
+el usuario. El usuario es responsable del uso y origen de los contenidos,
+listas o enlaces que cargue en el navegador y en Lex TV.
 
-    http://www.apache.org/licenses/LICENSE-2.0
+Este producto incorpora los siguientes componentes de terceros, librerías
+y listas declarativas distribuidas conforme a sus respectivas licencias:
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+------------------------------------------------------------------------
+1. Microsoft.Web.WebView2 (Version 1.0.4314.35)
+   Licencia: BSD 3-Clause License
+   Titular:  Microsoft Corporation
+------------------------------------------------------------------------
+Copyright (C) Microsoft Corporation. All rights reserved.
 
-src/remux/mp4-generator.js and src/demux/exp-golomb.ts implementation in this project
-are derived from the HLS library for video.js (https://github.com/videojs/videojs-contrib-hls)
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
 
-That work is also covered by the Apache 2 License, following copyright:
-Copyright (c) 2013-2015 Brightcove
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * The name of Microsoft Corporation, or the names of its contributors
+may not be used to endorse or promote products derived from this
+software without specific prior written permission.
 
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+------------------------------------------------------------------------
+2. Microsoft.Data.Sqlite.Core (Version 8.0.11)
+   System.Speech (Version 8.0.0)
+   Licencia: The MIT License (MIT)
+   Titulares: Microsoft Corporation / .NET Foundation and Contributors
+------------------------------------------------------------------------
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+------------------------------------------------------------------------
+3. SQLitePCLRaw.bundle_winsqlite3 (Version 2.1.11)
+   Titular:  Copyright 2014-2024 Eric Sink / SourceGear, LLC
+   Licencia: Apache License 2.0 (usa winsqlite3.dll nativo de Windows)
+------------------------------------------------------------------------
+4. Mozilla PDF.js (pdf.min.js / pdf.worker.min.js - Version 3.11.174)
+   Titular:  Copyright 2023 Mozilla Foundation
+   Licencia: Apache License 2.0
+   Origen:   https://github.com/mozilla/pdf.js
+------------------------------------------------------------------------
+5. pdf-lib (pdf-lib.min.js)
+   Titular:  Andrew Dillon & Contributors / tslib portions (c) Microsoft Corp.
+   Licencia: MIT License / Apache License 2.0
+   Origen:   https://github.com/Hopding/pdf-lib
+------------------------------------------------------------------------
+6. hls.js (hls.light.min.js - Version 1.7.4)
+   Titular:  Copyright (c) 2017 Dailymotion (http://www.dailymotion.com)
+   Derivados mp4-generator / exp-golomb: Copyright (c) 2013-2015 Brightcove
+   Licencia: Apache License 2.0
+   Origen:   https://github.com/video-dev/hls.js
+------------------------------------------------------------------------
+7. mpegts.js (mpegts.js - Version 1.8.2)
+   Licencia: Apache License 2.0
+   Origen:   https://github.com/xqq/mpegts.js
+------------------------------------------------------------------------
+8. LexShield Core — Listas declarativas, shims y scriptlets (lex-shield.lex)
+------------------------------------------------------------------------
+El motor LexShield Core es una implementación en C#/.NET 8 creada para
+Lex Junior Browser, inspirada en el diseño declarativo abierto de
+adblock-rust (Mozilla Public License 2.0, https://github.com/brave/adblock-rust).
+El paquete compilado lex-shield.lex incluye reglas propias de Lex Junior
+junto con los siguientes recursos comunitarios bajo sus licencias originales:
+
+- Google Interactive Media Ads SDK Adapter (shim de compatibilidad):
+  Basado en Mozilla WebCompat shim / derivados uAssets.
+  Licencia: Mozilla Public License 2.0 (MPL-2.0)
+
+- Brave Adblock Lists, Unbreak & NoCoin Filter List:
+  * brave-unbreak, brave-firstparty, brave-firstparty-regional,
+    brave-cookie-specific, brave-specific, brave-sugarcoat, coin-miners
+  Licencia: Mozilla Public License 2.0 (MPL-2.0)
+  Referencia: https://github.com/brave/adblock-lists/blob/master/LICENSE
+
+- Declarative Surrogates & Scriptlets (adblock-resources / uAssets):
+  Licencia: Mozilla Public License 2.0 (MPL-2.0) y recursos derivados
+  bajo GNU General Public License v3.0 (GPL-3.0)
+  Referencia: https://github.com/brave/adblock-resources/blob/master/LICENSE
+
+- EasyList, EasyPrivacy & EasyList Spanish (easylist.to):
+  Licencia dual: GPL-3.0 OR Creative Commons Attribution-ShareAlike 3.0
+  Unported (CC BY-SA 3.0)
+  Referencia: https://easylist.to/pages/licence.html
+
+- uBlock Origin Filter Lists (uAssets):
+  * uBlock filters, badware, resource-abuse, unbreak
+  Licencia: GNU General Public License v3.0 (GPL-3.0)
+  Referencia: https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE
+
+------------------------------------------------------------------------
+9. Lex TV — Arquitectura de Fuentes Locales
+------------------------------------------------------------------------
+Lex TV opera estrictamente como reproductor multimedia cliente para listas,
+archivos y credenciales ingresados directamente por el usuario. No incluye,
+aloja ni redistribuye canales, catálogos ni transmisiones de terceros.
 
 ========================================================================
-2. mpegts.js (dist/mpegts.js) - Version 1.8.2
-   License: Apache License 2.0
-   Origin: https://registry.npmjs.org/mpegts.js/-/mpegts.js-1.8.2.tgz
-   Bundled file: LexBrowser/Assets/tv/vendor/mpegts.js
-   SHA256: BDA31748736A69CB610C2EDF4623E633F1F4F47B5BDA83668C8D287E51B0C3A8
+APACHE LICENSE, VERSION 2.0 (TEXTO OFICIAL DE REFERENCIA)
 ========================================================================
-
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -163,18 +259,13 @@ THE SOFTWARE.
           within a display generated by the Derivative Works, if and
           wherever such third-party notices normally appear. The contents
           of the NOTICE file are for informational purposes only and
-          do not modify the License. You may add Your own attribution
-          notices within Derivative Works that You distribute, alongside
-          or as an addendum to the NOTICE text from the Work, provided
-          that such additional attribution notices cannot be construed
-          as modifying the License.
-
-      You may add Your own copyright statement to Your modifications and
-      may provide additional or different license terms and conditions
-      for use, reproduction, or distribution of Your modifications, or
-      for any such Derivative Works as a whole, provided Your use,
-      reproduction, and distribution of the Work otherwise complies with
-      the conditions stated in this License.
+          do not modify the License. You may add Your own copyright
+          notice to Your modifications and may provide additional or
+          different license terms and conditions for use, reproduction,
+          or distribution of Your modifications, or for any such
+          Derivative Works as a whole, provided Your use, reproduction,
+          and distribution of the Work otherwise complies with the
+          conditions stated in this License.
 
    5. Submission of Contributions. Unless You explicitly state otherwise,
       any Contribution intentionally submitted for inclusion in the Work
@@ -201,11 +292,11 @@ THE SOFTWARE.
 
    8. Limitation of Liability. In no event and under no legal theory,
       whether in tort (including negligence), contract, or otherwise,
-      unless required by applicable law (such as deliberate and grossly
-      negligent acts) or agreed to in writing, shall any Contributor be
-      liable to You for damages, including any direct, indirect, special,
-      incidental, or consequential damages of any character arising as a
-      result of this License or out of the use or inability to use the
+      unless required by applicable law (such as deliberate misconduct
+      and gross negligence) or agreed to in writing, shall any Contributor
+      be liable to You for damages, including any direct, indirect,
+      special, incidental, or consequential damages of any character arising
+      as a result of this License or out of the use or inability to use the
       Work (including but not limited to damages for loss of goodwill,
       work stoppage, computer failure or malfunction, or any and all
       other commercial damages or losses), even if such Contributor
@@ -224,76 +315,13 @@ THE SOFTWARE.
 
    END OF TERMS AND CONDITIONS
 
-   APPENDIX: How to apply the Apache License to your work.
-
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
-
-   Copyright [yyyy] [name of copyright owner]
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-========================================================================
-3. Lex TV — User-Supplied Sources Architecture
-   Notice: Lex TV does not bundle, host, distribute or preload any third-party
-   channel directories, catalogs, or media streams. Lex TV operates strictly
-   as a local client media player for sources provided directly by the user.
-========================================================================
-4. LexShield Core — Declarative Filter Lists, Shims & Scriptlet Resources
-   Engine implementation: LexBrowser/Core/AdBlock/Core/* (C#/.NET 8, Lex Junior)
-   Inspired by public declarative adblock engine design (adblock-rust, MPL-2.0):
-   https://github.com/brave/adblock-rust
-   Compiler script: tools/compile_lex_shield.py -> LexBrowser/Assets/shield/lex-shield.lex
-
-   License notice & redistribution summary:
-   The bundled binary `LexBrowser/Assets/shield/lex-shield.lex` compiles
-   Lex Junior rules (`tools/lex-extra-rules.txt`) together with normalized
-   third-party filter snapshots and scriptlet/surrogate resources under their
-   respective upstream open-source licenses:
-
-   - Google Interactive Media Ads SDK Shim (`AdBlockResources.GoogleImaScript`):
-     Based on Mozilla WebCompat shim / uAssets derivative.
-     License: Mozilla Public License 2.0 (MPL-2.0)
-
-   - Brave Adblock Lists & Unbreak (`adblock-lists-master`, upstream attribution):
-     * brave-unbreak.txt, brave-firstparty.txt, brave-firstparty-regional.txt,
-       brave-cookie-specific.txt, brave-specific.txt, brave-sugarcoat.txt
-     * coin-miners.txt (NoCoin Filter List, Brave Software, Inc.)
-     License: Mozilla Public License 2.0 (MPL-2.0)
-     https://github.com/brave/adblock-lists/blob/master/LICENSE
-
-   - Declarative Surrogates & Scriptlets (`adblock-resources-master` / `brave-resources.json`):
-     License: Mozilla Public License 2.0 (MPL-2.0) and uBlock Origin derived
-     resources under GNU General Public License v3.0 (GPL-3.0)
-     https://github.com/brave/adblock-resources/blob/master/LICENSE
-
-   - EasyList, EasyPrivacy & EasyList Spanish (`easylist.to`):
-     * easylist.txt, easyprivacy.txt, easylistspanish.txt
-     License: Dual-licensed under GPL-3.0 OR Creative Commons Attribution-ShareAlike 3.0
-     Unported (CC BY-SA 3.0)
-     https://easylist.to/pages/licence.html
-
-   - uBlock Origin / uAssets (`uBlockOrigin` & `brave-main-list.txt`):
-     * brave-main-list.txt, filters.txt, badware.txt, resource-abuse.txt, unbreak.txt
-     License: GNU General Public License v3.0 (GPL-3.0)
-     https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE
-
-   Note: `update-lists.js` is not executed inside Lex Junior. To regenerate
-   `LexBrowser/Assets/shield/lex-shield.lex` locally from the reference snapshots:
-       python tools/compile_lex_shield.py
+------------------------------------------------------------------------
+REFERENCIAS COMPLETAS DE LICENCIAS COPYLEFT / PERMISIVAS ADICIONALES
+------------------------------------------------------------------------
+* Mozilla Public License 2.0 (MPL-2.0):
+  https://www.mozilla.org/en-US/MPL/2.0/
+* GNU General Public License v3.0 (GPL-3.0):
+  https://www.gnu.org/licenses/gpl-3.0.txt
+* Creative Commons Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0):
+  https://creativecommons.org/licenses/by-sa/3.0/legalcode
 ========================================================================

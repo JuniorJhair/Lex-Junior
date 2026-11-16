@@ -8,11 +8,13 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.5.0</Version>
-    <AssemblyVersion>2.5.0.0</AssemblyVersion>
-    <FileVersion>2.5.0.0</FileVersion>
+    <Version>2.6.0</Version>
+    <AssemblyVersion>2.6.0.0</AssemblyVersion>
+    <FileVersion>2.6.0.0</FileVersion>
     <Product>Lex Junior Browser</Product>
-    <Company>Lex Junior</Company>
+    <Authors>Junior Pacherrez</Authors>
+    <Company>Junior Pacherrez</Company>
+    <Copyright>Copyright © 2026 Junior Pacherrez</Copyright>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,6 +31,7 @@
     <None Update="Assets\tv\**" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\shield\lex-shield.lex" />
     <None Update="Assets\shield\lex-shield.lex" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="..\THIRD_PARTY_NOTICES.txt" LogicalName="THIRD_PARTY_NOTICES.txt" />
     <None Include="..\THIRD_PARTY_NOTICES.txt" Link="THIRD_PARTY_NOTICES.txt" CopyToOutputDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="LexBrowser.Tests" />
   </ItemGroup>

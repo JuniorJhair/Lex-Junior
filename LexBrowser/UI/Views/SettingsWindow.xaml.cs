@@ -67,7 +67,7 @@ public partial class SettingsWindow : Window
         }
         if (TxtAboutProductTitle != null && ver != null)
         {
-            TxtAboutProductTitle.Text = $"Lex Junior Browser v{ver.Major}.{ver.Minor}.{ver.Build} · LexShield Core";
+            TxtAboutProductTitle.Text = $"Lex Junior Browser v{ver.Major}.{ver.Minor}.{ver.Build} · Junior Pacherrez · LexShield Core";
         }
 
         LoadCurrentSettings();
@@ -216,17 +216,26 @@ public partial class SettingsWindow : Window
 
     internal static string? ResolveThirdPartyNoticesPath()
     {
-        string baseDir = AppContext.BaseDirectory;
-        string direct = System.IO.Path.Combine(baseDir, "THIRD_PARTY_NOTICES.txt");
-        if (System.IO.File.Exists(direct))
-            return direct;
+        var roots = new System.Collections.Generic.List<string>();
+        string? processDir = System.IO.Path.GetDirectoryName(Environment.ProcessPath);
+        if (!string.IsNullOrWhiteSpace(processDir))
+            roots.Add(processDir);
+        if (!string.IsNullOrWhiteSpace(AppContext.BaseDirectory))
+            roots.Add(AppContext.BaseDirectory);
 
-        var dir = new System.IO.DirectoryInfo(baseDir);
-        for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
+        foreach (string root in roots)
         {
-            string candidate = System.IO.Path.Combine(dir.FullName, "THIRD_PARTY_NOTICES.txt");
-            if (System.IO.File.Exists(candidate))
-                return candidate;
+            string direct = System.IO.Path.Combine(root, "THIRD_PARTY_NOTICES.txt");
+            if (System.IO.File.Exists(direct))
+                return direct;
+
+            var dir = new System.IO.DirectoryInfo(root);
+            for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
+            {
+                string candidate = System.IO.Path.Combine(dir.FullName, "THIRD_PARTY_NOTICES.txt");
+                if (System.IO.File.Exists(candidate))
+                    return candidate;
+            }
         }
         return null;
     }
@@ -237,25 +246,66 @@ public partial class SettingsWindow : Window
         {
             string? path = ResolveThirdPartyNoticesPath();
             if (!string.IsNullOrEmpty(path))
-                return System.IO.File.ReadAllText(path);
+                return System.IO.File.ReadAllText(path, System.Text.Encoding.UTF8);
         }
         catch { }
 
-        return "Lex Junior Browser · LexShield Core\r\nArchivo THIRD_PARTY_NOTICES.txt no encontrado en el directorio de instalación.";
+        try
+        {
+            using System.IO.Stream? stream = typeof(SettingsWindow).Assembly.GetManifestResourceStream("THIRD_PARTY_NOTICES.txt");
+            if (stream != null)
+            {
+                using var reader = new System.IO.StreamReader(stream, System.Text.Encoding.UTF8);
+                return reader.ReadToEnd();
+            }
+        }
+        catch { }
+
+        return "Lex Junior Browser · Junior Pacherrez\r\nArchivo THIRD_PARTY_NOTICES.txt no disponible.";
+    }
+
+    internal static string? EnsurePhysicalNoticesFilePath(string? preferredDir = null)
+    {
+        string? existing = ResolveThirdPartyNoticesPath();
+        if (!string.IsNullOrEmpty(existing))
+            return existing;
+
+        string text = LoadThirdPartyNoticesText();
+        string[] candidateDirs = preferredDir != null
+            ? new[] { preferredDir }
+            : new[]
+            {
+                System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexBrowser"),
+                System.IO.Path.GetTempPath()
+            };
+
+        foreach (string dir in candidateDirs)
+        {
+            if (string.IsNullOrWhiteSpace(dir)) continue;
+            try
+            {
+                System.IO.Directory.CreateDirectory(dir);
+                string outPath = System.IO.Path.Combine(dir, "THIRD_PARTY_NOTICES.txt");
+                System.IO.File.WriteAllText(outPath, text, new System.Text.UTF8Encoding(false));
+                return outPath;
+            }
+            catch { }
+        }
+        return null;
     }
 
     private void BtnOpenNoticesFile_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            string? path = ResolveThirdPartyNoticesPath();
+            string? path = EnsurePhysicalNoticesFilePath();
             if (!string.IsNullOrEmpty(path))
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
             }
             else
             {
-                MessageBox.Show("No se encontró THIRD_PARTY_NOTICES.txt en la carpeta de la aplicación.",
+                MessageBox.Show("No se pudo abrir THIRD_PARTY_NOTICES.txt.",
                     "Licencias y créditos", MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }

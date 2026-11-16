@@ -94,20 +94,14 @@ public partial class MainWindow
             }
             catch { }
 
-            string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            string logPath = Path.Combine(desktopPath, "LexJunior_ShieldLog.txt");
-            try
-            {
-                File.WriteAllText(logPath, dump, System.Text.Encoding.UTF8);
-            }
-            catch { }
+            string? logPath = WriteShieldLogExport(dump);
 
             string scopeLabel = onlyActiveTab ? "de esta pestaña" : $"({count} eventos)";
-            ShowToast($"🛡️ Shield Log {scopeLabel} copiado", "Abrir Log 📄", () =>
+            ShowToast($"🛡️ Shield Log {scopeLabel} guardado en Logs", "Abrir Log 📄", () =>
             {
                 try
                 {
-                    if (File.Exists(logPath))
+                    if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
                     {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(logPath) { UseShellExecute = true });
                     }
@@ -805,5 +799,43 @@ public partial class MainWindow
             await CompleteOverlayUnlockAsync();
             ShowToast("🔓 Acceso restablecido (se vació solo la bóveda de contraseñas; tus marcadores y ajustes siguen intactos).");
         }
+    }
+
+    internal static string? WriteShieldLogExport(string content, string? preferredAppDir = null)
+    {
+        var candidateBaseDirs = new System.Collections.Generic.List<string>();
+        if (!string.IsNullOrWhiteSpace(preferredAppDir))
+        {
+            candidateBaseDirs.Add(preferredAppDir);
+        }
+        else
+        {
+            string? processDir = Path.GetDirectoryName(Environment.ProcessPath);
+            if (!string.IsNullOrWhiteSpace(processDir))
+                candidateBaseDirs.Add(processDir);
+            if (!string.IsNullOrWhiteSpace(AppContext.BaseDirectory))
+                candidateBaseDirs.Add(AppContext.BaseDirectory);
+
+            string localAppDataDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "LexBrowser");
+            if (!string.IsNullOrWhiteSpace(localAppDataDir))
+                candidateBaseDirs.Add(localAppDataDir);
+        }
+
+        foreach (string baseDir in candidateBaseDirs)
+        {
+            try
+            {
+                string logsDir = Path.Combine(baseDir, "Logs");
+                Directory.CreateDirectory(logsDir);
+                string logPath = Path.Combine(logsDir, "LexJunior_ShieldLog.txt");
+                File.WriteAllText(logPath, content, new System.Text.UTF8Encoding(false));
+                return logPath;
+            }
+            catch { }
+        }
+
+        return null;
     }
 }
