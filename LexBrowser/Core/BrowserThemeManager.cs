@@ -14,14 +14,13 @@ public static class BrowserThemeManager
 
     public static string NormalizeTheme(string? theme)
     {
-        if (string.IsNullOrWhiteSpace(theme)) return Dark;
+        if (string.IsNullOrWhiteSpace(theme)) return Classic;
         string t = theme.Trim();
+        if (t.Equals("Dark", StringComparison.OrdinalIgnoreCase) || t.Equals("Oscuro", StringComparison.OrdinalIgnoreCase))
+            return Dark;
         if (t.Equals("Light", StringComparison.OrdinalIgnoreCase) || t.Equals("Claro", StringComparison.OrdinalIgnoreCase))
             return Light;
-        if (t.Equals("Classic", StringComparison.OrdinalIgnoreCase) || t.Equals("Clasico", StringComparison.OrdinalIgnoreCase) ||
-            t.Equals("Clásico", StringComparison.OrdinalIgnoreCase) || t.Equals("Original", StringComparison.OrdinalIgnoreCase))
-            return Classic;
-        return Dark;
+        return Classic;
     }
 
     public static void ApplyTheme(string? theme)

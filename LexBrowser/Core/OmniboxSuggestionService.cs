@@ -307,8 +307,7 @@ public static class OmniboxSuggestionService
                 string cleanDisplay = entry.CleanDisplayUrl;
                 string title = string.IsNullOrWhiteSpace(entry.Title) ? cleanDisplay : entry.Title;
                 if (entry.Url.Contains("lexjunior.pages.dev", StringComparison.OrdinalIgnoreCase) ||
-                    title.StartsWith("Lex Junior Browser", StringComparison.OrdinalIgnoreCase) ||
-                    title.Contains("Ultra-Ligero", StringComparison.OrdinalIgnoreCase))
+                    title.StartsWith("Lex Junior Browser", StringComparison.OrdinalIgnoreCase))
                 {
                     title = "Lex Junior Browser";
                 }
@@ -361,8 +360,7 @@ public static class OmniboxSuggestionService
 
                     string bTitle = string.IsNullOrWhiteSpace(bk.Title) ? FormatCleanDisplayUrl(bk.Url) : bk.Title;
                     if (bk.Url.Contains("lexjunior.pages.dev", StringComparison.OrdinalIgnoreCase) ||
-                        bTitle.StartsWith("Lex Junior Browser", StringComparison.OrdinalIgnoreCase) ||
-                        bTitle.Contains("Ultra-Ligero", StringComparison.OrdinalIgnoreCase))
+                        bTitle.StartsWith("Lex Junior Browser", StringComparison.OrdinalIgnoreCase))
                     {
                         bTitle = "Lex Junior Browser";
                     }

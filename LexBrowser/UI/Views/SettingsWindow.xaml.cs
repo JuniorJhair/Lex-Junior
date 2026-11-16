@@ -63,6 +63,10 @@ public partial class SettingsWindow : Window
         {
             TxtSettingsVersionBadge.Text = $"⚡ Lex Junior v{ver.Major}.{ver.Minor}.{ver.Build}";
         }
+        if (TxtAboutProductTitle != null && ver != null)
+        {
+            TxtAboutProductTitle.Text = $"Lex Junior Browser v{ver.Major}.{ver.Minor}.{ver.Build} · LexShield Core";
+        }
 
         LoadCurrentSettings();
         _isInitializing = false;
@@ -73,7 +77,7 @@ public partial class SettingsWindow : Window
     private void LoadCurrentSettings()
     {
         var s = SettingsManager.Current;
-        if (CmbBrowserTheme != null) SetComboByTag(CmbBrowserTheme, s.Theme ?? "Dark");
+        if (CmbBrowserTheme != null) SetComboByTag(CmbBrowserTheme, BrowserThemeManager.NormalizeTheme(s.Theme));
         ChkFloatingPage.IsChecked = s.ShowFloatingPageButton;
         ChkAutoVideoPip.IsChecked = s.EnableAutoVideoPip;
         ChkBookmarksBar.IsChecked = s.ShowBookmarksBar;
@@ -149,6 +153,10 @@ public partial class SettingsWindow : Window
 
         UpdateDefaultBrowserUI();
         RefreshNotificationSitesList();
+        if (TxtThirdPartyNotices != null && string.IsNullOrEmpty(TxtThirdPartyNotices.Text))
+        {
+            TxtThirdPartyNotices.Text = LoadThirdPartyNoticesText();
+        }
     }
 
     public void OpenToSection(string section)
@@ -156,6 +164,11 @@ public partial class SettingsWindow : Window
         if (section.Equals("Telemetry", StringComparison.OrdinalIgnoreCase))
         {
             TabTelemetry.IsChecked = true;
+        }
+        else if (section.Equals("Licenses", StringComparison.OrdinalIgnoreCase) ||
+                 section.Equals("About", StringComparison.OrdinalIgnoreCase))
+        {
+            if (TabAboutLicenses != null) TabAboutLicenses.IsChecked = true;
         }
         else if (section.Equals("Bookmarks", StringComparison.OrdinalIgnoreCase))
         {
@@ -184,10 +197,70 @@ public partial class SettingsWindow : Window
         PanelBookmarks.Visibility = (TabBookmarks.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
         PanelNotifications.Visibility = (TabNotifications.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
         PanelTelemetry.Visibility = (TabTelemetry.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
+        if (PanelAboutLicenses != null)
+        {
+            PanelAboutLicenses.Visibility = (TabAboutLicenses?.IsChecked == true) ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         if (TabNotifications.IsChecked == true)
         {
             RefreshNotificationSitesList();
+        }
+        else if (TabAboutLicenses?.IsChecked == true && TxtThirdPartyNotices != null && string.IsNullOrEmpty(TxtThirdPartyNotices.Text))
+        {
+            TxtThirdPartyNotices.Text = LoadThirdPartyNoticesText();
+        }
+    }
+
+    internal static string? ResolveThirdPartyNoticesPath()
+    {
+        string baseDir = AppContext.BaseDirectory;
+        string direct = System.IO.Path.Combine(baseDir, "THIRD_PARTY_NOTICES.txt");
+        if (System.IO.File.Exists(direct))
+            return direct;
+
+        var dir = new System.IO.DirectoryInfo(baseDir);
+        for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
+        {
+            string candidate = System.IO.Path.Combine(dir.FullName, "THIRD_PARTY_NOTICES.txt");
+            if (System.IO.File.Exists(candidate))
+                return candidate;
+        }
+        return null;
+    }
+
+    internal static string LoadThirdPartyNoticesText()
+    {
+        try
+        {
+            string? path = ResolveThirdPartyNoticesPath();
+            if (!string.IsNullOrEmpty(path))
+                return System.IO.File.ReadAllText(path);
+        }
+        catch { }
+
+        return "Lex Junior Browser · LexShield Core\r\nArchivo THIRD_PARTY_NOTICES.txt no encontrado en el directorio de instalación.";
+    }
+
+    private void BtnOpenNoticesFile_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            string? path = ResolveThirdPartyNoticesPath();
+            if (!string.IsNullOrEmpty(path))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            else
+            {
+                MessageBox.Show("No se encontró THIRD_PARTY_NOTICES.txt en la carpeta de la aplicación.",
+                    "Licencias y créditos", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"No se pudo abrir el archivo de licencias: {ex.Message}",
+                "Licencias y créditos", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

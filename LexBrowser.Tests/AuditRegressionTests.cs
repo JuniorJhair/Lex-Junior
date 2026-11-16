@@ -303,8 +303,9 @@ public class AuditRegressionTests
     [Fact]
     public void BrowserThemeManager_NormalizesAndAppliesThemes_Cleanly()
     {
-        Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme(null));
-        Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme(""));
+        Assert.Equal(BrowserThemeManager.Classic, BrowserThemeManager.NormalizeTheme(null));
+        Assert.Equal(BrowserThemeManager.Classic, BrowserThemeManager.NormalizeTheme(""));
+        Assert.Equal(BrowserThemeManager.Classic, BrowserThemeManager.NormalizeTheme("InvalidThemeName"));
         Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme("Dark"));
         Assert.Equal(BrowserThemeManager.Dark, BrowserThemeManager.NormalizeTheme("Oscuro"));
         Assert.Equal(BrowserThemeManager.Light, BrowserThemeManager.NormalizeTheme("Light"));
@@ -321,19 +322,28 @@ public class AuditRegressionTests
         Assert.True(dict.Contains("AccentColor"));
 
         // New Tab Page refleja el tema activo en su HTML generado
-        string darkHtml = NewTabPage.GetHtml();
-        Assert.Contains("#0F0F12", darkHtml);
-
         var s = SettingsManager.Current;
-        s.Theme = "Light";
-        string lightHtml = NewTabPage.GetHtml();
-        Assert.Contains("#F8FAFC", lightHtml);
+        string origTheme = s.Theme;
+        try
+        {
+            s.Theme = "Classic";
+            string classicHtml = NewTabPage.GetHtml();
+            Assert.Contains("#000000", classicHtml);
+            Assert.Contains("Menos anuncios", classicHtml);
+            Assert.DoesNotContain("Ultra-ligero", classicHtml, StringComparison.OrdinalIgnoreCase);
 
-        s.Theme = "Classic";
-        string classicHtml = NewTabPage.GetHtml();
-        Assert.Contains("#000000", classicHtml);
+            s.Theme = "Light";
+            string lightHtml = NewTabPage.GetHtml();
+            Assert.Contains("#F8FAFC", lightHtml);
 
-        s.Theme = "Dark";
+            s.Theme = "Dark";
+            string darkHtml = NewTabPage.GetHtml();
+            Assert.Contains("#0F0F12", darkHtml);
+        }
+        finally
+        {
+            s.Theme = origTheme;
+        }
     }
 
     [Fact]

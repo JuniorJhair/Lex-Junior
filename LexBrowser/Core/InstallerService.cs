@@ -126,11 +126,11 @@ public static class InstallerService
         {
             if (createDesktopShortcut)
             {
-                CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador ultraligero con bloqueo nativo y 0 telemetría");
+                CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
             }
             if (createStartMenuShortcut)
             {
-                CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador ultraligero con bloqueo nativo y 0 telemetría");
+                CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
             }
 
             RegisterInWindowsAddRemovePrograms(iconPath);
@@ -441,7 +441,7 @@ public static class InstallerService
 
                     using (var cap = clientKey.CreateSubKey("Capabilities"))
                     {
-                        cap.SetValue("ApplicationDescription", "Lex Junior - Navegador ultraligero con bloqueo nativo de anuncios y 0 telemetría.", RegistryValueKind.String);
+                        cap.SetValue("ApplicationDescription", "Lex Junior - Navegador rápido y privado con LexShield Core y 0 telemetría.", RegistryValueKind.String);
                         cap.SetValue("ApplicationIcon", $"{targetIcon},0", RegistryValueKind.String);
                         cap.SetValue("ApplicationName", "Lex Junior Browser", RegistryValueKind.String);
 
@@ -682,13 +682,13 @@ public static class InstallerService
                 // 1. Recrear acceso directo en el Escritorio
                 if (File.Exists(DesktopShortcutPath))
                 {
-                    CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador ultraligero con bloqueo nativo y 0 telemetría");
+                    CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
                 }
 
                 // 2. Recrear acceso directo en el Menú Inicio
                 if (File.Exists(StartMenuShortcutPath))
                 {
-                    CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador ultraligero con bloqueo nativo y 0 telemetría");
+                    CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
                 }
 
                 // 3. Actualizar accesos directos anclados en la barra de tareas de Windows

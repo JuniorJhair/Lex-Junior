@@ -133,6 +133,7 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
         Assert.Equal(ShieldSettings.CurrentShieldVersion, s.SettingsSchemaVersion);
         Assert.Equal(ShieldSettings.CurrentShieldVersion, s.Shield.Version);
         Assert.Equal(ShieldSettings.EngineLexShield, s.Shield.Engine);
+        Assert.Equal(BrowserThemeManager.Classic, s.Theme);
         Assert.True(s.EnableWebShieldInSubframes);
         Assert.True(s.Shield.Modules.Subframes);
         Assert.False(s.Shield.DiagnosticMode);
@@ -206,6 +207,55 @@ public sealed class SettingsPersistenceIsolationTests : IDisposable
         Assert.True(v3Load.EnableVideoPlayerDefuser);
         Assert.False(v3Load.EnableWebShieldInSubframes);
         Assert.Equal(SitePolicy.ModeCompat, v3Load.Shield.Sites["hentaila.com"].Mode);
+
+        // 3. Usuario existente con Theme="Dark" o "Oscuro" conserva Dark al migrar; valor inválido repara a Classic
+        File.WriteAllText(_tempPath, """
+        {
+          "SettingsSchemaVersion": 3,
+          "Theme": "Dark",
+          "Shield": { "Version": 3, "Engine": "Brave" }
+        }
+        """);
+        SettingsManager.Load();
+        Assert.Equal(BrowserThemeManager.Dark, SettingsManager.Current.Theme);
+
+        File.WriteAllText(_tempPath, """
+        {
+          "SettingsSchemaVersion": 3,
+          "Theme": "Oscuro",
+          "Shield": { "Version": 3, "Engine": "Brave" }
+        }
+        """);
+        SettingsManager.Load();
+        Assert.Equal(BrowserThemeManager.Dark, SettingsManager.Current.Theme);
+
+        File.WriteAllText(_tempPath, """
+        {
+          "SettingsSchemaVersion": 3,
+          "Theme": "TemaInvalido123",
+          "Shield": { "Version": 3, "Engine": "Brave" }
+        }
+        """);
+        SettingsManager.Load();
+        Assert.Equal(BrowserThemeManager.Classic, SettingsManager.Current.Theme);
+    }
+
+    [Fact]
+    public void SettingsWindow_ExposesAboutAndLicensesSection_AndLoadsNoticesFromOutput()
+    {
+        Assert.NotNull(typeof(SettingsWindow).GetField("TabAboutLicenses", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.NotNull(typeof(SettingsWindow).GetField("PanelAboutLicenses", BindingFlags.Instance | BindingFlags.NonPublic));
+        Assert.NotNull(typeof(SettingsWindow).GetField("TxtThirdPartyNotices", BindingFlags.Instance | BindingFlags.NonPublic));
+
+        string? resolvedPath = SettingsWindow.ResolveThirdPartyNoticesPath();
+        Assert.NotNull(resolvedPath);
+        Assert.True(File.Exists(resolvedPath!));
+
+        string notices = SettingsWindow.LoadThirdPartyNoticesText();
+        Assert.Contains("LexShield Core", notices, StringComparison.Ordinal);
+        Assert.Contains("lex-shield.lex", notices, StringComparison.Ordinal);
+        Assert.Contains("MPL-2.0", notices, StringComparison.Ordinal);
+        Assert.Contains("GPL-3.0", notices, StringComparison.Ordinal);
     }
 
     [Fact]

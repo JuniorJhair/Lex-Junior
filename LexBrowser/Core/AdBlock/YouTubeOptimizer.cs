@@ -5,8 +5,8 @@ using System.Text.Json.Nodes;
 namespace LexBrowser.Core.AdBlock;
 
 /// <summary>
-/// Adaptador de bloqueo de anuncios para YouTube basado en la estrategia de Brave
-/// (<c>adblock-rust-master/data/brave/brave-main-list.txt</c> y reglas de uBlock).
+/// Adaptador de bloqueo de anuncios para YouTube basado en listas declarativas públicas
+/// y reglas estándar de filtrado.
 ///
 /// Estrategia:
 /// 1. Aislamiento total de dominio: fuera de YouTube termina de inmediato sin tocar nada.
@@ -17,7 +17,7 @@ namespace LexBrowser.Core.AdBlock;
 /// 4. Neutralización del temporizador anti-adblock de 17 s y de <c>onAbnormalityDetected</c>.
 /// 5. Cero manipulación del reproductor: nunca altera <c>playbackRate</c>, volumen ni visibilidad.
 ///    Solo pulsa "Saltar" si un anuncio residual llega a mostrarse.
-/// 6. CSS cosmético seguro (sin ocultar <c>#player-ads</c>, exceptuado en Brave).
+/// 6. CSS cosmético seguro (sin ocultar <c>#player-ads</c>, exceptuado en reglas públicas).
 /// </summary>
 public static class YouTubeOptimizer
 {
@@ -154,7 +154,7 @@ public static class YouTubeOptimizer
         } catch (_) {}
     };
 
-    // 3. Poda de claves publicitarias y Shorts patrocinados (estrategia json-prune de Brave)
+    // 3. Poda de claves publicitarias y Shorts patrocinados (estrategia declarativa json-prune)
     const AD_KEYS = ['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams'];
 
     const isAdEntry = function(entry) {
@@ -539,7 +539,7 @@ public static class YouTubeOptimizer
         } catch (_) {}
     };
 
-    // 10. CSS cosmético declarativo de MediaShieldRules (sin selectores exceptuados por Brave)
+    // 10. CSS cosmético declarativo de MediaShieldRules (sin selectores exceptuados)
     const YT_COSMETIC_CSS = __YT_COSMETIC_CSS__;
     const attachYtStyle = function() {
         try {

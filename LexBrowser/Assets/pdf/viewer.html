@@ -130,7 +130,7 @@
       margin: 0 4px;
     }
 
-    /* PANEL LATERAL DE PROPIEDADES DE TRAZO (Estilo Brave) */
+    /* PANEL LATERAL DE PROPIEDADES DE TRAZO */
     #sidebar-properties {
       position: absolute;
       top: 58px;
@@ -661,7 +661,7 @@
       <button class="btn-tool" id="btn-next-page" title="Página siguiente">▶</button>
     </div>
 
-    <!-- 2. HERRAMIENTAS DE EDICIÓN Y DIBUJO (Estilo Brave) -->
+    <!-- 2. HERRAMIENTAS DE EDICIÓN Y DIBUJO -->
     <div class="toolbar-section">
       <button class="btn-tool" id="tool-pan" title="Mano / Desplazar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path></svg>
@@ -729,7 +729,7 @@
     </div>
   </header>
 
-  <!-- PANEL LATERAL FLOTANTE DE DIBUJO (Grosor y Colores como en Brave) -->
+  <!-- PANEL LATERAL FLOTANTE DE DIBUJO (Grosor y Colores) -->
   <aside id="sidebar-properties">
     <div class="sidebar-section-title">Tamaño del trazo</div>
     <div class="stroke-sizes">
@@ -979,7 +979,7 @@
 
       document.getElementById('sidebar-thumbnails').appendChild(thumbWrap);
 
-      // Renderizado ligero en background para miniatura
+      // Renderizado progresivo en background para miniatura
       AppState.pdfDoc.getPage(pageNum).then(p => {
         const vp = p.getViewport({ scale: 0.2 });
         canvas.width = vp.width;

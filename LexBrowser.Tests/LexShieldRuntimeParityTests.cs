@@ -88,7 +88,7 @@ public sealed class LexShieldRuntimeParityTests
     }
 
     [Fact]
-    public void RealBraveLex_CompilesAllRegexAndCspRegexRulesWithoutError()
+    public void RealLexShieldBundle_CompilesAllRegexAndCspRegexRulesWithoutError()
     {
         var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
@@ -120,7 +120,7 @@ public sealed class LexShieldRuntimeParityTests
     }
 
     [Fact]
-    public void RealBraveLex_IncludesEasyListSpanishRulesForHentailaAndAnimeyt()
+    public void RealLexShieldBundle_IncludesEasyListSpanishRulesForHentailaAndAnimeyt()
     {
         var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
@@ -396,7 +396,7 @@ public sealed class LexShieldRuntimeParityTests
                 Assert.Contains("popMagic", root.GetProperty("scriptletCalls").GetRawText(), StringComparison.OrdinalIgnoreCase);
             }
 
-            // En Modo Compatible sí se omiten subframes en Brave
+            // En Modo Compatible sí se omiten subframes
             var compatBridge = new LexShieldBridgeHostObject("secret-tok", () => activeMain, () => true);
             using (var blankFrameCompat = JsonDocument.Parse(compatBridge.GetDocumentPlanJson("secret-tok", "about:blank", "https://hentaila.com/ver/1", false)))
             {
@@ -412,7 +412,7 @@ public sealed class LexShieldRuntimeParityTests
             }
             Assert.Contains("LEXSHIELD_BRIDGE_PLAN_ERROR", ShieldLogger.DumpLog(), StringComparison.Ordinal);
 
-            // Aislamiento estricto: YouTube, Dailymotion y about:blank bajo Dailymotion jamás reciben Brave
+            // Aislamiento estricto: YouTube, Dailymotion y about:blank bajo Dailymotion jamás reciben LexShield general
             activeMain = new Uri("https://www.dailymotion.com/video/x123");
             using (var dmFrame = JsonDocument.Parse(bridge.GetDocumentPlanJson("secret-tok", "about:blank", "https://www.dailymotion.com/video/x123", false)))
             {
@@ -678,7 +678,7 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
     }
 
     [Fact]
-    public void BraveNetworkDecision_IncludesMatchedRuleAndFormatsDiagnosticReason()
+    public void LexShieldNetworkDecision_IncludesMatchedRuleAndFormatsDiagnosticReason()
     {
         var s = SettingsManager.Current;
         string origEngine = s.Shield.Engine;

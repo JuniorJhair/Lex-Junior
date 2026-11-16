@@ -12,7 +12,7 @@ namespace LexBrowser.Tests;
 
 public sealed class LexShieldCosmeticScriptletTests
 {
-    private static LexShieldData LoadRealBraveData()
+    private static LexShieldData LoadRealShieldData()
     {
         var data = LexShieldData.TryGetDefault();
         Assert.NotNull(data);
@@ -40,9 +40,9 @@ public sealed class LexShieldCosmeticScriptletTests
         };
 
     [Fact]
-    public void RealBraveLex_LoadsCosmeticCountsAndHostRules()
+    public void RealLexBundle_LoadsCosmeticCountsAndHostRules()
     {
-        var data = LoadRealBraveData();
+        var data = LoadRealShieldData();
         var cos = data.GetCosmeticEngine();
 
         Assert.Equal(9196, cos.SimpleClassCount);
@@ -60,9 +60,9 @@ public sealed class LexShieldCosmeticScriptletTests
     }
 
     [Fact]
-    public void Isolation_YouTubeAndDailymotionNeverReceiveBraveCosmeticsOrScriptlets()
+    public void Isolation_YouTubeAndDailymotionNeverReceiveGeneralCosmeticsOrScriptlets()
     {
-        var data = LoadRealBraveData();
+        var data = LoadRealShieldData();
         var cos = data.GetCosmeticEngine();
         var res = data.GetResourceStore();
         var policy = NormalPolicy("youtube.com");
@@ -82,7 +82,7 @@ public sealed class LexShieldCosmeticScriptletTests
     [Fact]
     public void RealSites_AnimeYtAndHentailaResolveExpectedScriptlets()
     {
-        var data = LoadRealBraveData();
+        var data = LoadRealShieldData();
         var cos = data.GetCosmeticEngine();
         var res = data.GetResourceStore();
         var policy = NormalPolicy("animeyt.es");
@@ -105,7 +105,7 @@ public sealed class LexShieldCosmeticScriptletTests
     [Fact]
     public void GenericCssLookup_RespectsCaseSensitivityUnhideAndGenericHide()
     {
-        var data = LoadRealBraveData();
+        var data = LoadRealShieldData();
         var cos = data.GetCosmeticEngine();
         var policy = NormalPolicy("example.org");
 
@@ -173,7 +173,7 @@ public sealed class LexShieldCosmeticScriptletTests
             new Dictionary<string, string[]>(StringComparer.Ordinal),
             new[] { "[href*=\"bad\"]", ".adbox" });
 
-        var realResources = LoadRealBraveData().GetResourceStore();
+        var realResources = LoadRealShieldData().GetResourceStore();
         var rootRes = engine.EvaluateHost(host, genericHide: false, realResources, allowPrivileged: false);
 
         // .adbox fue desocultado por #@#.adbox, pero .only-root aplica en testsite.example
@@ -228,7 +228,7 @@ public sealed class LexShieldCosmeticScriptletTests
     [Fact]
     public void NodeJs_ValidatesSyntaxAndRuntimeExecutionOfBootstrapAndScriptlets()
     {
-        var data = LoadRealBraveData();
+        var data = LoadRealShieldData();
         var cos = data.GetCosmeticEngine();
         var res = data.GetResourceStore();
 
@@ -257,7 +257,7 @@ public sealed class LexShieldCosmeticScriptletTests
             aeldJs,
             nowoifJs);
 
-        string tempFile = Path.Combine(Path.GetTempPath(), $"lex_brave_cos_{Guid.NewGuid():N}.js");
+        string tempFile = Path.Combine(Path.GetTempPath(), $"lex_shield_cos_{Guid.NewGuid():N}.js");
         try
         {
             File.WriteAllText(tempFile, harness, new UTF8Encoding(false));

@@ -1,7 +1,7 @@
 namespace LexBrowser.Core;
 
 /// <summary>
-/// Runtime universal y ligero para utilidades multimedia y atajos de teclado en pestañas web:
+/// Runtime universal y compacto para utilidades multimedia y atajos de teclado en pestañas web:
 /// 1. Mini-Reproductor Nativo (Picture-in-Picture libre con retorno a pestaña).
 /// 2. Amplificador de Volumen Hi-Fi hasta 300% (AudioContext + DynamicsCompressor bajo demanda).
 /// 3. Detector multimedia bajo demanda (0% consumo cuando el usuario no lo activa).

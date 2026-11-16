@@ -328,7 +328,7 @@ public class LexShieldCoreEngineTests
     }
 
     [Fact]
-    public void StrictIsolation_YouTube_Dailymotion_PaymentHosts_NeverBlockedByBrave()
+    public void StrictIsolation_YouTube_Dailymotion_PaymentHosts_NeverBlockedByCoreEngine()
     {
         var b = new SyntheticLexBuilder();
         b.AddPureHost("youtube.com");

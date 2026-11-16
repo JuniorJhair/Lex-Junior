@@ -91,12 +91,12 @@ public class ShieldLoggerTests
 
         for (int i = 0; i < 5; i++)
         {
-            ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "Brave network (purehost:adtng.com)", "Tab:t1");
+            ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "LexShield network (purehost:adtng.com)", "Tab:t1");
         }
         Assert.Equal(1, ShieldLogger.Count);
 
-        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://cdn.tsyndicate.com/sdk/v1/p.js", "Script", "Brave network (||tsyndicate.com|)", "Tab:t1");
-        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "Brave network (purehost:adtng.com)", "Tab:t1");
+        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://cdn.tsyndicate.com/sdk/v1/p.js", "Script", "LexShield network (||tsyndicate.com|)", "Tab:t1");
+        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "LexShield network (purehost:adtng.com)", "Tab:t1");
 
         Assert.Equal(3, ShieldLogger.Count);
 
@@ -105,7 +105,7 @@ public class ShieldLoggerTests
 
         // Clear debe limpiar _lastEntry para que la siguiente entrada idéntica vuelva a entrar normal (x1)
         ShieldLogger.Clear();
-        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "Brave network (purehost:adtng.com)", "Tab:t1");
+        ShieldLogger.Log("REQUEST_BLOCKED_403", "hentaila.com", "https://a.adtng.com/get/10016589", "Script", "LexShield network (purehost:adtng.com)", "Tab:t1");
         Assert.Equal(1, ShieldLogger.Count);
         Assert.DoesNotContain("(x", ShieldLogger.DumpLog(), StringComparison.Ordinal);
     }

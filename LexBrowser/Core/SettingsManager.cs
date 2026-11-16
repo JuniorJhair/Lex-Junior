@@ -8,7 +8,7 @@ namespace LexBrowser.Core;
 public class BrowserSettings
 {
     public int SettingsSchemaVersion { get; set; } = 1;
-    public string Theme { get; set; } = "Dark"; // "Dark", "Light", "Classic"
+    public string Theme { get; set; } = "Classic"; // "Classic", "Dark", "Light"
     public bool ShowFloatingPageButton { get; set; } = true;
     public bool EnableAutoVideoPip { get; set; } = true;
     public bool ShowBookmarksBar { get; set; } = true;
@@ -242,6 +242,13 @@ public static class SettingsManager
             settings.Shield.Engine = ShieldSettings.EngineLexShield;
             settings.Shield.Version = Math.Max(ShieldSettings.CurrentShieldVersion, settings.Shield.Version);
             settings.SettingsSchemaVersion = Math.Max(ShieldSettings.CurrentShieldVersion, settings.SettingsSchemaVersion);
+            migrated = true;
+        }
+
+        string normalizedTheme = BrowserThemeManager.NormalizeTheme(settings.Theme);
+        if (!string.Equals(settings.Theme, normalizedTheme, StringComparison.Ordinal))
+        {
+            settings.Theme = normalizedTheme;
             migrated = true;
         }
 

@@ -524,7 +524,7 @@ public static class NewTabPage
     </div>
   </div>
 
-  <div class=""footer"">⚡ <b>Lex Junior Browser</b> — Cero telemetría · Sin anuncios · Ultra-ligero</div>
+  <div class=""footer"">⚡ <b>Lex Junior Browser</b> — Cero telemetría · Menos anuncios · Navegación rápida</div>
 
   <script>
     function tick() {

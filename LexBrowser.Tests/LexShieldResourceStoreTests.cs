@@ -164,7 +164,7 @@ public class LexShieldResourceStoreTests
         Assert.Equal("Content-Type: image/gif", gif!.ContentTypeHeader);
         Assert.Equal((byte)'G', gif.Bytes[0]);
 
-        // Todas las entradas de brave-resources.json tienen mime explícito; set-constant.js se resuelve como scriptlet JS (perm=0)
+        // set-constant.js se resuelve como scriptlet JS (perm=0)
         Assert.True(store.TryGetResource("set-constant.js", out var setConstEntry));
         Assert.Contains("javascript", setConstEntry!.ContentTypeHeader);
         Assert.Equal(0, setConstEntry.Permission);
@@ -305,7 +305,7 @@ public class LexShieldResourceStoreTests
         Assert.True(ga.IsRedirectStub);
         Assert.Contains("javascript", ga.RedirectContentType);
 
-        // En Brave, google-ima.js aplica en dominios declarados como viki.com; en otros sitios solo bloquea red si aplica
+        // google-ima.js aplica tanto vía regla declarativa (p. ej. viki.com) como por respaldo seguro no-BigSite
         var imaViki = engine.EvaluateNetwork(
             new Uri("https://imasdk.googleapis.com/js/sdkloader/ima3.js"),
             "viki.com",

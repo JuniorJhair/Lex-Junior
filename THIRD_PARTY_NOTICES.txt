@@ -254,25 +254,30 @@ THE SOFTWARE.
    channel directories, catalogs, or media streams. Lex TV operates strictly
    as a local client media player for sources provided directly by the user.
 ========================================================================
-4. Brave Adblock Rust Semantics, Filter Snapshot & uAssets / Scriptlet Resources
-   Engine design reference: adblock-rust (Mozilla Public License 2.0 - MPL-2.0)
+4. LexShield Core — Declarative Filter Lists, Shims & Scriptlet Resources
+   Engine implementation: LexBrowser/Core/AdBlock/Core/* (C#/.NET 8, Lex Junior)
+   Inspired by public declarative adblock engine design (adblock-rust, MPL-2.0):
    https://github.com/brave/adblock-rust
-   Compiler script: tools/compile_brave_shield.py -> LexBrowser/Assets/shield/brave-shield.lex
+   Compiler script: tools/compile_lex_shield.py -> LexBrowser/Assets/shield/lex-shield.lex
 
-   License audit summary (all bundled sources allow redistribution):
-   The precompiled bundle `LexBrowser/Assets/shield/brave-shield.lex` embeds
-   normalized binary rules and surrogate resources compiled from the following
-   third-party snapshots under their respective upstream licenses:
+   License notice & redistribution summary:
+   The bundled binary `LexBrowser/Assets/shield/lex-shield.lex` compiles
+   Lex Junior rules (`tools/lex-extra-rules.txt`) together with normalized
+   third-party filter snapshots and scriptlet/surrogate resources under their
+   respective upstream open-source licenses:
 
-   - Brave Adblock Lists & Unbreak (`adblock-lists-master`):
+   - Google Interactive Media Ads SDK Shim (`AdBlockResources.GoogleImaScript`):
+     Based on Mozilla WebCompat shim / uAssets derivative.
+     License: Mozilla Public License 2.0 (MPL-2.0)
+
+   - Brave Adblock Lists & Unbreak (`adblock-lists-master`, upstream attribution):
      * brave-unbreak.txt, brave-firstparty.txt, brave-firstparty-regional.txt,
        brave-cookie-specific.txt, brave-specific.txt, brave-sugarcoat.txt
      * coin-miners.txt (NoCoin Filter List, Brave Software, Inc.)
      License: Mozilla Public License 2.0 (MPL-2.0)
      https://github.com/brave/adblock-lists/blob/master/LICENSE
 
-   - Brave Adblock Resources & Scriptlets (`adblock-resources-master` & `brave-resources.json`):
-     * `brave-resources.json` and `dist/resources.json` (surrogates/scriptlets)
+   - Declarative Surrogates & Scriptlets (`adblock-resources-master` / `brave-resources.json`):
      License: Mozilla Public License 2.0 (MPL-2.0) and uBlock Origin derived
      resources under GNU General Public License v3.0 (GPL-3.0)
      https://github.com/brave/adblock-resources/blob/master/LICENSE
@@ -288,8 +293,7 @@ THE SOFTWARE.
      License: GNU General Public License v3.0 (GPL-3.0)
      https://github.com/uBlockOrigin/uAssets/blob/master/LICENSE
 
-   Note: `update-lists.js` requires a `BRAVE_SERVICE_KEY` and does not run
-   automatically inside Lex Junior. To regenerate `brave-shield.lex` from local
-   snapshots, run:
-       python tools/compile_brave_shield.py
+   Note: `update-lists.js` is not executed inside Lex Junior. To regenerate
+   `LexBrowser/Assets/shield/lex-shield.lex` locally from the reference snapshots:
+       python tools/compile_lex_shield.py
 ========================================================================

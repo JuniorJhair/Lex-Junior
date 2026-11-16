@@ -1,9 +1,9 @@
 # ⚡ Lex Junior Browser (LexBrowser)
 
-Navegador web de escritorio ligero, privado y optimizado para multimedia en Windows, desarrollado en **C# (.NET 8.0 / WPF)** sobre **Microsoft Edge WebView2 (Chromium)**.
+Navegador web de escritorio privado y optimizado para multimedia en Windows, desarrollado en **C# (.NET 8.0 / WPF)** sobre **Microsoft Edge WebView2 (Chromium)**.
 
 ## ✨ Características Principales
-- **🛡️ LexShield AdBlock + YouTube Optimizer:** Bloqueo de red en tiempo real (403 Forbidden) contra dominios de publicidad/rastreo, neutralización de anuncios en YouTube/Shorts y cierre limpio de diálogos Polymer sin capas invisibles.
+- **🛡️ LexShield Core (Menos anuncios) + Adaptadores Aislados:** Motor declarativo unificado en C#/.NET 8 (`lex-shield.lex`, scriptlets estáticos sin `eval`, `$csp`, `$popup` y capas anti-overlay sin doble conteo) con rutas estrictamente aisladas para YouTube y Dailymotion.
 - **🔒 Modo Incógnito Real y 0 Telemetría:** Sesiones aisladas en memoria (`IsInPrivateModeEnabled = true`), sin registro en historial, sin retención en `Ctrl+Shift+T`, sin caché compartida de favicons y con protección mDNS para WebRTC.
 - **🗖 Picture-in-Picture Inteligente (Auto-PiP y Página Flotante):** Mini-reproductor nativo automático al cambiar de pestaña con memoria de tamaño independiente para videos 16:9 y Shorts 9:16, más ventana flotante manual.
 - **📑 Gestión Avanzada de Pestañas y Accesos Directos:** Navegación multi-pestaña con arrastrar y soltar, fijado de pestañas (solo icono o icono + título), indicador de seguridad HTTPS dinámico y barra de marcadores con persistencia atómica.

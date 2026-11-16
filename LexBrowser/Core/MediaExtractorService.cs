@@ -497,7 +497,7 @@ public static class MediaExtractorService
                 ? hlsProp.GetString()
                 : null;
 
-            // 1. Buscar las pistas de audio M4A (itag 140 = AAC 128kbps HQ, itag 139 = AAC 48kbps Ligero)
+            // 1. Buscar las pistas de audio M4A (itag 140 = AAC 128kbps HQ, itag 139 = AAC 48kbps Estándar)
             string? bestAudioM4aUrl = null;
             long bestAudioM4aBytes = 0;
             int bestAudioBitrate = 0;
@@ -1289,7 +1289,7 @@ public static class MediaExtractorService
         "google.", "youtube.", "facebook.", "twitter.", "disqus.", "recaptcha", "doubleclick", "gstatic.", "adservice"
     };
 
-    /// <summary>Script de inspección ligera ejecutado bajo demanda en frames DOM.</summary>
+    /// <summary>Script de inspección acotada ejecutado bajo demanda en frames DOM.</summary>
     public const string ScanJs = """
     (() => {
       const urls = new Set(), frames = new Set();

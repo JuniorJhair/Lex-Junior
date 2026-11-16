@@ -134,7 +134,7 @@ Estructura raíz:
 3. **Parseo en Streaming**:
    - Se utiliza `JsonDocument.ParseAsync(stream)` directamente desde el stream HTTP o de archivo, sin materializar el contenido como string C#.
 4. **Índice Compacto en Memoria**:
-   - Para los ~906 títulos, se mantiene en memoria únicamente un registro ligero:
+   - Para los ~906 títulos, se mantiene en memoria únicamente un registro compacto:
      - `Id` (string)
      - `Title` (string)
      - `TitleNormalized` (string sin acentos ni mayúsculas para búsqueda instantánea)

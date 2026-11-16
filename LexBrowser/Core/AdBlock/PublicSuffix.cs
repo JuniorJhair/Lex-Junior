@@ -5,7 +5,7 @@ using System.Net;
 namespace LexBrowser.Core.AdBlock;
 
 /// <summary>
-/// Utilidad ligera de sufijos públicos (eTLD+1) y coincidencia segura de dominios con frontera de punto.
+/// Utilidad compacta de sufijos públicos (eTLD+1) y coincidencia segura de dominios con frontera de punto.
 /// Evita tratar sufijos compuestos hispanoamericanos e internacionales (.com.pe, .gob.pe, .co.uk, .com.br, etc.)
 /// como un mismo dominio registrable y previene falsos positivos de sufijo sin punto (p. ej. xyoutube.com).
 /// </summary>

@@ -1101,7 +1101,7 @@ public static class PasswordManager
     }
 
     /// <summary>
-    /// Script pasivo ultraligero (0% CPU en reposo; sin timers ni MutationObserver).
+    /// Script pasivo bajo demanda (0% CPU en reposo; sin timers ni MutationObserver).
     /// Solo se activa cuando el usuario enfoca un campo de login o envía un formulario con campo de contraseña.
     /// </summary>
     public const string InjectedPasswordScript = @"

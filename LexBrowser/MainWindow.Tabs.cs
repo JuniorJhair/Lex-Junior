@@ -1760,7 +1760,7 @@ public partial class MainWindow
             win.InspectNetworkMediaResponse(tab, e);
         };
 
-        // 6. Historial de Descargas Ligero (0% CPU en reposo)
+        // 6. Historial de Descargas eficiente (0% CPU en reposo)
         core.DownloadStarting += (s, e) =>
         {
             try
