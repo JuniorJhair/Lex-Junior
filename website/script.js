@@ -64,8 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     'view-sniffer': {
       icon: '📥',
-      title: 'Streaming HD — Episodio 5',
-      url: 'https://streaming-hd.example/episodio-05',
+      title: 'Reproductor Multimedia — Episodio 5',
+      url: 'https://reproductor.local/episodio-05',
       ads: '29 bloqueados'
     },
     'view-pip': {
@@ -120,6 +120,25 @@ document.addEventListener('DOMContentLoaded', () => {
   if (mockBtnPip) mockBtnPip.addEventListener('click', () => activateView('view-pip'));
   if (mockBtnVol) mockBtnVol.addEventListener('click', () => activateView('view-youtube'));
   if (mockBtnMedia) mockBtnMedia.addEventListener('click', () => activateView('view-sniffer'));
+
+  // 4b. Selector de tema visual del navegador de ejemplo (Principal: Clásico Original)
+  const browserMockup = document.getElementById('browser-mockup');
+  const themeButtons = document.querySelectorAll('.theme-pill');
+  const setMockupTheme = (theme) => {
+    if (!browserMockup) return;
+    browserMockup.classList.remove('theme-classic', 'theme-dark', 'theme-light');
+    const safeTheme = theme === 'dark' || theme === 'light' ? theme : 'classic';
+    browserMockup.classList.add(`theme-${safeTheme}`);
+    themeButtons.forEach((btn) => {
+      const isActive = btn.dataset.theme === safeTheme;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+  };
+  themeButtons.forEach((btn) => {
+    btn.addEventListener('click', () => setMockupTheme(btn.dataset.theme));
+  });
+  setMockupTheme('classic');
 
   // 5. Slider interactivo del Amplificador de Volumen 300%
   const volSlider = document.getElementById('demo-vol-slider');
