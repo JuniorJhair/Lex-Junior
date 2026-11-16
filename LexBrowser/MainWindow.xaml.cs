@@ -228,7 +228,7 @@ public partial class MainWindow : Window
         // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
         _ = CheckForBrowserUpdateInBackgroundAsync();
 
-        // Comprobar una sola vez y sin consumo en segundo plano si es el navegador predeterminado
+        // Comprobar una sola vez al iniciar si es el navegador predeterminado
         _ = CheckDefaultBrowserStatusAsync();
     }
 
@@ -508,7 +508,7 @@ public partial class MainWindow : Window
 
     private async Task CheckDefaultBrowserStatusAsync()
     {
-        // 0.0% CPU: solo se verifica una vez tras arrancar la ventana, sin hilos ni procesos en segundo plano
+        // Solo se verifica una vez tras arrancar la ventana, sin temporizadores recurrentes
         if (_isGuestSession) return;
 
         // Esperar 1.5s para no competir con el arranque inicial de pestañas
@@ -653,6 +653,10 @@ public partial class MainWindow : Window
             }
         }
 
+        UpdateShieldBadgeText();
+        UpdateVolumeBoosterUI();
+        UpdateMediaSnifferUI();
+        UpdateCurrentTabBookmarkUI();
         UpdateTabWidths();
     }
 

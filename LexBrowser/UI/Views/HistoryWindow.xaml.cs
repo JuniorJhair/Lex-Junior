@@ -26,6 +26,9 @@ public partial class HistoryWindow : Window
         return brush;
     }
 
+    private Brush GetThemeBrush(string key, Brush fallback) =>
+        (Resources[key] as Brush) ?? (TryFindResource(key) as Brush) ?? fallback;
+
     private readonly CoreWebView2? _core;
     private bool _isInitialized = false;
     private bool _suppressFilterEvents = false;
@@ -48,6 +51,7 @@ public partial class HistoryWindow : Window
         InitializeComponent();
         _core = core;
         _isInitialized = true;
+        UpdateThemeStyles(SettingsManager.Current?.Theme);
         Loaded += HistoryWindow_Loaded;
         Closed += (_, _) =>
         {
@@ -80,6 +84,17 @@ public partial class HistoryWindow : Window
         Close();
     }
 
+    public void UpdateThemeStyles(string? theme = null)
+    {
+        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
+        BrowserThemeManager.ApplyThemePalette(Resources, target);
+        if (Application.Current != null)
+        {
+            BrowserThemeManager.ApplyThemePalette(Application.Current.Resources, target);
+        }
+        UpdateHistoryMasterStatusUI();
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // INTERRUPTOR MAESTRO: ACTIVAR / DESACTIVAR HISTORIAL
     // ─────────────────────────────────────────────────────────────────
@@ -92,15 +107,15 @@ public partial class HistoryWindow : Window
 
         if (isEnabled)
         {
-            BadgeHistoryStatus.Background = BrushStatusActiveBg;
+            BadgeHistoryStatus.Background = GetThemeBrush("HistoryStatusActiveBg", BrushStatusActiveBg);
             TxtHistoryStatus.Text = "ACTIVO";
-            TxtHistoryStatus.Foreground = BrushStatusActiveFg;
+            TxtHistoryStatus.Foreground = GetThemeBrush("HistoryStatusActiveFg", BrushStatusActiveFg);
         }
         else
         {
-            BadgeHistoryStatus.Background = BrushStatusDisabledBg;
+            BadgeHistoryStatus.Background = GetThemeBrush("HistoryStatusDisabledBg", BrushStatusDisabledBg);
             TxtHistoryStatus.Text = "DESACTIVADO (0 ESPACIO)";
-            TxtHistoryStatus.Foreground = BrushStatusDisabledFg;
+            TxtHistoryStatus.Foreground = GetThemeBrush("HistoryStatusDisabledFg", BrushStatusDisabledFg);
         }
 
         TxtStorageInfo.Text = $"Espacio en disco: {HistoryManager.GetHistoryFileSizeFormatted()} ({HistoryManager.GetTotalCount()} visitas)";
@@ -218,7 +233,7 @@ public partial class HistoryWindow : Window
                 CboScopeTargetDomain.SelectedIndex = 0;
             }
 
-            // Chips rápidos
+            // Chips de filtro
             DomainChipsPanel.Children.Clear();
             foreach (var d in domains.Take(6))
             {

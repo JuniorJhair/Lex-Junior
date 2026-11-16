@@ -297,17 +297,17 @@ public partial class MainWindow
         if (!policy.ShieldEnabled)
         {
             TxtShieldBadge.Text = isCompact ? "Off" : "Pausado";
-            TxtShieldBadge.Foreground = BrushShieldOffText;
+            TxtShieldBadge.Foreground = TryFindResource("ShieldBadgeOffFg") as Brush ?? BrushShieldOffText;
         }
         else if (policy.IsCompatMode)
         {
             TxtShieldBadge.Text = isCompact ? $"{count} · ⚡" : $"{count} · Compatible";
-            TxtShieldBadge.Foreground = BrushShieldCompatText;
+            TxtShieldBadge.Foreground = TryFindResource("ShieldBadgeCompatFg") as Brush ?? BrushShieldCompatText;
         }
         else
         {
             TxtShieldBadge.Text = isCompact ? $"{count}" : $"{count} bloqueados";
-            TxtShieldBadge.Foreground = BrushShieldActiveText;
+            TxtShieldBadge.Foreground = TryFindResource("ShieldBadgeActiveFg") as Brush ?? BrushShieldActiveText;
         }
 
         if (PopupShieldPanel != null && PopupShieldPanel.IsOpen)

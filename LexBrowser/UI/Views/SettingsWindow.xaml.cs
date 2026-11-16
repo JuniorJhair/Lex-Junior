@@ -32,8 +32,6 @@ public partial class SettingsWindow : Window
     private static readonly SolidColorBrush BrushBadgeAskFg = CreateFrozenBrush(0xD4, 0xD4, 0xD8);
     private static readonly SolidColorBrush BrushDrawerBg = CreateFrozenBrush(0x14, 0x14, 0x1F);
     private static readonly SolidColorBrush BrushDrawerBorder = CreateFrozenBrush(0x31, 0x2E, 0x81);
-    private static readonly SolidColorBrush BrushComboBg = CreateFrozenBrush(0x1E, 0x1E, 0x2A);
-    private static readonly SolidColorBrush BrushComboBorder = CreateFrozenBrush(0x3D, 0x3D, 0x56);
 
     private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
     {
@@ -42,6 +40,9 @@ public partial class SettingsWindow : Window
         return brush;
     }
 
+    private Brush GetThemeBrush(string key, Brush fallback) =>
+        (Resources[key] as Brush) ?? (TryFindResource(key) as Brush) ?? fallback;
+
     private readonly CoreWebView2? _core;
     private bool _isInitializing = true;
 
@@ -49,6 +50,7 @@ public partial class SettingsWindow : Window
     {
         _core = core;
         InitializeComponent();
+        UpdateThemeStyles(SettingsManager.Current?.Theme);
 
         Loaded += (_, _) =>
         {
@@ -456,10 +458,12 @@ public partial class SettingsWindow : Window
                 }
 
                 TxtDefaultBrowserStatus.Text = "🎉 ¡Gracias por preferirnos como tu navegador predeterminado en Windows!";
-                TxtDefaultBrowserStatus.Foreground = BrushEmeraldFg;
+                TxtDefaultBrowserStatus.Foreground = GetThemeBrush("PanelSuccessFg", BrushEmeraldFg);
                 BtnSetDefaultBrowser.Content = "✓ Ya es predeterminado";
-                BtnSetDefaultBrowser.Background = BrushEmeraldBg;
-                BtnSetDefaultBrowser.Foreground = BrushEmeraldFg;
+                BtnSetDefaultBrowser.Background = GetThemeBrush("DefaultBtnDoneBg", BrushEmeraldBg);
+                BtnSetDefaultBrowser.Foreground = GetThemeBrush("DefaultBtnDoneFg", BrushEmeraldFg);
+                BtnSetDefaultBrowser.BorderBrush = GetThemeBrush("DefaultBtnDoneBorder", BrushEmeraldFg);
+                BtnSetDefaultBrowser.BorderThickness = new Thickness(1);
                 BtnSetDefaultBrowser.IsEnabled = false;
             }
             else
@@ -471,10 +475,12 @@ public partial class SettingsWindow : Window
                 }
 
                 TxtDefaultBrowserStatus.Text = "Haz de Lex Junior tu navegador principal para abrir enlaces externos.";
-                TxtDefaultBrowserStatus.Foreground = BrushSecondaryFg;
+                TxtDefaultBrowserStatus.Foreground = GetThemeBrush("PanelTextMuted", BrushSecondaryFg);
                 BtnSetDefaultBrowser.Content = "🌐 Establecer como predeterminado";
-                BtnSetDefaultBrowser.Background = BrushPrimaryIndigo;
+                BtnSetDefaultBrowser.Background = GetThemeBrush("PanelAccentBg", BrushPrimaryIndigo);
                 BtnSetDefaultBrowser.Foreground = Brushes.White;
+                BtnSetDefaultBrowser.BorderBrush = Brushes.Transparent;
+                BtnSetDefaultBrowser.BorderThickness = new Thickness(0);
                 BtnSetDefaultBrowser.IsEnabled = true;
             }
         }
@@ -673,8 +679,8 @@ public partial class SettingsWindow : Window
     {
         var container = new Border
         {
-            Background = BrushSiteCardBg,
-            BorderBrush = BrushSiteCardBorder,
+            Background = GetThemeBrush("PanelSiteCardBg", BrushSiteCardBg),
+            BorderBrush = GetThemeBrush("PanelSiteCardBorder", BrushSiteCardBorder),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(12, 10, 12, 10),
@@ -696,7 +702,7 @@ public partial class SettingsWindow : Window
             Width = 26,
             Height = 26,
             CornerRadius = new CornerRadius(6),
-            Background = BrushSiteIconBg,
+            Background = GetThemeBrush("PanelSiteIconBg", BrushSiteIconBg),
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 10, 0)
         };
@@ -733,12 +739,15 @@ public partial class SettingsWindow : Window
 
         var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
 
+        var strongFg = GetThemeBrush("PanelTextStrong", Brushes.White);
+        var mutedFg = GetThemeBrush("PanelTextMuted", BrushSecondaryFg);
+
         var titleBlock = new TextBlock
         {
             Text = host,
             FontWeight = FontWeights.SemiBold,
             FontSize = 12.5,
-            Foreground = Brushes.White,
+            Foreground = strongFg,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
         infoStack.Children.Add(titleBlock);
@@ -752,23 +761,23 @@ public partial class SettingsWindow : Window
         {
             case SiteNotificationMode.Block:
                 badgeText = "🚫 Bloqueado";
-                badgeBg = BrushBadgeBlockBg;
-                badgeFg = BrushBadgeBlockFg;
+                badgeBg = GetThemeBrush("PanelBadgeBlockBg", BrushBadgeBlockBg);
+                badgeFg = GetThemeBrush("PanelBadgeBlockFg", BrushBadgeBlockFg);
                 break;
             case SiteNotificationMode.Allow:
                 badgeText = "✅ Permitido";
-                badgeBg = BrushBadgeAllowBg;
-                badgeFg = BrushEmeraldFg;
+                badgeBg = GetThemeBrush("PanelBadgeAllowBg", BrushBadgeAllowBg);
+                badgeFg = GetThemeBrush("PanelBadgeAllowFg", BrushEmeraldFg);
                 break;
             case SiteNotificationMode.Silent:
                 badgeText = "🔕 Silencioso";
-                badgeBg = BrushBadgeSilentBg;
-                badgeFg = BrushBadgeSilentFg;
+                badgeBg = GetThemeBrush("PanelBadgeSilentBg", BrushBadgeSilentBg);
+                badgeFg = GetThemeBrush("PanelBadgeSilentFg", BrushBadgeSilentFg);
                 break;
             default:
                 badgeText = "❓ Preguntar";
-                badgeBg = BrushBadgeAskBg;
-                badgeFg = BrushBadgeAskFg;
+                badgeBg = GetThemeBrush("PanelBadgeAskBg", BrushBadgeAskBg);
+                badgeFg = GetThemeBrush("PanelBadgeAskFg", BrushBadgeAskFg);
                 break;
         }
 
@@ -792,7 +801,7 @@ public partial class SettingsWindow : Window
         detailsStack.Children.Add(new TextBlock
         {
             Text = quotaText,
-            Foreground = BrushSecondaryFg,
+            Foreground = mutedFg,
             FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 8, 0)
@@ -801,7 +810,7 @@ public partial class SettingsWindow : Window
         detailsStack.Children.Add(new TextBlock
         {
             Text = $"Agregado: {entry.CreatedAt.ToLocalTime():dd/MM/yyyy}",
-            Foreground = BrushSecondaryFg,
+            Foreground = mutedFg,
             FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center
         });
@@ -814,8 +823,8 @@ public partial class SettingsWindow : Window
 
         var customDrawer = new Border
         {
-            Background = BrushDrawerBg,
-            BorderBrush = BrushDrawerBorder,
+            Background = GetThemeBrush("PanelDrawerBg", BrushDrawerBg),
+            BorderBrush = GetThemeBrush("PanelDrawerBorder", BrushDrawerBorder),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(12, 10, 12, 10),
@@ -923,7 +932,7 @@ public partial class SettingsWindow : Window
         var promptText = new TextBlock
         {
             Text = $"¿Cómo deseas configurar las notificaciones para {host}?",
-            Foreground = Brushes.White,
+            Foreground = strongFg,
             FontWeight = FontWeights.SemiBold,
             FontSize = 11.5,
             VerticalAlignment = VerticalAlignment.Center
@@ -953,17 +962,14 @@ public partial class SettingsWindow : Window
         {
             Text = "Límite diario de este sitio:",
             FontSize = 11,
-            Foreground = BrushSecondaryFg,
+            Foreground = mutedFg,
             Margin = new Thickness(0, 0, 0, 3)
         });
 
         var cmbSiteLimit = new ComboBox
         {
             Height = 28,
-            FontSize = 11,
-            Background = BrushComboBg,
-            Foreground = Brushes.White,
-            BorderBrush = BrushComboBorder
+            FontSize = 11
         };
         cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Predeterminado (Global)", Tag = "0" });
         cmbSiteLimit.Items.Add(new ComboBoxItem { Content = "Máx 1 al día", Tag = "1" });
@@ -981,17 +987,14 @@ public partial class SettingsWindow : Window
         {
             Text = "Modo de entrega:",
             FontSize = 11,
-            Foreground = BrushSecondaryFg,
+            Foreground = mutedFg,
             Margin = new Thickness(0, 0, 0, 3)
         });
 
         var cmbSiteMode = new ComboBox
         {
             Height = 28,
-            FontSize = 11,
-            Background = BrushComboBg,
-            Foreground = Brushes.White,
-            BorderBrush = BrushComboBorder
+            FontSize = 11
         };
         cmbSiteMode.Items.Add(new ComboBoxItem { Content = "Aviso emergente (Toast)", Tag = "Allow" });
         cmbSiteMode.Items.Add(new ComboBoxItem { Content = "Solo silencioso (Centro)", Tag = "Silent" });
@@ -1072,8 +1075,17 @@ public partial class SettingsWindow : Window
 
     public void UpdateThemeStyles(string? theme = null)
     {
-        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current.Theme);
+        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
         BrowserThemeManager.ApplyThemePalette(Resources, target);
+        if (Application.Current != null)
+        {
+            BrowserThemeManager.ApplyThemePalette(Application.Current.Resources, target);
+        }
+        if (!_isInitializing)
+        {
+            UpdateDefaultBrowserUI();
+            RefreshNotificationSitesList();
+        }
     }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)

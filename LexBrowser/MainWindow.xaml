@@ -393,7 +393,7 @@
                                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="#38BDF8"/>
                                             <Setter TargetName="TabBorder" Property="BorderThickness" Value="0,2,0,0"/>
                                         </MultiDataTrigger>
-                                        <!-- Pestaña suspendida para ahorro de RAM -->
+                                        <!-- Pestaña suspendida -->
                                         <DataTrigger Binding="{Binding IsSuspendedByLex}" Value="True">
                                             <Setter TargetName="TabBorder" Property="Opacity" Value="0.6"/>
                                         </DataTrigger>
@@ -460,7 +460,7 @@
 
                     <!-- Logo G multicolor de Google (visible al buscar o en Nueva Pestaña) + Icono de Seguridad HTTPS -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
-                        <Border x:Name="BadgeGoogleOmnibox" Width="18" Height="18" CornerRadius="9" Background="#1F2432" VerticalAlignment="Center" ToolTip="Búsqueda rápida con Google">
+                        <Border x:Name="BadgeGoogleOmnibox" Width="18" Height="18" CornerRadius="9" Background="#1F2432" VerticalAlignment="Center" ToolTip="Buscar con Google">
                             <Viewbox Width="13" Height="13">
                                 <Canvas Width="24" Height="24">
                                     <Path Fill="#4285F4" Data="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
@@ -488,7 +488,7 @@
                              PreviewMouseDown="TxtUrl_PreviewMouseDown"/>
 
                     <!-- Escudo de Anuncios interactivo en la barra (Clic abre el Popover de control por sitio de LexShield) -->
-                    <Button x:Name="BorderShieldBadge" Grid.Column="2" Background="#1E293B" BorderBrush="#2A3A52" BorderThickness="1"
+                    <Button x:Name="BorderShieldBadge" Grid.Column="2" Background="{DynamicResource ShieldBadgeBg}" BorderBrush="{DynamicResource ShieldBadgeBorder}" BorderThickness="1"
                             Padding="6,2" Margin="4,0,0,0" VerticalAlignment="Center"
                             Cursor="Hand" Click="BorderShieldBadge_Click"
                             FocusVisualStyle="{StaticResource LexFocusVisual}"
@@ -502,14 +502,14 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="#273549"/>
+                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ShieldBadgeHoverBg}"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtShieldIcon" Text="🛡️" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtShieldBadge" Text="0 bloqueados" Foreground="#38BDF8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtShieldBadge" Text="0 bloqueados" Foreground="{DynamicResource ShieldBadgeActiveFg}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
 
@@ -737,7 +737,7 @@
 
                         <TextBlock Text="ℹ️ Los cambios de script se aplican al recargar." FontSize="10.5" Foreground="#94A3B8" Margin="0,0,0,8"/>
 
-                        <!-- Acciones rápidas: Modo compatible, Recargar ahora y Copiar diagnóstico -->
+                        <!-- Acciones: Modo compatible, Recargar ahora y Copiar diagnóstico -->
                         <Grid Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -1081,7 +1081,7 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,8,0">
                 <!-- Botón Lex TV (Reproductor bajo demanda: IPTV y VOD) -->
                 <Button x:Name="BtnLiveTv" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
-                        ToolTip="Lex TV: Reproductor bajo demanda (IPTV y VOD, 0% consumo al cerrar)" Click="BtnLiveTv_Click">
+                        ToolTip="Lex TV: Reproductor bajo demanda (IPTV y VOD, se detiene al cerrar)" Click="BtnLiveTv_Click">
                     <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="10,4,16,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -1186,7 +1186,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <TextBlock Text="📥 Detector Multimedia y Documentos" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
-                                    <TextBlock x:Name="TxtSnifferStatusSubtitle" Text="Apagado (0 MB RAM en reposo)" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="TxtSnifferStatusSubtitle" Text="Inactivo" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
 
                                 <Button x:Name="BtnToggleSnifferActive" Grid.Column="1" Click="BtnToggleSnifferActive_Click"
@@ -1212,12 +1212,12 @@
                                 </Button>
                             </Grid>
 
-                            <!-- Opciones de persistencia y acciones rápidas -->
+                            <!-- Opciones de persistencia y acciones -->
                             <Grid Margin="0,0,0,10">
                                 <CheckBox x:Name="ChkKeepSnifferOnNavigate" Content="Mantener activo al cambiar de página"
                                           Foreground="#D4D4D8" FontSize="11" VerticalAlignment="Center"
                                           Checked="ChkKeepSnifferOnNavigate_Changed" Unchecked="ChkKeepSnifferOnNavigate_Changed"
-                                          ToolTip="Si está desmarcado, el detector se apaga y libera memoria automáticamente al salir o recargar la página"/>
+                                          ToolTip="Si está desmarcado, el detector se desactiva automáticamente al salir o recargar la página"/>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button Style="{StaticResource LexSecondaryButton}" Content="🔄 Escanear" Click="BtnRescanMedia_Click"
                                             FontSize="10.5" Padding="8,4" MinHeight="26" Margin="0,0,4,0"
@@ -1347,11 +1347,11 @@
 
 
                 <!-- Pill Sin Telemetría (Clic abre la pestaña explicativa en Configuración) -->
-                <Border x:Name="BorderTelemetryBadge" Background="#16161D" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="2,0" 
+                <Border x:Name="BorderTelemetryBadge" Background="{DynamicResource TelemetryBadgeBg}" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="2,0" 
                         Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="Sin telemetría propia: haz clic para ver los controles de privacidad">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtTelemetryLabel" Text="Sin telemetría" Margin="6,0,0,0" FontSize="11" Foreground="#A1A1AA" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Ellipse Width="7" Height="7" Fill="{DynamicResource TelemetryDotFg}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtTelemetryLabel" Text="Sin telemetría" Margin="6,0,0,0" FontSize="11" Foreground="{DynamicResource TelemetryBadgeFg}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -1367,13 +1367,13 @@
                     </Border>
                 </Button>
 
-                <!-- Botón Bóveda de Contraseñas y Seguridad 🔑 (0% CPU en reposo) -->
+                <!-- Botón Bóveda de Contraseñas y Seguridad 🔑 -->
                 <Button x:Name="BtnPasswordVault" Style="{StaticResource NavBtn}" ToolTip="Bóveda de Contraseñas y Bloqueo por PIN (Ctrl+Shift+K)"
                         AutomationProperties.Name="Bóveda de contraseñas" Click="BtnPasswordVault_Click">
                     <TextBlock Text="🔑" FontSize="13" Foreground="#A1A1AA"/>
                 </Button>
 
-                <!-- Botón Historial de Descargas ⬇ (0% CPU en reposo) -->
+                <!-- Botón Historial de Descargas ⬇ -->
                 <Button x:Name="BtnDownloads" Style="{StaticResource NavBtn}" ToolTip="Historial de Descargas (Ctrl+J)"
                         AutomationProperties.Name="Historial de descargas" Click="BtnDownloads_Click"
                         MinWidth="34" Width="Auto" Padding="6,0">
@@ -1405,7 +1405,7 @@
                             <Grid Margin="0,0,0,10">
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="⬇ Historial de Descargas" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
-                                    <TextBlock x:Name="TxtDownloadsCountSubtitle" Text="En memoria · 0% consumo en segundo plano" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                    <TextBlock x:Name="TxtDownloadsCountSubtitle" Text="Solo en esta sesión · Inactivo" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <Button Style="{StaticResource LexSecondaryButton}" Content="📂 Carpeta" Click="BtnOpenDownloadsFolder_Click"
@@ -1512,7 +1512,7 @@
                     </Border>
                 </Popup>
 
-                <!-- Botón Centro de Notificaciones 🔔 (0% CPU en reposo) -->
+                <!-- Botón Centro de Notificaciones 🔔 -->
                 <Grid>
                     <Button x:Name="BtnNotifications" Style="{StaticResource NavBtn}" ToolTip="Centro de Notificaciones (Ctrl+Shift+D para No Molestar)"
                             AutomationProperties.Name="Centro de notificaciones" Click="BtnNotifications_Click">
@@ -1615,7 +1615,7 @@
             </Border>
 
             <!-- Separador vertical -->
-            <Border Grid.Column="1" Width="1" Height="16" Background="#2A2A38" Margin="4,0,6,0" VerticalAlignment="Center"/>
+            <Border Grid.Column="1" Width="1" Height="16" Background="{DynamicResource BorderDark}" Margin="4,0,6,0" VerticalAlignment="Center"/>
 
             <!-- Lista horizontal de Marcadores Anclados -->
             <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Center">
@@ -2022,7 +2022,7 @@
                             </StackPanel>
 
                             <Border Background="#1B1B2A" BorderBrush="#2E2E48" BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,0,0,14">
-                                <TextBlock Text="⚡ Entrada rápida activa: escribe tu PIN (ej. 6 dígitos) y se desbloqueará automáticamente al completar el último carácter."
+                                <TextBlock Text="⚡ Auto-desbloqueo activo: escribe tu PIN (ej. 6 dígitos) y se desbloqueará automáticamente al completar el último carácter."
                                            FontSize="11" Foreground="#A5B4FC" TextWrapping="Wrap" TextAlignment="Center"/>
                             </Border>
 

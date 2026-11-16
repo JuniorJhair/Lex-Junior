@@ -1376,7 +1376,7 @@ public partial class MainWindow
             }
         };
 
-        // Detección nativa de reproducción de audio para suspender o priorizar memoria
+        // Detección nativa de reproducción de audio para decidir si una pestaña puede suspenderse
         core.IsDocumentPlayingAudioChanged += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
@@ -1752,7 +1752,7 @@ public partial class MainWindow
             catch { }
         };
 
-        // 5. Detector Multimedia de Red Bajo Demanda (0 consumo cuando tab.IsMediaSnifferActive == false)
+        // 5. Detector Multimedia de Red Bajo Demanda (inactivo cuando tab.IsMediaSnifferActive == false)
         core.WebResourceResponseReceived += (s, e) =>
         {
             if (!tab.IsMediaSnifferActive || tab.IsDisposed) return;
@@ -1760,7 +1760,7 @@ public partial class MainWindow
             win.InspectNetworkMediaResponse(tab, e);
         };
 
-        // 6. Historial de Descargas eficiente (0% CPU en reposo)
+        // 6. Historial de Descargas en sesión
         core.DownloadStarting += (s, e) =>
         {
             try
@@ -3064,12 +3064,18 @@ public partial class MainWindow
     // ─────────────────────────────────────────────────────────────────────
     private void UpdateCurrentTabBookmarkUI()
     {
+        if (BorderCurrentTabBookmark == null || TxtCurrentTabBookmarkIcon == null || TxtCurrentTabBookmarkTitle == null) return;
+
+        var defaultBorder = TryFindResource("BorderDark") as Brush ?? s_bookmarkDefaultBorderBrush;
+        var defaultBg = TryFindResource("BookmarkItemBg") as Brush ?? s_bookmarkDefaultBgBrush;
+        var mutedFg = TryFindResource("TextMuted") as Brush ?? s_bookmarkNormalIconBrush;
+
         if (_activeTab == null || string.IsNullOrWhiteSpace(_activeTab.Url) || _activeTab.IsNewTab)
         {
-            BorderCurrentTabBookmark.BorderBrush = s_bookmarkDefaultBorderBrush;
-            BorderCurrentTabBookmark.Background = s_bookmarkDefaultBgBrush;
+            BorderCurrentTabBookmark.BorderBrush = defaultBorder;
+            BorderCurrentTabBookmark.Background = defaultBg;
             TxtCurrentTabBookmarkIcon.Text = "＋";
-            TxtCurrentTabBookmarkIcon.Foreground = s_bookmarkMutedIconBrush;
+            TxtCurrentTabBookmarkIcon.Foreground = TryFindResource("TextMuted") as Brush ?? s_bookmarkMutedIconBrush;
             TxtCurrentTabBookmarkTitle.Text = "Anclar página";
             return;
         }
@@ -3078,18 +3084,18 @@ public partial class MainWindow
 
         if (isBookmarked)
         {
-            BorderCurrentTabBookmark.BorderBrush = (SolidColorBrush)FindResource("AccentColor");
-            BorderCurrentTabBookmark.Background = s_bookmarkActiveBgBrush;
+            BorderCurrentTabBookmark.BorderBrush = TryFindResource("AccentColor") as Brush ?? defaultBorder;
+            BorderCurrentTabBookmark.Background = TryFindResource("BookmarkActiveBg") as Brush ?? s_bookmarkActiveBgBrush;
             TxtCurrentTabBookmarkIcon.Text = "★";
-            TxtCurrentTabBookmarkIcon.Foreground = (SolidColorBrush)FindResource("AccentHover");
+            TxtCurrentTabBookmarkIcon.Foreground = TryFindResource("AccentHover") as Brush ?? mutedFg;
             TxtCurrentTabBookmarkTitle.Text = string.IsNullOrWhiteSpace(_activeTab.Title) ? "Anclado" : _activeTab.Title;
         }
         else
         {
-            BorderCurrentTabBookmark.BorderBrush = s_bookmarkDefaultBorderBrush;
-            BorderCurrentTabBookmark.Background = s_bookmarkDefaultBgBrush;
+            BorderCurrentTabBookmark.BorderBrush = defaultBorder;
+            BorderCurrentTabBookmark.Background = defaultBg;
             TxtCurrentTabBookmarkIcon.Text = "＋";
-            TxtCurrentTabBookmarkIcon.Foreground = s_bookmarkNormalIconBrush;
+            TxtCurrentTabBookmarkIcon.Foreground = mutedFg;
             TxtCurrentTabBookmarkTitle.Text = string.IsNullOrWhiteSpace(_activeTab.Title) ? "Anclar página" : $"Anclar {_activeTab.Title}";
         }
     }

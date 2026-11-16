@@ -154,14 +154,23 @@ public partial class MainWindow
             TxtVolumeBoosterIcon.Text = pct == 0 ? "🔇" : (pct > 100 ? "🚀" : "🔊");
         }
 
+        bool isBoosted = pct != 100;
         if (BorderVolumeBooster != null)
         {
-            BorderVolumeBooster.Background = pct != 100 ? BrushVolBoosted : BrushVolNormal;
+            BorderVolumeBooster.Background = isBoosted
+                ? (TryFindResource("VolumeBoostedBg") as Brush ?? BrushVolBoosted)
+                : (TryFindResource("UtilityBtnBg") as Brush ?? BrushVolNormal);
+        }
+        if (TxtVolumeBoosterLabel != null)
+        {
+            TxtVolumeBoosterLabel.Foreground = isBoosted
+                ? (TryFindResource("VolumeBoostedFg") as Brush ?? Brushes.White)
+                : (TryFindResource("TextLight") as Brush ?? Brushes.White);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // DETECTOR Y DESCARGADOR MULTIMEDIA BAJO DEMANDA (0 MB RAM EN REPOSO)
+    // DETECTOR Y DESCARGADOR MULTIMEDIA BAJO DEMANDA
     // ─────────────────────────────────────────────────────────────────────
     private void BtnMediaSniffer_Click(object sender, RoutedEventArgs e)
     {
@@ -605,8 +614,15 @@ public partial class MainWindow
         _isUpdatingSnifferCheck = false;
 
         TxtMediaSnifferLabel.Text = active && count > 0 ? $"Multimedia ({count})" : "Multimedia";
-        DotMediaSnifferStatus.Fill = active ? BrushSnifferDotOn : BrushSnifferDotOff;
-        BorderMediaSniffer.Background = active ? BrushSnifferBgOn : BrushVolNormal;
+        DotMediaSnifferStatus.Fill = active
+            ? (TryFindResource("SnifferActiveDot") as Brush ?? BrushSnifferDotOn)
+            : (TryFindResource("TextMuted") as Brush ?? BrushSnifferDotOff);
+        BorderMediaSniffer.Background = active
+            ? (TryFindResource("SnifferActiveBg") as Brush ?? BrushSnifferBgOn)
+            : (TryFindResource("UtilityBtnBg") as Brush ?? BrushVolNormal);
+        TxtMediaSnifferLabel.Foreground = active
+            ? (TryFindResource("SnifferActiveFg") as Brush ?? Brushes.White)
+            : (TryFindResource("TextLight") as Brush ?? Brushes.White);
 
         if (TxtToggleSnifferBtn != null && BtnToggleSnifferActive != null && TxtSnifferStatusSubtitle != null)
         {
@@ -623,7 +639,7 @@ public partial class MainWindow
             {
                 TxtToggleSnifferBtn.Text = "⚡ Activar aquí";
                 BtnToggleSnifferActive.Background = BrushSnifferBtnStart;
-                TxtSnifferStatusSubtitle.Text = "Apagado (0 MB RAM en reposo)";
+                TxtSnifferStatusSubtitle.Text = "Inactivo";
                 TxtSnifferStatusSubtitle.Foreground = BrushSnifferSubIdle;
             }
         }

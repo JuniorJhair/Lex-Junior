@@ -70,6 +70,106 @@
     <SolidColorBrush x:Key="CaretColor" Color="#FFFFFF"/>
     <SolidColorBrush x:Key="WindowCtrlHoverBg" Color="#252530"/>
 
+    <!-- Brochas dinámicas por defecto para ventanas secundarias y badges -->
+    <SolidColorBrush x:Key="ShieldBadgeBg" Color="#1E293B"/>
+    <SolidColorBrush x:Key="ShieldBadgeHoverBg" Color="#273549"/>
+    <SolidColorBrush x:Key="ShieldBadgeBorder" Color="#2A3A52"/>
+    <SolidColorBrush x:Key="ShieldBadgeActiveFg" Color="#38BDF8"/>
+    <SolidColorBrush x:Key="ShieldBadgeCompatFg" Color="#F59E0B"/>
+    <SolidColorBrush x:Key="ShieldBadgeOffFg" Color="#9CA3AF"/>
+    <SolidColorBrush x:Key="TelemetryBadgeBg" Color="#16161D"/>
+    <SolidColorBrush x:Key="TelemetryBadgeFg" Color="#A1A1AA"/>
+    <SolidColorBrush x:Key="TelemetryDotFg" Color="#10B981"/>
+    <SolidColorBrush x:Key="BookmarkActiveBg" Color="#222238"/>
+    <SolidColorBrush x:Key="VolumeBoostedBg" Color="#312E81"/>
+    <SolidColorBrush x:Key="VolumeBoostedFg" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="SnifferActiveBg" Color="#1E3A3A"/>
+    <SolidColorBrush x:Key="SnifferActiveFg" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="SnifferActiveDot" Color="#10B981"/>
+    <SolidColorBrush x:Key="DefaultBtnDoneBg" Color="#065F46"/>
+    <SolidColorBrush x:Key="DefaultBtnDoneFg" Color="#ECFDF5"/>
+    <SolidColorBrush x:Key="DefaultBtnDoneBorder" Color="#10B981"/>
+    <SolidColorBrush x:Key="HistoryStatusActiveBg" Color="#1E3A8A"/>
+    <SolidColorBrush x:Key="HistoryStatusActiveFg" Color="#93C5FD"/>
+    <SolidColorBrush x:Key="HistoryStatusDisabledBg" Color="#4C1D27"/>
+    <SolidColorBrush x:Key="HistoryStatusDisabledFg" Color="#FDA4AF"/>
+
+    <SolidColorBrush x:Key="PanelWindowBg" Color="#0F0F14"/>
+    <SolidColorBrush x:Key="PanelChromeBg" Color="#14141A"/>
+    <SolidColorBrush x:Key="PanelSidebarBg" Color="#121217"/>
+    <SolidColorBrush x:Key="PanelFilterBarBg" Color="#111116"/>
+    <SolidColorBrush x:Key="PanelBannerBg" Color="#16161F"/>
+    <SolidColorBrush x:Key="PanelListBg" Color="#0C0C10"/>
+    <SolidColorBrush x:Key="PanelCardBg" Color="#15151D"/>
+    <SolidColorBrush x:Key="PanelCardAltBg" Color="#15151F"/>
+    <SolidColorBrush x:Key="PanelCardSubtleBg" Color="#1A1A24"/>
+    <SolidColorBrush x:Key="PanelCardInsetBg" Color="#121218"/>
+    <SolidColorBrush x:Key="PanelSurfaceDeepBg" Color="#101016"/>
+    <SolidColorBrush x:Key="PanelRowBg" Color="#191924"/>
+    <SolidColorBrush x:Key="PanelCustomTimeBg" Color="#1B1B26"/>
+    <SolidColorBrush x:Key="PanelCustomTimeBorder" Color="#2C2C40"/>
+    <SolidColorBrush x:Key="PanelBorder" Color="#272736"/>
+    <SolidColorBrush x:Key="PanelBorderSubtle" Color="#242430"/>
+    <SolidColorBrush x:Key="PanelBorderHairline" Color="#20202B"/>
+    <SolidColorBrush x:Key="PanelBorderCardAlt" Color="#252538"/>
+    <SolidColorBrush x:Key="PanelBorderMuted" Color="#1F2937"/>
+    <SolidColorBrush x:Key="PanelRowSeparator" Color="#1A1A24"/>
+    <SolidColorBrush x:Key="PanelRowHoverBg" Color="#171722"/>
+    <SolidColorBrush x:Key="PanelRowSelectedBg" Color="#1E1E2E"/>
+    <SolidColorBrush x:Key="PanelFaviconBg" Color="#1C1C26"/>
+    <SolidColorBrush x:Key="PanelDomainBadgeBg" Color="#20202F"/>
+    <SolidColorBrush x:Key="PanelTextStrong" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PanelTextPrimary" Color="#F4F4F5"/>
+    <SolidColorBrush x:Key="PanelTextBody" Color="#E4E4E7"/>
+    <SolidColorBrush x:Key="PanelTextSoft" Color="#D4D4D8"/>
+    <SolidColorBrush x:Key="PanelTextMuted" Color="#A1A1AA"/>
+    <SolidColorBrush x:Key="PanelTextSubtle" Color="#8B8B96"/>
+    <SolidColorBrush x:Key="PanelAccentBg" Color="#4F46E5"/>
+    <SolidColorBrush x:Key="PanelAccentHoverBg" Color="#4338CA"/>
+    <SolidColorBrush x:Key="PanelAccentFg" Color="#818CF8"/>
+    <SolidColorBrush x:Key="PanelTabHoverBg" Color="#1E1E28"/>
+    <SolidColorBrush x:Key="PanelTabActiveBg" Color="#252538"/>
+    <SolidColorBrush x:Key="PanelHistoryBtnBg" Color="#242436"/>
+    <SolidColorBrush x:Key="PanelHistoryBtnHoverBg" Color="#303048"/>
+    <SolidColorBrush x:Key="PanelFilterPillBg" Color="#1C1C28"/>
+    <SolidColorBrush x:Key="PanelFilterPillBorder" Color="#2D2D3E"/>
+    <SolidColorBrush x:Key="PanelControlBg" Color="#171720"/>
+    <SolidColorBrush x:Key="PanelControlHoverBg" Color="#262638"/>
+    <SolidColorBrush x:Key="PanelControlFocusedBg" Color="#1C1C28"/>
+    <SolidColorBrush x:Key="PanelControlBorder" Color="#2E2E3E"/>
+    <SolidColorBrush x:Key="PanelControlCheckBorder" Color="#3B3B4E"/>
+    <SolidColorBrush x:Key="PanelComboPopupBg" Color="#14141E"/>
+    <SolidColorBrush x:Key="PanelComboSelectedBg" Color="#4F46E5"/>
+    <SolidColorBrush x:Key="PanelToggleTrackBg" Color="#2E2E3A"/>
+    <SolidColorBrush x:Key="PanelRadioActiveBg" Color="#1E1E30"/>
+    <SolidColorBrush x:Key="PanelScrollThumbBg" Color="#38384E"/>
+    <SolidColorBrush x:Key="PanelScrollThumbHoverBg" Color="#6366F1"/>
+    <SolidColorBrush x:Key="PanelScrollThumbDragBg" Color="#818CF8"/>
+    <SolidColorBrush x:Key="PanelActionBtnBg" Color="#22222E"/>
+    <SolidColorBrush x:Key="PanelDangerFg" Color="#FB7185"/>
+    <SolidColorBrush x:Key="PanelSuccessFg" Color="#10B981"/>
+    <SolidColorBrush x:Key="PanelWarningFg" Color="#F59E0B"/>
+    <LinearGradientBrush x:Key="PanelTelemetryBg" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#2C1B4D" Offset="0.0"/>
+        <GradientStop Color="#15151E" Offset="0.8"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="PanelTelemetryBorder" Color="#4F46E5"/>
+    <SolidColorBrush x:Key="PanelTelemetryPillBg" Color="#206366F1"/>
+    <SolidColorBrush x:Key="PanelTelemetryPillFg" Color="#A5B4FC"/>
+    <SolidColorBrush x:Key="PanelSiteCardBg" Color="#181824"/>
+    <SolidColorBrush x:Key="PanelSiteCardBorder" Color="#29293C"/>
+    <SolidColorBrush x:Key="PanelSiteIconBg" Color="#232334"/>
+    <SolidColorBrush x:Key="PanelBadgeBlockBg" Color="#3B161B"/>
+    <SolidColorBrush x:Key="PanelBadgeBlockFg" Color="#F87171"/>
+    <SolidColorBrush x:Key="PanelBadgeAllowBg" Color="#0E3321"/>
+    <SolidColorBrush x:Key="PanelBadgeAllowFg" Color="#34D399"/>
+    <SolidColorBrush x:Key="PanelBadgeSilentBg" Color="#282048"/>
+    <SolidColorBrush x:Key="PanelBadgeSilentFg" Color="#A78BFA"/>
+    <SolidColorBrush x:Key="PanelBadgeAskBg" Color="#252533"/>
+    <SolidColorBrush x:Key="PanelBadgeAskFg" Color="#D4D4D8"/>
+    <SolidColorBrush x:Key="PanelDrawerBg" Color="#14141F"/>
+    <SolidColorBrush x:Key="PanelDrawerBorder" Color="#312E81"/>
+
     <!-- ======================================================== -->
     <!-- ESTILO DE FOCO ACCESIBLE DE TECLADO VISIBLE               -->
     <!-- ======================================================== -->
@@ -646,6 +746,417 @@
                                                 </Trigger>
                                                 <Trigger Property="IsDragging" Value="True">
                                                     <Setter TargetName="ThumbBorder" Property="Background" Value="#818CF8"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Thumb.Template>
+                                </Thumb>
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========================================================================= -->
+    <!-- ESTILOS DINÁMICOS PARA VENTANAS SECUNDARIAS TEMATIZADAS (CLARO/OSCURO)    -->
+    <!-- ========================================================================= -->
+    <Style x:Key="LexThemedBaseButton" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Background" Value="{DynamicResource PanelActionBtnBg}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextStrong}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelControlBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource PanelControlHoverBg}"/>
+                            <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PanelAccentBg}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="b" Property="Opacity" Value="0.88"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LexThemedSecondaryButton" TargetType="Button" BasedOn="{StaticResource LexThemedBaseButton}">
+        <Setter Property="Background" Value="{DynamicResource PanelActionBtnBg}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextBody}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Padding" Value="10,5"/>
+    </Style>
+
+    <Style x:Key="LexThemedGhostButton" TargetType="Button">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextSubtle}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="6,4"/>
+        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="MinWidth" Value="28"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource PanelControlHoverBg}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource PanelTextStrong}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="b" Property="Opacity" Value="0.85"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LexThemedComboItem" TargetType="ComboBoxItem">
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextPrimary}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="12,8"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="ItemBorder" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" Margin="2,1">
+                        <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource PanelTabHoverBg}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource PanelTextStrong}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource PanelComboSelectedBg}"/>
+                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <ControlTemplate x:Key="LexThemedComboBoxToggleButton" TargetType="ToggleButton">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition Width="28"/>
+            </Grid.ColumnDefinitions>
+            <Border x:Name="Border" Grid.ColumnSpan="2" CornerRadius="6"
+                    Background="{DynamicResource PanelControlBg}" BorderBrush="{DynamicResource PanelControlBorder}" BorderThickness="1"/>
+            <Path x:Name="Arrow" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                  Data="M 0 0 L 4 4 L 8 0 Z" Fill="{DynamicResource PanelTextMuted}"/>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource PanelAccentBg}"/>
+                <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource PanelTextStrong}"/>
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource PanelAccentBg}"/>
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource PanelControlFocusedBg}"/>
+                <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource PanelAccentBg}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style x:Key="LexThemedComboBox" TargetType="ComboBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="ScrollViewer.CanContentScroll" Value="False"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextPrimary}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource LexThemedComboItem}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="ToggleButton"
+                                      Template="{StaticResource LexThemedComboBoxToggleButton}"
+                                      Focusable="False"
+                                      IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      ClickMode="Press"/>
+                        <ContentPresenter x:Name="ContentSite"
+                                          IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                          Margin="12,6,28,6"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"/>
+                        <Popup x:Name="Popup"
+                               Placement="Bottom"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               PopupAnimation="Slide">
+                            <Grid x:Name="DropDown"
+                                  SnapsToDevicePixels="True"
+                                  MinWidth="{TemplateBinding ActualWidth}"
+                                  MaxHeight="260">
+                                <Border x:Name="DropDownBorder"
+                                        Background="{DynamicResource PanelComboPopupBg}"
+                                        BorderBrush="{DynamicResource PanelBorder}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="4"
+                                        Margin="0,4,0,4">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="12" ShadowDepth="4" Direction="270" Opacity="0.35" Color="Black"/>
+                                    </Border.Effect>
+                                    <ScrollViewer x:Name="DropDownScrollViewer"
+                                                  CanContentScroll="False"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  Focusable="False"
+                                                  SnapsToDevicePixels="True">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Grid>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="HasItems" Value="False">
+                            <Setter TargetName="DropDownBorder" Property="MinHeight" Value="60"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LexThemedToggle" TargetType="CheckBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextPrimary}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Margin="0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter Grid.Column="0" VerticalAlignment="Center"/>
+                        <Border x:Name="track" Grid.Column="1" Width="44" Height="24" CornerRadius="12" Background="{DynamicResource PanelToggleTrackBg}" Margin="10,0,0,0">
+                            <Ellipse x:Name="thumb" Width="18" Height="18" Fill="#FFFFFF" HorizontalAlignment="Left" Margin="3,0,0,0">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect BlurRadius="4" ShadowDepth="1" Opacity="0.3"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="track" Property="Background" Value="{DynamicResource PanelAccentBg}"/>
+                            <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
+                            <Setter TargetName="thumb" Property="Margin" Value="0,0,3,0"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="track" Property="BorderBrush" Value="{DynamicResource PanelAccentFg}"/>
+                            <Setter TargetName="track" Property="BorderThickness" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LexThemedRadioButton" TargetType="RadioButton">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextPrimary}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid Margin="0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="22"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="OuterCircle" Width="18" Height="18" CornerRadius="9"
+                                Background="{DynamicResource PanelControlBg}" BorderBrush="{DynamicResource PanelControlBorder}" BorderThickness="1.5"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Ellipse x:Name="InnerDot" Width="8" Height="8" Fill="{DynamicResource PanelAccentBg}" Visibility="Collapsed"/>
+                        </Border>
+                        <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="OuterCircle" Property="BorderBrush" Value="{DynamicResource PanelAccentFg}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="OuterCircle" Property="BorderBrush" Value="{DynamicResource PanelAccentBg}"/>
+                            <Setter TargetName="OuterCircle" Property="Background" Value="{DynamicResource PanelRadioActiveBg}"/>
+                            <Setter TargetName="InnerDot" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LexThemedCheckBox" TargetType="CheckBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextStrong}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="22"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="Box" Width="18" Height="18" CornerRadius="5"
+                                Background="{DynamicResource PanelControlBg}" BorderBrush="{DynamicResource PanelControlCheckBorder}" BorderThickness="1.5"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path x:Name="CheckMark" Data="M 3 8 L 7 12 L 15 4" Stroke="#FFFFFF" StrokeThickness="2"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed"
+                                  Margin="1,0,0,0"/>
+                        </Border>
+                        <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource PanelAccentFg}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource PanelAccentBg}"/>
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource PanelAccentBg}"/>
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LexThemedInput" TargetType="TextBox">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+        <Setter Property="Background" Value="{DynamicResource PanelControlBg}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PanelTextPrimary}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource PanelTextStrong}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource PanelControlBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="MinHeight" Value="30"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="b" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Hidden"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PanelAccentHoverBg}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource PanelAccentBg}"/>
+                            <Setter TargetName="b" Property="Background" Value="{DynamicResource PanelControlFocusedBg}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LexThemedScrollBar" TargetType="ScrollBar">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Width" Value="8"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid Background="Transparent">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.Thumb>
+                                <Thumb>
+                                    <Thumb.Template>
+                                        <ControlTemplate TargetType="Thumb">
+                                            <Border x:Name="ThumbBorder" Background="{DynamicResource PanelScrollThumbBg}" CornerRadius="4" Margin="1,0"/>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource PanelScrollThumbHoverBg}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource PanelScrollThumbDragBg}"/>
                                                 </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
