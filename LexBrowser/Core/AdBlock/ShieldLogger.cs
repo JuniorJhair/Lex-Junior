@@ -42,8 +42,8 @@ public sealed class ShieldLogEntry
 }
 
 /// <summary>
-/// Registro en memoria circular (ring buffer) de eventos de filtrado publicitario,
-/// navegación y ventanas de Lex Junior. Diseñado para diagnóstico forense sin impacto en CPU.
+/// Registro circular (ring buffer) de eventos de filtrado publicitario,
+/// navegación y ventanas de Lex Junior para diagnóstico bajo demanda.
 /// </summary>
 public static class ShieldLogger
 {

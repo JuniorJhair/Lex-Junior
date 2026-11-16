@@ -49,7 +49,7 @@ public sealed class NotificationMetadataDocument
 
 /// <summary>
 /// Gestor centralizado de permisos y preferencias de notificación web por origen.
-/// 0.0% CPU en reposo: sin hilos ni temporizadores permanentes.
+/// Reactivo a eventos: sin hilos ni temporizadores permanentes.
 /// Carga perezosa (lazy), guardado atómico mediante archivo temporal y aislamiento estricto de incógnito.
 /// </summary>
 public static class NotificationPermissionManager

@@ -1,4 +1,4 @@
-# Lanzador rápido de Lex Junior Browser
+# Lanzador de Lex Junior Browser
 # Cierra cualquier instancia previa (evita archivos bloqueados y la acumulación de .bak), compila y abre.
 param(
     [ValidateSet("Debug", "Release")]

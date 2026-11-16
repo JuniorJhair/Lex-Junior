@@ -9,7 +9,7 @@ namespace LexBrowser.Core;
 
 /// <summary>
 /// Motor local de lectura en voz alta bajo demanda basado en Windows SAPI (System.Speech).
-/// Se instancia perezosamente al primer Speak y se libera al completar o detener la lectura (0% RAM/CPU en reposo).
+/// Se instancia perezosamente al primer Speak y se libera al completar o detener la lectura.
 /// </summary>
 public static class ReadAloudService
 {

@@ -48,7 +48,7 @@ public sealed class VaultFileModel
 
 /// <summary>
 /// Motor criptográfico y almacén en memoria O(1) para la Bóveda de Contraseñas de Lex Junior.
-/// Cifrado nativo con Windows DPAPI (ProtectedData), 0% consumo de CPU en reposo.
+/// Cifrado nativo con Windows DPAPI (ProtectedData), sin sondeos en segundo plano.
 /// Regla de oro: si el cifrado falla, NO se escribe nada en disco y se avisa (nunca se degrada a texto plano).
 /// </summary>
 public sealed class PasswordVaultStore
@@ -671,7 +671,7 @@ public static class PasswordManager
     {
         try
         {
-            // Escuchar eventos nativos del sistema operativo (0% consumo de CPU en reposo):
+            // Escuchar eventos nativos del sistema operativo (sin sondeos periódicos):
             // Si el usuario bloquea su sesión de Windows (Win+L) o suspende la PC, el Modo Inteligente vuelve a proteger el navegador.
             Microsoft.Win32.SystemEvents.SessionSwitch += (_, e) =>
             {
@@ -1101,7 +1101,7 @@ public static class PasswordManager
     }
 
     /// <summary>
-    /// Script pasivo bajo demanda (0% CPU en reposo; sin timers ni MutationObserver).
+    /// Script pasivo bajo demanda (sin timers ni MutationObserver).
     /// Solo se activa cuando el usuario enfoca un campo de login o envía un formulario con campo de contraseña.
     /// </summary>
     public const string InjectedPasswordScript = @"

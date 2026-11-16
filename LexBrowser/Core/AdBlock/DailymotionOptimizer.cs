@@ -187,7 +187,7 @@ public static class DailymotionOptimizer
                         }
                     }
 
-                    // Si el video principal ya reprodujo más de 5 segundos, apagar el observer y los listeners de timeupdate para 0% CPU
+                    // Si el video principal ya reprodujo más de 5 segundos, apagar el observer y los listeners de timeupdate para evitar trabajo innecesario
                     if (video.currentTime > 5 && !isAdActive) {
                         shutdownDefuser();
                     }

@@ -11,7 +11,7 @@ namespace LexBrowser.Core.Pdf;
 /// Servicio de integración y motor de servidor virtual para Lex PDF Studio.
 /// Permite edición nativa de documentos PDF con herramientas de dibujo a mano alzada,
 /// resaltador, ajuste de grosor, paleta de colores, borrador, texto, firmas y guardado.
-/// 100% offline, 0% CPU en reposo y sin dependencias externas.
+/// 100% offline, bajo demanda y sin dependencias externas.
 /// </summary>
 public static class PdfStudioService
 {

@@ -87,7 +87,7 @@ public partial class MainWindow
                 : BookmarkManager.Bookmarks.ToArray();
 
             // Verificar que el cambio sea estrictamente una inserción al final del texto antes de autocompletar en línea.
-            // Esto evita inversiones o transposiciones de caracteres al editar en medio o escribir rápidamente.
+            // Esto evita inversiones o transposiciones de caracteres al editar en medio o escribir de forma continua.
             bool isForwardAppendAtEnd = false;
             if (e.Changes.Count == 1)
             {
@@ -135,7 +135,7 @@ public partial class MainWindow
         _omniboxLiveSuggestCts = cts;
         var token = cts.Token;
 
-        // Debounce inicial de 60 ms para escritura continua: si el usuario escribe rápido, no saturamos la UI
+        // Debounce inicial de 60 ms para escritura continua: si el usuario escribe seguido, no saturamos la UI
         if (!skipInitialDebounce)
         {
             try

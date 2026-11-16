@@ -40,7 +40,7 @@
             </StackPanel>
 
             <!-- Mensaje explicativo -->
-            <TextBlock Grid.Row="1" Text="Al desactivar el historial, Lex Junior dejará de guardar las páginas web, rutas y títulos que visites de ahora en adelante, ahorrando memoria y espacio."
+            <TextBlock Grid.Row="1" Text="Al desactivar el historial, Lex Junior dejará de guardar las páginas web, rutas y títulos que visites de ahora en adelante, evitando acumular nuevos registros y archivos en disco."
                        FontSize="12" Foreground="#A1A1AA" TextWrapping="Wrap" LineHeight="17" Margin="0,0,0,14"/>
 
             <!-- Caja de estadísticas -->

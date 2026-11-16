@@ -6,8 +6,7 @@ namespace LexBrowser.Core;
 
 /// <summary>
 /// Servicio de traducción de páginas web bajo demanda.
-/// 0.0% consumo de CPU y 0 MB de RAM en reposo: no ejecuta ningún proceso ni consume
-/// recursos hasta que el usuario hace clic en el botón de traducir.
+/// No ejecuta procesos ni inyecta scripts hasta que el usuario hace clic en el botón de traducir.
 /// Oculta completamente los banners invasivos y menús de tablas deformadas de Google Translate.
 /// </summary>
 public static class TranslationService

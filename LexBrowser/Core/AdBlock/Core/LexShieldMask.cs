@@ -78,7 +78,7 @@ public static class LexShieldHash
         if (text.IsEmpty)
             return FnvOffset;
 
-        // Ruta rápida sin asignaciones para cadenas ASCII (99.9% de hosts y tokens URL)
+        // Ruta directa sin asignaciones para cadenas ASCII (99.9% de hosts y tokens URL)
         ulong h = FnvOffset;
         for (int i = 0; i < text.Length; i++)
         {

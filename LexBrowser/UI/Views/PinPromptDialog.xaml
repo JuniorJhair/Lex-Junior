@@ -32,7 +32,7 @@
                     </StackPanel>
 
                     <Border Background="#181824" BorderBrush="#27273A" BorderThickness="1" CornerRadius="8" Padding="10,7" Margin="0,0,0,12">
-                        <TextBlock Text="⚡ Entrada rápida activa: se desbloquea automáticamente al completar tus caracteres (o presiona Enter)."
+                        <TextBlock Text="⚡ Auto-desbloqueo activo: escribe tu PIN (ej. 6 dígitos) y se desbloqueará automáticamente al completar tus caracteres (o presiona Enter)."
                                    FontSize="11" Foreground="#A5B4FC" TextWrapping="Wrap"/>
                     </Border>
 

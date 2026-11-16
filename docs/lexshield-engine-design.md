@@ -1,4 +1,6 @@
-# Lex Junior — Diseño del Nuevo Motor AdBlock Declarativo (Estilo Brave / `adblock-rust`)
+# Lex Junior — Diseño del Motor AdBlock Declarativo (Histórico Pre-Unificación)
+
+> **Nota histórica:** Propuesta inicial de diseño previa a la unificación en `LexShield Core` (`feature/escudo-unificado`). Para la arquitectura vigente y mediciones finales, consulta [`LEXSHIELD_PARIDAD.md`](LEXSHIELD_PARIDAD.md), [`UNIFICACION_ESCUDO.md`](UNIFICACION_ESCUDO.md) y [`REPORTE_UNIFICACION_FINAL.md`](REPORTE_UNIFICACION_FINAL.md).
 
 **Fecha:** 2026-11-15  
 **Rama / Base:** `master` @ `1586ec4` (tag de respaldo `backup-pre-adblock-brave`, snapshot físico en `_backups/pre-adblock-brave-20261115-0424`)  

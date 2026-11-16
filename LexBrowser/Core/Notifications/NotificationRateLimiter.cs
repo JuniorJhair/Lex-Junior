@@ -5,7 +5,7 @@ namespace LexBrowser.Core.Notifications;
 
 /// <summary>
 /// Controlador de cuotas, límites diarios y prevención de saturación de notificaciones.
-/// 0.0% CPU en reposo: evaluación pasiva en el microsegundo de llegada del evento, sin temporizadores.
+/// Evaluación reactiva al recibir el evento, sin temporizadores.
 /// </summary>
 public static class NotificationRateLimiter
 {

@@ -14,9 +14,9 @@ public static class BrowserEngine
     private static readonly SemaphoreSlim _initLock = new(1, 1);
 
     /// <summary>
-    /// Flags de Chromium para reducir telemetría y procesos en segundo plano inútiles.
+    /// Flags de Chromium para reducir servicios de telemetría y tareas en segundo plano innecesarias.
     /// Se evitan a propósito --disable-renderer-backgrounding, --disable-backgrounding-occluded-windows y
-    /// desactivar CalculateNativeWinOcclusion: mantenían las pestañas ocultas a prioridad completa (más CPU/RAM/batería).
+    /// desactivar CalculateNativeWinOcclusion porque mantendrían las pestañas ocultas en prioridad completa.
     /// </summary>
     private const string OptimizedEngineFlags =
         "--disable-background-networking " +

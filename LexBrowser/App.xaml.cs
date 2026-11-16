@@ -108,7 +108,7 @@ public partial class App : Application
         }
 
         // Si ya hay una ventana de Lex Junior abierta en el sistema, reenviarle la acción o URL por NamedPipe
-        // y terminar este proceso en ~5ms (evita procesos duplicados y ahorra 100% de memoria RAM).
+        // y terminar esta segunda instancia para evitar procesos o ventanas duplicadas.
         if (!SingleInstanceIpc.TryAcquireSingleInstance())
         {
             string payload = isGuestLaunch ? "CMD:GUEST" :

@@ -15,7 +15,7 @@ using LexBrowser.UI.Models;
 namespace LexBrowser.Core;
 
 /// <summary>
-/// Motor de extracción multimedia bajo demanda (0% CPU y 0 MB RAM cuando está apagado).
+/// Motor de extracción multimedia bajo demanda (inactivo hasta que el usuario lo habilita).
 /// Incluye:
 /// 1. Extractor directo para YouTube y YouTube Shorts (1080p HD, 720p HD, 480p, 360p MP4 con audio + Solo Audio M4A).
 /// 2. Muxer nativo ISO-BMFF (fMP4) en C# puro para unir pistas adaptativas de video HD + audio sin depender de FFmpeg externo.
@@ -814,7 +814,7 @@ public static class MediaExtractorService
     /// <summary>
     /// Descarga un elemento multimedia detectado al archivo destino, reportando progreso en tiempo real.
     /// Soporta:
-    /// 1. Videos adaptativos de YouTube (descarga por bloques rápidos &amp;range= de 10 MB + muxing nativo fMP4 de Video HD + Audio M4A).
+    /// 1. Videos adaptativos de YouTube (descarga por bloques &amp;range= de 10 MB + muxing nativo fMP4 de Video HD + Audio M4A).
     /// 2. Streams directos de YouTube por bloques de 10 MB (evita throttling de velocidad).
     /// 3. Streams HLS (.m3u8) descargando y uniendo todos los segmentos en un solo archivo.
     /// 4. Descarga HTTP directa estándar con cabeceras de sesión (Cookie/Referer/Origin) y reintento automático.

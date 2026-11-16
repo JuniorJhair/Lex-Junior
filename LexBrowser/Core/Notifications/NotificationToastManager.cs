@@ -9,7 +9,7 @@ namespace LexBrowser.Core.Notifications;
 
 /// <summary>
 /// Administrador de posición y ciclo de vida de los avisos flotantes (Toasts) en pantalla.
-/// 0.0% CPU en reposo: solo activo mientras haya toasts visibles (máximo 3 simultáneos).
+/// Reactivo: solo activo mientras haya toasts visibles (máximo 3 simultáneos).
 /// </summary>
 public static class NotificationToastManager
 {

@@ -23,8 +23,8 @@ public class SessionTabItem
 /// <summary>
 /// Gestiona la persistencia atómica de la última sesión de pestañas con arquitectura
 /// de Carga Perezosa (Lazy Loading). Al iniciar el navegador con pestañas guardadas,
-/// solo se conecta y carga la pestaña activa; las pestañas de fondo permanecen en hibernación,
-/// consumiendo 0.0% de CPU y 0 MB de memoria RAM hasta que el usuario hace clic en ellas.
+/// solo se conecta y carga la pestaña activa; las pestañas de fondo permanecen en hibernación
+/// sin inicializar WebView2 hasta que el usuario hace clic en ellas.
 /// </summary>
 public static class SessionManager
 {

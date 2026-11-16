@@ -47,7 +47,7 @@ public class BrowserSettings
     public int ReadAloudRate { get; set; } = 0;
     public string ReadAloudVoiceName { get; set; } = "";
 
-    // Guardador de Contraseñas y Bloqueo Inteligente del Navegador (0% CPU en reposo)
+    // Guardador de Contraseñas y Bloqueo Inteligente del Navegador
     public bool EnablePasswordManager { get; set; } = true;
     // Modos: "None" (Sin contraseña), "SmartSession" (Solo al prender PC o tras bloquear/suspender Windows),
     //        "AlwaysOnStartup" (Siempre al abrir el navegador), "VaultOnly" (Solo al abrir bóveda/ver claves)
@@ -67,7 +67,7 @@ public class BrowserSettings
     public bool UserDecidedDefaultBrowser { get; set; } = false;
     public bool WasPreviouslyDefaultBrowser { get; set; } = false;
 
-    // Sistema de Notificaciones Web (0% CPU en reposo)
+    // Sistema de Notificaciones Web (reactivo a eventos)
     // Valores: "Ask" (Preguntar al usuario), "BlockAll" (Bloquear todas en silencio - comportamiento previo), "SilentAll" (Permitir solo en centro)
     public string NotificationGlobalPolicy { get; set; } = "Ask";
     public string NotificationDndShortcut { get; set; } = "Ctrl+Shift+D";
@@ -313,7 +313,7 @@ public static class SettingsManager
     /// <summary>
     /// Programa un guardado diferido en segundo plano (por defecto 600 ms) para evitar escrituras
     /// síncronas repetitivas en el hilo de interfaz (ej. al redimensionar o mover ventanas PiP).
-    /// 0% CPU en reposo: el temporizador es de un solo disparo y permanece inactivo el resto del tiempo.
+    /// El temporizador es de un solo disparo y permanece inactivo el resto del tiempo.
     /// </summary>
     public static void SaveDeferred(int delayMs = 600, bool notify = false)
     {

@@ -126,11 +126,11 @@ public static class InstallerService
         {
             if (createDesktopShortcut)
             {
-                CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
+                CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
             }
             if (createStartMenuShortcut)
             {
-                CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
+                CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
             }
 
             RegisterInWindowsAddRemovePrograms(iconPath);
@@ -224,7 +224,7 @@ public static class InstallerService
     private const uint S_OK = 0;
 
     /// <summary>
-    /// Comprueba con 0% impacto en recursos si Lex Junior está actualmente configurado como navegador predeterminado en Windows.
+    /// Comprueba si Lex Junior está actualmente configurado como navegador predeterminado en Windows.
     /// Utiliza primero la API nativa de Shell (AssocQueryString) de Windows 10/11 y respaldo por Registro de Usuario (UserChoice).
     /// </summary>
     public static bool IsDefaultBrowser()
@@ -341,7 +341,7 @@ public static class InstallerService
     }
 
     /// <summary>
-    /// Limpia cualquier instalador previo de Lex Junior acumulado en la carpeta %TEMP% (0% basura residual).
+    /// Limpia instaladores previos de Lex Junior acumulados en la carpeta %TEMP%.
     /// </summary>
     public static void CleanOldTempInstallers()
     {
@@ -441,7 +441,7 @@ public static class InstallerService
 
                     using (var cap = clientKey.CreateSubKey("Capabilities"))
                     {
-                        cap.SetValue("ApplicationDescription", "Lex Junior - Navegador rápido y privado con LexShield Core y 0 telemetría.", RegistryValueKind.String);
+                        cap.SetValue("ApplicationDescription", "Lex Junior - Navegador privado con LexShield Core y 0 telemetría.", RegistryValueKind.String);
                         cap.SetValue("ApplicationIcon", $"{targetIcon},0", RegistryValueKind.String);
                         cap.SetValue("ApplicationName", "Lex Junior Browser", RegistryValueKind.String);
 
@@ -682,13 +682,13 @@ public static class InstallerService
                 // 1. Recrear acceso directo en el Escritorio
                 if (File.Exists(DesktopShortcutPath))
                 {
-                    CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
+                    CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
                 }
 
                 // 2. Recrear acceso directo en el Menú Inicio
                 if (File.Exists(StartMenuShortcutPath))
                 {
-                    CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado rápido con bloqueo nativo y 0 telemetría");
+                    CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
                 }
 
                 // 3. Actualizar accesos directos anclados en la barra de tareas de Windows

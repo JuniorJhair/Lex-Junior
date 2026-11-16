@@ -40,12 +40,12 @@
     <p class="muted">Arquitectura técnica, seguridad y respeto a los recursos del usuario.</p>
 
     <div class="info-card">
-      <h2><span class="badge-feature">0% REPOSO</span> 1. Modelo 100 % Bajo Demanda</h2>
+      <h2><span class="badge-feature">BAJO DEMANDA</span> 1. Modelo 100 % Bajo Demanda</h2>
       <p>
-        A diferencia de los servicios o extensiones tradicionales que ejecutan tareas en segundo plano, Lex TV sólo existe mientras su pestaña se encuentra abierta:
+        A diferencia de los servicios o extensiones que ejecutan tareas permanentes en segundo plano, Lex TV sólo opera mientras su pestaña se encuentra abierta:
       </p>
       <ul>
-        <li><strong>0 hilos y 0 timers en segundo plano:</strong> Al cerrar la pestaña de TV, todos los sockets, streams y memorias intermedias se liberan de forma inmediata (<span class="mono">ReleaseAll</span>).</li>
+        <li><strong>Liberación al cerrar la pestaña:</strong> Al cerrar la pestaña de TV, las sesiones, streams y búferes activos del reproductor se detienen (<span class="mono">ReleaseAll</span>).</li>
         <li><strong>0 telemetría:</strong> Tus listas, canales favoritos, marcas de reproducción y diagnósticos se guardan exclusivamente de manera local en tu equipo (<span class="mono">%LocalAppData%\LexBrowser</span>).</li>
         <li><strong>Sin dependencias externas obligatorias:</strong> Lex no consulta servidores centrales de seguimiento ni servicios remotos de analítica.</li>
       </ul>

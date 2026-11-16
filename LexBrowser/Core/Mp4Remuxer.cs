@@ -10,7 +10,7 @@ namespace LexBrowser.Core;
 /// <summary>
 /// Remuxer compacto en streaming fMP4 (DASH fragmentado) -> MP4 progresivo estándar (moov al inicio + mdat único).
 /// Soporta 1 pista de video (H.264 avc1) y opcionalmente 1 pista de audio (AAC mp4a). Sin dependencias externas.
-/// Lee en streaming desde disco: solo las tablas de muestras se procesan en memoria (0% saturación de RAM).
+/// Lee en streaming desde disco: solo las tablas de muestras se procesan en memoria sin cargar el archivo completo.
 /// Genera la tabla stbl completa (stts, ctts, stss, stsc, stsz, stco/co64) compatible 100% con Windows Media Player (WMP).
 /// </summary>
 public static class Mp4Remuxer

@@ -10,8 +10,8 @@ namespace LexBrowser.Core;
 /// <summary>
 /// Gestiona la instancia única del navegador y la comunicación IPC mediante Named Pipes.
 /// Cuando el usuario hace clic en un enlace externo (WhatsApp, Discord, etc.) con el navegador
-/// ya abierto, la nueva instancia envía la URL a la instancia existente y se cierra en ~5ms,
-/// evitando abrir procesos duplicados y ahorrando 100% de memoria RAM innecesaria.
+/// ya abierto, la nueva instancia envía la URL a la instancia existente y se cierra
+/// para evitar abrir procesos o ventanas duplicadas.
 /// </summary>
 public static class SingleInstanceIpc
 {

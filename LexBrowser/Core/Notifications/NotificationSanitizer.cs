@@ -7,7 +7,7 @@ namespace LexBrowser.Core.Notifications;
 /// <summary>
 /// Sanitizador de seguridad para títulos y cuerpos de notificaciones web.
 /// Neutraliza inyecciones HTML, scripts, caracteres de control y suplantaciones por inversión de texto (bidi).
-/// 0.0% CPU en reposo: solo se ejecuta al recibir una notificación.
+/// Reactivo: solo se ejecuta al recibir una notificación.
 /// </summary>
 public static class NotificationSanitizer
 {

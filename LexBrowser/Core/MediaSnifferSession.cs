@@ -13,7 +13,7 @@ namespace LexBrowser.Core;
 /// Sesión de detección multimedia BAJO DEMANDA para UNA pestaña.
 /// Capas: CDP Network (con auto-attach a iframes OOPIF) + escaneo retroactivo por frame +
 /// resolución HTTP de embeds (Streamwish, Vidhide, Mp4upload, etc.) + una recarga única con captura activa si está vacío.
-/// Garantiza 0% CPU y 0 MB RAM en reposo: al llamar a Dispose() apaga CDP y limpia colecciones.
+/// Al llamar a Dispose() apaga CDP y limpia las colecciones registradas.
 /// </summary>
 public sealed class MediaSnifferSession : IDisposable
 {

@@ -75,7 +75,7 @@ public sealed class OmniboxSuggestionItem : INotifyPropertyChanged
 ///  2. Búsquedas recientes realizadas por el usuario (extraídas del historial con icono 🕒)
 ///  3. Autocompletado predictivo en vivo del buscador seleccionado (con caché LRU en RAM y cancelación inmediata)
 ///  4. Páginas y videos ya navegados con anterioridad (con icono y URL formateada)
-/// Sin consumo de CPU o red cuando el usuario no está escribiendo en la barra.
+/// No realiza consultas cuando el usuario no está escribiendo en la barra.
 /// </summary>
 public static class OmniboxSuggestionService
 {

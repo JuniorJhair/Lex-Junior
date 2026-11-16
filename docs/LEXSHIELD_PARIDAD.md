@@ -1,4 +1,6 @@
-# Paridad Brave vs Lex (Motor AdBlock + Cosmético + Scriptlets)
+# Paridad del Motor Declarativo vs Lex (Histórico Pre-Unificación)
+
+> **Nota histórica:** Documento de análisis previo a la unificación en `LexShield Core` (`feature/escudo-unificado`). El estado vigente se documenta en [`UNIFICACION_ESCUDO.md`](UNIFICACION_ESCUDO.md) y [`REPORTE_UNIFICACION_FINAL.md`](REPORTE_UNIFICACION_FINAL.md).
 
 Referencia local inspeccionada: `COMO BLOQUEA BRAVE/brave-core` (`ad_block_engine.cc`, `adblock_stub_response.cc`), `COMO BLOQUEA BRAVE/adblock-rust-master`, `COMO BLOQUEA BRAVE/adblock-lists-master` y `COMO BLOQUEA BRAVE/adblock-resources-master`.
 

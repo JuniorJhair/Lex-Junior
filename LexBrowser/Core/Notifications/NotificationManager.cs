@@ -13,7 +13,7 @@ namespace LexBrowser.Core.Notifications;
 
 /// <summary>
 /// Despachador central y gestor de notificaciones W3C recibidas vía WebView2.
-/// 0.0% CPU en reposo: totalmente reactivo a eventos. Sin sondeos ni bucles.
+/// Totalmente reactivo a eventos, sin sondeos ni bucles periódicos.
 /// Maneja sanitizado, cuotas, modo No Molestar pasivo, historial e invocación de toasts WPF.
 /// </summary>
 public static class NotificationManager
@@ -43,7 +43,7 @@ public static class NotificationManager
 
     /// <summary>
     /// Consulta el estado del sistema en Windows para saber si el usuario está en pantalla completa,
-    /// jugando o en una presentación (llamado únicamente al recibir un evento, 0% CPU en reposo).
+    /// jugando o en una presentación (llamado únicamente al recibir un evento, sin sondeo periódico).
     /// </summary>
     public static bool IsSystemInQuietMode()
     {

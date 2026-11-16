@@ -14,7 +14,7 @@ namespace LexBrowser.Core.Tv;
 
 /// <summary>
 /// Servidor virtual https://tv.lex.local/ para Lex TV (reproductor bajo demanda de listas del propio usuario).
-/// Aplica CSP unificada estricta, aislamiento de origen y 0% de costo en reposo.
+/// Aplica CSP unificada estricta, aislamiento de origen y ejecución bajo demanda.
 /// </summary>
 public static class TvStudioService
 {

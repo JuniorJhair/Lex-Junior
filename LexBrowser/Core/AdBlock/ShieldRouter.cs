@@ -241,7 +241,7 @@ public static class ShieldRouter
     }
 
     /// <summary>
-    /// Determina de forma rápida si la respuesta Document debe diferirse brevemente para
+    /// Determina si la respuesta Document debe diferirse brevemente para
     /// registrar scriptlets / reglas cosméticas específicas del dominio antes del parsing HTML.
     /// </summary>
     public static bool ShouldDeferDocumentForScriptlets(

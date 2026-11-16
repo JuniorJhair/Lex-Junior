@@ -17,7 +17,7 @@ public partial class MainWindow
     private readonly System.Collections.ObjectModel.ObservableCollection<DownloadEntry> _downloadsObservable = new();
 
     // ─────────────────────────────────────────────────────────────────────
-    // HISTORIAL DE DESCARGAS EN MEMORIA (0% CPU EN REPOSO + THROTTLE UI ~4/s)
+    // HISTORIAL DE DESCARGAS EN SESIÓN (BAJO DEMANDA + THROTTLE UI ~4/s)
     // ─────────────────────────────────────────────────────────────────────
     private void OnDownloadsChanged()
     {
@@ -158,8 +158,8 @@ public partial class MainWindow
             else
             {
                 TxtDownloadsCountSubtitle.Text = entries.Count == 0
-                    ? "En memoria · 0% consumo en segundo plano"
-                    : $"{entries.Count} {(entries.Count == 1 ? "archivo registrado" : "archivos registrados")} · 0% CPU en reposo";
+                    ? "Solo en esta sesión · Inactivo"
+                    : $"{entries.Count} {(entries.Count == 1 ? "archivo registrado" : "archivos registrados")} · Solo en esta sesión";
             }
         }
 

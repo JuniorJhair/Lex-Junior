@@ -59,7 +59,7 @@ public sealed class TvUserStateData
 /// <summary>
 /// Persistencia bajo demanda del usuario: tv_prefs.json (favoritos, términos aceptados y fallos tipificados)
 /// y tv_playlists.json (listas propias de canales M3U del usuario).
-/// Elimina cachés de terceros en el primer arranque y libera memoria al cerrar TV.
+/// Elimina cachés de terceros en el primer arranque y limpia el estado temporal al cerrar TV.
 /// </summary>
 public sealed class TvUserStateStore
 {

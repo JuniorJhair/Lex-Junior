@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
       icon: '📺',
       title: 'Lex TV — Reproductor Multimedia Personal',
       url: 'http://tv.lex.local/',
-      ads: '0 Telemetría · 0% CPU al cerrar'
+      ads: '0 Telemetría · Bajo demanda'
     },
     'view-youtube': {
       icon: '▶',
@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
       icon: '📑',
       title: 'Contrato_Acuerdo_Servicios.pdf — Lex PDF Studio',
       url: 'file:///C:/Users/Documentos/Contrato_Acuerdo_Servicios.pdf',
-      ads: '0% CPU · 100% Offline'
+      ads: '100% Offline · Local'
     },
     'view-incognito': {
       icon: '🕵️',
