@@ -2,6 +2,14 @@
 
 Todos los cambios notables de **Lex Junior Browser** se documentan en este archivo usando [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-11-16
+
+### Novedades y mejoras
+- **Identidad visual oficial de Lex Junior Browser**: Sustitución integral del icono y logotipo (`Logo.png`) en la aplicación (`app.ico`, `logo.png`, `logo_web.png`), recursos locales de Lex TV (`favicon.ico`/`favicon.png`) y sitio web oficial (`website/assets/`).
+- **Sitio web renovado (Oscuro Morado + Original Naranja)**: Nueva paleta combinada del tema **Oscuro** (morado/índigo) y **Original/Clásico** (naranja sobre negro), con **Tema Clásico (Original)** como vista principal del navegador interactivo en la web y selector en tiempo real para alternar entre **Original (Clásico)**, **Oscuro** y **Claro**.
+- **Atribución oficial y corrección de `THIRD_PARTY_NOTICES.txt` en compilación única**: Incrustación de `THIRD_PARTY_NOTICES.txt` como `EmbeddedResource` en `LexJuniorSetup.exe` con créditos oficiales (`Copyright © 2026 Junior Pacherrez`), texto legal completo de licencias y extracción/apertura garantizada desde **Configuración → Licencias y créditos**.
+- **Funciones oficiales de diagnóstico y logs en instalación**: Eliminada la etiqueta `(Temporal en esta sesión)` en `Modo Diagnóstico Verboso de LexShield`, renombrado `Adaptador de Google IMA SDK y Stubs VAST/VMAP`, y exportación de registros (`Ctrl + Shift + L` / Diagnóstico por pestaña) dirigida a la subcarpeta `Logs\LexJunior_ShieldLog.txt` dentro del directorio del navegador (sin dejar archivos en el Escritorio).
+
 ## [2.5.0] - 2026-11-16
 
 ### Novedades y mejoras

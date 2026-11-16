@@ -470,4 +470,64 @@ public class AuditRegressionTests
             }
         }
     }
+
+    [Fact]
+    public void Release26_NoticesEmbeddedAndLoaded_CreditingCreator()
+    {
+        string loaded = LexBrowser.UI.Views.SettingsWindow.LoadThirdPartyNoticesText();
+        Assert.Contains("Junior Pacherrez", loaded, StringComparison.Ordinal);
+        Assert.Contains("Microsoft.Web.WebView2", loaded, StringComparison.Ordinal);
+        Assert.Contains("Mozilla PDF.js", loaded, StringComparison.Ordinal);
+        Assert.DoesNotContain("no encontrado", loaded, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no disponible", loaded, StringComparison.OrdinalIgnoreCase);
+
+        using Stream? embedded = typeof(LexBrowser.UI.Views.SettingsWindow).Assembly
+            .GetManifestResourceStream("THIRD_PARTY_NOTICES.txt");
+        Assert.NotNull(embedded);
+        using var reader = new StreamReader(embedded!, System.Text.Encoding.UTF8);
+        string embeddedText = reader.ReadToEnd();
+        Assert.Contains("Junior Pacherrez", embeddedText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Release26_ShieldLogExportWritesToLogsSubdirectory()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), $"lex_shield_log_test_{Guid.NewGuid():N}");
+        try
+        {
+            string? exported = LexBrowser.MainWindow.WriteShieldLogExport("evento-test-shield", tempRoot);
+            string expectedPath = Path.Combine(tempRoot, "Logs", "LexJunior_ShieldLog.txt");
+
+            Assert.Equal(expectedPath, exported);
+            Assert.True(File.Exists(expectedPath));
+            Assert.Equal("evento-test-shield", File.ReadAllText(expectedPath, System.Text.Encoding.UTF8));
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Release26_OfficialUiAndWebsiteCopy_DefaultsClassicAndNoPlaceholders()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string settingsXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "SettingsWindow.xaml"));
+        string webHtml = File.ReadAllText(Path.Combine(repoRoot, "website", "index.html"));
+        string webJs = File.ReadAllText(Path.Combine(repoRoot, "website", "script.js"));
+
+        Assert.Contains("Adaptador de Google IMA SDK", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("Modo Diagnóstico Verboso de LexShield", settingsXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("(Temporal en esta sesión)", settingsXaml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Simulador de Google IMA", settingsXaml, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("class=\"browser-window reveal theme-classic\" id=\"browser-mockup\"", webHtml, StringComparison.Ordinal);
+        Assert.Contains("data-theme=\"classic\"", webHtml, StringComparison.Ordinal);
+        Assert.Contains("data-theme=\"dark\"", webHtml, StringComparison.Ordinal);
+        Assert.Contains("data-theme=\"light\"", webHtml, StringComparison.Ordinal);
+        Assert.Contains("v2.6.0", webHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("neutralizado en 0.01s", webHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("streaming-hd.example", webHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("streaming-hd.example", webJs, StringComparison.OrdinalIgnoreCase);
+    }
 }
