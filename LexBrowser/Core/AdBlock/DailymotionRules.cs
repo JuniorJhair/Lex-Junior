@@ -117,6 +117,7 @@ public static class DailymotionRules
             or CoreWebView2WebResourceContext.Media;
 
         if (xmlStubContext &&
+            !IsRealMediaManifestOrSegmentPath(path, full) &&
             !ShieldIsolation.IsGoogleOrYouTubeContent(host, originHost) &&
             (full.Contains("monetization", StringComparison.OrdinalIgnoreCase) || IsVmapUrl(full, path)))
         {
@@ -126,5 +127,17 @@ public static class DailymotionRules
         }
 
         return false;
+    }
+
+    private static bool IsRealMediaManifestOrSegmentPath(string path, string fullUrl)
+    {
+        return path.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".mpd", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".m4s", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("/manifest/video", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains("/cdn/manifest/", StringComparison.OrdinalIgnoreCase) ||
+               fullUrl.Contains("cdndirector", StringComparison.OrdinalIgnoreCase);
     }
 }

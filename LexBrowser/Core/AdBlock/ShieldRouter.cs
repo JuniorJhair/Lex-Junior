@@ -613,7 +613,9 @@ public static class ShieldRouter
         string? tabUrlFallback,
         string? referer,
         string? secFetchDest,
-        CoreWebView2WebResourceContext resourceContext)
+        CoreWebView2WebResourceContext resourceContext,
+        string? secFetchSite = null,
+        Func<string, bool>? isKnownSubframeHost = null)
     {
         bool isExplicitSubframe =
             string.Equals(secFetchDest, "iframe", StringComparison.OrdinalIgnoreCase) ||
@@ -663,6 +665,17 @@ public static class ShieldRouter
                 mainTabHost = uri.Host;
                 originHost = uri.Host;
             }
+        }
+        else if (originHost != "unknown" &&
+                 !PublicSuffix.IsSameRegistrableDomain(uri.Host, originHost) &&
+                 ((string.Equals(secFetchSite, "same-origin", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(secFetchSite, "same-site", StringComparison.OrdinalIgnoreCase)) ||
+                  (isKnownSubframeHost != null && isKnownSubframeHost(uri.Host))))
+        {
+            // Subframe cross-origin con Referrer-Policy: no-referrer: su petición same-origin/known-subframe
+            // pertenece al iframe de origen (p. ej. cdn.dotanborito.net), no al host superior.
+            originHost = uri.Host;
+            frameDesc = $"Subframe:{uri.Host}|{resourceContext}";
         }
 
         string policyHost = (mainTabHost != "unknown" && !string.IsNullOrEmpty(mainTabHost))

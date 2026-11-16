@@ -888,6 +888,7 @@ public partial class MainWindow
                 {
                     string referer = string.Empty;
                     string? secFetchDest = null;
+                    string? secFetchSite = null;
                     try
                     {
                         var reqHeaders = e.Request.Headers;
@@ -896,11 +897,10 @@ public partial class MainWindow
                         else if (reqHeaders.Contains("Origin"))
                             referer = reqHeaders.GetHeader("Origin");
 
-                        if (e.ResourceContext == CoreWebView2WebResourceContext.Document &&
-                            reqHeaders.Contains("Sec-Fetch-Dest"))
-                        {
+                        if (reqHeaders.Contains("Sec-Fetch-Dest"))
                             secFetchDest = reqHeaders.GetHeader("Sec-Fetch-Dest");
-                        }
+                        if (reqHeaders.Contains("Sec-Fetch-Site"))
+                            secFetchSite = reqHeaders.GetHeader("Sec-Fetch-Site");
                     }
                     catch { }
 
@@ -910,7 +910,14 @@ public partial class MainWindow
                         tab.Url,
                         referer,
                         secFetchDest,
-                        e.ResourceContext);
+                        e.ResourceContext,
+                        secFetchSite,
+                        tab.IsKnownSubframeHost);
+
+                    if (frameDesc.StartsWith("SubframeDoc:", StringComparison.Ordinal))
+                    {
+                        tab.RecordActiveSubframeHost(originHost);
+                    }
 
                     // Evaluar política del sitio principal de la pestaña (o del originHost si la pestaña aún no tiene host) con caché por revisión
                     var policy = tab.ResolveCachedPolicy(policyHost);
@@ -1270,13 +1277,17 @@ public partial class MainWindow
                     string originHost = mainUri?.Host ?? "unknown";
                     var policy = tab.ResolveCachedPolicy(originHost);
                     if (!policy.ShieldEnabled || !policy.Network)
+                    {
+                        tab.RecordActiveSubframeHost(fUri.Host);
                         return;
+                    }
 
                     if (ShieldExemptions.IsPaymentOrAuthHost(fUri.Host) ||
                         ShieldExemptions.IsPaymentOrAuthHost(originHost) ||
                         ShieldIsolation.IsIsolatedHost(fUri.Host) ||
                         ShieldIsolation.IsIsolatedHost(originHost))
                     {
+                        tab.RecordActiveSubframeHost(fUri.Host);
                         return;
                     }
 
@@ -1313,6 +1324,10 @@ public partial class MainWindow
                                 win.UpdateShieldBadgeText();
                         });
                     }
+                    else
+                    {
+                        tab.RecordActiveSubframeHost(fUri.Host);
+                    }
                 };
             }
             catch { }
@@ -1332,6 +1347,7 @@ public partial class MainWindow
         core.NavigationStarting += (s, e) =>
         {
             tab.ActiveFrames.Clear();
+            tab.ClearActiveSubframeHosts();
             tab.DailymotionRealVideoSignaled = false;
             tab.HasShownYouTubeIssueNotice = false;
             tab.CorsUnlocker?.Dispose();

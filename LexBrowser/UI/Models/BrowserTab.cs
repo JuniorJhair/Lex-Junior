@@ -87,6 +87,32 @@ public class BrowserTab : INotifyPropertyChanged
     /// <summary>Registro en memoria de subframes (iframes) activos para sincronización instantánea de volumen y multimedia.</summary>
     public ConcurrentDictionary<CoreWebView2Frame, byte> ActiveFrames { get; } = new();
 
+    /// <summary>Hosts vistos en subframes activos de la navegación actual para atribución exacta de subrecursos sin Referer.</summary>
+    private readonly ConcurrentDictionary<string, byte> _activeSubframeHosts = new(StringComparer.OrdinalIgnoreCase);
+
+    public void RecordActiveSubframeHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return;
+        string reg = LexBrowser.Core.AdBlock.PublicSuffix.GetRegistrableDomain(host);
+        if (!string.IsNullOrEmpty(reg))
+            _activeSubframeHosts.TryAdd(reg, 0);
+        _activeSubframeHosts.TryAdd(host.Trim().TrimEnd('.').ToLowerInvariant(), 0);
+    }
+
+    public bool IsKnownSubframeHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host) || _activeSubframeHosts.IsEmpty)
+            return false;
+        string clean = host.Trim().TrimEnd('.').ToLowerInvariant();
+        if (_activeSubframeHosts.ContainsKey(clean))
+            return true;
+        string reg = LexBrowser.Core.AdBlock.PublicSuffix.GetRegistrableDomain(clean);
+        return !string.IsNullOrEmpty(reg) && _activeSubframeHosts.ContainsKey(reg);
+    }
+
+    public void ClearActiveSubframeHosts() => _activeSubframeHosts.Clear();
+
     /// <summary>Nivel de amplificación de volumen de la pestaña (0% a 300%, por defecto 100%).</summary>
     public int VolumeBoostPercent
     {

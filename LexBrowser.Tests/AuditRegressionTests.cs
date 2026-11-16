@@ -335,4 +335,52 @@ public class AuditRegressionTests
 
         s.Theme = "Dark";
     }
+
+    [Fact]
+    public void DailymotionRules_NeverReplacesVideoManifestM3u8WithVmapStubEvenIfQueryContainsMonetization()
+    {
+        var manifestUri = new Uri("https://dmxleo.dailymotion.com/cdn/manifest/video/x8t73c2.m3u8?ps=539x303&monetization_mode=none");
+        bool isStub = DailymotionRules.TryGetRedirectStub(
+            manifestUri,
+            out _,
+            out _,
+            "geo.dailymotion.com",
+            CoreWebView2WebResourceContext.XmlHttpRequest);
+        Assert.False(isStub);
+
+        var vmapUri = new Uri("https://www.dailymotion.com/vast/vmap?video=x8t73c2&monetization=1");
+        bool isVmap = DailymotionRules.TryGetRedirectStub(
+            vmapUri,
+            out byte[] vmapBytes,
+            out _,
+            "geo.dailymotion.com",
+            CoreWebView2WebResourceContext.XmlHttpRequest);
+        Assert.True(isVmap);
+        Assert.NotEmpty(vmapBytes);
+    }
+
+    [Fact]
+    public void ClassifyWebResourceRequest_AttributesNoReferrerCrossOriginSubframeXhrToSubframeHost()
+    {
+        var tab = new BrowserTab();
+        tab.RecordActiveSubframeHost("cdn.dotanborito.net");
+
+        var m3u8Uri = new Uri("https://cdn.dotanborito.net/m3u8/565787491bda871ffc1862a9034ee537");
+        var mainUri = new Uri("https://hentaila.com/media/slug/6");
+
+        var (mainTabHost, originHost, policyHost, frameDesc) = ShieldRouter.ClassifyWebResourceRequest(
+            m3u8Uri,
+            mainUri,
+            mainUri.AbsoluteUri,
+            referer: "",
+            secFetchDest: "empty",
+            CoreWebView2WebResourceContext.XmlHttpRequest,
+            secFetchSite: "same-origin",
+            tab.IsKnownSubframeHost);
+
+        Assert.Equal("hentaila.com", mainTabHost);
+        Assert.Equal("cdn.dotanborito.net", originHost);
+        Assert.Equal("hentaila.com", policyHost);
+        Assert.StartsWith("Subframe:cdn.dotanborito.net|", frameDesc, StringComparison.Ordinal);
+    }
 }
