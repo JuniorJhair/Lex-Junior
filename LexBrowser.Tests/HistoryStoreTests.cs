@@ -352,5 +352,47 @@ public sealed class HistoryStoreTests : IDisposable
     [InlineData("", "")]
     public void ExtractRootDomain_cases(string url, string expected) =>
         Assert.Equal(expected, HistoryStore.ExtractRootDomain(url));
+
+    // ── Reparación de mojibake UTF-8 interpretado como Latin-1/Win-1252 ───
+    [Theory]
+    [InlineData("Videos de el Ãºltimo arrepentimiento de los trillizos - Dailymotion",
+                "Videos de el último arrepentimiento de los trillizos - Dailymotion")]
+    [InlineData("Episodios â€“ PelÃ­cula de acciÃ³n Ã‰xito",
+                "Episodios – Película de acción Éxito")]
+    [InlineData("El último arrepentimiento — Español ¡Hola! Año ¿Qué pasó?",
+                "El último arrepentimiento — Español ¡Hola! Año ¿Qué pasó?")]
+    [InlineData("Âmbito internacional y Añadir elementos",
+                "Âmbito internacional y Añadir elementos")]
+    public void RepairMojibake_repairs_broken_utf8_without_corrupting_valid_text(string input, string expected) =>
+        Assert.Equal(expected, HistoryStore.RepairMojibake(input));
+
+    [Fact]
+    public void Load_and_add_and_updateTitle_normalize_mojibake_titles()
+    {
+        File.WriteAllText(_file, JsonSerializer.Serialize(new[]
+        {
+            new HistoryEntry
+            {
+                Url = "https://www.dailymotion.com/search/el%20%C3%BAltimo/top-results",
+                Title = "Videos de el Ãºltimo arrepentimiento de los trillizos - Dailymotion",
+                Domain = "dailymotion.com",
+                VisitedAt = _now.AddMinutes(-2)
+            }
+        }));
+
+        using (var store = NewStore())
+        {
+            store.Load();
+            var loaded = Assert.Single(store.GetEntries());
+            Assert.Equal("Videos de el último arrepentimiento de los trillizos - Dailymotion", loaded.Title);
+            Assert.Single(store.GetEntries(filterText: "último"));
+
+            store.Flush();
+            store.AddEntry("https://www.dailymotion.com/video/x9abcde", "CapÃ­tulo final â€“ Dailymotion");
+            store.UpdateTitle("https://www.dailymotion.com/video/x9abcde", "CapÃ­tulo 1 â€“ Dailymotion");
+            var latest = store.GetRecentSnapshot(1)[0];
+            Assert.Equal("Capítulo 1 – Dailymotion", latest.Title);
+        }
+    }
 }
 

@@ -330,7 +330,10 @@ public class AuditRegressionTests
             string classicHtml = NewTabPage.GetHtml();
             Assert.Contains("#000000", classicHtml);
             Assert.Contains("Menos anuncios", classicHtml);
+            Assert.Contains("Cero telemetría", classicHtml);
+            Assert.Contains("Privado", classicHtml);
             Assert.DoesNotContain("Ultra-ligero", classicHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Navegación rápida", classicHtml, StringComparison.OrdinalIgnoreCase);
 
             s.Theme = "Light";
             string lightHtml = NewTabPage.GetHtml();
@@ -392,5 +395,79 @@ public class AuditRegressionTests
         Assert.Equal("cdn.dotanborito.net", originHost);
         Assert.Equal("hentaila.com", policyHost);
         Assert.StartsWith("Subframe:cdn.dotanborito.net|", frameDesc, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrowserThemeManager_AppliesLightContrastPalettesAndNewTabXIcon()
+    {
+        var lightDict = new System.Windows.ResourceDictionary();
+        BrowserThemeManager.ApplyThemePalette(lightDict, BrowserThemeManager.Light);
+
+        Assert.Equal(System.Windows.Media.Color.FromRgb(0xF1, 0xF5, 0xF9),
+            Assert.IsType<System.Windows.Media.SolidColorBrush>(lightDict["TelemetryBadgeBg"]).Color);
+        Assert.Equal(System.Windows.Media.Color.FromRgb(0x0F, 0x17, 0x2A),
+            Assert.IsType<System.Windows.Media.SolidColorBrush>(lightDict["TelemetryBadgeFg"]).Color);
+        Assert.Equal(System.Windows.Media.Color.FromRgb(0xEF, 0xF6, 0xFF),
+            Assert.IsType<System.Windows.Media.SolidColorBrush>(lightDict["ShieldBadgeBg"]).Color);
+        Assert.Equal(System.Windows.Media.Color.FromRgb(0x03, 0x69, 0xA1),
+            Assert.IsType<System.Windows.Media.SolidColorBrush>(lightDict["ShieldBadgeActiveFg"]).Color);
+        Assert.Equal(System.Windows.Media.Color.FromRgb(0xF8, 0xFA, 0xFC),
+            Assert.IsType<System.Windows.Media.SolidColorBrush>(lightDict["PanelWindowBg"]).Color);
+        Assert.Equal(System.Windows.Media.Color.FromRgb(0x0F, 0x17, 0x2A),
+            Assert.IsType<System.Windows.Media.SolidColorBrush>(lightDict["PanelTextStrong"]).Color);
+        Assert.Equal(System.Windows.Media.Color.FromRgb(0x06, 0x5F, 0x46),
+            Assert.IsType<System.Windows.Media.SolidColorBrush>(lightDict["DefaultBtnDoneFg"]).Color);
+        Assert.IsType<System.Windows.Media.LinearGradientBrush>(lightDict["PanelTelemetryBg"]);
+
+        var s = SettingsManager.Current;
+        string origTheme = s.Theme;
+        try
+        {
+            s.Theme = "Light";
+            string lightHtml = NewTabPage.GetHtml();
+            Assert.Contains(@"fill=""#0F172A""", lightHtml, StringComparison.Ordinal);
+
+            s.Theme = "Dark";
+            string darkHtml = NewTabPage.GetHtml();
+            Assert.Contains(@"fill=""#F4F4F5""", darkHtml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            s.Theme = origTheme;
+        }
+    }
+
+    [Fact]
+    public void SettingsSidebarCopyMatchesNewTabFooter_AndThemeBindingsExist()
+    {
+        string? repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string settingsXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "SettingsWindow.xaml"));
+        string historyXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "HistoryWindow.xaml"));
+        string newTabFooter = "Cero telemetría · Menos anuncios · Privado";
+
+        Assert.Contains(newTabFooter, settingsXaml, StringComparison.Ordinal);
+        Assert.Contains(newTabFooter, NewTabPage.GetHtml(), StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource PanelWindowBg}", settingsXaml, StringComparison.Ordinal);
+        Assert.Contains("{DynamicResource PanelWindowBg}", historyXaml, StringComparison.Ordinal);
+        Assert.Contains("DefaultBrowserBtnStyle", settingsXaml, StringComparison.Ordinal);
+
+        // Todas las claves DynamicResource Panel* / Badge* usadas en vistas deben quedar pobladas en Light, Dark y Classic
+        string mainXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml"));
+        var referencedKeys = System.Text.RegularExpressions.Regex
+            .Matches(settingsXaml + "\n" + historyXaml + "\n" + mainXaml, @"\{DynamicResource\s+([A-Za-z0-9_]+)\}")
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.NotEmpty(referencedKeys);
+        foreach (string theme in new[] { BrowserThemeManager.Light, BrowserThemeManager.Dark, BrowserThemeManager.Classic })
+        {
+            var dict = new System.Windows.ResourceDictionary();
+            BrowserThemeManager.ApplyThemePalette(dict, theme);
+            foreach (string key in referencedKeys)
+            {
+                Assert.True(dict.Contains(key), $"Falta clave DynamicResource '{key}' en tema '{theme}'.");
+            }
+        }
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 
@@ -73,6 +74,7 @@ public sealed class HistoryStore : IDisposable
                     var list = JsonSerializer.Deserialize<List<HistoryEntry>>(json);
                     if (list != null)
                     {
+                        bool repairedAnyTitle = false;
                         _entries.Clear();
                         foreach (var item in list)
                         {
@@ -85,11 +87,22 @@ public sealed class HistoryStore : IDisposable
                                 item.Url = unwrappedPdf;
                                 item.Domain = ExtractRootDomain(unwrappedPdf);
                             }
+                            string repairedTitle = RepairMojibake(item.Title);
+                            if (!string.Equals(repairedTitle, item.Title, StringComparison.Ordinal))
+                            {
+                                item.Title = repairedTitle;
+                                repairedAnyTitle = true;
+                            }
                             _ = item.SearchKey;
                             _entries.Add(item);
                         }
                         _entries.Sort((a, b) => a.VisitedAt.CompareTo(b.VisitedAt));
                         RebuildSnapshotUnderLock();
+                        if (repairedAnyTitle)
+                        {
+                            _dirty = true;
+                            if (!_disposed) _saveTimer.Change(_saveDelay, Timeout.InfiniteTimeSpan);
+                        }
                     }
                 }
             }
@@ -175,8 +188,132 @@ public sealed class HistoryStore : IDisposable
         }
 
         normalizedUrl = trimmed;
-        cleanTitle = string.IsNullOrWhiteSpace(title) ? normalizedUrl : title.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            cleanTitle = normalizedUrl;
+        }
+        else
+        {
+            string trimmedTitle = RepairMojibake(title.Trim());
+            cleanTitle = string.IsNullOrWhiteSpace(trimmedTitle) ? normalizedUrl : trimmedTitle;
+        }
         return true;
+    }
+
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>
+    /// Repara secuencias UTF-8 decodificadas erróneamente como Latin-1/Windows-1252
+    /// (p. ej. "Ãºltimo" → "último", "â€“" → "–") sin alterar texto UTF-8 válido.
+    /// </summary>
+    internal static string RepairMojibake(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+
+        bool hasMarker = false;
+        foreach (char ch in text)
+        {
+            if (ch == 'Ã' || ch == 'Â' || ch == 'â' || ch == 'ð' || ch == 'Ð' || ch == 'Ñ')
+            {
+                hasMarker = true;
+                break;
+            }
+        }
+        if (!hasMarker) return text;
+
+        var sb = new StringBuilder(text.Length);
+        Span<byte> seq = stackalloc byte[4];
+        bool changed = false;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (TryToWin1252Byte(text[i], out byte b0))
+            {
+                int seqLen = 0;
+                if (b0 >= 0xC2 && b0 <= 0xDF) seqLen = 2;
+                else if (b0 >= 0xE0 && b0 <= 0xEF) seqLen = 3;
+                else if (b0 >= 0xF0 && b0 <= 0xF4) seqLen = 4;
+
+                if (seqLen > 0 && i + seqLen <= text.Length)
+                {
+                    seq[0] = b0;
+                    bool allCont = true;
+                    for (int k = 1; k < seqLen; k++)
+                    {
+                        if (!TryToWin1252Byte(text[i + k], out byte bk) || (bk & 0xC0) != 0x80)
+                        {
+                            allCont = false;
+                            break;
+                        }
+                        seq[k] = bk;
+                    }
+
+                    if (allCont)
+                    {
+                        try
+                        {
+                            string decoded = StrictUtf8.GetString(seq.Slice(0, seqLen));
+                            if (decoded.Length > 0 && !(decoded.Length == 1 && decoded[0] >= '\u0080' && decoded[0] <= '\u009F'))
+                            {
+                                sb.Append(decoded);
+                                i += seqLen - 1;
+                                changed = true;
+                                continue;
+                            }
+                        }
+                        catch (DecoderFallbackException)
+                        {
+                        }
+                    }
+                }
+            }
+            sb.Append(text[i]);
+        }
+
+        return changed ? sb.ToString() : text;
+    }
+
+    private static bool TryToWin1252Byte(char ch, out byte value)
+    {
+        if (ch <= '\u00FF')
+        {
+            value = (byte)ch;
+            return true;
+        }
+
+        switch (ch)
+        {
+            case '\u20AC': value = 0x80; return true; // €
+            case '\u201A': value = 0x82; return true; // ‚
+            case '\u0192': value = 0x83; return true; // ƒ
+            case '\u201E': value = 0x84; return true; // „
+            case '\u2026': value = 0x85; return true; // …
+            case '\u2020': value = 0x86; return true; // †
+            case '\u2021': value = 0x87; return true; // ‡
+            case '\u02C6': value = 0x88; return true; // ˆ
+            case '\u2030': value = 0x89; return true; // ‰
+            case '\u0160': value = 0x8A; return true; // Š
+            case '\u2039': value = 0x8B; return true; // ‹
+            case '\u0152': value = 0x8C; return true; // Œ
+            case '\u017D': value = 0x8E; return true; // Ž
+            case '\u2018': value = 0x91; return true; // ‘
+            case '\u2019': value = 0x92; return true; // ’
+            case '\u201C': value = 0x93; return true; // “
+            case '\u201D': value = 0x94; return true; // ”
+            case '\u2022': value = 0x95; return true; // •
+            case '\u2013': value = 0x96; return true; // –
+            case '\u2014': value = 0x97; return true; // —
+            case '\u02DC': value = 0x98; return true; // ˜
+            case '\u2122': value = 0x99; return true; // ™
+            case '\u0161': value = 0x9A; return true; // š
+            case '\u203A': value = 0x9B; return true; // ›
+            case '\u0153': value = 0x9C; return true; // œ
+            case '\u017E': value = 0x9E; return true; // ž
+            case '\u0178': value = 0x9F; return true; // Ÿ
+            default:
+                value = 0;
+                return false;
+        }
     }
 
     /// <summary>Registra una visita. Visitas consecutivas a la misma URL en menos de 5 s se fusionan.</summary>
