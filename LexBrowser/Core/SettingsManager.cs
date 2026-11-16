@@ -196,10 +196,9 @@ public static class SettingsManager
             return;
         }
 
-        Current = new BrowserSettings { SettingsSchemaVersion = 3 };
-        Current.Shield.Version = 3;
-        Current.Shield.Engine = ShieldSettings.EngineBrave;
-        Current.Shield.EngineMigratedToBrave = true;
+        Current = new BrowserSettings { SettingsSchemaVersion = ShieldSettings.CurrentShieldVersion };
+        Current.Shield.Version = ShieldSettings.CurrentShieldVersion;
+        Current.Shield.Engine = ShieldSettings.EngineLexShield;
         MigrateAndSyncShieldSettings(Current);
         BumpSettingsRevision();
         SyncSecurityMarker();
@@ -223,27 +222,26 @@ public static class SettingsManager
             migrated = true;
         }
 
-        if (!settings.Shield.EngineMigratedToBrave)
-        {
-            bool wasLegacy = string.Equals(
-                ShieldSettings.NormalizeEngine(settings.Shield.Engine),
-                ShieldSettings.EngineLegacy,
-                StringComparison.Ordinal);
+        string rawEngine = (settings.Shield.Engine ?? string.Empty).Trim();
+        bool wasLegacyAlias = string.Equals(rawEngine, ShieldSettings.LegacyEngineLegacyAlias, StringComparison.OrdinalIgnoreCase);
+        bool wasBraveAlias = string.Equals(rawEngine, ShieldSettings.LegacyEngineBraveAlias, StringComparison.OrdinalIgnoreCase);
+        bool needsShieldV4Migration =
+            settings.SettingsSchemaVersion < ShieldSettings.CurrentShieldVersion ||
+            settings.Shield.Version < ShieldSettings.CurrentShieldVersion ||
+            wasLegacyAlias ||
+            wasBraveAlias ||
+            !string.Equals(rawEngine, ShieldSettings.EngineLexShield, StringComparison.Ordinal);
 
-            settings.Shield.Engine = ShieldSettings.EngineBrave;
-            if (settings.SettingsSchemaVersion < 3 && wasLegacy)
+        if (needsShieldV4Migration)
+        {
+            if (settings.SettingsSchemaVersion < 3 && wasLegacyAlias)
             {
                 settings.EnableWebShieldInSubframes = true;
             }
-            settings.Shield.EngineMigratedToBrave = true;
-            settings.Shield.Version = Math.Max(3, settings.Shield.Version);
-            settings.SettingsSchemaVersion = Math.Max(3, settings.SettingsSchemaVersion);
-            migrated = true;
-        }
-        else if (settings.SettingsSchemaVersion < 3 || settings.Shield.Version < 3)
-        {
-            settings.Shield.Version = Math.Max(3, settings.Shield.Version);
-            settings.SettingsSchemaVersion = Math.Max(3, settings.SettingsSchemaVersion);
+
+            settings.Shield.Engine = ShieldSettings.EngineLexShield;
+            settings.Shield.Version = Math.Max(ShieldSettings.CurrentShieldVersion, settings.Shield.Version);
+            settings.SettingsSchemaVersion = Math.Max(ShieldSettings.CurrentShieldVersion, settings.SettingsSchemaVersion);
             migrated = true;
         }
 

@@ -1,7 +1,7 @@
 using System;
 using Microsoft.Web.WebView2.Core;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
 /// <summary>
 /// Resultado de evaluar una petición de red a través de un motor de bloqueo.
@@ -67,9 +67,9 @@ public readonly struct ShieldNetworkDecision
 }
 
 /// <summary>
-/// Contrato común para motores generales de bloqueo (Legacy y Brave declarativo).
+/// Contrato común de evaluación para LexShield Core.
 /// </summary>
-public interface IShieldEngine
+public interface ILexShieldEngine
 {
     string Name { get; }
 

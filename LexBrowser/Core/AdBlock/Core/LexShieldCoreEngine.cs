@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
 /// <summary>
 /// Motor de red declarativo en C#/.NET 8 que replica la semántica <c>check_parameterised</c>
@@ -15,7 +15,7 @@ namespace LexBrowser.Core.AdBlock.Brave;
 /// <c>*</c>, <c>$domain/$from/$to/$denyallow</c>, <c>$1p/$3p</c>, <c>$popup</c>, <c>$generichide</c>).
 /// YouTube, Dailymotion y hosts críticos de pago/OAuth/CAPTCHA quedan estrictamente excluidos.
 /// </summary>
-public sealed class BraveNetworkEngine : IShieldEngine
+public sealed class LexShieldCoreEngine : ILexShieldEngine
 {
     private const int UrlStackLimit = 512;
     private const int MaxTokensPerUrl = 128;
@@ -32,7 +32,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
     {
         var arr = new ulong[domains.Length];
         for (int i = 0; i < domains.Length; i++)
-            arr[i] = BraveHash.Fnv1a64(domains[i].AsSpan());
+            arr[i] = LexShieldHash.Fnv1a64(domains[i].AsSpan());
         Array.Sort(arr);
         return arr;
     }
@@ -42,21 +42,21 @@ public sealed class BraveNetworkEngine : IShieldEngine
         var src = ShieldExemptions.PaymentOrAuthHosts;
         var arr = new ulong[src.Length];
         for (int i = 0; i < src.Length; i++)
-            arr[i] = BraveHash.Fnv1a64(src[i].ToLowerInvariant().AsSpan());
+            arr[i] = LexShieldHash.Fnv1a64(src[i].ToLowerInvariant().AsSpan());
         Array.Sort(arr);
         return arr;
     }
 
-    private readonly Func<BraveShieldData?> _dataProvider;
+    private readonly Func<LexShieldData?> _dataProvider;
 
-    public string Name => ShieldSettings.EngineBrave;
+    public string Name => ShieldSettings.EngineLexShield;
 
-    public BraveNetworkEngine(Func<BraveShieldData?>? dataProvider = null)
+    public LexShieldCoreEngine(Func<LexShieldData?>? dataProvider = null)
     {
-        _dataProvider = dataProvider ?? BraveShieldData.TryGetDefault;
+        _dataProvider = dataProvider ?? LexShieldData.TryGetDefault;
     }
 
-    internal BraveShieldData? GetShieldData() => _dataProvider();
+    internal LexShieldData? GetShieldData() => _dataProvider();
 
     public ShieldNetworkDecision EvaluateNetwork(
         Uri uri,
@@ -76,6 +76,58 @@ public sealed class BraveNetworkEngine : IShieldEngine
             out _);
     }
 
+    internal ShieldNetworkDecision EvaluateIsolatedNetwork(
+        Uri uri,
+        string? originHost,
+        EffectiveSitePolicy policy,
+        CoreWebView2WebResourceContext resourceContext,
+        bool allowNetworkBlock)
+    {
+        if (uri == null || !policy.ShieldEnabled)
+            return ShieldNetworkDecision.Allow;
+
+        if (policy.Stubs)
+        {
+            bool allowThisStub = policy.ImaStub ||
+                                 !uri.AbsolutePath.EndsWith("ima3.js", StringComparison.OrdinalIgnoreCase);
+            if (allowThisStub &&
+                AdBlockResources.TryGetRedirectStub(uri, out byte[] stubBytes, out string stubContentType, originHost, resourceContext))
+            {
+                return ShieldNetworkDecision.Redirect(
+                    stubBytes,
+                    stubContentType,
+                    "LexShield isolated stub (200 OK)");
+            }
+        }
+
+        if (allowNetworkBlock && policy.Network && AdBlockFilter.ShouldBlock(uri, originHost, resourceContext))
+        {
+            return ShieldNetworkDecision.Block("Blocked ad domain or pattern");
+        }
+
+        return ShieldNetworkDecision.Allow;
+    }
+
+    internal bool ShouldBlockIsolatedPopup(
+        Uri targetUri,
+        Uri? originUri,
+        EffectiveSitePolicy policy,
+        out string reason)
+    {
+        reason = string.Empty;
+        if (targetUri == null || !policy.ShieldEnabled || !policy.Popups)
+            return false;
+
+        if ((policy.Network && AdBlockFilter.ShouldBlock(targetUri, originUri?.Host, CoreWebView2WebResourceContext.Document)) ||
+            AdBlockFilter.IsSuspiciousPopup(targetUri, originUri))
+        {
+            reason = "AdBlockFilter domain or suspicious pattern";
+            return true;
+        }
+
+        return false;
+    }
+
     private ShieldNetworkDecision EvaluateNetworkCore(
         Uri uri,
         string? originHost,
@@ -86,8 +138,16 @@ public sealed class BraveNetworkEngine : IShieldEngine
         out bool hadException)
     {
         hadException = false;
-        if (uri is null || !policy.ShieldEnabled || !policy.Network)
+        if (uri is null || !uri.IsAbsoluteUri)
             return ShieldNetworkDecision.Allow;
+
+        var tier = ShieldExemptions.ResolveExemptionTier(uri.Host, originHost, policy);
+        if (tier == ShieldExemptionTier.TotalExempt ||
+            tier == ShieldExemptionTier.CosmeticOnly ||
+            !policy.Network)
+        {
+            return ShieldNetworkDecision.Allow;
+        }
 
         Span<char> urlScratch = stackalloc char[UrlStackLimit];
         Span<ulong> tokBuf = stackalloc ulong[MaxTokensPerUrl];
@@ -106,7 +166,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
         {
             var data = _dataProvider();
             if (data == null)
-                return ShieldNetworkDecision.AllowDataUnavailable("Brave data == null (fail-open: shield data not loaded)");
+                return ShieldNetworkDecision.AllowDataUnavailable("LexShield data == null (fail-open: shield data not loaded)");
 
             var redir = new RedirectCollector();
             var trace = RuleMatchTrace.Empty;
@@ -126,10 +186,27 @@ public sealed class BraveNetworkEngine : IShieldEngine
             bool shouldBlock = hasImportantBlock || (hasNormalBlock && !hasException);
             if (!shouldBlock)
             {
+                if (!hasException &&
+                    policy.Stubs &&
+                    !policy.IsCompatMode &&
+                    (resourceContext is CoreWebView2WebResourceContext.XmlHttpRequest or
+                                        CoreWebView2WebResourceContext.Fetch or
+                                        CoreWebView2WebResourceContext.Other or
+                                        CoreWebView2WebResourceContext.Media) &&
+                    AdBlockResources.TryGetUnifiedFallbackStub(
+                        uri, originHost, resourceContext, policy,
+                        out byte[] unblockedStubBytes, out string unblockedStubCt, out string unblockedStubName))
+                {
+                    return ShieldNetworkDecision.Redirect(
+                        unblockedStubBytes,
+                        unblockedStubCt,
+                        $"LexShield stub ({unblockedStubName})");
+                }
+
                 if (hasException && ShieldLogger.DiagnosticMode)
                 {
                     string excRule = FormatMatchedRule(data, in ctx, isImportant: false, isException: true, in trace);
-                    return ShieldNetworkDecision.AllowWithReason($"Brave exception ({excRule})", hasException: true);
+                    return ShieldNetworkDecision.AllowWithReason($"LexShield exception ({excRule})", hasException: true);
                 }
                 return ShieldNetworkDecision.Allow;
             }
@@ -141,16 +218,29 @@ public sealed class BraveNetworkEngine : IShieldEngine
                     return redirectDecision;
             }
 
+            if (policy.Stubs &&
+                !redir.CancelAll &&
+                AdBlockResources.TryGetUnifiedFallbackStub(
+                    uri, originHost, resourceContext, policy,
+                    out byte[] fallbackBytes, out string fallbackCt, out string fallbackName))
+            {
+                return ShieldNetworkDecision.Redirect(
+                    fallbackBytes,
+                    fallbackCt,
+                    $"LexShield stub ({fallbackName})",
+                    isImportant: hasImportantBlock);
+            }
+
             string matchedRule = FormatMatchedRule(data, in ctx, isImportant: hasImportantBlock, isException: false, in trace);
             if (hasImportantBlock)
             {
                 return ShieldNetworkDecision.Block(
-                    string.IsNullOrEmpty(matchedRule) ? "Brave network ($important)" : $"Brave network ($important: {matchedRule})",
+                    string.IsNullOrEmpty(matchedRule) ? "LexShield network ($important)" : $"LexShield network ($important: {matchedRule})",
                     isImportant: true);
             }
 
             return ShieldNetworkDecision.Block(
-                string.IsNullOrEmpty(matchedRule) ? "Brave network" : $"Brave network ({matchedRule})");
+                string.IsNullOrEmpty(matchedRule) ? "LexShield network" : $"LexShield network ({matchedRule})");
         }
         finally
         {
@@ -190,13 +280,13 @@ public sealed class BraveNetworkEngine : IShieldEngine
         Span<ulong> orgBuf = stackalloc ulong[MaxOriginHashes];
         Span<ulong> tgtBuf = stackalloc ulong[MaxOriginHashes];
 
-        // 1. Reglas declarativas $popup de Brave (ej. ||popunder.net^$popup y /regex/$popup)
+        // 1. Reglas declarativas $popup de LexShield Core (ej. ||popunder.net^$popup y /regex/$popup)
         if (TryBuildRequestContext(
                 targetUri, originHost, CoreWebView2WebResourceContext.Document,
                 secFetchDest: null, httpMethod: "GET",
                 urlScratch, tokBuf, orgBuf, tgtBuf,
                 out var ctx, out char[]? rentedBuf,
-                overrideTypeMask: BraveNetworkMask.FromPopup))
+                overrideTypeMask: LexShieldMask.FromPopup))
         {
             try
             {
@@ -216,8 +306,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 {
                     string matched = FormatMatchedRule(data, in ctx, isImportant: impPopup, isException: false, in trace);
                     reason = impPopup
-                        ? (string.IsNullOrEmpty(matched) ? "Brave $popup ($important)" : $"Brave $popup ($important: {matched})")
-                        : (string.IsNullOrEmpty(matched) ? "Brave $popup" : $"Brave $popup ({matched})");
+                        ? (string.IsNullOrEmpty(matched) ? "LexShield $popup ($important)" : $"LexShield $popup ($important: {matched})")
+                        : (string.IsNullOrEmpty(matched) ? "LexShield $popup" : $"LexShield $popup ({matched})");
                     return true;
                 }
             }
@@ -242,7 +332,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 out hasDocException);
             if (navDecision.ShouldBlock)
             {
-                reason = navDecision.Reason ?? "Brave popup document block";
+                reason = navDecision.Reason ?? "LexShield popup document block";
                 return true;
             }
         }
@@ -256,7 +346,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
             EvaluateCspPolicies(originUri, originUri.Host, isFromSubframe, policy, out bool originSandboxNoPopups);
             if (originSandboxNoPopups)
             {
-                reason = "Brave $csp=sandbox (no allow-popups)";
+                reason = "LexShield $csp=sandbox (no allow-popups)";
                 return true;
             }
         }
@@ -270,13 +360,13 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 originUri != null &&
                 !PublicSuffix.IsSameRegistrableDomain(targetUri.Host, originUri.Host))
             {
-                reason = "Brave popup: cross-origin unsolicited";
+                reason = "LexShield popup: cross-origin unsolicited";
                 return true;
             }
 
             if ((!isUserInitiated || isFromSubframe) && AdBlockFilter.IsSuspiciousPopup(targetUri, originUri))
             {
-                reason = "Brave popup: suspicious tracking/popunder";
+                reason = "LexShield popup: suspicious tracking/popunder";
                 return true;
             }
         }
@@ -321,7 +411,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 tgtBuf,
                 out var ctx,
                 out char[]? rentedBuf,
-                overrideTypeMask: isSubdocument ? BraveNetworkMask.FromSubdocument : BraveNetworkMask.FromDocument))
+                overrideTypeMask: isSubdocument ? LexShieldMask.FromSubdocument : LexShieldMask.FromDocument))
         {
             return Array.Empty<string>();
         }
@@ -336,20 +426,20 @@ public sealed class BraveNetworkEngine : IShieldEngine
             for (int i = 0; i < cspRules.Length; i++)
             {
                 ref readonly var rec = ref cspRules[i];
-                var mask = (BraveNetworkMask)rec.Mask;
+                var mask = (LexShieldMask)rec.Mask;
 
                 if ((mask & ctx.TypeMask) == 0)
                     continue;
                 if ((mask & ctx.PartyMask) == 0)
                     continue;
-                if ((mask & BraveNetworkMask.FromSchemeMask) != 0 && (mask & ctx.SchemeMask) == 0)
+                if ((mask & LexShieldMask.FromSchemeMask) != 0 && (mask & ctx.SchemeMask) == 0)
                     continue;
-                if ((mask & BraveNetworkMask.FromAnyMethods) != 0 && (mask & ctx.MethodMask) == 0)
+                if ((mask & LexShieldMask.FromAnyMethods) != 0 && (mask & ctx.MethodMask) == 0)
                     continue;
                 if (!MatchesDomainConstraints(data, in rec, ctx.OriginHashes, ctx.TargetHashes))
                     continue;
 
-                bool matched = (mask & BraveNetworkMask.IsFullRegex) != 0
+                bool matched = (mask & LexShieldMask.IsFullRegex) != 0
                     ? MatchesFullRegex(data, in rec, i, isCsp: true, in ctx)
                     : MatchesUrlPattern(data, in rec, ctx.UrlLower, ctx.ReqHost, ctx.HostStart);
                 if (!matched)
@@ -359,8 +449,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
                     ? Encoding.UTF8.GetString(data.StrBlob, rec.ModOff, rec.ModLen).Trim()
                     : string.Empty;
 
-                bool isException = (mask & BraveNetworkMask.IsException) != 0;
-                bool isImportant = (mask & BraveNetworkMask.IsImportant) != 0;
+                bool isException = (mask & LexShieldMask.IsException) != 0;
+                bool isImportant = (mask & LexShieldMask.IsImportant) != 0;
 
                 if (isException)
                 {
@@ -525,10 +615,10 @@ public sealed class BraveNetworkEngine : IShieldEngine
         public string CleanOriginStr;
         public int HostStart;
         public int HostEnd;
-        public BraveNetworkMask TypeMask;
-        public BraveNetworkMask PartyMask;
-        public BraveNetworkMask SchemeMask;
-        public BraveNetworkMask MethodMask;
+        public LexShieldMask TypeMask;
+        public LexShieldMask PartyMask;
+        public LexShieldMask SchemeMask;
+        public LexShieldMask MethodMask;
         public ReadOnlySpan<ulong> TokenHashes;
         public ReadOnlySpan<ulong> OriginHashes;
         public ReadOnlySpan<ulong> TargetHashes;
@@ -589,7 +679,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static string FormatMatchedRule(
-        BraveShieldData data,
+        LexShieldData data,
         in RequestEvalContext ctx,
         bool isImportant,
         bool isException,
@@ -622,27 +712,27 @@ public sealed class BraveNetworkEngine : IShieldEngine
         return string.Empty;
     }
 
-    private static string FormatPatRecRule(BraveShieldData data, int encodedIdx)
+    private static string FormatPatRecRule(LexShieldData data, int encodedIdx)
     {
         ref readonly var rec = ref GetRuleByEncodedIndex(data, encodedIdx);
-        var mask = (BraveNetworkMask)rec.Mask;
+        var mask = (LexShieldMask)rec.Mask;
 
         string host = rec.HostLen > 0 ? Encoding.UTF8.GetString(data.StrBlob, rec.HostOff, rec.HostLen) : string.Empty;
         string pat = rec.PatLen > 0 ? Encoding.UTF8.GetString(data.StrBlob, rec.PatOff, rec.PatLen) : string.Empty;
 
         var sb = new StringBuilder(64);
-        if ((mask & BraveNetworkMask.IsException) != 0)
+        if ((mask & LexShieldMask.IsException) != 0)
             sb.Append("@@");
 
-        if ((mask & BraveNetworkMask.IsFullRegex) != 0)
+        if ((mask & LexShieldMask.IsFullRegex) != 0)
         {
             sb.Append('/').Append(pat).Append('/');
         }
         else
         {
-            if ((mask & BraveNetworkMask.IsHostnameAnchor) != 0)
+            if ((mask & LexShieldMask.IsHostnameAnchor) != 0)
                 sb.Append("||");
-            else if ((mask & BraveNetworkMask.IsLeftAnchor) != 0)
+            else if ((mask & LexShieldMask.IsLeftAnchor) != 0)
                 sb.Append('|');
 
             if (string.IsNullOrEmpty(pat))
@@ -652,11 +742,11 @@ public sealed class BraveNetworkEngine : IShieldEngine
             else
                 sb.Append(pat);
 
-            if ((mask & BraveNetworkMask.IsRightAnchor) != 0)
+            if ((mask & LexShieldMask.IsRightAnchor) != 0)
                 sb.Append('|');
         }
 
-        if ((mask & BraveNetworkMask.IsImportant) != 0)
+        if ((mask & LexShieldMask.IsImportant) != 0)
             sb.Append("$important");
 
         string res = sb.ToString();
@@ -675,7 +765,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
         Span<ulong> tgtBuf,
         out RequestEvalContext ctx,
         out char[]? rentedUrlBuf,
-        BraveNetworkMask? overrideTypeMask = null)
+        LexShieldMask? overrideTypeMask = null)
     {
         ctx = default;
         rentedUrlBuf = null;
@@ -762,10 +852,10 @@ public sealed class BraveNetworkEngine : IShieldEngine
             CleanOriginStr = cleanOriginStr,
             HostStart = hostStart,
             HostEnd = hostEnd,
-            TypeMask = overrideTypeMask ?? BraveRequestContextMapper.ToResourceTypeMask(resourceContext, secFetchDest),
-            PartyMask = isFirstParty ? BraveNetworkMask.FirstParty : BraveNetworkMask.ThirdParty,
-            SchemeMask = isHttps ? BraveNetworkMask.FromHttps : BraveNetworkMask.FromHttp,
-            MethodMask = BraveRequestContextMapper.ToMethodMask(httpMethod),
+            TypeMask = overrideTypeMask ?? LexShieldRequestContextMapper.ToResourceTypeMask(resourceContext, secFetchDest),
+            PartyMask = isFirstParty ? LexShieldMask.FirstParty : LexShieldMask.ThirdParty,
+            SchemeMask = isHttps ? LexShieldMask.FromHttps : LexShieldMask.FromHttp,
+            MethodMask = LexShieldRequestContextMapper.ToMethodMask(httpMethod),
             TokenHashes = tokBuf.Slice(0, tokCount),
             OriginHashes = orgBuf.Slice(0, orgCount),
             TargetHashes = tgtSlice
@@ -795,7 +885,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static void EvaluateRules(
-        BraveShieldData data,
+        LexShieldData data,
         scoped in RequestEvalContext ctx,
         EvalMode mode,
         out bool hasImportantBlock,
@@ -869,7 +959,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ref readonly BravePatRec GetRuleByEncodedIndex(BraveShieldData data, int encodedIdx)
+    private static ref readonly LexShieldPatRec GetRuleByEncodedIndex(LexShieldData data, int encodedIdx)
     {
         if (encodedIdx < 0)
             return ref data.GetRegexRules()[~encodedIdx];
@@ -877,7 +967,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static ShieldNetworkDecision ResolveBestRedirect(
-        BraveShieldData data,
+        LexShieldData data,
         Uri uri,
         in RequestEvalContext ctx,
         EffectiveSitePolicy policy,
@@ -908,7 +998,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
             }
         }
 
-        BraveResourceEntry? bestEntry = null;
+        LexShieldResourceEntry? bestEntry = null;
         short bestPriority = short.MinValue;
         bool hasBest = false;
 
@@ -929,12 +1019,12 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 continue;
             }
 
-            bool isIma = BraveResourceStore.IsImaResource(entry.Name) ||
+            bool isIma = LexShieldResourceStore.IsImaResource(entry.Name) ||
                          uri.AbsolutePath.EndsWith("ima3.js", StringComparison.OrdinalIgnoreCase);
             if (isIma && !allowIma)
                 continue;
 
-            if (BraveResourceStore.IsVastOrVmapResource(entry.Name) && isExemptBigSite)
+            if (LexShieldResourceStore.IsVastOrVmapResource(entry.Name) && isExemptBigSite)
                 continue;
 
             if (!hasBest || rec.RedirectPriority > bestPriority)
@@ -951,24 +1041,24 @@ public sealed class BraveNetworkEngine : IShieldEngine
         return ShieldNetworkDecision.Redirect(
             bestEntry.Bytes,
             bestEntry.ContentTypeHeader,
-            $"Brave redirect ({bestEntry.Name})",
+            $"LexShield redirect ({bestEntry.Name})",
             isImportant: isImportant);
     }
 
-    private static bool CheckPureHosts(BraveShieldData data, in RequestEvalContext ctx, out int matchedPos)
+    private static bool CheckPureHosts(LexShieldData data, in RequestEvalContext ctx, out int matchedPos)
     {
         var reqHost = ctx.ReqHost;
         int pos = 0;
         while (pos < reqHost.Length)
         {
-            ulong h = BraveHash.Fnv1a64(reqHost.Slice(pos));
+            ulong h = LexShieldHash.Fnv1a64(reqHost.Slice(pos));
             int idx = Array.BinarySearch(data.PureHashes, h);
             if (idx >= 0)
             {
-                var mask = (BraveNetworkMask)data.PureMasks[idx];
+                var mask = (LexShieldMask)data.PureMasks[idx];
                 if ((mask & ctx.TypeMask) != 0 &&
                     (mask & ctx.PartyMask) != 0 &&
-                    ((mask & BraveNetworkMask.FromSchemeMask) == 0 || (mask & ctx.SchemeMask) != 0))
+                    ((mask & LexShieldMask.FromSchemeMask) == 0 || (mask & ctx.SchemeMask) != 0))
                 {
                     matchedPos = pos;
                     return true;
@@ -985,7 +1075,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static void EvaluateBucketRange(
-        BraveShieldData data,
+        LexShieldData data,
         scoped in RequestEvalContext ctx,
         EvalMode mode,
         int[] indices,
@@ -1021,10 +1111,10 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static void EvaluateRegexRules(
-        BraveShieldData data,
+        LexShieldData data,
         scoped in RequestEvalContext ctx,
         EvalMode mode,
-        BravePatRec[] regexRules,
+        LexShieldPatRec[] regexRules,
         ref bool hasImportantBlock,
         ref bool hasNormalBlock,
         ref bool hasException,
@@ -1053,10 +1143,10 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static void EvaluateSingleRule(
-        BraveShieldData data,
+        LexShieldData data,
         scoped in RequestEvalContext ctx,
         EvalMode mode,
-        in BravePatRec rec,
+        in LexShieldPatRec rec,
         int encodedIdx,
         int ruleIndex,
         bool isFullRegex,
@@ -1066,25 +1156,25 @@ public sealed class BraveNetworkEngine : IShieldEngine
         scoped ref RedirectCollector redir,
         scoped ref RuleMatchTrace trace)
     {
-        var mask = (BraveNetworkMask)rec.Mask;
+        var mask = (LexShieldMask)rec.Mask;
 
-        bool isException = (mask & BraveNetworkMask.IsException) != 0;
-        bool isImportant = (mask & BraveNetworkMask.IsImportant) != 0;
-        bool isRedirect = (mask & BraveNetworkMask.IsRedirect) != 0;
+        bool isException = (mask & LexShieldMask.IsException) != 0;
+        bool isImportant = (mask & LexShieldMask.IsImportant) != 0;
+        bool isRedirect = (mask & LexShieldMask.IsRedirect) != 0;
 
         switch (mode)
         {
             case EvalMode.GenericHide:
-                if ((mask & BraveNetworkMask.IsGenericHide) == 0)
+                if ((mask & LexShieldMask.IsGenericHide) == 0)
                     return;
                 break;
 
             case EvalMode.Popup:
-                if ((mask & BraveNetworkMask.IsGenericHide) != 0)
+                if ((mask & LexShieldMask.IsGenericHide) != 0)
                     return;
                 if (!isException)
                 {
-                    if ((mask & BraveNetworkMask.FromPopup) == 0)
+                    if ((mask & LexShieldMask.FromPopup) == 0)
                         return;
                 }
                 else
@@ -1092,15 +1182,15 @@ public sealed class BraveNetworkEngine : IShieldEngine
                     // @@...$popup o @@...$document desactivan bloqueo de popup (no @@...$redirect)
                     if (isRedirect)
                         return;
-                    if ((mask & (BraveNetworkMask.FromPopup | BraveNetworkMask.FromDocument)) == 0)
+                    if ((mask & (LexShieldMask.FromPopup | LexShieldMask.FromDocument)) == 0)
                         return;
                 }
                 break;
 
             case EvalMode.Network:
-                if ((mask & BraveNetworkMask.IsGenericHide) != 0)
+                if ((mask & LexShieldMask.IsGenericHide) != 0)
                     return;
-                if ((mask & BraveNetworkMask.FromPopup) != 0)
+                if ((mask & LexShieldMask.FromPopup) != 0)
                     return;
                 if (!isRedirect)
                 {
@@ -1117,10 +1207,10 @@ public sealed class BraveNetworkEngine : IShieldEngine
         if ((mask & ctx.PartyMask) == 0)
             return;
 
-        if ((mask & BraveNetworkMask.FromSchemeMask) != 0 && (mask & ctx.SchemeMask) == 0)
+        if ((mask & LexShieldMask.FromSchemeMask) != 0 && (mask & ctx.SchemeMask) == 0)
             return;
 
-        if ((mask & BraveNetworkMask.FromAnyMethods) != 0 && (mask & ctx.MethodMask) == 0)
+        if ((mask & LexShieldMask.FromAnyMethods) != 0 && (mask & ctx.MethodMask) == 0)
             return;
 
         if (!MatchesDomainConstraints(data, in rec, ctx.OriginHashes, ctx.TargetHashes))
@@ -1147,7 +1237,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
             else
             {
                 redir.AddCandidate(encodedIdx);
-                if ((mask & BraveNetworkMask.IsAlsoBlockRedirect) != 0)
+                if ((mask & LexShieldMask.IsAlsoBlockRedirect) != 0)
                 {
                     if (isImportant)
                     {
@@ -1189,8 +1279,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static bool MatchesFullRegex(
-        BraveShieldData data,
-        in BravePatRec rec,
+        LexShieldData data,
+        in LexShieldPatRec rec,
         int ruleIndex,
         bool isCsp,
         scoped in RequestEvalContext ctx)
@@ -1209,7 +1299,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
 
         try
         {
-            if (((BraveNetworkMask)rec.Mask & BraveNetworkMask.IsMatchCase) != 0 && ctx.OriginalUri != null)
+            if (((LexShieldMask)rec.Mask & LexShieldMask.IsMatchCase) != 0 && ctx.OriginalUri != null)
             {
                 string pathAndQuery = ctx.OriginalUri.PathAndQuery;
                 int prefixLen = ctx.HostEnd;
@@ -1249,8 +1339,8 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static bool MatchesDomainConstraints(
-        BraveShieldData data,
-        in BravePatRec rec,
+        LexShieldData data,
+        in LexShieldPatRec rec,
         ReadOnlySpan<ulong> originHashes,
         ReadOnlySpan<ulong> targetHashes)
     {
@@ -1299,18 +1389,18 @@ public sealed class BraveNetworkEngine : IShieldEngine
     }
 
     private static bool MatchesUrlPattern(
-        BraveShieldData data,
-        in BravePatRec rec,
+        LexShieldData data,
+        in LexShieldPatRec rec,
         ReadOnlySpan<char> urlLower,
         ReadOnlySpan<char> reqHost,
         int hostStart)
     {
-        var mask = (BraveNetworkMask)rec.Mask;
-        bool isHostnameAnchor = (mask & BraveNetworkMask.IsHostnameAnchor) != 0;
-        bool isLeftAnchor = (mask & BraveNetworkMask.IsLeftAnchor) != 0;
-        bool isRightAnchor = (mask & BraveNetworkMask.IsRightAnchor) != 0;
-        bool isHostWildcard = (mask & BraveNetworkMask.IsHostWildcard) != 0;
-        bool isRegex = (mask & BraveNetworkMask.IsRegex) != 0;
+        var mask = (LexShieldMask)rec.Mask;
+        bool isHostnameAnchor = (mask & LexShieldMask.IsHostnameAnchor) != 0;
+        bool isLeftAnchor = (mask & LexShieldMask.IsLeftAnchor) != 0;
+        bool isRightAnchor = (mask & LexShieldMask.IsRightAnchor) != 0;
+        bool isHostWildcard = (mask & LexShieldMask.IsHostWildcard) != 0;
+        bool isRegex = (mask & LexShieldMask.IsRegex) != 0;
 
         Span<char> hostScratch = stackalloc char[128];
         Span<char> patScratch = stackalloc char[256];
@@ -1510,7 +1600,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
             int len = i - start;
             if (len > 1)
             {
-                ulong h = BraveHash.Fnv1a64(urlLower.Slice(start, len));
+                ulong h = LexShieldHash.Fnv1a64(urlLower.Slice(start, len));
                 bool dup = false;
                 for (int k = 0; k < count; k++)
                 {
@@ -1557,7 +1647,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
 
         while (pos < hostSpan.Length && count < dest.Length)
         {
-            dest[count++] = BraveHash.Fnv1a64(hostSpan.Slice(pos));
+            dest[count++] = LexShieldHash.Fnv1a64(hostSpan.Slice(pos));
             int dot = hostSpan.Slice(pos).IndexOf('.');
             if (dot < 0)
                 break;
@@ -1574,7 +1664,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
                 regDomain.AsSpan(0, regDot).CopyTo(entityScratch);
                 entityScratch[regDot] = '.';
                 entityScratch[regDot + 1] = '*';
-                ulong eh = BraveHash.Fnv1a64(entityScratch.Slice(0, regDot + 2));
+                ulong eh = LexShieldHash.Fnv1a64(entityScratch.Slice(0, regDot + 2));
                 if (dest.Slice(0, count).IndexOf(eh) < 0)
                     dest[count++] = eh;
             }

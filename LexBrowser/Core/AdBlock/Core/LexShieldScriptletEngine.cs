@@ -5,13 +5,13 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
 /// <summary>
 /// Compone scripts por documento a partir de los scriptlets (<c>##+js(...)</c>),
-/// selectores específicos y reglas procedurales de Brave, más el script bootstrap compartido.
+/// selectores específicos y reglas procedurales de LexShield Core, más el script bootstrap compartido.
 /// </summary>
-public static class BraveScriptletEngine
+public static class LexShieldScriptletEngine
 {
     private const int MaxStyleRuleSize = 64 * 1024;
 
@@ -118,7 +118,7 @@ public static class BraveScriptletEngine
 
     public static bool TryBuildScriptletCall(
         string rawInner,
-        BraveResourceStore resources,
+        LexShieldResourceStore resources,
         out string scriptletJs,
         bool allowPrivileged = false)
     {
@@ -130,10 +130,10 @@ public static class BraveScriptletEngine
         if (args.Count == 0 || string.IsNullOrWhiteSpace(args[0]))
             return false;
 
-        if (!TryResolveJsResource(resources, args[0], allowPrivileged, out BraveResourceEntry? entry) || entry == null)
+        if (!TryResolveJsResource(resources, args[0], allowPrivileged, out LexShieldResourceEntry? entry) || entry == null)
             return false;
 
-        var orderedDeps = new List<BraveResourceEntry>();
+        var orderedDeps = new List<LexShieldResourceEntry>();
         var visitedDeps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!CollectDependencies(entry, resources, allowPrivileged, orderedDeps, visitedDeps))
             return false;
@@ -181,14 +181,14 @@ public static class BraveScriptletEngine
             inner.AppendLine(mainBody);
         }
 
-        scriptletJs = $"try{{(function(){{'use strict';var scriptletGlobals={{}};\n{inner}\n}})();}}catch(_e){{try{{var _d=window.__lexBraveDiag;if(_d&&_d.scriptletErrs)_d.scriptletErrs.push(String(_e));}}catch(_){{}}}}\n";
+        scriptletJs = $"try{{(function(){{'use strict';var scriptletGlobals={{}};\n{inner}\n}})();}}catch(_e){{try{{var _d=window.__lexShieldDiag;if(_d&&_d.scriptletErrs)_d.scriptletErrs.push(String(_e));}}catch(_){{}}}}\n";
         return true;
     }
 
     public static string? BuildHostInjectionScript(
         string? host,
         HostCosmeticResources cosmetic,
-        BraveResourceStore resources,
+        LexShieldResourceStore resources,
         EffectiveSitePolicy policy,
         bool allowPrivileged = false)
     {
@@ -221,7 +221,7 @@ public static class BraveScriptletEngine
         sb.AppendLine(")return;");
 
         if (cosmetic.GenericHide)
-            sb.AppendLine("window.__lexBraveGenericHide=true;");
+            sb.AppendLine("window.__lexShieldGenericHide=true;");
 
         for (int i = 0; i < scriptletBlocks.Count; i++)
             sb.Append(scriptletBlocks[i]);
@@ -234,8 +234,8 @@ public static class BraveScriptletEngine
             sb.AppendLine("(function __applyHostCss(){");
             sb.AppendLine("  var fn=function(){");
             sb.AppendLine("    var root=document.head||document.documentElement;if(!root)return false;");
-            sb.AppendLine("    var st=document.getElementById('lex-brave-host');");
-            sb.AppendLine("    if(!st){st=document.createElement('style');st.id='lex-brave-host';root.appendChild(st);}");
+            sb.AppendLine("    var st=document.getElementById('lex-shield-host');");
+            sb.AppendLine("    if(!st){st=document.createElement('style');st.id='lex-shield-host';root.appendChild(st);}");
             sb.AppendLine("    if(st.textContent!==__css)st.textContent=__css;");
             sb.AppendLine("    return true;");
             sb.AppendLine("  };");
@@ -252,15 +252,15 @@ public static class BraveScriptletEngine
                 AppendJsStringLiteral(sb, cosmetic.ProceduralRules[i]);
             }
             sb.AppendLine("];");
-            sb.AppendLine("window.__lexBravePendingProcedural=(window.__lexBravePendingProcedural||[]).concat(__proc);");
-            sb.AppendLine("if(typeof window.__lexBraveApplyProcedural==='function'){try{window.__lexBraveApplyProcedural();}catch(_){}}");
+            sb.AppendLine("window.__lexShieldPendingProcedural=(window.__lexShieldPendingProcedural||[]).concat(__proc);");
+            sb.AppendLine("if(typeof window.__lexShieldApplyProcedural==='function'){try{window.__lexShieldApplyProcedural();}catch(_){}}");
         }
 
         sb.AppendLine("})();");
         return sb.ToString();
     }
 
-    public static string BuildMiscGenericCss(BraveCosmeticEngine engine, HostCosmeticResources? hostCosmetic)
+    public static string BuildMiscGenericCss(LexShieldCosmeticEngine engine, HostCosmeticResources? hostCosmetic)
     {
         if (engine == null || engine.MiscGenericHide.Count == 0)
             return string.Empty;
@@ -281,12 +281,12 @@ public static class BraveScriptletEngine
         if (kept.Count == 0)
             return string.Empty;
 
-        return BraveCosmeticEngine.FormatHideCssChunks(kept);
+        return LexShieldCosmeticEngine.FormatHideCssChunks(kept);
     }
 
     internal static string BuildScriptletsBundle(
         HostCosmeticResources cosmetic,
-        BraveResourceStore resources,
+        LexShieldResourceStore resources,
         bool allowPrivileged = false)
     {
         if (cosmetic == null || resources == null || cosmetic.Scriptlets.Count == 0)
@@ -303,7 +303,7 @@ public static class BraveScriptletEngine
 
     internal static string BuildHostHideCss(HostCosmeticResources cosmetic)
         => cosmetic?.HideSelectors.Count > 0
-            ? BraveCosmeticEngine.FormatHideCssChunks(cosmetic.HideSelectors, maxBatchCount: 20, maxBatchChars: MaxStyleRuleSize)
+            ? LexShieldCosmeticEngine.FormatHideCssChunks(cosmetic.HideSelectors, maxBatchCount: 20, maxBatchChars: MaxStyleRuleSize)
             : string.Empty;
 
     internal static string BuildHostStyleCss(HostCosmeticResources cosmetic)
@@ -332,10 +332,10 @@ public static class BraveScriptletEngine
     }
 
     private static bool TryResolveJsResource(
-        BraveResourceStore resources,
+        LexShieldResourceStore resources,
         string nameOrAlias,
         bool allowPrivileged,
-        out BraveResourceEntry? entry)
+        out LexShieldResourceEntry? entry)
     {
         string trimmed = nameOrAlias.Trim();
         if (resources.TryGetResource(trimmed, out entry, allowPrivileged) &&
@@ -358,10 +358,10 @@ public static class BraveScriptletEngine
     }
 
     private static bool CollectDependencies(
-        BraveResourceEntry entry,
-        BraveResourceStore resources,
+        LexShieldResourceEntry entry,
+        LexShieldResourceStore resources,
         bool allowPrivileged,
-        List<BraveResourceEntry> ordered,
+        List<LexShieldResourceEntry> ordered,
         HashSet<string> visited)
     {
         if (entry.Dependencies == null || entry.Dependencies.Count == 0)
@@ -373,7 +373,7 @@ public static class BraveScriptletEngine
             if (!visited.Add(depName))
                 continue;
 
-            if (!resources.TryGetResource(depName, out BraveResourceEntry? depEntry, allowPrivileged) || depEntry == null)
+            if (!resources.TryGetResource(depName, out LexShieldResourceEntry? depEntry, allowPrivileged) || depEntry == null)
                 return false;
 
             if (!CollectDependencies(depEntry, resources, allowPrivileged, ordered, visited))
@@ -457,18 +457,18 @@ public static class BraveScriptletEngine
         sb.Append('"');
     }
 
-    private static readonly ConditionalWeakTable<BraveResourceStore, string> _staticRegistryCache = new();
+    private static readonly ConditionalWeakTable<LexShieldResourceStore, string> _staticRegistryCache = new();
     private static readonly string _emptyStaticRegistryJs = "var __lexReg=null;function __getLexReg(){return __lexReg||(__lexReg={s:{},a:{}});}\n";
 
-    internal static IReadOnlyList<BraveScriptletCall> BuildScriptletCalls(
+    internal static IReadOnlyList<LexShieldScriptletCall> BuildScriptletCalls(
         HostCosmeticResources? cosmetic,
-        BraveResourceStore? resources,
+        LexShieldResourceStore? resources,
         bool allowPrivileged = false)
     {
         if (cosmetic == null || resources == null || cosmetic.Scriptlets.Count == 0)
-            return Array.Empty<BraveScriptletCall>();
+            return Array.Empty<LexShieldScriptletCall>();
 
-        var calls = new List<BraveScriptletCall>();
+        var calls = new List<LexShieldScriptletCall>();
         var dedup = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < cosmetic.Scriptlets.Count; i++)
         {
@@ -477,13 +477,13 @@ public static class BraveScriptletEngine
                 continue;
 
             List<string> args = ParseScriptletArgs(raw);
-            if (args.Count == 0 || !TryResolveJsResource(resources, args[0], allowPrivileged, out BraveResourceEntry? entry) || entry == null)
+            if (args.Count == 0 || !TryResolveJsResource(resources, args[0], allowPrivileged, out LexShieldResourceEntry? entry) || entry == null)
                 continue;
 
             if (entry.IsTemplate)
                 continue;
 
-            var deps = new List<BraveResourceEntry>();
+            var deps = new List<LexShieldResourceEntry>();
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { entry.Name };
             if (!CollectDependencies(entry, resources, allowPrivileged, deps, visited))
                 continue;
@@ -491,13 +491,13 @@ public static class BraveScriptletEngine
             string[] callArgs = args.Count > 1 ? args.Skip(1).ToArray() : Array.Empty<string>();
             string key = entry.Name.ToLowerInvariant() + "\u0001" + string.Join("\u0001", callArgs);
             if (dedup.Add(key))
-                calls.Add(new BraveScriptletCall(args[0], callArgs));
+                calls.Add(new LexShieldScriptletCall(args[0], callArgs));
         }
 
         return calls;
     }
 
-    internal static string BuildStaticScriptletRegistryJs(BraveResourceStore? resources)
+    internal static string BuildStaticScriptletRegistryJs(LexShieldResourceStore? resources)
     {
         if (resources == null || resources.Count == 0)
             return _emptyStaticRegistryJs;
@@ -505,7 +505,7 @@ public static class BraveScriptletEngine
         return _staticRegistryCache.GetValue(resources, BuildStaticScriptletRegistryCore);
     }
 
-    private static string BuildStaticScriptletRegistryCore(BraveResourceStore resources)
+    private static string BuildStaticScriptletRegistryCore(LexShieldResourceStore resources)
     {
         var entries = resources.Entries;
         var sb = new StringBuilder(Math.Max(1024, entries.Count * 512));
@@ -515,7 +515,7 @@ public static class BraveScriptletEngine
         bool firstFn = true;
         for (int i = 0; i < entries.Count; i++)
         {
-            BraveResourceEntry entry = entries[i];
+            LexShieldResourceEntry entry = entries[i];
             if (entry.Permission != 0 ||
                 entry.IsTemplate ||
                 !entry.Mime.Contains("javascript", StringComparison.OrdinalIgnoreCase) ||
@@ -524,7 +524,7 @@ public static class BraveScriptletEngine
                 continue;
             }
 
-            var deps = new List<BraveResourceEntry>();
+            var deps = new List<LexShieldResourceEntry>();
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { entry.Name };
             if (!CollectDependencies(entry, resources, allowPrivileged: false, deps, visited))
                 continue;
@@ -583,16 +583,17 @@ public static class BraveScriptletEngine
     }
 
     /// <summary>
-    /// Script ligero compartido en pestañas no aisladas cuando el motor Brave está activo:
+    /// Script bootstrap compartido en pestañas no aisladas cuando LexShield Core está activo:
     /// obtiene el plan del documento síncronamente vía HostObject COM (<c>lexShield</c>),
     /// despacha scriptlets desde un registro estático compilado (cero compilación dinámica),
-    /// aplica CSP/estilos en el primer nodo del DOM, consulta selectores genéricos bajo demanda y ejecuta filtros procedurales.
+    /// aplica CSP/estilos en el primer nodo del DOM, consulta selectores genéricos bajo demanda,
+    /// ejecuta filtros procedurales y coordina la capa complementaria de popups y overlays sin doble conteo.
     /// </summary>
     public static string BootstrapScript => BuildBootstrapScript(string.Empty);
 
-    public static string BuildBootstrapScript(string bridgeToken, BraveResourceStore? resources = null)
+    public static string BuildBootstrapScript(string bridgeToken, LexShieldResourceStore? resources = null)
     {
-        BraveResourceStore? effectiveResources = resources ?? BraveShieldData.TryGetDefault()?.GetResourceStore();
+        LexShieldResourceStore? effectiveResources = resources ?? LexShieldData.TryGetDefault()?.GetResourceStore();
         string escapedToken = EscapeJsRawStringBody(bridgeToken ?? string.Empty);
         string registryJs = BuildStaticScriptletRegistryJs(effectiveResources);
         return BootstrapScriptTemplate
@@ -603,8 +604,8 @@ public static class BraveScriptletEngine
     private const string BootstrapScriptTemplate = """
 (function(){
 'use strict';
-if(window.__lexBraveBootstrapped)return;
-window.__lexBraveBootstrapped=true;
+if(window.__lexShieldBootstrapped)return;
+window.__lexShieldBootstrapped=true;
 var __lexTok="__LEX_BRIDGE_TOKEN__";
 var __isTop=(window.top===window);
 var __host=(location.hostname||'').toLowerCase().replace(/\.+$/,'');
@@ -619,6 +620,7 @@ if(!__effectiveHost&&__parentHref){
   if(__pm&&__pm[1])__effectiveHost=__pm[1].toLowerCase().replace(/\.+$/,'');
 }
 if(!__effectiveHost)return;
+if(__effectiveHost==='tv.lex.local'||__effectiveHost==='pdf.lex.local')return;
 if(/(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com|youtubekids\.com|googlevideo\.com|ytimg\.com|dailymotion\.com|dmcdn\.net|dmxleo\.com)$/.test(__effectiveHost))return;
 
 var __seenCls=new Set(),__seenIds=new Set();
@@ -631,7 +633,7 @@ var __pendingCsp=[];
 var __cspInserted=false;
 var __genericAllowed=true;
 var __enableOverlayDefuser=false;
-var __diag=window.__lexBraveDiag={host:__effectiveHost,isTop:__isTop,hasBridge:false,hostObjType:'undefined',planOk:false,enabled:null,cosmetic:null,ghide:false,scriptletLen:0,scriptletsOk:false,scriptletErrs:[],hostCss:false,styleCss:false,mgCss:false,cspCount:0,noPopup:false,ovl:false,errs:[]};
+var __diag=window.__lexShieldDiag={host:__effectiveHost,isTop:__isTop,hasBridge:false,hostObjType:'undefined',planOk:false,enabled:null,cosmetic:null,ghide:false,scriptletLen:0,scriptletsOk:false,scriptletErrs:[],hostCss:false,styleCss:false,mgCss:false,cspCount:0,noPopup:false,decoyPopup:false,ovl:false,errs:[]};
 
 function __applyStyleEl(id,cssText,root){
   var el=document.getElementById(id);
@@ -687,33 +689,99 @@ function __flushCsp(){
     }catch(e){__diag.errs.push('csp:'+String(e));}
   }
 }
-function __reportShield(category,count,reason){
-  if(!__isTop||count<=0)return;
+function __reportShield(category,count,reason,allowSubframe,targetUrl){
+  if((!__isTop&&!allowSubframe)||!(count>0))return;
   try{
     if(window.chrome&&window.chrome.webview&&typeof window.chrome.webview.postMessage==='function'){
-      window.chrome.webview.postMessage({type:'ad_blocked',category:category||'cosmetic',reason:reason||'brave_cosmetic',url:location.href});
+      window.chrome.webview.postMessage({type:'ad_blocked',category:category||'cosmetic',reason:reason||'lex_shield_cosmetic',url:targetUrl||location.href});
     }
   }catch(_){}
 }
 function __reportCosmetic(count,reason){
-  __reportShield('cosmetic',count,reason);
+  __reportShield('cosmetic',count,reason,false);
+}
+var __adDomainsRe=/(propellerads|popcash|popads|adsterra|monetag|bet365|1xbet|clickadu|hilltopads|exoclick|juicyads|syndication|doubleclick|adservice|outbrain|taboola|criteo|adnxs|pubmatic|onclick|trafficstars|adcash|revcontent|smartadserver|r2ads|llvpn|streamtp|trkr|ppof\.net|visariomedia|qojseyonoj|hfryyynvqwgy|magsrv|realsrv|exdynsrv|trafficjunky|adglare|plugrush|adxvip|etahub|ptgnadsv2|videoplayerhub|runative|adtng|pemsrv|opoxv)/i;
+var __trustedOAuthRe=/^https:\/\/([a-z0-9-]+\.)?(google\.com|apple\.com|microsoft\.com|microsoftonline\.com|live\.com|github\.com|facebook\.com|discord\.com|x\.com|twitter\.com|paypal\.com)(\/|$)/i;
+var __isVideoEmbed=!__isTop&&(/(streamwish|wishfast|wishembed|vidhide|streamtape|dood|d000d|ds2play|filelions|lulustream|luluvdo|mp4upload|uqload|voe\.sx|mixdrop|fastream|hglink|dhcplay|fembed|upstream|vidoza|wolfstream|megacloud|rabbitstream|vidplay|yourupload)/i.test(__effectiveHost)||/^\/(e|v|embed|player)(\/|$|-)/i.test(location.pathname||'')||/\/(videoembed|video_ext)/i.test(location.pathname||''));
+function __isAdOrSuspiciousUrl(u){
+  if(!u||typeof u!=='string')return false;
+  if(__trustedOAuthRe.test(u))return false;
+  var lower=u.toLowerCase();
+  return __adDomainsRe.test(lower)||lower.indexOf('/ad/')!==-1||lower.indexOf('/ads/')!==-1||lower.indexOf('popunder')!==-1||lower.indexOf('direct-link')!==-1||lower.indexOf('link?z=')!==-1||lower.indexOf('?z=')!==-1||lower.indexOf('&z=')!==-1||lower.indexOf('zoneid')!==-1||lower.indexOf('trkr.')!==-1||(lower.indexOf('click')!==-1&&lower.indexOf('track')!==-1);
+}
+function __createDecoyPopup(){
+  var noop=function(){};
+  var noopObj={write:noop,open:noop,close:noop,createElement:function(){return{style:{}};}};
+  var noopLoc={href:'about:blank',replace:noop,assign:noop,reload:noop};
+  try{
+    return new Proxy({closed:false},{
+      get:function(target,prop){
+        if(prop==='closed')return false;
+        if(prop==='document')return noopObj;
+        if(prop==='location')return noopLoc;
+        if(prop==='opener')return window;
+        if(prop==='self'||prop==='window')return target;
+        return noop;
+      },
+      set:function(){return true;}
+    });
+  }catch(_){
+    return{closed:false,focus:noop,blur:noop,close:noop,postMessage:noop,addEventListener:noop,removeEventListener:noop,document:noopObj,location:noopLoc,opener:window};
+  }
 }
 function __installNoPopup(){
+  if(window.__lexWindowOpenWrapped)return;
+  window.__lexWindowOpenWrapped=true;
   try{
-    window.open=function(){__reportShield('popup',1,'brave_csp_sandbox');return null;};
+    window.open=function(u){
+      __reportShield('popup',1,'window_open_csp_sandbox',true,typeof u==='string'?u:'');
+      return null;
+    };
   }catch(_){}
   try{
-    document.addEventListener('click',function(ev){
-      var t=ev&&ev.target;
-      var a=t&&t.closest?t.closest('a[target]'):null;
-      if(!a)return;
-      var tgt=(a.getAttribute('target')||'').toLowerCase();
-      if(tgt==='_blank'||tgt==='new'){
-        ev.preventDefault();
-        ev.stopPropagation();
-        __reportShield('popup',1,'brave_csp_sandbox_blank');
+    if(typeof document.addEventListener==='function'){
+      document.addEventListener('click',function(ev){
+        var t=ev&&ev.target;
+        var a=t&&t.closest?t.closest('a[target]'):null;
+        if(!a)return;
+        var tgt=(a.getAttribute('target')||'').toLowerCase();
+        if(tgt==='_blank'||tgt==='new'){
+          ev.preventDefault();
+          ev.stopPropagation();
+          __reportShield('popup',1,'lex_shield_csp_sandbox_blank',true,a.href||'');
+        }
+      },true);
+    }
+  }catch(_){}
+}
+function __installDecoyPopup(){
+  if(window.__lexWindowOpenWrapped)return;
+  window.__lexWindowOpenWrapped=true;
+  try{
+    var originalOpen=window.open;
+    window.open=function(url,target,features){
+      var urlStr=(typeof url==='string')?url:(url&&typeof url.toString==='function'?url.toString():'');
+      if(__isAdOrSuspiciousUrl(urlStr)){
+        __reportShield('popup',1,'window_open_ad_pattern',true,urlStr);
+        return __createDecoyPopup();
       }
-    },true);
+      if(!__isTop){
+        var hasUserGesture=!!(navigator&&navigator.userActivation&&navigator.userActivation.isActive);
+        var origin=(location&&location.origin)||'';
+        var isCrossDomain=!!(urlStr&&(!origin||urlStr.indexOf(origin)!==0)&&!__trustedOAuthRe.test(urlStr));
+        var isBlankPop=!urlStr||urlStr==='about:blank';
+        if(isBlankPop||(isCrossDomain&&(!hasUserGesture||__isVideoEmbed))){
+          __reportShield('popup',1,__isVideoEmbed?'window_open_embed_popunder':'window_open_iframe_popunder',true,urlStr||'about:blank');
+          return __createDecoyPopup();
+        }
+      }
+      try{
+        var win=typeof originalOpen==='function'?originalOpen.apply(this,arguments):null;
+        return win||__createDecoyPopup();
+      }catch(_){
+        return __createDecoyPopup();
+      }
+    };
   }catch(_){}
 }
 
@@ -737,7 +805,7 @@ if(__plan){
   if(__plan.host)__effectiveHost=__plan.host;
   if(__plan.cosmetic===false)__genericAllowed=false;
   __diag.cosmetic=__genericAllowed;
-  if(__plan.ghide){window.__lexBraveGenericHide=true;__diag.ghide=true;}
+  if(__plan.ghide){window.__lexShieldGenericHide=true;__diag.ghide=true;}
   if(__plan.scriptletCalls&&__plan.scriptletCalls.length){
     __diag.scriptletLen=__plan.scriptletCalls.length;
     __LEX_SCRIPTLET_REGISTRY__
@@ -765,15 +833,16 @@ if(__plan){
     }
   }
   if(__plan.noPopup){__installNoPopup();__diag.noPopup=true;}
-  if(__plan.hostCss){__ensureStyle('lex-brave-host',__plan.hostCss);__diag.hostCss=true;}
-  if(__plan.styleCss){__ensureStyle('lex-brave-style',__plan.styleCss);__diag.styleCss=true;}
-  if(__plan.mgCss&&!__plan.ghide&&__genericAllowed){__ensureStyle('lex-brave-mg',__plan.mgCss);__diag.mgCss=true;}
+  else if(__plan.decoyPopup){__installDecoyPopup();__diag.decoyPopup=true;}
+  if(__plan.hostCss){__ensureStyle('lex-shield-host',__plan.hostCss);__diag.hostCss=true;}
+  if(__plan.styleCss){__ensureStyle('lex-shield-style',__plan.styleCss);__diag.styleCss=true;}
+  if(__plan.mgCss&&!__plan.ghide&&__genericAllowed){__ensureStyle('lex-shield-mg',__plan.mgCss);__diag.mgCss=true;}
   if(__plan.csp&&__plan.csp.length){
     __pendingCsp=__plan.csp.slice();
     __flushCsp();
   }
   if(__plan.proc&&__plan.proc.length){
-    window.__lexBravePendingProcedural=(window.__lexBravePendingProcedural||[]).concat(__plan.proc);
+    window.__lexShieldPendingProcedural=(window.__lexShieldPendingProcedural||[]).concat(__plan.proc);
   }
   if(__plan.ovl&&!__plan.ghide){__enableOverlayDefuser=true;__diag.ovl=true;}
 }
@@ -980,9 +1049,9 @@ function __evalSteps(steps,seed){
 }
 var __compiledProc=[];
 function __compileProcedural(){
-  var pending=window.__lexBravePendingProcedural;
+  var pending=window.__lexShieldPendingProcedural;
   if(pending&&pending.length){
-    window.__lexBravePendingProcedural=[];
+    window.__lexShieldPendingProcedural=[];
     for(var i=0;i<pending.length;i++){
       var r=pending[i],steps=__splitSteps(r);
       if(!steps.length)continue;
@@ -994,7 +1063,7 @@ function __compileProcedural(){
     }
   }
 }
-window.__lexBraveApplyProcedural=function(){
+window.__lexShieldApplyProcedural=function(){
   __compileProcedural();
   if(!__compiledProc.length||!document.documentElement)return;
   var hits=0;
@@ -1030,7 +1099,7 @@ window.__lexBraveApplyProcedural=function(){
       if(!counted){__countedEls.add(el);hits++;}
     }
   }
-  if(hits>0)__reportCosmetic(hits,'brave_procedural');
+  if(hits>0)__reportCosmetic(hits,'lex_shield_procedural');
 };
 
 function __collectTokens(node,budget){
@@ -1067,24 +1136,24 @@ function __countHideCssHits(cssText,reason){
   if(newHits>0)__reportCosmetic(newHits,reason);
 }
 function __applyGenericReply(d){
-  if(!d||d.type!=='brave_cosmetic_apply')return;
+  if(!d||d.type!=='lex_shield_cosmetic_apply')return;
   if(d.host&&d.host!==__effectiveHost)return;
   if(d.ghide){
-    window.__lexBraveGenericHide=true;
-    __removeStyle('lex-brave-gen');
-    __removeStyle('lex-brave-mg');
+    window.__lexShieldGenericHide=true;
+    __removeStyle('lex-shield-gen');
+    __removeStyle('lex-shield-mg');
     __pendCls.length=0;__pendIds.length=0;
     return;
   }
-  if(d.mgCss)__ensureStyle('lex-brave-mg',d.mgCss);
+  if(d.mgCss)__ensureStyle('lex-shield-mg',d.mgCss);
   if(d.css){
-    __appendStyle('lex-brave-gen',d.css);
-    __countHideCssHits(d.css,'brave_generic_cosmetic');
+    __appendStyle('lex-shield-gen',d.css);
+    __countHideCssHits(d.css,'lex_shield_generic_cosmetic');
   }
 }
 function __flushGeneric(){
   __scanTimer=0;
-  if(!__genericAllowed||window.__lexBraveGenericHide===true)return;
+  if(!__genericAllowed||window.__lexShieldGenericHide===true)return;
   if(__initialSent&&__pendCls.length===0&&__pendIds.length===0)return;
   if(__bridge&&__lexTok&&typeof __bridge.QueryCosmeticsJson==='function'){
     do{
@@ -1107,7 +1176,7 @@ function __flushGeneric(){
     __initialSent=true;
     try{
       window.chrome.webview.postMessage({
-        type:'brave_cosmetic_query',
+        type:'lex_shield_cosmetic_query',
         host:__effectiveHost,
         initial:isIni,
         classes:clsB,
@@ -1117,11 +1186,11 @@ function __flushGeneric(){
   }while(__pendCls.length>0||__pendIds.length>0);
 }
 function __scheduleScan(){
-  if(__genericAllowed&&!window.__lexBraveGenericHide&&!__scanTimer){
+  if(__genericAllowed&&!window.__lexShieldGenericHide&&!__scanTimer){
     __scanTimer=setTimeout(__flushGeneric,28);
   }
-  if(!__procTimer&&(__compiledProc.length>0||(window.__lexBravePendingProcedural&&window.__lexBravePendingProcedural.length>0))){
-    __procTimer=setTimeout(function(){__procTimer=0;try{window.__lexBraveApplyProcedural();}catch(_){}},60);
+  if(!__procTimer&&(__compiledProc.length>0||(window.__lexShieldPendingProcedural&&window.__lexShieldPendingProcedural.length>0))){
+    __procTimer=setTimeout(function(){__procTimer=0;try{window.__lexShieldApplyProcedural();}catch(_){}},60);
   }
 }
 
@@ -1148,14 +1217,128 @@ function __reapplyCachedStyles(){
   }
 }
 
+function __isNeverOverlay(el){
+  try{
+    if(!el||el.nodeType!==1)return false;
+    var tag=(el.tagName||'').toUpperCase();
+    if(tag==='CANVAS'||tag==='SVG'||tag==='OBJECT'||tag==='EMBED')return true;
+    if(el.isContentEditable)return true;
+    var role=el.getAttribute?(el.getAttribute('role')||'').toLowerCase():'';
+    if(role==='application')return true;
+    if(el.querySelector&&el.querySelector('canvas'))return true;
+  }catch(_){}
+  return false;
+}
+function __isControlOrMeaningful(el){
+  if(!el||el.nodeType!==1)return false;
+  var tag=(el.tagName||'').toUpperCase();
+  if(tag==='BUTTON'||tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'||tag==='LABEL'||tag==='VIDEO'||tag==='AUDIO')return true;
+  if(tag==='SVG'||(el.closest&&el.closest('svg')))return true;
+  if(__isNeverOverlay(el))return true;
+  var text=(el.innerText||el.textContent||'').trim();
+  if(text.length>0&&typeof window.getComputedStyle==='function'){
+    try{
+      var st=window.getComputedStyle(el);
+      if(st){
+        var op=parseFloat(st.opacity);
+        if(op>0.3&&st.visibility!=='hidden'&&st.display!=='none')return true;
+      }
+    }catch(_){}
+  }
+  var cls=((typeof el.className==='string'?el.className:'')+' '+(el.id||'')).toLowerCase();
+  return /(control|button|btn|play|pause|volume|mute|progress|slider|seek|timeline|time|setting|gear|fullscreen|quality|caption|subtitle|speed)/.test(cls);
+}
+var __playerHintRe=/(player|video|plyr|jwplayer|jw-|vjs|video-js|fluid|embed|stream)/i;
+function __hasTrapTargetBeneath(el,px,py){
+  try{
+    if(typeof document.elementsFromPoint!=='function')return false;
+    var x=px,y=py;
+    if(typeof x!=='number'||typeof y!=='number'){
+      var r=el.getBoundingClientRect();
+      x=r.left+r.width/2;
+      y=r.top+r.height/2;
+    }
+    x=Math.min(Math.max(x,0),Math.max(0,(window.innerWidth||0)-1));
+    y=Math.min(Math.max(y,0),Math.max(0,(window.innerHeight||0)-1));
+    var stack=document.elementsFromPoint(x,y);
+    var startIdx=stack.indexOf(el)+1;
+    for(var i=startIdx;i<stack.length;i++){
+      var s=stack[i];
+      if(!s||s===el||s===document.body||s===document.documentElement)continue;
+      if(s.contains&&s.contains(el))continue;
+      var t=(s.tagName||'').toUpperCase();
+      if(t==='VIDEO'||t==='IFRAME')return true;
+      var idCls=((s.id||'')+' '+(typeof s.className==='string'?s.className:'')).toLowerCase();
+      if(idCls&&__playerHintRe.test(idCls))return true;
+    }
+  }catch(_){}
+  return false;
+}
+function __classifyGhost(el,px,py){
+  if(!el||el.nodeType!==1||el===document.body||el===document.documentElement)return null;
+  var tag=(el.tagName||'').toUpperCase();
+  if(tag==='VIDEO'||tag==='AUDIO'||tag==='BUTTON'||tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'||tag==='FORM'||tag==='DIALOG')return null;
+  if(__isNeverOverlay(el))return null;
+  if(el.id==='root'||el.id==='app'||el.id==='__next'||el.id==='__nuxt'||(el.hasAttribute&&el.hasAttribute('data-reactroot')))return null;
+  if(el.querySelector&&(el.querySelector('video, audio, iframe')||el.querySelector('button, input, select, textarea, svg, [class*=control], [class*=btn]')))return null;
+  if(typeof window.getComputedStyle!=='function')return null;
+  var style=window.getComputedStyle(el);
+  if(!style)return null;
+  var text=(el.innerText||el.textContent||'').trim();
+  var opacity=parseFloat(style.opacity);
+  if(text.length>0&&style.visibility!=='hidden'&&opacity>0.3)return null;
+  var isPositioned=(style.position==='fixed'||style.position==='absolute');
+  var bg=style.backgroundColor||'';
+  var isZeroAlpha=(!bg||bg==='transparent'||(bg.indexOf('rgba(')!==-1&&parseFloat(bg.split(',')[3]||'1')<=0.08));
+  var isTransparent=(opacity<=0.08||isZeroAlpha||style.visibility==='hidden');
+  var idClass=((el.id||'')+' '+(typeof el.className==='string'?el.className:'')).toLowerCase();
+  var isExplicitAdName=/(first-click-ad|click-ad|ad-overlay|pop-overlay|popup-overlay|interads|pop-under|banner-overlay)/.test(idClass);
+  if(!isPositioned&&!isExplicitAdName)return null;
+  if(!isTransparent&&!isExplicitAdName)return null;
+  var anchor=(tag==='A')?el:(el.querySelector?el.querySelector('a'):null);
+  if(anchor){
+    var href=(anchor.href||'').toLowerCase();
+    var isAdLink=__adDomainsRe.test(href)||__isAdOrSuspiciousUrl(href)||anchor.target==='_blank';
+    if(isAdLink||!text)return 'hard';
+  }
+  if(isExplicitAdName)return 'hard';
+  var zIndex=parseInt(style.zIndex,10);
+  var rect=el.getBoundingClientRect?el.getBoundingClientRect():{width:0,height:0};
+  if(rect.width>200&&rect.height>150&&(zIndex>=10||isNaN(zIndex))&&isTransparent&&!text){
+    if(__hasTrapTargetBeneath(el,px,py))return 'soft';
+  }
+  return null;
+}
+function __neutralizeOverlayElement(el,mode){
+  if(!el)return;
+  try{
+    el.style.setProperty('pointer-events','none','important');
+    if(mode==='soft')return;
+    el.style.setProperty('display','none','important');
+    el.style.setProperty('visibility','hidden','important');
+    if(el.tagName==='A'||(el.children&&el.children.length===0)){
+      if(typeof el.remove==='function')el.remove();
+    }
+  }catch(_){}
+}
+function __describeOverlay(el,mode){
+  var r=el.getBoundingClientRect?el.getBoundingClientRect():{width:0,height:0};
+  var cs=typeof window.getComputedStyle==='function'?window.getComputedStyle(el):null;
+  var tag=el.tagName||'';
+  var id=el.id?('#'+el.id):'';
+  var cls=(el.className&&typeof el.className==='string'&&el.className.trim())?('.'+el.className.trim().split(/\s+/).join('.')):'';
+  var zi=(cs&&cs.zIndex)||'auto';
+  return tag+id+cls+' ['+Math.round(r.width)+'x'+Math.round(r.height)+', z:'+zi+(mode?', '+mode:'')+']';
+}
 function __defuseClickjackTarget(el){
-  if(!__enableOverlayDefuser||window.__lexBraveGenericHide||!el||el.nodeType!==1)return false;
+  if(!__enableOverlayDefuser||window.__lexShieldGenericHide||!el||el.nodeType!==1||__isNeverOverlay(el))return false;
   var tag=(el.tagName||'').toUpperCase();
   if(tag!=='DIV'&&tag!=='A'&&tag!=='SPAN'&&tag!=='SECTION')return false;
   if(el.childElementCount!==0)return false;
   if((el.textContent||'').trim()!=='')return false;
+  if(typeof window.getComputedStyle!=='function')return false;
   try{
-    var cs=getComputedStyle(el);
+    var cs=window.getComputedStyle(el);
     if(!cs)return false;
     var pos=cs.position;
     if(pos!=='fixed'&&pos!=='absolute')return false;
@@ -1170,21 +1353,151 @@ function __defuseClickjackTarget(el){
     if(rect.width>=vw*0.85&&rect.height>=vh*0.85){
       el.style.setProperty('display','none','important');
       el.style.setProperty('pointer-events','none','important');
-      __reportShield('overlay',1,'brave_clickjack_overlay');
+      if(!__countedEls.has(el)){
+        __countedEls.add(el);
+        __reportShield('overlay',1,'lex_shield_clickjack_overlay',true);
+      }
       return true;
     }
   }catch(_){}
   return false;
 }
-
-if(__enableOverlayDefuser&&typeof document.addEventListener==='function'){
+function __handleCaptureOverlayClick(e){
+  if(!__enableOverlayDefuser||window.__lexShieldGenericHide)return;
+  var target=e&&e.target;
+  if(!target||__isControlOrMeaningful(target))return;
+  var ghost=null,ghostMode=null,curr=target;
+  for(var i=0;i<5&&curr&&curr!==document.body;i++){
+    var mode=__classifyGhost(curr,e.clientX,e.clientY);
+    if(mode){ghost=curr;ghostMode=mode;break;}
+    curr=curr.parentElement;
+  }
+  if(!ghost)return;
+  e.preventDefault();
+  e.stopPropagation();
+  if(typeof e.stopImmediatePropagation==='function')e.stopImmediatePropagation();
+  var desc=__describeOverlay(ghost,ghostMode);
+  var firstCount=!__countedEls.has(ghost);
+  if(firstCount)__countedEls.add(ghost);
+  __neutralizeOverlayElement(ghost,ghostMode);
+  if(firstCount)__reportShield('overlay',1,'ghost_overlay_capture -> '+desc,true);
   try{
-    document.addEventListener('mousedown',function(ev){
-      if(!__enableOverlayDefuser||window.__lexBraveGenericHide)return;
-      var hit=ev&&ev.target;
-      if(__defuseClickjackTarget(hit)){ev.preventDefault();ev.stopPropagation();}
-    },true);
+    if(typeof document.elementFromPoint==='function'){
+      var underlying=document.elementFromPoint(e.clientX,e.clientY);
+      if(underlying&&underlying!==ghost){
+        if(underlying.tagName==='VIDEO'){
+          if(underlying.paused&&typeof underlying.play==='function')underlying.play().catch(function(){});
+        }else if(typeof underlying.click==='function'){
+          underlying.click();
+        }
+      }
+    }
   }catch(_){}
+}
+function __clearClickjackOverlays(){
+  if(!__enableOverlayDefuser||window.__lexShieldGenericHide||typeof document.querySelectorAll!=='function')return;
+  try{
+    var explicitAds=document.querySelectorAll('[id*=first-click-ad], [class*=first-click-ad], [id*=click-ad], [class*=click-ad], [class*=ad-overlay], [class*=pop-overlay], [class*=popup-overlay], [class*=interads], [id*=popunder], [class*=popunder]');
+    for(var i=0;i<explicitAds.length;i++){
+      var el=explicitAds[i];
+      var mode=__classifyGhost(el);
+      if(mode){
+        var first=!__countedEls.has(el);
+        if(first)__countedEls.add(el);
+        __neutralizeOverlayElement(el,mode);
+        if(first)__reportShield('overlay',1,'ghost_overlay_explicit -> '+__describeOverlay(el,mode),true);
+      }
+    }
+    var ghostAnchors=document.querySelectorAll('a[target=_blank]');
+    for(var j=0;j<ghostAnchors.length;j++){
+      var a=ghostAnchors[j];
+      var amode=__classifyGhost(a);
+      if(amode){
+        var aFirst=!__countedEls.has(a);
+        if(aFirst)__countedEls.add(a);
+        __neutralizeOverlayElement(a,amode);
+        if(aFirst)__reportShield('overlay',1,'ghost_anchor_scanned -> '+__describeOverlay(a,amode),true);
+      }
+    }
+    var players=document.querySelectorAll('[class*=player], [id*=player], iframe, video');
+    for(var p=0;p<players.length;p++){
+      var sibs=players[p].parentElement?players[p].parentElement.children:[];
+      for(var s=0;s<sibs.length;s++){
+        var sib=sibs[s];
+        if(sib===players[p])continue;
+        var smode=__classifyGhost(sib);
+        if(smode){
+          var sFirst=!__countedEls.has(sib);
+          if(sFirst)__countedEls.add(sib);
+          __neutralizeOverlayElement(sib,smode);
+          if(sFirst)__reportShield('overlay',1,'player_sibling_overlay_removed -> '+__describeOverlay(sib,smode),true);
+        }
+      }
+    }
+  }catch(_){}
+}
+
+if(__enableOverlayDefuser){
+  try{
+    if(typeof HTMLAnchorElement!=='undefined'&&HTMLAnchorElement.prototype&&!window.__lexAnchorClickWrapped){
+      window.__lexAnchorClickWrapped=true;
+      var __origAnchorClick=HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click=function(){
+        if(__enableOverlayDefuser&&!window.__lexShieldGenericHide){
+          var href=this.href||'';
+          var isDetached=!(document.contains&&document.contains(this));
+          var text=(this.innerText||this.textContent||'').trim();
+          if((isDetached||!text)&&(this.target==='_blank'||__adDomainsRe.test(href))){
+            if(!__countedEls.has(this)){
+              __countedEls.add(this);
+              __reportShield('overlay',1,'phantom_anchor',true,href);
+            }
+            return;
+          }
+        }
+        return __origAnchorClick.apply(this,arguments);
+      };
+    }
+  }catch(_){}
+  if(typeof window.addEventListener==='function'){
+    try{
+      window.addEventListener('click',__handleCaptureOverlayClick,true);
+      window.addEventListener('pointerdown',__handleCaptureOverlayClick,true);
+    }catch(_){}
+  }
+  if(typeof document.addEventListener==='function'){
+    try{
+      document.addEventListener('mousedown',function(ev){
+        if(!__enableOverlayDefuser||window.__lexShieldGenericHide)return;
+        var hit=ev&&ev.target;
+        if(__defuseClickjackTarget(hit)){ev.preventDefault();ev.stopPropagation();}
+      },true);
+    }catch(_){}
+  }
+  (function(){
+    var lastClearAt=0;
+    var runClear=function(){
+      if(!__enableOverlayDefuser||window.__lexShieldGenericHide||document.hidden)return;
+      var now=Date.now();
+      if(now-lastClearAt<500)return;
+      lastClearAt=now;
+      __clearClickjackOverlays();
+    };
+    var onLoaded=function(){
+      setTimeout(runClear,600);
+      if(__isVideoEmbed||(typeof document.querySelector==='function'&&document.querySelector('video, iframe'))){
+        setTimeout(runClear,3000);
+        setTimeout(runClear,8000);
+      }
+    };
+    if(document.readyState==='complete')onLoaded();
+    else if(typeof window.addEventListener==='function')window.addEventListener('load',onLoaded,{once:true});
+    if(typeof document.addEventListener==='function'){
+      document.addEventListener('visibilitychange',function(){
+        if(!document.hidden&&(__isVideoEmbed||(typeof document.querySelector==='function'&&document.querySelector('video, iframe'))))runClear();
+      });
+    }
+  })();
 }
 
 function __onDomStart(){
@@ -1192,14 +1505,14 @@ function __onDomStart(){
   __reapplyCachedStyles();
   if(__genericAllowed&&document.documentElement)__collectTokens(document.documentElement,{n:2000});
   if(__plan&&__plan.proc&&__plan.proc.length&&document.documentElement){
-    try{window.__lexBraveApplyProcedural();}catch(_){}
+    try{window.__lexShieldApplyProcedural();}catch(_){}
   }
   __scheduleScan();
   try{
     var mo=new MutationObserver(function(muts){
       __flushCsp();
       __reapplyCachedStyles();
-      if(__genericAllowed&&!window.__lexBraveGenericHide){
+      if(__genericAllowed&&!window.__lexShieldGenericHide){
         var budget={n:800};
         for(var i=0;i<muts.length&&budget.n>0;i++){
           var m=muts[i];
@@ -1224,16 +1537,16 @@ if(document.readyState==='loading'){
     __flushCsp();
     __reapplyCachedStyles();
     if(__genericAllowed&&document.documentElement)__collectTokens(document.documentElement,{n:2000});
-    if(__genericAllowed&&!window.__lexBraveGenericHide)__flushGeneric();
-    if(__plan&&__plan.hostCss)__countHideCssHits(__plan.hostCss,'brave_host_cosmetic');
-    try{window.__lexBraveApplyProcedural();}catch(_){}
+    if(__genericAllowed&&!window.__lexShieldGenericHide)__flushGeneric();
+    if(__plan&&__plan.hostCss)__countHideCssHits(__plan.hostCss,'lex_shield_host_cosmetic');
+    try{window.__lexShieldApplyProcedural();}catch(_){}
   },{once:true});
 }else{
-  if(__genericAllowed&&!window.__lexBraveGenericHide)__flushGeneric();
-  if(__plan&&__plan.hostCss)__countHideCssHits(__plan.hostCss,'brave_host_cosmetic');
+  if(__genericAllowed&&!window.__lexShieldGenericHide)__flushGeneric();
+  if(__plan&&__plan.hostCss)__countHideCssHits(__plan.hostCss,'lex_shield_host_cosmetic');
 }
 })();
 """;
 }
 
-internal sealed record BraveScriptletCall(string n, string[] a);
+internal sealed record LexShieldScriptletCall(string n, string[] a);

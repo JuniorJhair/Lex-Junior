@@ -96,7 +96,7 @@ public static class DailymotionRules
         string path = uri.AbsolutePath;
         string full = uri.AbsoluteUri;
 
-        // 0. Dailymotion Canary Script (Anti-AdBlock Bypass de Brave: @@||dailymotion.com/nativeads.js^)
+        // 0. Dailymotion Canary Script (Anti-AdBlock Bypass: @@||dailymotion.com/nativeads.js^)
         if ((PublicSuffix.HostMatchesDomain(host, "dailymotion.com") ||
              (!string.IsNullOrEmpty(originHost) && PublicSuffix.HostMatchesDomain(originHost, "dailymotion.com"))) &&
             (path.EndsWith("nativeads.js", StringComparison.OrdinalIgnoreCase) ||

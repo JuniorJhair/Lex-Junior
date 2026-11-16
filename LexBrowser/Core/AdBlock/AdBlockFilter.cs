@@ -251,26 +251,7 @@ public static class AdBlockFilter
         "popunder", "adserver", "adclick", "rotator", "onclickads", "syndication"
     };
 
-    // ── Dominios seguros globales (navegación legítima de usuario + fuente única BigSites) ────────
-    private static readonly HashSet<string> TrustedRootDomains = CreateTrustedRootDomains();
-
-    private static HashSet<string> CreateTrustedRootDomains()
-    {
-        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "google.com.pe", "google.es", "reddit.com",
-            "twitter.com", "x.com", "facebook.com", "instagram.com",
-            "amazon.com", "discord.com", "netflix.com", "spotify.com",
-            "linkedin.com", "mercadolibre.com", "whatsapp.com"
-        };
-
-        foreach (string domain in ShieldExemptions.BigSites)
-        {
-            set.Add(domain);
-        }
-
-        return set;
-    }
+    // ── Dominios seguros globales: delegados a la fuente única ShieldExemptions ────────
 
     /// <summary>
     /// Devuelve true si el host, o cualquiera de sus dominios padre, está en <paramref name="set"/>.
@@ -298,7 +279,7 @@ public static class AdBlockFilter
         string path = uri.AbsolutePath;
         string fullUrl = uri.AbsoluteUri;
 
-        // Reglas declarativas de YouTube (basadas en las listas de Brave):
+        // Reglas declarativas aisladas de YouTube:
         // bloquea solo endpoints publicitarios explícitos y permite el resto del tráfico de YouTube/googlevideo.
         if (MediaShieldRules.IsServiceOrStreamHost(host))
         {
@@ -460,7 +441,7 @@ public static class AdBlockFilter
         return regDomain.StartsWith("google.", StringComparison.OrdinalIgnoreCase);
     }
 
-    public static bool IsTrustedDomain(string host) => HostMatchesSet(host, TrustedRootDomains);
+    public static bool IsTrustedDomain(string host) => ShieldExemptions.IsTrustedNavigationDomain(host);
 
     /// <summary>
     /// Comprueba si dos URIs pertenecen al mismo sitio o dominio raíz registrable (ej: sub.sitio.com y sitio.com).

@@ -4,7 +4,7 @@ namespace LexBrowser.Core.AdBlock;
 
 /// <summary>
 /// Frontera estricta de aislamiento para YouTube y Dailymotion.
-/// Ninguna petición ni contexto de estos dos sitios debe evaluarse contra reglas generales de Brave.
+/// Ninguna petición ni contexto de estos dos sitios debe evaluarse contra reglas generales de LexShield Core.
 /// </summary>
 public static class ShieldIsolation
 {

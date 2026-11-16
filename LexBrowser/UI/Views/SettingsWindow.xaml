@@ -256,17 +256,6 @@
                         <StackPanel x:Name="PanelAdBlockSubModules">
                             <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
                                 <StackPanel>
-                                    <CheckBox x:Name="ChkUseBraveEngine" Style="{StaticResource ModernToggle}" Click="ChkUseBraveEngine_Click">
-                                        <StackPanel>
-                                            <TextBlock Text="Motor Declarativo Estilo Brave (Listas ABP/uBO + Scriptlets + EasyList ES)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                            <TextBlock Text="Aplica listas declarativas de Brave, uBO y EasyList Spanish con scriptlets tempranos, $csp e iframes. YouTube y Dailymotion siguen estrictamente aislados." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                    </CheckBox>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Background="#15151D" BorderBrush="#272736" BorderThickness="1" CornerRadius="10" Padding="18,14" Margin="0,0,0,14">
-                                <StackPanel>
                                     <CheckBox x:Name="ChkImaSdkStub" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                         <StackPanel>
                                             <TextBlock Text="Simulador de Google IMA SDK y Stubs VAST/VMAP (ima3.js)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
@@ -302,8 +291,8 @@
                                 <StackPanel>
                                     <CheckBox x:Name="ChkVideoPlayerDefuser" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                         <StackPanel>
-                                            <TextBlock Text="Acelerador en Reproductores Externos (Solo Motor Legacy — inactivo en Brave)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                            <TextBlock Text="Solo se activa al usar Motor Legacy (JW Player / Video.js / Fluid). Permanecerá deshabilitado con Motor Brave activo; no afecta a YouTube ni Dailymotion." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Text="Desarmador Pasivo en Reproductores Externos (Respaldo)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Respaldo opcional para reproductores JW Player, Video.js y Fluid Player cuando un bloqueo pausa la reproducción; desactivado por defecto en sitios generales y aislado de YouTube y Dailymotion." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>
@@ -313,8 +302,8 @@
                                 <StackPanel>
                                     <CheckBox x:Name="ChkSubframeWebShield" Style="{StaticResource ModernToggle}" Click="SaveSettings_Click">
                                         <StackPanel>
-                                            <TextBlock Text="Protección de Escudo en Submarcos e Iframes (Recomendado en Brave)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
-                                            <TextBlock Text="Aplica bloqueo declarativo, scriptlets y defensa cosmética también dentro de submarcos e iframes embebidos (activado por defecto en Brave; respeta pasarelas de pago, SSO, YouTube y Dailymotion)." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Text="Protección de Escudo en Submarcos e Iframes (LexShield Core)" FontWeight="SemiBold" FontSize="13" Foreground="#F4F4F5"/>
+                                            <TextBlock Text="Aplica bloqueo declarativo, scriptlets y defensa cosmética también dentro de submarcos e iframes embebidos (respeta pasarelas de pago, SSO, YouTube y Dailymotion)." FontSize="11" Foreground="#8B8B96" TextWrapping="Wrap" Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </CheckBox>
                                 </StackPanel>

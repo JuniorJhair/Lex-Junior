@@ -16,7 +16,7 @@ using System.Windows.Shell;
 using System.Windows.Threading;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using LexBrowser.Core.Engine;
 using LexBrowser.Core.Interop;
 using LexBrowser.Core.Notifications;
@@ -627,20 +627,20 @@ public partial class MainWindow
             }
         };
 
-        // Puente síncrono COM para scriptlets/cosmética/CSP de Brave antes de RefreshTabShieldScriptsAsync
-        if (tab.BraveBridge == null)
+        // Puente síncrono COM para scriptlets/cosmética/CSP de LexShield Core antes de RefreshTabShieldScriptsAsync
+        if (tab.ShieldBridge == null)
         {
-            tab.BraveBridge = new LexBrowser.Core.AdBlock.Brave.BraveBridgeHostObject(
+            tab.ShieldBridge = new LexShieldBridgeHostObject(
                 Guid.NewGuid().ToString("N"),
                 () => tab.PendingMainNavigationUri ?? tab.CurrentUri,
                 () => tab.TemporaryCompatMode);
             try
             {
-                core.AddHostObjectToScript("lexShield", tab.BraveBridge);
+                core.AddHostObjectToScript("lexShield", tab.ShieldBridge);
             }
             catch (Exception ex)
             {
-                ShieldLogger.LogForTab(tab, "BRAVE_BRIDGE_REGISTER_ERROR", "Init", "", "MainFrame", $"{ex.GetType().Name}: {ex.Message}");
+                ShieldLogger.LogForTab(tab, "LEXSHIELD_BRIDGE_REGISTER_ERROR", "Init", "", "MainFrame", $"{ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -1243,15 +1243,15 @@ public partial class MainWindow
             tab.ActiveFrames.TryAdd(frame, 0);
             frame.Destroyed += (fs, fe) => tab.ActiveFrames.TryRemove(frame, out _);
 
-            if (tab.BraveBridge != null)
+            if (tab.ShieldBridge != null)
             {
                 try
                 {
-                    frame.AddHostObjectToScript("lexShield", tab.BraveBridge, new[] { "*" });
+                    frame.AddHostObjectToScript("lexShield", tab.ShieldBridge, new[] { "*" });
                 }
                 catch (Exception ex)
                 {
-                    ShieldLogger.LogForTab(tab, "BRAVE_FRAME_BRIDGE_ERROR", tab.CurrentUri?.Host ?? "unknown", "", "Subframe", $"{ex.GetType().Name}: {ex.Message}");
+                    ShieldLogger.LogForTab(tab, "LEXSHIELD_FRAME_BRIDGE_ERROR", tab.CurrentUri?.Host ?? "unknown", "", "Subframe", $"{ex.GetType().Name}: {ex.Message}");
                 }
             }
 
@@ -1422,7 +1422,7 @@ public partial class MainWindow
                 if (!root.TryGetProperty("type", out var typeProp)) return;
                 string type = typeProp.GetString() ?? "";
 
-                if (type == "brave_cosmetic_query")
+                if (type == "lex_shield_cosmetic_query")
                 {
                     string host = root.TryGetProperty("host", out var hProp) ? (hProp.GetString() ?? "") : "";
                     bool initial = root.TryGetProperty("initial", out var initProp) && initProp.ValueKind == JsonValueKind.True;
@@ -3412,17 +3412,17 @@ public partial class MainWindow
             try { core.RemoveScriptToExecuteOnDocumentCreated(tab.DailymotionScriptId); } catch { }
             tab.DailymotionScriptId = null;
         }
-        if (!string.IsNullOrEmpty(tab.WebShieldScriptId))
+        if (!string.IsNullOrEmpty(tab.VideoDefuserScriptId))
         {
-            try { core.RemoveScriptToExecuteOnDocumentCreated(tab.WebShieldScriptId); } catch { }
-            tab.WebShieldScriptId = null;
+            try { core.RemoveScriptToExecuteOnDocumentCreated(tab.VideoDefuserScriptId); } catch { }
+            tab.VideoDefuserScriptId = null;
         }
-        if (!string.IsNullOrEmpty(tab.BraveBootstrapScriptId))
+        if (!string.IsNullOrEmpty(tab.ShieldBootstrapScriptId))
         {
-            try { core.RemoveScriptToExecuteOnDocumentCreated(tab.BraveBootstrapScriptId); } catch { }
-            tab.BraveBootstrapScriptId = null;
+            try { core.RemoveScriptToExecuteOnDocumentCreated(tab.ShieldBootstrapScriptId); } catch { }
+            tab.ShieldBootstrapScriptId = null;
         }
-        foreach (string hostScriptId in tab.DrainBraveHostScriptIds())
+        foreach (string hostScriptId in tab.DrainShieldHostScriptIds())
         {
             try { core.RemoveScriptToExecuteOnDocumentCreated(hostScriptId); } catch { }
         }
@@ -3466,44 +3466,40 @@ public partial class MainWindow
 
         if (s.EnableAdBlocker)
         {
-            if (ShieldRouter.IsBraveActive)
+            try
             {
-                try
+                if (tab.ShieldBridge == null)
                 {
-                    if (tab.BraveBridge == null)
+                    tab.ShieldBridge = new LexShieldBridgeHostObject(
+                        Guid.NewGuid().ToString("N"),
+                        () => tab.PendingMainNavigationUri ?? tab.CurrentUri,
+                        () => tab.TemporaryCompatMode);
+                    try
                     {
-                        tab.BraveBridge = new LexBrowser.Core.AdBlock.Brave.BraveBridgeHostObject(
-                            Guid.NewGuid().ToString("N"),
-                            () => tab.PendingMainNavigationUri ?? tab.CurrentUri,
-                            () => tab.TemporaryCompatMode);
-                        try
-                        {
-                            core.AddHostObjectToScript("lexShield", tab.BraveBridge);
-                        }
-                        catch (Exception ex)
-                        {
-                            ShieldLogger.LogForTab(tab, "BRAVE_BRIDGE_REGISTER_ERROR", "Refresh", "", "MainFrame", $"{ex.GetType().Name}: {ex.Message}");
-                        }
+                        core.AddHostObjectToScript("lexShield", tab.ShieldBridge);
                     }
+                    catch (Exception ex)
+                    {
+                        ShieldLogger.LogForTab(tab, "LEXSHIELD_BRIDGE_REGISTER_ERROR", "Refresh", "", "MainFrame", $"{ex.GetType().Name}: {ex.Message}");
+                    }
+                }
 
-                    string bootstrapScript = BraveScriptletEngine.BuildBootstrapScript(tab.BraveBridge.BridgeToken);
-                    tab.BraveBootstrapScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(bootstrapScript);
-                }
-                catch (Exception ex)
-                {
-                    ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "BraveBootstrap", "", "Refresh", ex.Message);
-                }
+                string bootstrapScript = LexShieldScriptletEngine.BuildBootstrapScript(tab.ShieldBridge.BridgeToken);
+                tab.ShieldBootstrapScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(bootstrapScript);
             }
-            else
+            catch (Exception ex)
             {
-                try
-                {
-                    tab.WebShieldScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(WebShield.InjectedScript);
-                }
-                catch (Exception ex)
-                {
-                    ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "WebShield", "", "Refresh", ex.Message);
-                }
+                ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "LexShieldBootstrap", "", "Refresh", ex.Message);
+            }
+
+            try
+            {
+                string defuserScript = WebShield.GetVideoDefuserScript(s.EnableVideoPlayerDefuser, s.Shield?.Sites);
+                tab.VideoDefuserScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(defuserScript);
+            }
+            catch (Exception ex)
+            {
+                ShieldLogger.LogForTab(tab, "SCRIPT_INJECT_ERROR", "VideoPlayerDefuser", "", "Refresh", ex.Message);
             }
         }
 

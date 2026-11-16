@@ -7,7 +7,7 @@ namespace LexBrowser.Core.AdBlock;
 /// <summary>
 /// Respuestas señuelo (stubs / mocks) con HTTP 200 OK para recursos publicitarios conocidos
 /// que los reproductores de streaming (anime, series, video) esperan para iniciar la reproducción.
-/// Basado en las reglas de redirección y mocks de Brave Shields y uBlock Origin.
+/// Incluye shim IMA (MPL-2.0) y stubs XML VAST/VMAP acotados al contexto multimedia/XHR.
 /// </summary>
 public static class AdBlockResources
 {
@@ -21,6 +21,105 @@ public static class AdBlockResources
     private static readonly byte[] InstreamStatusBytes = Encoding.UTF8.GetBytes("window.google_ad_status = 1;");
     private static readonly byte[] Gif1x1Bytes = new byte[] { 71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 255, 255, 255, 255, 255, 255, 33, 249, 4, 1, 10, 0, 1, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 76, 1, 0, 59 };
     private static readonly byte[] GoogleImaShimBytes = Encoding.UTF8.GetBytes(GoogleImaScript);
+
+    /// <summary>
+    /// Resuelve un stub de respaldo para la etapa 4 unificada de LexShield Core cuando no ganó
+    /// una regla declarativa $redirect (o para aislamiento YT/DM y etiquetas VAST/VMAP genéricas).
+    /// Respeta estrictamente las exenciones BigSites / PaymentOrAuth y la política por sitio.
+    /// </summary>
+    internal static bool TryGetUnifiedFallbackStub(
+        Uri uri,
+        string? originHost,
+        CoreWebView2WebResourceContext resourceContext,
+        EffectiveSitePolicy policy,
+        out byte[] responseBytes,
+        out string contentType,
+        out string stubName)
+    {
+        responseBytes = Array.Empty<byte>();
+        contentType = string.Empty;
+        stubName = string.Empty;
+
+        if (uri == null || !policy.ShieldEnabled || !policy.Stubs)
+            return false;
+
+        if (ShieldExemptions.IsPaymentOrAuthHost(uri.Host) ||
+            ShieldExemptions.IsPaymentOrAuthHost(originHost) ||
+            (!string.IsNullOrEmpty(originHost) && ShieldExemptions.IsBigSite(originHost)))
+        {
+            return false;
+        }
+
+        string host = uri.Host;
+        string path = uri.AbsolutePath;
+        string full = uri.AbsoluteUri;
+
+        if (policy.ImaStub &&
+            PublicSuffix.HostMatchesDomain(host, "googleapis.com") &&
+            path.EndsWith("/ima3.js", StringComparison.OrdinalIgnoreCase))
+        {
+            responseBytes = GoogleImaShimBytes;
+            contentType = "Content-Type: application/javascript; charset=utf-8";
+            stubName = "google-ima.js";
+            return true;
+        }
+
+        bool isGoogleOrYouTubeContent = ShieldIsolation.IsGoogleOrYouTubeContent(host, originHost);
+        bool xmlStubContext = resourceContext is
+            CoreWebView2WebResourceContext.XmlHttpRequest or
+            CoreWebView2WebResourceContext.Fetch or
+            CoreWebView2WebResourceContext.Other or
+            CoreWebView2WebResourceContext.Media;
+
+        if (xmlStubContext && !isGoogleOrYouTubeContent)
+        {
+            if (DailymotionRules.IsVmapUrl(full, path))
+            {
+                responseBytes = VmapEmptyBytes;
+                contentType = "Content-Type: text/xml; charset=utf-8";
+                stubName = "noop-vmap.xml";
+                return true;
+            }
+
+            if (IsKnownVideoAdNetworkHost(host) ||
+                full.Contains("ad_type=vast", StringComparison.OrdinalIgnoreCase) ||
+                full.Contains("format=vast", StringComparison.OrdinalIgnoreCase) ||
+                full.Contains("output=vast", StringComparison.OrdinalIgnoreCase) ||
+                full.Contains("type=vast", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith("/vast", StringComparison.OrdinalIgnoreCase) ||
+                path.Contains("/vast/", StringComparison.OrdinalIgnoreCase) ||
+                path.Contains("/vast.", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith("vast.xml", StringComparison.OrdinalIgnoreCase))
+            {
+                responseBytes = VastEmptyBytes;
+                contentType = "Content-Type: text/xml; charset=utf-8";
+                stubName = "noop-vast.xml";
+                return true;
+            }
+        }
+
+        if (path.EndsWith("/instream/ad_status.js", StringComparison.OrdinalIgnoreCase))
+        {
+            responseBytes = InstreamStatusBytes;
+            contentType = "Content-Type: application/javascript; charset=utf-8";
+            stubName = "instream-ad-status.js";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsKnownVideoAdNetworkHost(string host)
+        => PublicSuffix.HostMatchesDomain(host, "adtng.com") ||
+           PublicSuffix.HostMatchesDomain(host, "trafficjunky.net") ||
+           PublicSuffix.HostMatchesDomain(host, "trafficjunky.com") ||
+           PublicSuffix.HostMatchesDomain(host, "exoclick.com") ||
+           PublicSuffix.HostMatchesDomain(host, "magsrv.com") ||
+           PublicSuffix.HostMatchesDomain(host, "realsrv.com") ||
+           PublicSuffix.HostMatchesDomain(host, "pemsrv.com") ||
+           PublicSuffix.HostMatchesDomain(host, "juicyads.com") ||
+           PublicSuffix.HostMatchesDomain(host, "tsyndicate.com") ||
+           PublicSuffix.HostMatchesDomain(host, "ero-advertising.com");
 
     public static bool TryGetRedirectStub(Uri uri, out byte[] responseBytes, out string contentType)
         => TryGetRedirectStub(uri, out responseBytes, out contentType, null, null);
@@ -126,10 +225,16 @@ public static class AdBlockResources
                 contentType = "Content-Type: image/gif";
                 return true;
             }
-            // Por defecto para XHR/Fetch/XML o solicitudes de video ad: devolver VAST vacío
-            responseBytes = VastEmptyBytes;
-            contentType = "Content-Type: text/xml; charset=utf-8";
-            return true;
+            if (xmlStubContext)
+            {
+                // Solo devolver VAST vacío en contextos multimedia/XHR, nunca en Document/iframe
+                responseBytes = VastEmptyBytes;
+                contentType = "Content-Type: text/xml; charset=utf-8";
+                return true;
+            }
+            responseBytes = Array.Empty<byte>();
+            contentType = "Content-Type: text/plain";
+            return false;
         }
 
         bool isVast = xmlStubContext &&

@@ -27,7 +27,7 @@ public static class DailymotionOptimizer
     if (!isDailymotion) return;
 
     // ─────────────────────────────────────────────────────────────────
-    // 0. SCRIPTLET CANARY DE DAILYMOTION (Anti-AdBlock Bypass de Brave / uBO)
+    // 0. SCRIPTLET CANARY DE DAILYMOTION (Anti-AdBlock Bypass uBO / declarativo)
     // ─────────────────────────────────────────────────────────────────
     try {
         window.__NATIVEADS_CANARY__ = true;

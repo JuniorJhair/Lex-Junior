@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
 internal readonly struct CosHostSlice
 {
@@ -98,11 +98,11 @@ public sealed class HostCosmeticResources
 }
 
 /// <summary>
-/// Motor cosmético de Brave compilado desde <c>brave-shield.lex</c> (secciones 13..19):
+/// Motor cosmético de LexShield Core compilado desde <c>lex-shield.lex</c> (secciones 13..19):
 /// soporta selectores específicos por dominio/entidad, excepciones <c>#@#</c>,
 /// <c>$generichide</c>, lookup bajo demanda de clases/IDs genéricos y reglas procedurales.
 /// </summary>
-public sealed class BraveCosmeticEngine
+public sealed class LexShieldCosmeticEngine
 {
     private const byte HostFlagUninjectAll = 1;
     private const int MaxGenericSelectorsPerQuery = 512;
@@ -125,7 +125,7 @@ public sealed class BraveCosmeticEngine
         ":-abp-"
     };
 
-    public static BraveCosmeticEngine Empty { get; } = new(
+    public static LexShieldCosmeticEngine Empty { get; } = new(
         Array.Empty<ulong>(),
         Array.Empty<ulong>(),
         Array.Empty<ulong>(),
@@ -148,7 +148,7 @@ public sealed class BraveCosmeticEngine
     private readonly Dictionary<string, string[]> _complexIds;
     private readonly string[] _miscGenericHide;
 
-    internal BraveCosmeticEngine(
+    internal LexShieldCosmeticEngine(
         ulong[] simpleClassHashes,
         ulong[] simpleIdHashes,
         ulong[] cosHostHashes,
@@ -178,7 +178,7 @@ public sealed class BraveCosmeticEngine
     public int PayloadCount => _payloads.Length;
     public IReadOnlyList<string> MiscGenericHide => _miscGenericHide;
 
-    internal static BraveCosmeticEngine LoadFromSections(
+    internal static LexShieldCosmeticEngine LoadFromSections(
         byte[] sec13SimpleClasses,
         byte[] sec14SimpleIds,
         byte[] sec15HostHashes,
@@ -195,7 +195,7 @@ public sealed class BraveCosmeticEngine
         (CosPayload[] payloads, Dictionary<string, string[]> uiMap) = ParseSection18(sec18PayloadsJsonUtf8);
         (Dictionary<string, string[]> cc, Dictionary<string, string[]> ci, string[] mg) = ParseSection19(sec19ComplexJsonUtf8);
 
-        return new BraveCosmeticEngine(
+        return new LexShieldCosmeticEngine(
             simpleClasses,
             simpleIds,
             hostHashes,
@@ -253,7 +253,7 @@ public sealed class BraveCosmeticEngine
     public HostCosmeticResources EvaluateHost(
         string? host,
         bool genericHide,
-        BraveResourceStore? resources = null,
+        LexShieldResourceStore? resources = null,
         bool allowPrivileged = false)
     {
         string normalized = NormalizeHost(host);
@@ -413,7 +413,7 @@ public sealed class BraveCosmeticEngine
 
                 if (_simpleClassHashes.Length > 0 && IsSafeCssToken(cls))
                 {
-                    ulong h = BraveHash.Fnv1a64(cls.AsSpan());
+                    ulong h = LexShieldHash.Fnv1a64(cls.AsSpan());
                     if (Array.BinarySearch(_simpleClassHashes, h) >= 0)
                     {
                         string sel = "." + EscapeCssToken(cls);
@@ -445,7 +445,7 @@ public sealed class BraveCosmeticEngine
 
                 if (_simpleIdHashes.Length > 0 && IsSafeCssToken(id))
                 {
-                    ulong h = BraveHash.Fnv1a64(id.AsSpan());
+                    ulong h = LexShieldHash.Fnv1a64(id.AsSpan());
                     if (Array.BinarySearch(_simpleIdHashes, h) >= 0)
                     {
                         string sel = "#" + EscapeCssToken(id);
@@ -625,7 +625,7 @@ public sealed class BraveCosmeticEngine
         while (pos < normalizedHost.Length && count < dest.Length)
         {
             ReadOnlySpan<char> suffix = normalizedHost.AsSpan(pos);
-            ulong h = BraveHash.Fnv1a64(suffix);
+            ulong h = LexShieldHash.Fnv1a64(suffix);
             int idx = Array.BinarySearch(_cosHostHashes, h);
             if (idx >= 0)
                 dest[count++] = idx;
@@ -650,7 +650,7 @@ public sealed class BraveCosmeticEngine
                 entityKey = string.Concat(reg.AsSpan(0, regDot), ".*");
                 if (count < dest.Length)
                 {
-                    ulong eh = BraveHash.Fnv1a64(entityKey.AsSpan());
+                    ulong eh = LexShieldHash.Fnv1a64(entityKey.AsSpan());
                     int eIdx = Array.BinarySearch(_cosHostHashes, eh);
                     if (eIdx >= 0 && !ContainsInt(dest.Slice(0, count), eIdx))
                         dest[count++] = eIdx;
@@ -699,12 +699,12 @@ public sealed class BraveCosmeticEngine
     private static bool IsScriptletUninjected(
         string scriptletInner,
         List<string>? uninjectRules,
-        BraveResourceStore? resources)
+        LexShieldResourceStore? resources)
     {
         if (uninjectRules == null || uninjectRules.Count == 0)
             return false;
 
-        List<string> targetArgs = BraveScriptletEngine.ParseScriptletArgs(scriptletInner);
+        List<string> targetArgs = LexShieldScriptletEngine.ParseScriptletArgs(scriptletInner);
         if (targetArgs.Count == 0)
             return false;
 
@@ -716,7 +716,7 @@ public sealed class BraveCosmeticEngine
             if (string.Equals(rule, scriptletInner, StringComparison.Ordinal))
                 return true;
 
-            List<string> excArgs = BraveScriptletEngine.ParseScriptletArgs(rule);
+            List<string> excArgs = LexShieldScriptletEngine.ParseScriptletArgs(rule);
             if (excArgs.Count == 0)
                 continue;
 
@@ -747,7 +747,7 @@ public sealed class BraveCosmeticEngine
         return false;
     }
 
-    private static string ResolveScriptletIdentity(string rawName, BraveResourceStore? resources)
+    private static string ResolveScriptletIdentity(string rawName, LexShieldResourceStore? resources)
     {
         string trimmed = rawName.Trim();
         if (resources != null)

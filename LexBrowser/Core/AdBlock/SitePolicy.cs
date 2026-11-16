@@ -66,22 +66,22 @@ public sealed class SiteShieldProfile
 /// </summary>
 public sealed class ShieldSettings
 {
-    public const string EngineLegacy = "Legacy";
-    public const string EngineBrave = "Brave";
+    public const string EngineLexShield = "LexShield Core";
+    public const int CurrentShieldVersion = 4;
 
-    public int Version { get; set; } = 3;
+    // Identificadores heredados reconocidos explícitamente durante la migración v1..v3 -> v4.
+    internal const string LegacyEngineBraveAlias = "Brave";
+    internal const string LegacyEngineLegacyAlias = "Legacy";
+
+    public int Version { get; set; } = CurrentShieldVersion;
     public bool Enabled { get; set; } = true;
     public bool DiagnosticMode { get; set; } = false;
-    public string Engine { get; set; } = EngineBrave;
-    public bool EngineMigratedToBrave { get; set; } = false;
+    public string Engine { get; set; } = EngineLexShield;
     public ShieldModulesConfig Modules { get; set; } = new();
     public ShieldAdaptersConfig Adapters { get; set; } = new();
     public Dictionary<string, SiteShieldProfile> Sites { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public static string NormalizeEngine(string? engine)
-        => string.Equals(engine, EngineLegacy, StringComparison.OrdinalIgnoreCase)
-            ? EngineLegacy
-            : EngineBrave;
+    public static string NormalizeEngine(string? engine) => EngineLexShield;
 }
 
 /// <summary>
@@ -209,9 +209,8 @@ public static class SitePolicy
         bool overlays = !isCompat && shield.Modules.Overlays && !IsModDisabled(ModOverlays);
         bool cosmetic = !isCompat && (appSettings?.EnableCosmeticShield ?? true) && shield.Modules.Cosmetic && !IsModDisabled(ModCosmetic);
         bool antiWall = !isCompat && shield.Modules.AntiWall && !IsModDisabled(ModAntiWall);
-        bool isLegacyEngine = string.Equals(ShieldSettings.NormalizeEngine(shield.Engine), ShieldSettings.EngineLegacy, StringComparison.Ordinal);
         bool subframes = !isCompat && (appSettings?.EnableWebShieldInSubframes ?? true) && shield.Modules.Subframes && !IsModDisabled(ModSubframes);
-        bool videoDefuser = isLegacyEngine && !isCompat && (appSettings?.EnableVideoPlayerDefuser ?? false) && shield.Modules.VideoDefuser && !IsModDisabled(ModVideoDefuser);
+        bool videoDefuser = !isCompat && (appSettings?.EnableVideoPlayerDefuser ?? false) && shield.Modules.VideoDefuser && !IsModDisabled(ModVideoDefuser);
 
         bool adapterEnabled = !isCompat && !IsModDisabled(ModAdapter);
         bool ytAdapter = adapterEnabled && (appSettings?.EnableYouTubeAdBlock ?? true) && shield.Adapters.YouTube;

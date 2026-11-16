@@ -10,10 +10,10 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public struct BravePatRec
+public struct LexShieldPatRec
 {
     public uint Mask;
     public int HostOff;
@@ -35,7 +35,7 @@ public struct BravePatRec
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
-public struct BraveBucketRange
+public struct LexShieldBucketRange
 {
     public uint Offset;
     public uint Count;
@@ -58,7 +58,7 @@ internal readonly struct CompressedTailSlice
 /// Las secciones de red (1..12) residen en arreglos planos primitivos sin punteros GC;
 /// las secciones cosméticas y de recursos (13..21) permanecen comprimidas hasta su uso bajo demanda.
 /// </summary>
-public sealed class BraveShieldData
+public sealed class LexShieldData
 {
     internal sealed class CompiledRegexBox
     {
@@ -75,51 +75,51 @@ public sealed class BraveShieldData
     private static readonly TimeSpan RegexEvalTimeout = TimeSpan.FromMilliseconds(2);
 
     private static readonly object InitLock = new();
-    private static BraveShieldData? _cachedDefault;
+    private static LexShieldData? _cachedDefault;
     private static bool _defaultLoadAttempted;
     private static Task? _preloadTask;
 
     public static bool IsDefaultLoaded => Volatile.Read(ref _cachedDefault) != null;
 
     private readonly CompressedTailSlice[] _tailSections;
-    private readonly Lazy<BraveResourceStore> _resourceStoreLazy;
-    private readonly Lazy<BraveCosmeticEngine> _cosmeticEngineLazy;
-    private readonly Lazy<BravePatRec[]> _cspRulesLazy;
-    private readonly Lazy<BravePatRec[]> _regexRulesLazy;
+    private readonly Lazy<LexShieldResourceStore> _resourceStoreLazy;
+    private readonly Lazy<LexShieldCosmeticEngine> _cosmeticEngineLazy;
+    private readonly Lazy<LexShieldPatRec[]> _cspRulesLazy;
+    private readonly Lazy<LexShieldPatRec[]> _regexRulesLazy;
     private readonly Lazy<CompiledRegexBox?[]> _cspRegexCacheLazy;
     private readonly Lazy<CompiledRegexBox?[]> _netRegexCacheLazy;
 
     public string MetaJson { get; }
     public ulong[] PureHashes { get; }
     public uint[] PureMasks { get; }
-    public BravePatRec[] PatternRules { get; }
+    public LexShieldPatRec[] PatternRules { get; }
     public byte[] StrBlob { get; }
     public ulong[] HashPool { get; }
     public ulong[] TokKeys { get; }
-    public BraveBucketRange[] TokRanges { get; }
+    public LexShieldBucketRange[] TokRanges { get; }
     public int[] TokVals { get; }
     public ulong[] OptKeys { get; }
-    public BraveBucketRange[] OptRanges { get; }
+    public LexShieldBucketRange[] OptRanges { get; }
     public int[] OptVals { get; }
     public int[] FallbackRules { get; }
 
-    private BraveShieldData(
+    private LexShieldData(
         string metaJson,
         ulong[] pureHashes,
         uint[] pureMasks,
-        BravePatRec[] patternRules,
+        LexShieldPatRec[] patternRules,
         byte[] strBlob,
         ulong[] hashPool,
         ulong[] tokKeys,
-        BraveBucketRange[] tokRanges,
+        LexShieldBucketRange[] tokRanges,
         int[] tokVals,
         ulong[] optKeys,
-        BraveBucketRange[] optRanges,
+        LexShieldBucketRange[] optRanges,
         int[] optVals,
         int[] fallbackRules,
         CompressedTailSlice[] tailSections,
-        BravePatRec[]? cspOverride = null,
-        BravePatRec[]? regexOverride = null)
+        LexShieldPatRec[]? cspOverride = null,
+        LexShieldPatRec[]? regexOverride = null)
     {
         MetaJson = metaJson;
         PureHashes = pureHashes;
@@ -135,18 +135,18 @@ public sealed class BraveShieldData
         OptVals = optVals;
         FallbackRules = fallbackRules;
         _tailSections = tailSections;
-        _resourceStoreLazy = new Lazy<BraveResourceStore>(() =>
+        _resourceStoreLazy = new Lazy<LexShieldResourceStore>(() =>
         {
             byte[] idx = DecompressTailSection(20);
             byte[] blob = DecompressTailSection(21);
-            return BraveResourceStore.LoadFromSections(idx, blob);
+            return LexShieldResourceStore.LoadFromSections(idx, blob);
         }, LazyThreadSafetyMode.ExecutionAndPublication);
-        _cosmeticEngineLazy = new Lazy<BraveCosmeticEngine>(() =>
+        _cosmeticEngineLazy = new Lazy<LexShieldCosmeticEngine>(() =>
         {
             if (_tailSections.Length == 0 || _tailSections[0].Compressed == null || _tailSections[0].Compressed.Length == 0)
-                return BraveCosmeticEngine.Empty;
+                return LexShieldCosmeticEngine.Empty;
 
-            return BraveCosmeticEngine.LoadFromSections(
+            return LexShieldCosmeticEngine.LoadFromSections(
                 DecompressTailSection(13),
                 DecompressTailSection(14),
                 DecompressTailSection(15),
@@ -155,23 +155,23 @@ public sealed class BraveShieldData
                 DecompressTailSection(18),
                 DecompressTailSection(19));
         }, LazyThreadSafetyMode.ExecutionAndPublication);
-        _cspRulesLazy = new Lazy<BravePatRec[]>(() =>
+        _cspRulesLazy = new Lazy<LexShieldPatRec[]>(() =>
         {
             if (cspOverride != null)
                 return cspOverride;
             int rel = CspSectionIndex - TailStartSection;
             if (rel >= _tailSections.Length)
-                return Array.Empty<BravePatRec>();
-            return ReadStructArray<BravePatRec>(DecompressTailSection(CspSectionIndex));
+                return Array.Empty<LexShieldPatRec>();
+            return ReadStructArray<LexShieldPatRec>(DecompressTailSection(CspSectionIndex));
         }, LazyThreadSafetyMode.ExecutionAndPublication);
-        _regexRulesLazy = new Lazy<BravePatRec[]>(() =>
+        _regexRulesLazy = new Lazy<LexShieldPatRec[]>(() =>
         {
             if (regexOverride != null)
                 return regexOverride;
             int rel = RegexSectionIndex - TailStartSection;
             if (rel >= _tailSections.Length)
-                return Array.Empty<BravePatRec>();
-            return ReadStructArray<BravePatRec>(DecompressTailSection(RegexSectionIndex));
+                return Array.Empty<LexShieldPatRec>();
+            return ReadStructArray<LexShieldPatRec>(DecompressTailSection(RegexSectionIndex));
         }, LazyThreadSafetyMode.ExecutionAndPublication);
         _cspRegexCacheLazy = new Lazy<CompiledRegexBox?[]>(
             () => new CompiledRegexBox?[_cspRulesLazy.Value.Length],
@@ -181,13 +181,13 @@ public sealed class BraveShieldData
             LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
-    public BraveResourceStore GetResourceStore() => _resourceStoreLazy.Value;
+    public LexShieldResourceStore GetResourceStore() => _resourceStoreLazy.Value;
 
-    public BraveCosmeticEngine GetCosmeticEngine() => _cosmeticEngineLazy.Value;
+    public LexShieldCosmeticEngine GetCosmeticEngine() => _cosmeticEngineLazy.Value;
 
-    public BravePatRec[] GetCspRules() => _cspRulesLazy.Value;
+    public LexShieldPatRec[] GetCspRules() => _cspRulesLazy.Value;
 
-    public BravePatRec[] GetRegexRules() => _regexRulesLazy.Value;
+    public LexShieldPatRec[] GetRegexRules() => _regexRulesLazy.Value;
 
     public static Regex? TryCompileRegex(string pattern, bool matchCase)
     {
@@ -220,40 +220,40 @@ public sealed class BraveShieldData
 
         ref readonly var rec = ref rules[index];
         string pat = rec.PatLen > 0 ? Encoding.UTF8.GetString(StrBlob, rec.PatOff, rec.PatLen) : string.Empty;
-        bool matchCase = (rec.Mask & (uint)BraveNetworkMask.IsMatchCase) != 0;
+        bool matchCase = (rec.Mask & (uint)LexShieldMask.IsMatchCase) != 0;
         var box = new CompiledRegexBox(TryCompileRegex(pat, matchCase));
         Volatile.Write(ref cache[index], box);
         return box.Value;
     }
 
-    public static BraveShieldData CreateForTests(
+    public static LexShieldData CreateForTests(
         ulong[]? pureHashes = null,
         uint[]? pureMasks = null,
-        BravePatRec[]? patternRules = null,
+        LexShieldPatRec[]? patternRules = null,
         byte[]? strBlob = null,
         ulong[]? hashPool = null,
         ulong[]? tokKeys = null,
-        BraveBucketRange[]? tokRanges = null,
+        LexShieldBucketRange[]? tokRanges = null,
         int[]? tokVals = null,
         ulong[]? optKeys = null,
-        BraveBucketRange[]? optRanges = null,
+        LexShieldBucketRange[]? optRanges = null,
         int[]? optVals = null,
         int[]? fallbackRules = null,
-        BravePatRec[]? cspRules = null,
-        BravePatRec[]? regexRules = null)
+        LexShieldPatRec[]? cspRules = null,
+        LexShieldPatRec[]? regexRules = null)
     {
-        return new BraveShieldData(
+        return new LexShieldData(
             metaJson: "{}",
             pureHashes: pureHashes ?? Array.Empty<ulong>(),
             pureMasks: pureMasks ?? Array.Empty<uint>(),
-            patternRules: patternRules ?? Array.Empty<BravePatRec>(),
+            patternRules: patternRules ?? Array.Empty<LexShieldPatRec>(),
             strBlob: strBlob ?? Array.Empty<byte>(),
             hashPool: hashPool ?? Array.Empty<ulong>(),
             tokKeys: tokKeys ?? Array.Empty<ulong>(),
-            tokRanges: tokRanges ?? Array.Empty<BraveBucketRange>(),
+            tokRanges: tokRanges ?? Array.Empty<LexShieldBucketRange>(),
             tokVals: tokVals ?? Array.Empty<int>(),
             optKeys: optKeys ?? Array.Empty<ulong>(),
-            optRanges: optRanges ?? Array.Empty<BraveBucketRange>(),
+            optRanges: optRanges ?? Array.Empty<LexShieldBucketRange>(),
             optVals: optVals ?? Array.Empty<int>(),
             fallbackRules: fallbackRules ?? Array.Empty<int>(),
             tailSections: new CompressedTailSlice[BaseSectionCount - TailStartSection],
@@ -261,7 +261,7 @@ public sealed class BraveShieldData
             regexOverride: regexRules);
     }
 
-    public static BraveShieldData? TryGetDefault()
+    public static LexShieldData? TryGetDefault()
     {
         var existing = Volatile.Read(ref _cachedDefault);
         if (existing != null || Volatile.Read(ref _defaultLoadAttempted))
@@ -283,7 +283,7 @@ public sealed class BraveShieldData
                 }
 
                 var asm = Assembly.GetExecutingAssembly();
-                const string resourceSuffix = "Assets.shield.brave-shield.lex";
+                const string resourceSuffix = "Assets.shield.lex-shield.lex";
                 foreach (string name in asm.GetManifestResourceNames())
                 {
                     if (name.EndsWith(resourceSuffix, StringComparison.OrdinalIgnoreCase))
@@ -299,7 +299,7 @@ public sealed class BraveShieldData
             }
             catch (Exception ex)
             {
-                ShieldLogger.Log("BRAVE_LOAD_ERROR", "local", "brave-shield.lex", "Startup", ex.Message, "ShieldData");
+                ShieldLogger.Log("LEXSHIELD_LOAD_ERROR", "local", "lex-shield.lex", "Startup", ex.Message, "ShieldData");
             }
             finally
             {
@@ -341,18 +341,18 @@ public sealed class BraveShieldData
             if (string.IsNullOrWhiteSpace(root))
                 continue;
 
-            string direct = Path.Combine(root, "Assets", "shield", "brave-shield.lex");
+            string direct = Path.Combine(root, "Assets", "shield", "lex-shield.lex");
             if (File.Exists(direct))
                 return direct;
 
             var dir = new DirectoryInfo(root);
             for (int depth = 0; depth < 7 && dir != null; depth++, dir = dir.Parent)
             {
-                string cand1 = Path.Combine(dir.FullName, "Assets", "shield", "brave-shield.lex");
+                string cand1 = Path.Combine(dir.FullName, "Assets", "shield", "lex-shield.lex");
                 if (File.Exists(cand1))
                     return cand1;
 
-                string cand2 = Path.Combine(dir.FullName, "LexBrowser", "Assets", "shield", "brave-shield.lex");
+                string cand2 = Path.Combine(dir.FullName, "LexBrowser", "Assets", "shield", "lex-shield.lex");
                 if (File.Exists(cand2))
                     return cand2;
             }
@@ -361,27 +361,27 @@ public sealed class BraveShieldData
         return null;
     }
 
-    public static BraveShieldData LoadFromPath(string path)
+    public static LexShieldData LoadFromPath(string path)
     {
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         return LoadFromStream(fs);
     }
 
-    public static BraveShieldData LoadFromStream(Stream stream)
+    public static LexShieldData LoadFromStream(Stream stream)
     {
         Span<byte> header = stackalloc byte[16];
         stream.ReadExactly(header);
 
         if (Encoding.ASCII.GetString(header.Slice(0, 8)) != Magic)
-            throw new InvalidDataException("Invalid brave-shield header magic.");
+            throw new InvalidDataException("Invalid lex-shield header magic.");
 
         uint version = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(8, 4));
         if (version != SupportedVersion)
-            throw new InvalidDataException($"Unsupported brave-shield version {version}.");
+            throw new InvalidDataException($"Unsupported lex-shield version {version}.");
 
         uint sectionCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(12, 4));
         if (sectionCount < BaseSectionCount)
-            throw new InvalidDataException($"Unexpected brave-shield section count {sectionCount}.");
+            throw new InvalidDataException($"Unexpected lex-shield section count {sectionCount}.");
 
         byte[][] headRaw = new byte[TailStartSection][];
         int tailCount = Math.Max((int)sectionCount, BaseSectionCount) - TailStartSection;
@@ -412,18 +412,18 @@ public sealed class BraveShieldData
         string metaJson = Encoding.UTF8.GetString(headRaw[0]);
         ulong[] pureHashes = ReadStructArray<ulong>(headRaw[1]);
         uint[] pureMasks = ReadStructArray<uint>(headRaw[2]);
-        BravePatRec[] patternRules = ReadStructArray<BravePatRec>(headRaw[3]);
+        LexShieldPatRec[] patternRules = ReadStructArray<LexShieldPatRec>(headRaw[3]);
         byte[] strBlob = headRaw[4];
         ulong[] hashPool = ReadStructArray<ulong>(headRaw[5]);
         ulong[] tokKeys = ReadStructArray<ulong>(headRaw[6]);
-        BraveBucketRange[] tokRanges = ReadStructArray<BraveBucketRange>(headRaw[7]);
+        LexShieldBucketRange[] tokRanges = ReadStructArray<LexShieldBucketRange>(headRaw[7]);
         int[] tokVals = ReadStructArray<int>(headRaw[8]);
         ulong[] optKeys = ReadStructArray<ulong>(headRaw[9]);
-        BraveBucketRange[] optRanges = ReadStructArray<BraveBucketRange>(headRaw[10]);
+        LexShieldBucketRange[] optRanges = ReadStructArray<LexShieldBucketRange>(headRaw[10]);
         int[] optVals = ReadStructArray<int>(headRaw[11]);
         int[] fallbackRules = ReadStructArray<int>(headRaw[12]);
 
-        return new BraveShieldData(
+        return new LexShieldData(
             metaJson,
             pureHashes,
             pureMasks,

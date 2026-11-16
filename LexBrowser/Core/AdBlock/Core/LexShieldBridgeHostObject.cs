@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
 /// <summary>
 /// Puente síncrono COM (<c>hostObjects.sync.lexShield</c>) expuesto a WebView2 para entregar
@@ -11,10 +11,10 @@ namespace LexBrowser.Core.AdBlock.Brave;
 /// </summary>
 [ClassInterface(ClassInterfaceType.AutoDual)]
 [ComVisible(true)]
-public sealed class BraveBridgeHostObject
+public sealed class LexShieldBridgeHostObject
 {
     private const string DisabledPlanJson = """{"enabled":false}""";
-    private const string EmptyCosmeticsJson = """{"type":"brave_cosmetic_apply","ghide":true}""";
+    private const string EmptyCosmeticsJson = """{"type":"lex_shield_cosmetic_apply","ghide":true}""";
     private const int MaxLoggedBridgeErrors = 25;
 
     private readonly string _bridgeToken;
@@ -22,7 +22,7 @@ public sealed class BraveBridgeHostObject
     private readonly Func<bool> _getTemporaryCompatMode;
     private int _loggedErrorCount;
 
-    public BraveBridgeHostObject(
+    public LexShieldBridgeHostObject(
         string bridgeToken,
         Func<Uri?> getMainTabUri,
         Func<bool> getTemporaryCompatMode)
@@ -49,7 +49,7 @@ public sealed class BraveBridgeHostObject
         if (!string.Equals(token, _bridgeToken, StringComparison.Ordinal))
         {
             if (ShieldLogger.DiagnosticMode)
-                LogBridgeIssue("BRAVE_BRIDGE_TOKEN_MISMATCH", href, isTop, "Invalid bridge token on GetDocumentPlanJson");
+                LogBridgeIssue("LEXSHIELD_BRIDGE_TOKEN_MISMATCH", href, isTop, "Invalid bridge token on GetDocumentPlanJson");
             return DisabledPlanJson;
         }
 
@@ -64,7 +64,7 @@ public sealed class BraveBridgeHostObject
         }
         catch (Exception ex)
         {
-            LogBridgeIssue("BRAVE_BRIDGE_PLAN_ERROR", href, isTop, $"{ex.GetType().Name}: {ex.Message}");
+            LogBridgeIssue("LEXSHIELD_BRIDGE_PLAN_ERROR", href, isTop, $"{ex.GetType().Name}: {ex.Message}");
             return DisabledPlanJson;
         }
     }
@@ -81,7 +81,7 @@ public sealed class BraveBridgeHostObject
         if (!string.Equals(token, _bridgeToken, StringComparison.Ordinal))
         {
             if (ShieldLogger.DiagnosticMode)
-                LogBridgeIssue("BRAVE_BRIDGE_TOKEN_MISMATCH", href, isTop, "Invalid bridge token on QueryCosmeticsJson");
+                LogBridgeIssue("LEXSHIELD_BRIDGE_TOKEN_MISMATCH", href, isTop, "Invalid bridge token on QueryCosmeticsJson");
             return EmptyCosmeticsJson;
         }
 
@@ -99,7 +99,7 @@ public sealed class BraveBridgeHostObject
         }
         catch (Exception ex)
         {
-            LogBridgeIssue("BRAVE_BRIDGE_COSMETIC_ERROR", href, isTop, $"{ex.GetType().Name}: {ex.Message}");
+            LogBridgeIssue("LEXSHIELD_BRIDGE_COSMETIC_ERROR", href, isTop, $"{ex.GetType().Name}: {ex.Message}");
             return EmptyCosmeticsJson;
         }
     }

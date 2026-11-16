@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Offline compiler for Lex Junior's Brave-inspired declarative shield engine.
+Offline compiler for LexShield Core declarative bundle.
 
-Reads a frozen snapshot of filter lists and resources from `adblock-rust-master/data/brave/`
-and outputs the compact pre-indexed binary bundle `LexBrowser/Assets/shield/brave-shield.lex`
+Reads the frozen upstream snapshot of filter lists and resources plus Lex Junior's own
+`tools/lex-extra-rules.txt` and outputs `LexBrowser/Assets/shield/lex-shield.lex`
 (format LEXSHLD2).
 
 Exclusions enforced at compile time:
@@ -16,7 +16,7 @@ Exclusions enforced at compile time:
   - $badfilter rules are canonicalized and cancel matching rules ahead of time
 
 Usage:
-  python Tools/compile_brave_shield.py
+  python tools/compile_lex_shield.py
 """
 
 from __future__ import annotations
@@ -31,32 +31,33 @@ import zlib
 from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BRAVE_DIR = os.path.join(ROOT, "COMO BLOQUEA BRAVE")
-BRAVE_DATA_DIR = os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave")
-OUTPUT_PATH = os.path.join(ROOT, "LexBrowser", "Assets", "shield", "brave-shield.lex")
+UPSTREAM_DIR = os.path.join(ROOT, "COMO BLOQUEA BRAVE")
+UPSTREAM_DATA_DIR = os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave")
+EXTRA_RULES_PATH = os.path.join(ROOT, "tools", "lex-extra-rules.txt")
+OUTPUT_PATH = os.path.join(ROOT, "LexBrowser", "Assets", "shield", "lex-shield.lex")
 
 INPUT_LISTS = [
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "brave-main-list.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "coin-miners.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "easylist.to", "easylist", "easylist.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "easylist.to", "easylist", "easyprivacy.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "data", "easylist.to", "easylist", "easylist.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "data", "easylist.to", "easylist", "easyprivacy.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "data", "easylist.to", "easylistspanish", "easylistspanish.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "filters.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "badware.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "resource-abuse.txt"),
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "unbreak.txt"),
-    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-unbreak.txt"),
-    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-firstparty.txt"),
-    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-firstparty-regional.txt"),
-    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-cookie-specific.txt"),
-    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-specific.txt"),
-    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-sugarcoat.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "brave-main-list.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "coin-miners.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "easylist.to", "easylist", "easylist.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "easylist.to", "easylist", "easyprivacy.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "data", "easylist.to", "easylist", "easylist.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "data", "easylist.to", "easylist", "easyprivacy.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "data", "easylist.to", "easylistspanish", "easylistspanish.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "filters.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "badware.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "resource-abuse.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "unbreak.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-lists-master", "brave-unbreak.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-lists-master", "brave-lists", "brave-firstparty.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-lists-master", "brave-lists", "brave-firstparty-regional.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-lists-master", "brave-lists", "brave-cookie-specific.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-lists-master", "brave-lists", "brave-specific.txt"),
+    os.path.join(UPSTREAM_DIR, "adblock-lists-master", "brave-lists", "brave-sugarcoat.txt"),
 ]
 RESOURCES_JSONS = [
-    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "brave-resources.json"),
-    os.path.join(BRAVE_DIR, "adblock-resources-master", "adblock-resources-master", "dist", "resources.json"),
+    os.path.join(UPSTREAM_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "brave-resources.json"),
+    os.path.join(UPSTREAM_DIR, "adblock-resources-master", "adblock-resources-master", "dist", "resources.json"),
 ]
 
 YT_DM_DOMAINS = (
@@ -70,7 +71,7 @@ YT_DM_DOMAINS = (
     "dmxleo.com",
 )
 
-# Deterministic FNV-1a 64-bit matching C# BraveHash.Fnv1a64
+# Deterministic FNV-1a 64-bit matching C# LexShieldHash.Fnv1a64
 FNV_OFFSET = 14695981039346656037
 FNV_PRIME = 1099511628211
 
@@ -97,7 +98,7 @@ def is_yt_dm_host(host: str) -> bool:
     return any(h == d or h.endswith("." + d) for d in YT_DM_DOMAINS)
 
 
-# Bitflags mirroring BraveNetworkMask in C#
+# Bitflags mirroring LexShieldMask in C#
 FROM_IMAGE = 1 << 0
 FROM_MEDIA = 1 << 1
 FROM_OBJECT = 1 << 2
@@ -778,7 +779,7 @@ def parse_network_rule(line: str, stats: Counter):
     }
 
 
-# Upstream exceptions that conflict with Brave's own redirect rules in brave-main-list.txt
+# Upstream exceptions that conflict with higher-priority redirect rules
 SUPPRESSED_RULES = {
     "@@||imasdk.googleapis.com/js/sdkloader/ima3.js$script,domain=viki.com",
 }
@@ -788,8 +789,9 @@ def main() -> int:
     raw_lines: list[str] = []
 
     seen_raw: set[str] = set()
-    for fn in INPUT_LISTS:
-        path = os.path.normpath(fn) if os.path.isabs(fn) else os.path.normpath(os.path.join(BRAVE_DATA_DIR, fn))
+    all_input_lists = list(INPUT_LISTS) + ([EXTRA_RULES_PATH] if os.path.exists(EXTRA_RULES_PATH) else [])
+    for fn in all_input_lists:
+        path = os.path.normpath(fn) if os.path.isabs(fn) else os.path.normpath(os.path.join(UPSTREAM_DATA_DIR, fn))
         if not os.path.exists(path):
             print(f"ERROR: Missing input file: {path}", file=sys.stderr)
             return 1
@@ -1209,7 +1211,7 @@ def main() -> int:
         separators=(",", ":"),
     ).encode("utf-8")
 
-    # Pack resources from brave-resources.json + adblock-resources-master (deduplicated by name)
+    # Pack surrogate resources from local resource snapshots (deduplicated by name)
     res_by_name: dict[str, dict] = {}
     for res_path in RESOURCES_JSONS:
         if not os.path.exists(res_path):
@@ -1252,7 +1254,7 @@ def main() -> int:
 
     meta = {
         "format": "LEXSHLD2",
-        "sources": [os.path.relpath(p, ROOT) for p in INPUT_LISTS + RESOURCES_JSONS],
+        "sources": [os.path.relpath(p, ROOT) for p in all_input_lists + RESOURCES_JSONS],
         "counts": {
             "rawLines": len(raw_lines),
             "pureHosts": len(sorted_pure),

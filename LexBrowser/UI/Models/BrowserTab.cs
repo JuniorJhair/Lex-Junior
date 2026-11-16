@@ -168,60 +168,60 @@ public class BrowserTab : INotifyPropertyChanged
     }
 
     /// <summary>IDs de scripts registrados mediante AddScriptToExecuteOnDocumentCreatedAsync para actualización en caliente.</summary>
-    public string? WebShieldScriptId { get; set; }
+    public string? VideoDefuserScriptId { get; set; }
     public string? CookieBannerScriptId { get; set; }
     public string? MediaRuntimeScriptId { get; set; }
     public string? DailymotionScriptId { get; set; }
     public string? YouTubeScriptId { get; set; }
-    public string? BraveBootstrapScriptId { get; set; }
-    public LexBrowser.Core.AdBlock.Brave.BraveBridgeHostObject? BraveBridge { get; set; }
+    public string? ShieldBootstrapScriptId { get; set; }
+    public LexBrowser.Core.AdBlock.ShieldCore.LexShieldBridgeHostObject? ShieldBridge { get; set; }
     public Uri? PendingMainNavigationUri { get; set; }
 
-    private readonly List<(string HostKey, string ScriptId)> _braveHostScripts = new();
+    private readonly List<(string HostKey, string ScriptId)> _shieldHostScripts = new();
 
-    public bool HasActiveBraveHostScript(string host)
+    public bool HasActiveShieldHostScript(string host)
     {
         if (string.IsNullOrWhiteSpace(host))
             return false;
         string normalized = host.Trim().TrimEnd('.').ToLowerInvariant();
-        for (int i = 0; i < _braveHostScripts.Count; i++)
+        for (int i = 0; i < _shieldHostScripts.Count; i++)
         {
-            if (string.Equals(_braveHostScripts[i].HostKey, normalized, StringComparison.Ordinal))
+            if (string.Equals(_shieldHostScripts[i].HostKey, normalized, StringComparison.Ordinal))
                 return true;
         }
         return false;
     }
 
-    public string? RecordActiveBraveHostScript(string hostKey, string scriptId, int maxEntries = 8)
+    public string? RecordActiveShieldHostScript(string hostKey, string scriptId, int maxEntries = 8)
     {
         string normalized = (hostKey ?? string.Empty).Trim().TrimEnd('.').ToLowerInvariant();
         string? removedId = null;
 
-        for (int i = _braveHostScripts.Count - 1; i >= 0; i--)
+        for (int i = _shieldHostScripts.Count - 1; i >= 0; i--)
         {
-            if (string.Equals(_braveHostScripts[i].HostKey, normalized, StringComparison.Ordinal))
+            if (string.Equals(_shieldHostScripts[i].HostKey, normalized, StringComparison.Ordinal))
             {
-                removedId = _braveHostScripts[i].ScriptId;
-                _braveHostScripts.RemoveAt(i);
+                removedId = _shieldHostScripts[i].ScriptId;
+                _shieldHostScripts.RemoveAt(i);
                 break;
             }
         }
 
-        _braveHostScripts.Add((normalized, scriptId));
-        if (removedId == null && _braveHostScripts.Count > maxEntries)
+        _shieldHostScripts.Add((normalized, scriptId));
+        if (removedId == null && _shieldHostScripts.Count > maxEntries)
         {
-            removedId = _braveHostScripts[0].ScriptId;
-            _braveHostScripts.RemoveAt(0);
+            removedId = _shieldHostScripts[0].ScriptId;
+            _shieldHostScripts.RemoveAt(0);
         }
         return removedId;
     }
 
-    public List<string> DrainBraveHostScriptIds()
+    public List<string> DrainShieldHostScriptIds()
     {
-        var ids = new List<string>(_braveHostScripts.Count);
-        for (int i = 0; i < _braveHostScripts.Count; i++)
-            ids.Add(_braveHostScripts[i].ScriptId);
-        _braveHostScripts.Clear();
+        var ids = new List<string>(_shieldHostScripts.Count);
+        for (int i = 0; i < _shieldHostScripts.Count; i++)
+            ids.Add(_shieldHostScripts[i].ScriptId);
+        _shieldHostScripts.Clear();
         return ids;
     }
 

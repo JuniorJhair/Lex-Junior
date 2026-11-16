@@ -168,13 +168,12 @@ public static class ShieldModuleRegistry
         new ShieldModuleDefinition
         {
             Id = SitePolicy.ModVideoDefuser,
-            DisplayName = "Acelerador genérico (solo Motor Legacy)",
-            Description = "Acelera anuncios pre-roll en reproductores externos únicamente bajo Motor Legacy (inactivo en Motor Brave).",
+            DisplayName = "Desarmador pasivo de reproductor (respaldo)",
+            Description = "Acelera o salta anuncios pre-roll en reproductores externos cuando un bloqueo deja pausado el reproductor (sin tocar YouTube ni Dailymotion).",
             DiagnosticKey = "SiteDefuser",
             DisabledInCompatMode = true,
             GetEffectiveState = (p, _, _) => p.VideoDefuser,
             GetSavedSiteState = (prof, s) =>
-                string.Equals(ShieldSettings.NormalizeEngine(s.Shield?.Engine), ShieldSettings.EngineLegacy, StringComparison.Ordinal) &&
                 (s.EnableVideoPlayerDefuser || (s.Shield?.Modules?.VideoDefuser ?? false)) &&
                 (prof?.IsModuleEnabled(SitePolicy.ModVideoDefuser) ?? true),
             ApplySiteToggle = (prof, s, enabled) =>
@@ -312,19 +311,15 @@ public static class ShieldModuleRegistry
         var list = Modules;
         var items = new List<ShieldModulePopupItem>(list.Count);
         bool controlsInteractive = hasSite && settings.EnableAdBlocker;
-        bool isBraveEngine = string.Equals(ShieldSettings.NormalizeEngine(settings.Shield?.Engine), ShieldSettings.EngineBrave, StringComparison.Ordinal);
 
         for (int i = 0; i < list.Count; i++)
         {
             var mod = list[i];
-            bool isLegacyOnlyInBrave = isBraveEngine && string.Equals(mod.Id, SitePolicy.ModVideoDefuser, StringComparison.OrdinalIgnoreCase);
             // Cuando el escudo del sitio está en Off/pausado mostramos el estado guardado para permitir edición individual;
             // cuando está en Compat/Normal reflejamos el estado efectivo (compat apaga overlays/cosmética, etc.)
-            bool isChecked = isLegacyOnlyInBrave
-                ? false
-                : (policy.IsCompatMode
-                    ? EvaluateEffectiveState(mod, policy, settings, profile)
-                    : (settings.EnableAdBlocker && EvaluateSavedState(mod, profile, settings)));
+            bool isChecked = policy.IsCompatMode
+                ? EvaluateEffectiveState(mod, policy, settings, profile)
+                : (settings.EnableAdBlocker && EvaluateSavedState(mod, profile, settings));
 
             items.Add(new ShieldModulePopupItem
             {
@@ -332,7 +327,7 @@ public static class ShieldModuleRegistry
                 DisplayName = mod.DisplayName,
                 Description = mod.Description,
                 IsChecked = isChecked,
-                IsControlEnabled = controlsInteractive && !isLegacyOnlyInBrave
+                IsControlEnabled = controlsInteractive
             });
         }
 

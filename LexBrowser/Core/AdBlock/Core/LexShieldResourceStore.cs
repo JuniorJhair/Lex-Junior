@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
-public sealed class BraveResourceEntry
+public sealed class LexShieldResourceEntry
 {
-    public BraveResourceEntry(
+    public LexShieldResourceEntry(
         string name,
         IReadOnlyList<string> aliases,
         string mime,
@@ -42,17 +42,17 @@ public sealed class BraveResourceEntry
 
 /// <summary>
 /// Almacén perezoso (bajo demanda) de recursos de redirección y scriptlets
-/// extraído de las secciones 20 y 21 de <c>brave-shield.lex</c> (<c>brave-resources.json</c>).
+/// extraído de las secciones 20 y 21 de <c>lex-shield.lex</c>.
 /// Aplica la política de permisos <c>Permission == 0</c> (bloquea <c>trusted-*</c> por defecto).
 /// </summary>
-public sealed class BraveResourceStore
+public sealed class LexShieldResourceStore
 {
-    private readonly Dictionary<string, BraveResourceEntry> _byNameOrAlias;
-    private readonly IReadOnlyList<BraveResourceEntry> _entries;
+    private readonly Dictionary<string, LexShieldResourceEntry> _byNameOrAlias;
+    private readonly IReadOnlyList<LexShieldResourceEntry> _entries;
 
-    private BraveResourceStore(
-        Dictionary<string, BraveResourceEntry> byNameOrAlias,
-        IReadOnlyList<BraveResourceEntry> entries)
+    private LexShieldResourceStore(
+        Dictionary<string, LexShieldResourceEntry> byNameOrAlias,
+        IReadOnlyList<LexShieldResourceEntry> entries)
     {
         _byNameOrAlias = byNameOrAlias;
         _entries = entries;
@@ -60,12 +60,12 @@ public sealed class BraveResourceStore
 
     public int Count => _entries.Count;
 
-    internal IReadOnlyList<BraveResourceEntry> Entries => _entries;
+    internal IReadOnlyList<LexShieldResourceEntry> Entries => _entries;
 
-    public static BraveResourceStore Empty { get; } =
-        new(new Dictionary<string, BraveResourceEntry>(StringComparer.OrdinalIgnoreCase), Array.Empty<BraveResourceEntry>());
+    public static LexShieldResourceStore Empty { get; } =
+        new(new Dictionary<string, LexShieldResourceEntry>(StringComparer.OrdinalIgnoreCase), Array.Empty<LexShieldResourceEntry>());
 
-    internal static BraveResourceStore LoadFromSections(byte[] indexJsonUtf8, byte[] blob)
+    internal static LexShieldResourceStore LoadFromSections(byte[] indexJsonUtf8, byte[] blob)
     {
         if (indexJsonUtf8 == null || indexJsonUtf8.Length == 0)
             return Empty;
@@ -74,8 +74,8 @@ public sealed class BraveResourceStore
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
             return Empty;
 
-        var list = new List<BraveResourceEntry>(doc.RootElement.GetArrayLength());
-        var map = new Dictionary<string, BraveResourceEntry>(StringComparer.OrdinalIgnoreCase);
+        var list = new List<LexShieldResourceEntry>(doc.RootElement.GetArrayLength());
+        var map = new Dictionary<string, LexShieldResourceEntry>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var el in doc.RootElement.EnumerateArray())
         {
@@ -100,7 +100,7 @@ public sealed class BraveResourceStore
             }
 
             string header = BuildContentTypeHeader(mime);
-            var entry = new BraveResourceEntry(name, aliases, mime, isTemplate, deps, perm, data, header);
+            var entry = new LexShieldResourceEntry(name, aliases, mime, isTemplate, deps, perm, data, header);
             list.Add(entry);
 
             map.TryAdd(name, entry);
@@ -111,10 +111,10 @@ public sealed class BraveResourceStore
             }
         }
 
-        return new BraveResourceStore(map, list);
+        return new LexShieldResourceStore(map, list);
     }
 
-    public bool TryGetResource(string? nameOrAlias, out BraveResourceEntry? entry, bool allowPrivileged = false)
+    public bool TryGetResource(string? nameOrAlias, out LexShieldResourceEntry? entry, bool allowPrivileged = false)
     {
         entry = null;
         if (string.IsNullOrWhiteSpace(nameOrAlias))
@@ -131,7 +131,7 @@ public sealed class BraveResourceStore
         return false;
     }
 
-    public bool TryGetRedirectResource(string? nameOrAlias, out BraveResourceEntry? entry, bool allowPrivileged = false)
+    public bool TryGetRedirectResource(string? nameOrAlias, out LexShieldResourceEntry? entry, bool allowPrivileged = false)
     {
         if (TryGetResource(nameOrAlias, out var found, allowPrivileged) &&
             found != null &&

@@ -8,8 +8,7 @@ namespace LexBrowser.Core.AdBlock;
 /// <summary>
 /// Reglas declarativas de red y de presentación para reproductores de video en streaming (YouTube).
 ///
-/// Origen del comportamiento: descripción pública de las listas de filtros que usa Brave
-/// (EasyList / uBlock Origin / lista propia de Brave, ver <c>adblock-rust-master/data</c>).
+/// Origen del comportamiento: descripción pública de listas de filtros estándar (EasyList / uBlock Origin).
 /// La implementación es propia: no se copia código de esas listas ni de sus scriptlets.
 ///
 /// Criterio de diseño (el mismo de la lista de referencia): se bloquean únicamente endpoints
@@ -39,9 +38,8 @@ public static class MediaShieldRules
     // ── Red ──────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Devuelve true si la petición es un endpoint publicitario explícito del servicio.
-    /// Cada rama cita la regla de la lista de Brave de la que procede (líneas de
-    /// <c>brave-main-list.txt</c> en el repositorio de referencia).
+    /// Devuelve true si la petición es un endpoint publicitario explícito del servicio
+    /// según reglas declarativas públicas de listas estándar.
     /// </summary>
     public static bool IsAdRequest(Uri? uri, string? originHost, CoreWebView2WebResourceContext? context)
     {
@@ -147,7 +145,7 @@ public static class MediaShieldRules
         "#masthead-ad",
         ".ytp-ad-progress",
 
-        // Brave (brave-main-list.txt l. 132018-132038)
+        // Selectores declarativos de feed/slots publicitarios de YouTube
         "#contents > ytd-rich-item-renderer:has(> ytd-ad-slot-renderer)",
         "ytd-rich-item-renderer:has(> #content > ytd-ad-slot-renderer)",
         "#shorts-inner-container > .ytd-shorts:has(> .ytd-reel-video-renderer > ytd-ad-slot-renderer)",

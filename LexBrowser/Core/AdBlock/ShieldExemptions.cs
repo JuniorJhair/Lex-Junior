@@ -1,15 +1,36 @@
 using System;
+using System.Collections.Generic;
 
 namespace LexBrowser.Core.AdBlock;
 
 /// <summary>
-/// Fuente única de verdad para exenciones globales del Escudo LexShield:
-/// sitios principales con optimizador propio (YouTube, Dailymotion), herramientas de productividad
-/// basadas en lienzo/canvas (Miro, Figma, Canva, Notion) y pasarelas de pago/autenticación.
-/// Compartida entre el filtro de red en C# y los scripts inyectados en WebView2.
+/// Nivel efectivo de exención resuelto por la fuente única de verdad de LexShield Core.
+/// </summary>
+public enum ShieldExemptionTier
+{
+    FullProtection,
+    TotalExempt,
+    NetworkOnly,
+    CosmeticOnly
+}
+
+/// <summary>
+/// Fuente única de verdad para exenciones globales del Escudo LexShield en 3 niveles:
+/// - TotalExempt: esquemas internos, pagos, OAuth/SSO, CAPTCHA, aislamiento YT/DM o escudo pausado.
+/// - NetworkOnly: plataformas grandes/productividad (BigSites: Miro, Figma, Canva, Google, ChatGPT, Notion...),
+///                Modo Compatible o cosmética desactivada (bloqueo de red sí; sin stubs/overlays/cosmética genérica).
+/// - CosmeticOnly: red desactivada manteniendo cosmética activa.
+/// Compartida entre el filtro de red en C# y el plan por documento en WebView2.
 /// </summary>
 public static class ShieldExemptions
 {
+    private static readonly HashSet<string> ExtraTrustedNavigationDomains = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "google.com.pe", "google.es", "reddit.com",
+        "twitter.com", "x.com", "facebook.com", "instagram.com",
+        "amazon.com", "discord.com", "netflix.com", "spotify.com",
+        "linkedin.com", "mercadolibre.com", "whatsapp.com"
+    };
     /// <summary>
     /// Dominios raíz de plataformas grandes, motores de búsqueda, medios dedicados y apps web
     /// que quedan exentos de reglas genéricas por subcadena, shims IMA/VAST y del escudo genérico WebShield.
@@ -105,6 +126,56 @@ public static class ShieldExemptions
                path.StartsWith("/player", StringComparison.OrdinalIgnoreCase) ||
                path.Contains("/videoembed", StringComparison.OrdinalIgnoreCase) ||
                path.Contains("/video_ext", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Devuelve true si el host es un destino legítimo de navegación global (BigSites + portales principales)
+    /// que no debe bloquearse por heurísticas de popups ni patrones ambiguos.
+    /// </summary>
+    public static bool IsTrustedNavigationDomain(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        string clean = StripPort(host);
+        if (IsBigSite(clean)) return true;
+        foreach (string domain in ExtraTrustedNavigationDomains)
+        {
+            if (PublicSuffix.HostMatchesDomain(clean, domain))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Resuelve de forma determinista el nivel de exención aplicable al par (recurso/documento, origen).
+    /// Nota: IsBigSite se evalúa sobre <paramref name="originOrDocumentHost"/> para que recursos externos
+    /// bajo *.googleapis.com (p. ej. ima3.js en reproductores terceros) sigan evaluándose correctamente.
+    /// </summary>
+    public static ShieldExemptionTier ResolveExemptionTier(
+        string? targetHost,
+        string? originOrDocumentHost,
+        EffectiveSitePolicy policy)
+    {
+        if (!policy.ShieldEnabled ||
+            IsPaymentOrAuthHost(targetHost) ||
+            IsPaymentOrAuthHost(originOrDocumentHost) ||
+            ShieldIsolation.IsIsolatedHost(targetHost) ||
+            ShieldIsolation.IsIsolatedHost(originOrDocumentHost))
+        {
+            return ShieldExemptionTier.TotalExempt;
+        }
+
+        bool noCosmetic = policy.IsCompatMode || IsBigSite(originOrDocumentHost) || !policy.Cosmetic;
+        if (!policy.Network)
+        {
+            return noCosmetic ? ShieldExemptionTier.TotalExempt : ShieldExemptionTier.CosmeticOnly;
+        }
+
+        if (noCosmetic)
+        {
+            return ShieldExemptionTier.NetworkOnly;
+        }
+
+        return ShieldExemptionTier.FullProtection;
     }
 
     private static string StripPort(string host)

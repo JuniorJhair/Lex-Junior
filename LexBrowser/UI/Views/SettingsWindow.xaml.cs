@@ -78,13 +78,6 @@ public partial class SettingsWindow : Window
         ChkAutoVideoPip.IsChecked = s.EnableAutoVideoPip;
         ChkBookmarksBar.IsChecked = s.ShowBookmarksBar;
         ChkAdBlocker.IsChecked = s.EnableAdBlocker;
-        if (ChkUseBraveEngine != null)
-        {
-            ChkUseBraveEngine.IsChecked = string.Equals(
-                LexBrowser.Core.AdBlock.ShieldSettings.NormalizeEngine(s.Shield?.Engine),
-                LexBrowser.Core.AdBlock.ShieldSettings.EngineBrave,
-                StringComparison.OrdinalIgnoreCase);
-        }
         ChkVideoPlayerDefuser.IsChecked = s.EnableVideoPlayerDefuser;
         ChkImaSdkStub.IsChecked = s.EnableImaSdkStub;
         ChkCosmeticShield.IsChecked = s.EnableCosmeticShield;
@@ -201,7 +194,6 @@ public partial class SettingsWindow : Window
     private void UpdateAdBlockerSubTogglesEnabledState()
     {
         bool masterEnabled = ChkAdBlocker.IsChecked == true;
-        bool useBrave = ChkUseBraveEngine?.IsChecked == true;
         if (PanelAdBlockSubModules != null)
         {
             // Atenuar visualmente cuando el maestro está desactivado, sin deshabilitar los controles hijos
@@ -210,34 +202,9 @@ public partial class SettingsWindow : Window
         }
         if (ChkVideoPlayerDefuser != null)
         {
-            ChkVideoPlayerDefuser.IsEnabled = !useBrave;
-            ChkVideoPlayerDefuser.Opacity = useBrave ? 0.55 : 1.0;
+            ChkVideoPlayerDefuser.IsEnabled = true;
+            ChkVideoPlayerDefuser.Opacity = masterEnabled ? 1.0 : 0.55;
         }
-    }
-
-    internal static void ApplyShieldEngineSelection(BrowserSettings settings, bool useBraveEngine)
-    {
-        if (settings == null) return;
-        settings.Shield ??= new LexBrowser.Core.AdBlock.ShieldSettings();
-        settings.Shield.Engine = useBraveEngine
-            ? LexBrowser.Core.AdBlock.ShieldSettings.EngineBrave
-            : LexBrowser.Core.AdBlock.ShieldSettings.EngineLegacy;
-        settings.Shield.EngineMigratedToBrave = true;
-    }
-
-    private void ChkUseBraveEngine_Click(object sender, RoutedEventArgs e)
-    {
-        if (_isInitializing || ChkUseBraveEngine == null) return;
-
-        var s = SettingsManager.Current;
-        if (ChkUseBraveEngine.IsChecked == true && !s.EnableAdBlocker && ChkAdBlocker != null)
-        {
-            ChkAdBlocker.IsChecked = true;
-            s.EnableAdBlocker = true;
-        }
-        ApplyShieldEngineSelection(s, ChkUseBraveEngine.IsChecked == true);
-        UpdateAdBlockerSubTogglesEnabledState();
-        SettingsManager.Save();
     }
 
     private void SaveSettings_Click(object sender, RoutedEventArgs e)

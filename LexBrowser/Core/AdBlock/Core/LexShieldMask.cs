@@ -2,13 +2,13 @@ using System;
 using System.Text;
 using Microsoft.Web.WebView2.Core;
 
-namespace LexBrowser.Core.AdBlock.Brave;
+namespace LexBrowser.Core.AdBlock.ShieldCore;
 
 /// <summary>
-/// Banderas de red de 32 bits alineadas exactamente con <c>Tools/compile_brave_shield.py</c>.
+/// Banderas de red de 32 bits alineadas exactamente con <c>tools/compile_lex_shield.py</c>.
 /// </summary>
 [Flags]
-public enum BraveNetworkMask : uint
+public enum LexShieldMask : uint
 {
     None = 0,
     FromImage = 1u << 0,
@@ -57,7 +57,7 @@ public enum BraveNetworkMask : uint
 /// <summary>
 /// Hash FNV-1a 64-bit determinista idéntico al generador Python offline (<c>fnv1a_64</c>).
 /// </summary>
-public static class BraveHash
+public static class LexShieldHash
 {
     private const ulong FnvOffset = 14695981039346656037UL;
     private const ulong FnvPrime = 1099511628211UL;
@@ -107,28 +107,28 @@ public static class BraveHash
 }
 
 /// <summary>
-/// Mapea contextos HTTP/WebView2 y encabezados <c>Sec-Fetch-Dest</c> hacia <see cref="BraveNetworkMask"/>.
+/// Mapea contextos HTTP/WebView2 y encabezados <c>Sec-Fetch-Dest</c> hacia <see cref="LexShieldMask"/>.
 /// </summary>
-public static class BraveRequestContextMapper
+public static class LexShieldRequestContextMapper
 {
-    public static BraveNetworkMask ToResourceTypeMask(CoreWebView2WebResourceContext context, string? secFetchDest = null)
+    public static LexShieldMask ToResourceTypeMask(CoreWebView2WebResourceContext context, string? secFetchDest = null)
     {
         return context switch
         {
             CoreWebView2WebResourceContext.Document => IsIframeDest(secFetchDest)
-                ? BraveNetworkMask.FromSubdocument
-                : BraveNetworkMask.FromDocument,
-            CoreWebView2WebResourceContext.Stylesheet => BraveNetworkMask.FromStylesheet,
-            CoreWebView2WebResourceContext.Image => BraveNetworkMask.FromImage,
-            CoreWebView2WebResourceContext.Media => BraveNetworkMask.FromMedia,
-            CoreWebView2WebResourceContext.Font => BraveNetworkMask.FromFont,
-            CoreWebView2WebResourceContext.Script => BraveNetworkMask.FromScript,
-            CoreWebView2WebResourceContext.XmlHttpRequest => BraveNetworkMask.FromXmlHttpRequest,
-            CoreWebView2WebResourceContext.Fetch => BraveNetworkMask.FromXmlHttpRequest,
-            CoreWebView2WebResourceContext.Websocket => BraveNetworkMask.FromWebsocket,
-            CoreWebView2WebResourceContext.Ping => BraveNetworkMask.FromPing,
-            CoreWebView2WebResourceContext.All => BraveNetworkMask.FromAllTypes,
-            _ => BraveNetworkMask.FromOther
+                ? LexShieldMask.FromSubdocument
+                : LexShieldMask.FromDocument,
+            CoreWebView2WebResourceContext.Stylesheet => LexShieldMask.FromStylesheet,
+            CoreWebView2WebResourceContext.Image => LexShieldMask.FromImage,
+            CoreWebView2WebResourceContext.Media => LexShieldMask.FromMedia,
+            CoreWebView2WebResourceContext.Font => LexShieldMask.FromFont,
+            CoreWebView2WebResourceContext.Script => LexShieldMask.FromScript,
+            CoreWebView2WebResourceContext.XmlHttpRequest => LexShieldMask.FromXmlHttpRequest,
+            CoreWebView2WebResourceContext.Fetch => LexShieldMask.FromXmlHttpRequest,
+            CoreWebView2WebResourceContext.Websocket => LexShieldMask.FromWebsocket,
+            CoreWebView2WebResourceContext.Ping => LexShieldMask.FromPing,
+            CoreWebView2WebResourceContext.All => LexShieldMask.FromAllTypes,
+            _ => LexShieldMask.FromOther
         };
     }
 
@@ -136,18 +136,18 @@ public static class BraveRequestContextMapper
         => string.Equals(secFetchDest, "iframe", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(secFetchDest, "frame", StringComparison.OrdinalIgnoreCase);
 
-    public static BraveNetworkMask ToMethodMask(string? httpMethod)
+    public static LexShieldMask ToMethodMask(string? httpMethod)
     {
         if (string.IsNullOrEmpty(httpMethod))
-            return BraveNetworkMask.FromGet;
+            return LexShieldMask.FromGet;
 
         if (string.Equals(httpMethod, "GET", StringComparison.OrdinalIgnoreCase))
-            return BraveNetworkMask.FromGet;
+            return LexShieldMask.FromGet;
         if (string.Equals(httpMethod, "POST", StringComparison.OrdinalIgnoreCase))
-            return BraveNetworkMask.FromPost;
+            return LexShieldMask.FromPost;
         if (string.Equals(httpMethod, "HEAD", StringComparison.OrdinalIgnoreCase))
-            return BraveNetworkMask.FromHead;
+            return LexShieldMask.FromHead;
 
-        return BraveNetworkMask.None;
+        return LexShieldMask.None;
     }
 }

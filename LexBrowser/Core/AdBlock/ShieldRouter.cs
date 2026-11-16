@@ -2,20 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.Core.AdBlock.ShieldCore;
 using Microsoft.Web.WebView2.Core;
 
 namespace LexBrowser.Core.AdBlock;
 
 /// <summary>
-/// Única fachada pública de evaluación de red y popups para Lex Shield.
+/// Única fachada pública de evaluación de red, popups, cosmética y exenciones para <c>LexShield Core</c>.
 /// Enruta YouTube y Dailymotion exclusivamente a sus módulos aislados; el resto del tráfico
-/// usa el motor configurado en <see cref="ShieldSettings.Engine"/> (<c>Legacy</c> o <c>Brave</c>).
+/// pasa por el pipeline unificado <see cref="LexShieldCoreEngine"/>.
 /// </summary>
 public static class ShieldRouter
 {
-    private static readonly LegacyShieldEngine LegacyEngine = new();
-    private static BraveNetworkEngine _braveEngine = new();
+    private static LexShieldCoreEngine _coreEngine = new();
 
     /// <summary>
     /// Contextos seguros de WebView2 para <c>AddWebResourceRequestedFilter</c>.
@@ -71,7 +70,7 @@ public static class ShieldRouter
                 frameDesc,
                 resourceContext,
                 engineName,
-                "Brave data == null (fail-open: shield data not loaded)");
+                "LexShield data == null (fail-open: shield data not loaded)");
             return true;
         }
 
@@ -111,36 +110,21 @@ public static class ShieldRouter
         return true;
     }
 
-    public static string GetConfiguredEngineName()
-        => ShieldSettings.NormalizeEngine(SettingsManager.Current?.Shield?.Engine);
-
-    public static bool IsBraveActive
-        => string.Equals(GetConfiguredEngineName(), ShieldSettings.EngineBrave, StringComparison.Ordinal);
+    public static string GetConfiguredEngineName() => ShieldSettings.EngineLexShield;
 
     public static void PreloadIfConfigured()
     {
-        if (IsBraveActive)
-        {
-            BraveShieldData.PreloadInBackground();
-        }
+        LexShieldData.PreloadInBackground();
     }
 
-    public static IShieldEngine GetGeneralEngine(string? engineOverride = null)
-    {
-        string engine = string.IsNullOrWhiteSpace(engineOverride)
-            ? GetConfiguredEngineName()
-            : ShieldSettings.NormalizeEngine(engineOverride);
-
-        return string.Equals(engine, ShieldSettings.EngineBrave, StringComparison.Ordinal)
-            ? _braveEngine
-            : LegacyEngine;
-    }
+    public static ILexShieldEngine GetGeneralEngine(string? engineOverride = null)
+        => _coreEngine;
 
     /// <summary>
-    /// Permite inyectar una instancia de prueba del motor Brave (para suites unitarias).
+    /// Permite inyectar una instancia de prueba de <see cref="LexShieldCoreEngine"/> (para suites unitarias).
     /// </summary>
-    internal static void SetBraveEngineForTests(BraveNetworkEngine? engine)
-        => _braveEngine = engine ?? new BraveNetworkEngine();
+    internal static void SetCoreEngineForTests(LexShieldCoreEngine? engine)
+        => _coreEngine = engine ?? new LexShieldCoreEngine();
 
     public static ShieldNetworkDecision EvaluateWebResource(
         Uri uri,
@@ -174,11 +158,11 @@ public static class ShieldRouter
         if (isYouTubeIsolated || isDailymotionIsolated)
         {
             bool allowNetworkBlock = !isYouTubeAdapterContext || policy.YouTubeAdapter;
-            return LegacyEngine.EvaluateIsolatedNetwork(
+            return _coreEngine.EvaluateIsolatedNetwork(
                 uri, originHost, policy, resourceContext, allowNetworkBlock);
         }
 
-        return GetGeneralEngine(engineOverride).EvaluateNetwork(
+        return _coreEngine.EvaluateNetwork(
             uri, originHost, policy, resourceContext, secFetchDest, httpMethod);
     }
 
@@ -230,11 +214,11 @@ public static class ShieldRouter
 
         if (isIsolated)
         {
-            return LegacyEngine.ShouldBlockPopup(
-                targetUri, originUri, originPolicy, isFromSubframe, isUserInitiated, out reason);
+            return _coreEngine.ShouldBlockIsolatedPopup(
+                targetUri, originUri, originPolicy, out reason);
         }
 
-        return GetGeneralEngine(engineOverride).ShouldBlockPopup(
+        return _coreEngine.ShouldBlockPopup(
             targetUri, originUri, originPolicy, isFromSubframe, isUserInitiated, out reason);
     }
 
@@ -243,24 +227,31 @@ public static class ShieldRouter
         if (documentUri == null)
             return false;
 
-        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) || ShieldIsolation.IsIsolatedHost(originHost))
+        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) ||
+            ShieldIsolation.IsIsolatedHost(originHost) ||
+            ShieldExemptions.IsBigSite(documentUri.Host) ||
+            ShieldExemptions.IsBigSite(originHost) ||
+            ShieldExemptions.IsPaymentOrAuthHost(documentUri.Host) ||
+            ShieldExemptions.IsPaymentOrAuthHost(originHost))
+        {
             return false;
+        }
 
-        return GetGeneralEngine(engineOverride).IsGenericHideEnabled(documentUri, originHost);
+        return _coreEngine.IsGenericHideEnabled(documentUri, originHost);
     }
 
     /// <summary>
     /// Determina de forma rápida si la respuesta Document debe diferirse brevemente para
     /// registrar scriptlets / reglas cosméticas específicas del dominio antes del parsing HTML.
     /// </summary>
-    public static bool ShouldDeferDocumentForBraveScriptlets(
+    public static bool ShouldDeferDocumentForScriptlets(
         Uri? documentUri,
         string? originHost,
         EffectiveSitePolicy policy,
         bool isSubframe,
         string? engineOverride = null)
     {
-        if (!IsEngineBrave(engineOverride) || documentUri == null)
+        if (documentUri == null)
             return false;
 
         if (!policy.ShieldEnabled || !policy.Cosmetic)
@@ -269,10 +260,11 @@ public static class ShieldRouter
         if (isSubframe && !policy.Subframes)
             return false;
 
-        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) || ShieldIsolation.IsIsolatedHost(originHost))
+        var tier = ShieldExemptions.ResolveExemptionTier(documentUri.Host, originHost, policy);
+        if (tier != ShieldExemptionTier.FullProtection)
             return false;
 
-        var data = BraveShieldData.TryGetDefault();
+        var data = LexShieldData.TryGetDefault();
         if (data == null)
             return false;
 
@@ -295,13 +287,18 @@ public static class ShieldRouter
         string? engineOverride = null)
     {
         enforceSandboxNoPopups = false;
-        if (!IsEngineBrave(engineOverride) || documentUri == null || !policy.ShieldEnabled || !policy.Network)
+        if (documentUri == null || !policy.ShieldEnabled || !policy.Network)
             return Array.Empty<string>();
 
-        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) || ShieldIsolation.IsIsolatedHost(originHost))
+        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) ||
+            ShieldIsolation.IsIsolatedHost(originHost) ||
+            ShieldExemptions.IsPaymentOrAuthHost(documentUri.Host) ||
+            ShieldExemptions.IsPaymentOrAuthHost(originHost))
+        {
             return Array.Empty<string>();
+        }
 
-        return _braveEngine.EvaluateCspPolicies(
+        return _coreEngine.EvaluateCspPolicies(
             documentUri,
             originHost,
             isSubdocument,
@@ -311,7 +308,7 @@ public static class ShieldRouter
 
     /// <summary>
     /// Resuelve de forma síncrona el plan completo por documento/iframe (scriptlets, CSP, cosmética host/genérica y defensa anti-overlay)
-    /// evitando carreras de carga inicial y respetando aislamiento YT/DM, Auth y políticas por sitio.
+    /// evitando carreras de carga inicial y respetando aislamiento YT/DM, exenciones de 3 niveles y políticas por sitio.
     /// </summary>
     public static string BuildDocumentPlanJson(
         string? href,
@@ -322,13 +319,21 @@ public static class ShieldRouter
         string? engineOverride = null)
     {
         if (!TryResolveFrameContext(
-                href, parentHref, isTop, mainTabUri, temporaryCompatMode, engineOverride,
+                href, parentHref, isTop, mainTabUri, temporaryCompatMode,
                 out Uri? effectiveUri, out string? originHost, out EffectiveSitePolicy policy))
         {
             return DisabledPlanJson;
         }
 
-        BraveShieldData? data = _braveEngine.GetShieldData();
+        var tier = ShieldExemptions.ResolveExemptionTier(effectiveUri!.Host, originHost, policy);
+        if (tier == ShieldExemptionTier.TotalExempt)
+            return DisabledPlanJson;
+
+        bool isBigSite = ShieldExemptions.IsBigSite(effectiveUri.Host) ||
+                         (!string.IsNullOrEmpty(originHost) && ShieldExemptions.IsBigSite(originHost));
+        bool allowHostCosmetics = policy.Cosmetic && !isBigSite;
+
+        LexShieldData? data = _coreEngine.GetShieldData();
         bool noPopup = false;
         IReadOnlyList<string> cspPolicies = policy.Network
             ? EvaluateCspPolicies(effectiveUri, originHost, isSubdocument: !isTop, policy, out noPopup, engineOverride)
@@ -336,35 +341,35 @@ public static class ShieldRouter
         if (!policy.Popups)
             noPopup = false;
 
-        bool ghide = !policy.Cosmetic || _braveEngine.IsGenericHideEnabled(effectiveUri!, originHost);
+        bool ghide = !allowHostCosmetics || _coreEngine.IsGenericHideEnabled(effectiveUri, originHost);
         HostCosmeticResources? cos = null;
-        IReadOnlyList<BraveScriptletCall>? scriptletCalls = null;
+        IReadOnlyList<LexShieldScriptletCall>? scriptletCalls = null;
         string? hostCss = null;
         string? styleCss = null;
         string? mgCss = null;
         IReadOnlyList<string>? proc = null;
 
-        if (data != null && policy.Cosmetic)
+        if (data != null && allowHostCosmetics)
         {
             var cosEngine = data.GetCosmeticEngine();
             var resources = data.GetResourceStore();
-            cos = cosEngine.EvaluateHost(effectiveUri!.Host, ghide, resources);
+            cos = cosEngine.EvaluateHost(effectiveUri.Host, ghide, resources);
 
-            var calls = BraveScriptletEngine.BuildScriptletCalls(cos, resources);
+            var calls = LexShieldScriptletEngine.BuildScriptletCalls(cos, resources);
             if (calls.Count > 0)
                 scriptletCalls = calls;
 
-            string builtHostCss = BraveScriptletEngine.BuildHostHideCss(cos);
+            string builtHostCss = LexShieldScriptletEngine.BuildHostHideCss(cos);
             if (!string.IsNullOrEmpty(builtHostCss))
                 hostCss = builtHostCss;
 
-            string builtStyleCss = BraveScriptletEngine.BuildHostStyleCss(cos);
+            string builtStyleCss = LexShieldScriptletEngine.BuildHostStyleCss(cos);
             if (!string.IsNullOrEmpty(builtStyleCss))
                 styleCss = builtStyleCss;
 
             if (!ghide)
             {
-                string builtMg = BraveScriptletEngine.BuildMiscGenericCss(cosEngine, cos);
+                string builtMg = LexShieldScriptletEngine.BuildMiscGenericCss(cosEngine, cos);
                 if (!string.IsNullOrEmpty(builtMg))
                     mgCss = builtMg;
             }
@@ -373,14 +378,15 @@ public static class ShieldRouter
                 proc = cos.ProceduralRules;
         }
 
-        bool ovl = policy.Overlays && !ghide && (cos == null || !cos.UnhiddenSelectors.Contains("*"));
-        string normalizedHost = effectiveUri!.Host.Trim().TrimEnd('.').ToLowerInvariant();
+        bool ovl = policy.Overlays && !ghide && !isBigSite && (cos == null || !cos.UnhiddenSelectors.Contains("*"));
+        bool decoyPopup = policy.Popups && !noPopup && !policy.IsCompatMode && !isBigSite;
+        string normalizedHost = effectiveUri.Host.Trim().TrimEnd('.').ToLowerInvariant();
 
         return JsonSerializer.Serialize(new
         {
             enabled = true,
             host = normalizedHost,
-            cosmetic = policy.Cosmetic,
+            cosmetic = allowHostCosmetics,
             ghide,
             scriptletCalls,
             hostCss,
@@ -389,6 +395,7 @@ public static class ShieldRouter
             proc,
             csp = cspPolicies.Count > 0 ? cspPolicies : null,
             noPopup = noPopup ? (bool?)true : null,
+            decoyPopup = decoyPopup ? (bool?)true : null,
             ovl = ovl ? (bool?)true : null
         }, PlanJsonOptions);
     }
@@ -405,10 +412,10 @@ public static class ShieldRouter
         string? engineOverride = null)
     {
         if (!TryResolveFrameContext(
-                href, parentHref, isTop, mainTabUri, temporaryCompatMode, engineOverride,
+                href, parentHref, isTop, mainTabUri, temporaryCompatMode,
                 out Uri? effectiveUri, out _, out EffectiveSitePolicy policy))
         {
-            return """{"type":"brave_cosmetic_apply","ghide":true}""";
+            return """{"type":"lex_shield_cosmetic_apply","ghide":true}""";
         }
 
         string[]? classes = ParseJsonStringList(classesJson);
@@ -444,7 +451,6 @@ public static class ShieldRouter
         bool isTop,
         Uri? mainTabUri,
         bool temporaryCompatMode,
-        string? engineOverride,
         out Uri? effectiveUri,
         out string? originHost,
         out EffectiveSitePolicy policy)
@@ -452,9 +458,6 @@ public static class ShieldRouter
         effectiveUri = null;
         originHost = null;
         policy = default;
-
-        if (!IsEngineBrave(engineOverride))
-            return false;
 
         Uri? docUri = TryParseHttpUri(href);
         Uri? parentUri = TryParseHttpUri(parentHref);
@@ -479,22 +482,15 @@ public static class ShieldRouter
 
         string policyHost = !string.IsNullOrWhiteSpace(safeMainUri?.Host) ? safeMainUri.Host : originHost;
 
-        if (ShieldIsolation.IsIsolatedHost(docUri.Host) ||
-            ShieldIsolation.IsIsolatedHost(originHost) ||
-            ShieldIsolation.IsIsolatedHost(policyHost) ||
-            ShieldExemptions.IsPaymentOrAuthHost(docUri.Host) ||
-            ShieldExemptions.IsPaymentOrAuthHost(policyHost))
+        policy = SitePolicy.Resolve(policyHost, temporaryCompatMode);
+        if (ShieldExemptions.ResolveExemptionTier(docUri.Host, originHost, policy) == ShieldExemptionTier.TotalExempt ||
+            ShieldExemptions.ResolveExemptionTier(docUri.Host, policyHost, policy) == ShieldExemptionTier.TotalExempt)
         {
             return false;
         }
 
-        policy = SitePolicy.Resolve(policyHost, temporaryCompatMode);
-        if (!policy.ShieldEnabled)
-            return false;
-
-        // En motor Brave, proteger iframes/about:blank en Modo Normal aunque EnableWebShieldInSubframes
-        // valga false (ese flag global desactiva solo WebShield Legacy para no romper YT/DM);
-        // en Modo Compatible o si el usuario excluyó subframes en este sitio concreto sí se omiten.
+        // En LexShield Core, proteger iframes/about:blank en Modo Normal salvo en Modo Compatible
+        // o si el usuario excluyó subframes explícitamente en este sitio concreto.
         if (!isTop && (policy.IsCompatMode || SitePolicy.IsSiteModuleExplicitlyDisabled(policyHost, SitePolicy.ModSubframes)))
             return false;
 
@@ -518,23 +514,21 @@ public static class ShieldRouter
         EffectiveSitePolicy policy,
         string? engineOverride = null)
     {
-        if (!IsEngineBrave(engineOverride) || documentUri == null)
+        if (documentUri == null)
             return null;
 
-        if (!policy.ShieldEnabled || !policy.Cosmetic)
+        var tier = ShieldExemptions.ResolveExemptionTier(documentUri.Host, originHost, policy);
+        if (tier != ShieldExemptionTier.FullProtection && tier != ShieldExemptionTier.CosmeticOnly)
             return null;
 
-        if (ShieldIsolation.IsIsolatedHost(documentUri.Host) || ShieldIsolation.IsIsolatedHost(originHost))
-            return null;
-
-        var data = _braveEngine.GetShieldData() ?? BraveShieldData.TryGetDefault();
+        var data = _coreEngine.GetShieldData() ?? LexShieldData.TryGetDefault();
         if (data == null)
             return null;
 
-        bool ghide = IsGenericHideEnabled(documentUri, originHost, engineOverride);
+        bool ghide = IsGenericHideEnabled(documentUri, originHost);
         var resources = data.GetResourceStore();
         var cos = data.GetCosmeticEngine().EvaluateHost(documentUri.Host, ghide, resources);
-        return BraveScriptletEngine.BuildHostInjectionScript(documentUri.Host, cos, resources, policy);
+        return LexShieldScriptletEngine.BuildHostInjectionScript(documentUri.Host, cos, resources, policy);
     }
 
     public static string BuildCosmeticQueryResponseJson(
@@ -547,16 +541,13 @@ public static class ShieldRouter
         string? engineOverride = null)
     {
         string normalizedHost = (host ?? string.Empty).Trim().TrimEnd('.').ToLowerInvariant();
-        if (!IsEngineBrave(engineOverride) ||
-            string.IsNullOrEmpty(normalizedHost) ||
-            ShieldIsolation.IsIsolatedHost(normalizedHost) ||
-            ShieldIsolation.IsIsolatedHost(tabUri?.Host) ||
-            !policy.ShieldEnabled ||
-            !policy.Cosmetic)
+        if (string.IsNullOrEmpty(normalizedHost) ||
+            ShieldExemptions.ResolveExemptionTier(normalizedHost, tabUri?.Host ?? normalizedHost, policy) != ShieldExemptionTier.FullProtection &&
+            ShieldExemptions.ResolveExemptionTier(normalizedHost, tabUri?.Host ?? normalizedHost, policy) != ShieldExemptionTier.CosmeticOnly)
         {
             return JsonSerializer.Serialize(new
             {
-                type = "brave_cosmetic_apply",
+                type = "lex_shield_cosmetic_apply",
                 host = normalizedHost,
                 ghide = true
             });
@@ -566,23 +557,23 @@ public static class ShieldRouter
         if (evalUri == null)
             Uri.TryCreate("https://" + normalizedHost + "/", UriKind.Absolute, out evalUri);
 
-        bool genericHide = IsGenericHideEnabled(evalUri, normalizedHost, engineOverride);
+        bool genericHide = IsGenericHideEnabled(evalUri, normalizedHost);
         if (genericHide)
         {
             return JsonSerializer.Serialize(new
             {
-                type = "brave_cosmetic_apply",
+                type = "lex_shield_cosmetic_apply",
                 host = normalizedHost,
                 ghide = true
             });
         }
 
-        var data = _braveEngine.GetShieldData() ?? BraveShieldData.TryGetDefault();
+        var data = _coreEngine.GetShieldData() ?? LexShieldData.TryGetDefault();
         if (data == null)
         {
             return JsonSerializer.Serialize(new
             {
-                type = "brave_cosmetic_apply",
+                type = "lex_shield_cosmetic_apply",
                 host = normalizedHost,
                 ghide = false
             });
@@ -594,12 +585,12 @@ public static class ShieldRouter
         if (initial)
         {
             var hostCos = cosEngine.EvaluateHost(normalizedHost, genericHide: false, data.GetResourceStore());
-            mgCss = BraveScriptletEngine.BuildMiscGenericCss(cosEngine, hostCos);
+            mgCss = LexShieldScriptletEngine.BuildMiscGenericCss(cosEngine, hostCos);
         }
 
         return JsonSerializer.Serialize(new
         {
-            type = "brave_cosmetic_apply",
+            type = "lex_shield_cosmetic_apply",
             host = normalizedHost,
             ghide = false,
             css = string.IsNullOrEmpty(css) ? null : css,
@@ -684,11 +675,5 @@ public static class ShieldRouter
         return (mainTabHost, originHost, policyHost, frameDesc);
     }
 
-    private static bool IsEngineBrave(string? engineOverride)
-    {
-        string engine = string.IsNullOrWhiteSpace(engineOverride)
-            ? GetConfiguredEngineName()
-            : ShieldSettings.NormalizeEngine(engineOverride);
-        return string.Equals(engine, ShieldSettings.EngineBrave, StringComparison.Ordinal);
-    }
+    private static bool IsEngineLexShield => true;
 }

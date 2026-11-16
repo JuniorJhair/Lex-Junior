@@ -410,8 +410,7 @@ public partial class MainWindow
             }
             else
             {
-                string engineTag = ShieldRouter.IsBraveActive ? "Motor Brave" : "Motor Legacy";
-                TxtShieldSiteModeStatus.Text = $"Protección estándar activa ({engineTag})";
+                TxtShieldSiteModeStatus.Text = $"Protección estándar activa ({ShieldRouter.GetConfiguredEngineName()})";
                 TxtShieldSiteModeStatus.Foreground = BrushShieldGreen;
             }
 

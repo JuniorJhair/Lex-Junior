@@ -74,15 +74,12 @@ public partial class MainWindow
         {
             string? tabFilter = (onlyActiveTab && _activeTab != null) ? $"Tab:{_activeTab.TabId} " : null;
             var s = SettingsManager.Current;
-            bool braveActive = LexBrowser.Core.AdBlock.ShieldRouter.IsBraveActive;
-            bool braveLoaded = braveActive
-                ? LexBrowser.Core.AdBlock.Brave.BraveShieldData.TryGetDefault() != null
-                : LexBrowser.Core.AdBlock.Brave.BraveShieldData.IsDefaultLoaded;
+            bool shieldDataLoaded = LexBrowser.Core.AdBlock.ShieldCore.LexShieldData.TryGetDefault() != null;
             LexBrowser.Core.AdBlock.EffectiveSitePolicy? activePolicy = _activeTab != null
                 ? LexBrowser.Core.AdBlock.SitePolicy.Resolve(_activeTab.CurrentUri, _activeTab.TemporaryCompatMode)
                 : (LexBrowser.Core.AdBlock.EffectiveSitePolicy?)null;
             string header =
-                $"Engine={s.Shield?.Engine ?? "Legacy"} | IsBraveActive={braveActive} | BraveDataLoaded={braveLoaded} | " +
+                $"Engine={LexBrowser.Core.AdBlock.ShieldRouter.GetConfiguredEngineName()} | ShieldDataLoaded={shieldDataLoaded} | " +
                 $"AdBlocker={s.EnableAdBlocker} | Cosmetic={s.EnableCosmeticShield} | SubframesGlobal={s.EnableWebShieldInSubframes} | " +
                 $"DiagnosticMode={ShieldLogger.DiagnosticMode}" +
                 (_activeTab != null ? $" | ActiveTabUrl={_activeTab.CurrentUri} | CompatMode={_activeTab.TemporaryCompatMode}" : "") +
