@@ -45,13 +45,13 @@ public sealed class BraveCosmeticScriptletTests
         var data = LoadRealBraveData();
         var cos = data.GetCosmeticEngine();
 
-        Assert.Equal(9075, cos.SimpleClassCount);
-        Assert.Equal(4326, cos.SimpleIdCount);
-        Assert.Equal(35275, cos.HostCount);
-        Assert.Equal(23356, cos.PayloadCount);
-        Assert.Equal(552, cos.MiscGenericHide.Count);
-        Assert.Equal(93, data.GetCspRules().Length);
-        Assert.Equal(433, data.GetRegexRules().Length);
+        Assert.Equal(9196, cos.SimpleClassCount);
+        Assert.Equal(4376, cos.SimpleIdCount);
+        Assert.Equal(42518, cos.HostCount);
+        Assert.Equal(27636, cos.PayloadCount);
+        Assert.Equal(620, cos.MiscGenericHide.Count);
+        Assert.Equal(230, data.GetCspRules().Length);
+        Assert.Equal(456, data.GetRegexRules().Length);
 
         Assert.True(cos.HasHostRules("animeyt.es"));
         Assert.True(cos.HasHostRules("hentaila.com"));
@@ -352,11 +352,13 @@ function makeBrowserCtx(host, extra) {
     head: { appendChild() {} },
     getElementById() { return null; },
     createElement() { return { style: {}, textContent: '' }; },
+    createTreeWalker: () => ({ nextNode: () => null }),
     querySelectorAll: () => ['ok']
   });
   const ctx = Object.assign({
     location: { hostname: host, pathname: '/home', search: '', origin: 'https://' + host, href: 'https://' + host + '/home' },
     Math, Object, Array, RegExp, Error, ReferenceError, TypeError, Proxy, Reflect, Set, Map, WeakSet, WeakMap,
+    NodeFilter: { SHOW_ELEMENT: 1, SHOW_TEXT: 4 },
     Function, String, Number, Boolean, Symbol, Date, Promise,
     JSON, parseInt, parseFloat, isNaN, setTimeout, clearTimeout, setInterval, clearInterval,
     console, atob: (b) => Buffer.from(b, 'base64').toString('binary'), decodeURIComponent,

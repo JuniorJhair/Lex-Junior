@@ -106,7 +106,7 @@ public sealed class BraveNetworkEngine : IShieldEngine
         {
             var data = _dataProvider();
             if (data == null)
-                return ShieldNetworkDecision.Allow;
+                return ShieldNetworkDecision.AllowDataUnavailable("Brave data == null (fail-open: shield data not loaded)");
 
             var redir = new RedirectCollector();
             var trace = RuleMatchTrace.Empty;

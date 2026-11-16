@@ -45,7 +45,15 @@ public static class ShieldLogger
     /// Registra un evento asociado a una pestaña, omitiendo automáticamente cualquier registro
     /// si la pestaña pertenece a Modo Invitado o Modo Incógnito para proteger la privacidad.
     /// </summary>
-    public static void LogForTab(BrowserTab? tab, string eventType, string sourceDomain, string url, string frame, string reason, string tabName = "")
+    public static void LogForTab(
+        BrowserTab? tab,
+        string eventType,
+        string sourceDomain,
+        string url,
+        string frame,
+        string reason,
+        string tabName = "",
+        bool bypassDiagnosticFilter = false)
     {
         if (tab != null && (tab.IsGuest || tab.IsIncognito))
             return;
@@ -54,19 +62,28 @@ public static class ShieldLogger
             ? tabName
             : (tab != null ? $"Tab:{tab.TabId} ({(tab.CurrentUri != null ? tab.CurrentUri.Host : "blank")})" : string.Empty);
 
-        Log(eventType, sourceDomain, url, frame, reason, tabLabel, isPrivateOrGuest: false);
+        Log(eventType, sourceDomain, url, frame, reason, tabLabel, isPrivateOrGuest: false, bypassDiagnosticFilter: bypassDiagnosticFilter);
     }
 
     /// <summary>
     /// Registra un evento de seguridad / bloqueo en el buffer circular.
     /// Sanitiza URLs de tipo data: y cadenas excesivamente largas para no saturar memoria ni el portapapeles.
     /// </summary>
-    public static void Log(string eventType, string sourceDomain, string url, string frame, string reason, string tabName = "", bool isPrivateOrGuest = false)
+    public static void Log(
+        string eventType,
+        string sourceDomain,
+        string url,
+        string frame,
+        string reason,
+        string tabName = "",
+        bool isPrivateOrGuest = false,
+        bool bypassDiagnosticFilter = false)
     {
         if (isPrivateOrGuest)
             return;
 
         if (!DiagnosticMode &&
+            !bypassDiagnosticFilter &&
             (string.Equals(eventType, "REQUEST_ALLOWED", StringComparison.OrdinalIgnoreCase) ||
              string.Equals(eventType, "NAVIGATION_STARTING", StringComparison.OrdinalIgnoreCase) ||
              string.Equals(eventType, "SUBFRAME_NAVIGATION_STARTING", StringComparison.OrdinalIgnoreCase)))

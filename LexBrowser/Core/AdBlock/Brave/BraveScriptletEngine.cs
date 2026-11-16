@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -455,18 +457,147 @@ public static class BraveScriptletEngine
         sb.Append('"');
     }
 
+    private static readonly ConditionalWeakTable<BraveResourceStore, string> _staticRegistryCache = new();
+    private static readonly string _emptyStaticRegistryJs = "var __lexReg=null;function __getLexReg(){return __lexReg||(__lexReg={s:{},a:{}});}\n";
+
+    internal static IReadOnlyList<BraveScriptletCall> BuildScriptletCalls(
+        HostCosmeticResources? cosmetic,
+        BraveResourceStore? resources,
+        bool allowPrivileged = false)
+    {
+        if (cosmetic == null || resources == null || cosmetic.Scriptlets.Count == 0)
+            return Array.Empty<BraveScriptletCall>();
+
+        var calls = new List<BraveScriptletCall>();
+        var dedup = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < cosmetic.Scriptlets.Count; i++)
+        {
+            string raw = cosmetic.Scriptlets[i];
+            if (string.IsNullOrWhiteSpace(raw))
+                continue;
+
+            List<string> args = ParseScriptletArgs(raw);
+            if (args.Count == 0 || !TryResolveJsResource(resources, args[0], allowPrivileged, out BraveResourceEntry? entry) || entry == null)
+                continue;
+
+            if (entry.IsTemplate)
+                continue;
+
+            var deps = new List<BraveResourceEntry>();
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { entry.Name };
+            if (!CollectDependencies(entry, resources, allowPrivileged, deps, visited))
+                continue;
+
+            string[] callArgs = args.Count > 1 ? args.Skip(1).ToArray() : Array.Empty<string>();
+            string key = entry.Name.ToLowerInvariant() + "\u0001" + string.Join("\u0001", callArgs);
+            if (dedup.Add(key))
+                calls.Add(new BraveScriptletCall(args[0], callArgs));
+        }
+
+        return calls;
+    }
+
+    internal static string BuildStaticScriptletRegistryJs(BraveResourceStore? resources)
+    {
+        if (resources == null || resources.Count == 0)
+            return _emptyStaticRegistryJs;
+
+        return _staticRegistryCache.GetValue(resources, BuildStaticScriptletRegistryCore);
+    }
+
+    private static string BuildStaticScriptletRegistryCore(BraveResourceStore resources)
+    {
+        var entries = resources.Entries;
+        var sb = new StringBuilder(Math.Max(1024, entries.Count * 512));
+        sb.Append("var __lexReg=null;function __getLexReg(){if(__lexReg)return __lexReg;var s={");
+
+        var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
+        bool firstFn = true;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            BraveResourceEntry entry = entries[i];
+            if (entry.Permission != 0 ||
+                entry.IsTemplate ||
+                !entry.Mime.Contains("javascript", StringComparison.OrdinalIgnoreCase) ||
+                entry.Name.EndsWith(".fn", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var deps = new List<BraveResourceEntry>();
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { entry.Name };
+            if (!CollectDependencies(entry, resources, allowPrivileged: false, deps, visited))
+                continue;
+
+            string canonical = entry.Name.Trim().ToLowerInvariant();
+            string mainBody = entry.GetUtf8Text();
+            bool hasLeadingFn = TryExtractLeadingFunctionName(mainBody, out string fnName);
+
+            if (!firstFn)
+                sb.Append(',');
+            firstFn = false;
+
+            AppendJsStringLiteral(sb, canonical);
+            sb.Append(":function(scriptletGlobals){\n");
+            for (int d = 0; d < deps.Count; d++)
+            {
+                sb.Append(deps[d].GetUtf8Text());
+                sb.Append("\n;\n");
+            }
+            sb.Append(mainBody);
+            sb.Append("\n;\n");
+            if (hasLeadingFn)
+                sb.Append("return ").Append(fnName).Append(".apply(null,Array.prototype.slice.call(arguments,1));\n");
+            sb.Append('}');
+
+            if (canonical.EndsWith(".js", StringComparison.Ordinal))
+                aliases.TryAdd(canonical[..^3], canonical);
+
+            if (entry.Aliases != null)
+            {
+                for (int a = 0; a < entry.Aliases.Count; a++)
+                {
+                    string al = entry.Aliases[a]?.Trim().ToLowerInvariant() ?? string.Empty;
+                    if (string.IsNullOrEmpty(al))
+                        continue;
+                    aliases.TryAdd(al, canonical);
+                    if (al.EndsWith(".js", StringComparison.Ordinal))
+                        aliases.TryAdd(al[..^3], canonical);
+                }
+            }
+        }
+
+        sb.Append("};var a={");
+        bool firstAlias = true;
+        foreach (var kv in aliases)
+        {
+            if (!firstAlias)
+                sb.Append(',');
+            firstAlias = false;
+            AppendJsStringLiteral(sb, kv.Key);
+            sb.Append(':');
+            AppendJsStringLiteral(sb, kv.Value);
+        }
+        sb.Append("};__lexReg={s:s,a:a};return __lexReg;}\n");
+        return sb.ToString();
+    }
+
     /// <summary>
     /// Script ligero compartido en pestañas no aisladas cuando el motor Brave está activo:
     /// obtiene el plan del documento síncronamente vía HostObject COM (<c>lexShield</c>),
-    /// ejecuta scriptlets antes del &lt;head&gt;, aplica CSP/estilos en el primer nodo del DOM,
-    /// consulta selectores genéricos bajo demanda y ejecuta filtros procedurales.
+    /// despacha scriptlets desde un registro estático compilado (cero compilación dinámica),
+    /// aplica CSP/estilos en el primer nodo del DOM, consulta selectores genéricos bajo demanda y ejecuta filtros procedurales.
     /// </summary>
-    public static string BootstrapScript { get; } = BuildBootstrapScript(string.Empty);
+    public static string BootstrapScript => BuildBootstrapScript(string.Empty);
 
-    public static string BuildBootstrapScript(string bridgeToken)
+    public static string BuildBootstrapScript(string bridgeToken, BraveResourceStore? resources = null)
     {
+        BraveResourceStore? effectiveResources = resources ?? BraveShieldData.TryGetDefault()?.GetResourceStore();
         string escapedToken = EscapeJsRawStringBody(bridgeToken ?? string.Empty);
-        return BootstrapScriptTemplate.Replace("__LEX_BRIDGE_TOKEN__", escapedToken, StringComparison.Ordinal);
+        string registryJs = BuildStaticScriptletRegistryJs(effectiveResources);
+        return BootstrapScriptTemplate
+            .Replace("__LEX_BRIDGE_TOKEN__", escapedToken, StringComparison.Ordinal)
+            .Replace("__LEX_SCRIPTLET_REGISTRY__", registryJs, StringComparison.Ordinal);
     }
 
     private const string BootstrapScriptTemplate = """
@@ -607,9 +738,31 @@ if(__plan){
   if(__plan.cosmetic===false)__genericAllowed=false;
   __diag.cosmetic=__genericAllowed;
   if(__plan.ghide){window.__lexBraveGenericHide=true;__diag.ghide=true;}
-  if(__plan.scriptlets){
-    __diag.scriptletLen=__plan.scriptlets.length;
-    try{(new Function(__plan.scriptlets))();__diag.scriptletsOk=true;}catch(e){__diag.errs.push('scriptlet:'+String(e));}
+  if(__plan.scriptletCalls&&__plan.scriptletCalls.length){
+    __diag.scriptletLen=__plan.scriptletCalls.length;
+    __LEX_SCRIPTLET_REGISTRY__
+    function __runStaticScriptlet(name,args){
+      var k=String(name||'').trim().toLowerCase();
+      if(!k)return false;
+      var reg=__getLexReg();
+      var canon=reg.a[k]||k;
+      var fn=reg.s[canon]||reg.s[canon+'.js'];
+      if(typeof fn!=='function')return false;
+      var callArgs=[{site:__effectiveHost||location.hostname||''}];
+      if(args&&args.length){for(var i=0;i<args.length;i++)callArgs.push(args[i]);}
+      fn.apply(null,callArgs);
+      return true;
+    }
+    for(var __si=0;__si<__plan.scriptletCalls.length;__si++){
+      var __sc=__plan.scriptletCalls[__si];
+      try{
+        if(__sc&&__runStaticScriptlet(__sc.n,__sc.a))__diag.scriptletsOk=true;
+      }catch(e){
+        var __em=String(e);
+        __diag.scriptletErrs.push((__sc&&__sc.n||'unknown')+':'+__em);
+        __diag.errs.push('scriptlet:'+__em);
+      }
+    }
   }
   if(__plan.noPopup){__installNoPopup();__diag.noPopup=true;}
   if(__plan.hostCss){__ensureStyle('lex-brave-host',__plan.hostCss);__diag.hostCss=true;}
@@ -1082,3 +1235,5 @@ if(document.readyState==='loading'){
 })();
 """;
 }
+
+internal sealed record BraveScriptletCall(string n, string[] a);

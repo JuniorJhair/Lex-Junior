@@ -144,7 +144,7 @@ public class BraveResourceStoreTests
         Assert.NotNull(data);
 
         var store = data!.GetResourceStore();
-        Assert.Equal(211, store.Count);
+        Assert.Equal(223, store.Count);
 
         Assert.True(store.TryGetRedirectResource("noop.js", out var noopByName));
         Assert.True(store.TryGetRedirectResource("noopjs", out var noopByAlias));

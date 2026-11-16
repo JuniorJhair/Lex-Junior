@@ -50,6 +50,67 @@ public static class ShieldRouter
         return $"{rule} | Engine={engineName} | Ctx={resourceContext} | Subframe={isSubframe} | Host={uri.Host}";
     }
 
+    internal static bool TryFormatAllowedNetworkLog(
+        in ShieldNetworkDecision decision,
+        Uri uri,
+        string? policyHost,
+        string? currentHost,
+        string frameDesc,
+        CoreWebView2WebResourceContext resourceContext,
+        string engineName,
+        bool diagnosticMode,
+        out string reasonText,
+        out bool bypassDiagnosticFilter)
+    {
+        if (decision.IsDataUnavailable)
+        {
+            bypassDiagnosticFilter = true;
+            reasonText = FormatNetworkDecisionLogReason(
+                in decision,
+                uri,
+                frameDesc,
+                resourceContext,
+                engineName,
+                "Brave data == null (fail-open: shield data not loaded)");
+            return true;
+        }
+
+        bypassDiagnosticFilter = false;
+        if (!diagnosticMode)
+        {
+            reasonText = string.Empty;
+            return false;
+        }
+
+        string reqHost = uri.Host;
+        string? effectiveMainHost = !string.IsNullOrEmpty(currentHost)
+            ? currentHost
+            : (!string.IsNullOrEmpty(policyHost) ? policyHost : null);
+        bool isSubframeReq = frameDesc.StartsWith("Subframe", StringComparison.OrdinalIgnoreCase);
+
+        string? allowKind = null;
+        if (isSubframeReq)
+            allowKind = "Subframe network request";
+        else if (resourceContext == CoreWebView2WebResourceContext.Document)
+            allowKind = "Document navigation request";
+        else if (decision.HasException)
+            allowKind = "Exception rule matched";
+        else if (!string.IsNullOrEmpty(effectiveMainHost) &&
+                 !PublicSuffix.HostMatchesDomain(reqHost, effectiveMainHost) &&
+                 !AdBlockFilter.IsTrustedDomain(reqHost))
+            allowKind = "External third-party resource";
+
+        if (allowKind == null)
+        {
+            reasonText = string.Empty;
+            return false;
+        }
+
+        reasonText = FormatNetworkDecisionLogReason(
+            in decision, uri, frameDesc, resourceContext, engineName, $"{allowKind} (no match)");
+        return true;
+    }
+
     public static string GetConfiguredEngineName()
         => ShieldSettings.NormalizeEngine(SettingsManager.Current?.Shield?.Engine);
 
@@ -277,7 +338,7 @@ public static class ShieldRouter
 
         bool ghide = !policy.Cosmetic || _braveEngine.IsGenericHideEnabled(effectiveUri!, originHost);
         HostCosmeticResources? cos = null;
-        string? scriptlets = null;
+        IReadOnlyList<BraveScriptletCall>? scriptletCalls = null;
         string? hostCss = null;
         string? styleCss = null;
         string? mgCss = null;
@@ -289,9 +350,9 @@ public static class ShieldRouter
             var resources = data.GetResourceStore();
             cos = cosEngine.EvaluateHost(effectiveUri!.Host, ghide, resources);
 
-            string builtScriptlets = BraveScriptletEngine.BuildScriptletsBundle(cos, resources);
-            if (!string.IsNullOrEmpty(builtScriptlets))
-                scriptlets = builtScriptlets;
+            var calls = BraveScriptletEngine.BuildScriptletCalls(cos, resources);
+            if (calls.Count > 0)
+                scriptletCalls = calls;
 
             string builtHostCss = BraveScriptletEngine.BuildHostHideCss(cos);
             if (!string.IsNullOrEmpty(builtHostCss))
@@ -321,7 +382,7 @@ public static class ShieldRouter
             host = normalizedHost,
             cosmetic = policy.Cosmetic,
             ghide,
-            scriptlets,
+            scriptletCalls,
             hostCss,
             styleCss,
             mgCss,

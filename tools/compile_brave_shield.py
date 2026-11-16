@@ -31,16 +31,33 @@ import zlib
 from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BRAVE_DATA_DIR = os.path.join(ROOT, "adblock-rust-master", "data", "brave")
+BRAVE_DIR = os.path.join(ROOT, "COMO BLOQUEA BRAVE")
+BRAVE_DATA_DIR = os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave")
 OUTPUT_PATH = os.path.join(ROOT, "LexBrowser", "Assets", "shield", "brave-shield.lex")
 
 INPUT_LISTS = [
-    "brave-main-list.txt",
-    "brave-unbreak.txt",
-    "coin-miners.txt",
-    "../easylist.to/easylistspanish/easylistspanish.txt",
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "brave-main-list.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "coin-miners.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "easylist.to", "easylist", "easylist.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "easylist.to", "easylist", "easyprivacy.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "data", "easylist.to", "easylist", "easylist.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "data", "easylist.to", "easylist", "easyprivacy.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "data", "easylist.to", "easylistspanish", "easylistspanish.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "filters.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "badware.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "resource-abuse.txt"),
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "uBlockOrigin", "unbreak.txt"),
+    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-unbreak.txt"),
+    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-firstparty.txt"),
+    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-firstparty-regional.txt"),
+    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-cookie-specific.txt"),
+    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-specific.txt"),
+    os.path.join(BRAVE_DIR, "adblock-lists-master", "brave-lists", "brave-sugarcoat.txt"),
 ]
-RESOURCES_JSON = "brave-resources.json"
+RESOURCES_JSONS = [
+    os.path.join(BRAVE_DIR, "adblock-rust-master", "adblock-rust-master", "data", "brave", "brave-resources.json"),
+    os.path.join(BRAVE_DIR, "adblock-resources-master", "adblock-resources-master", "dist", "resources.json"),
+]
 
 YT_DM_DOMAINS = (
     "youtube.com",
@@ -761,12 +778,18 @@ def parse_network_rule(line: str, stats: Counter):
     }
 
 
+# Upstream exceptions that conflict with Brave's own redirect rules in brave-main-list.txt
+SUPPRESSED_RULES = {
+    "@@||imasdk.googleapis.com/js/sdkloader/ima3.js$script,domain=viki.com",
+}
+
 def main() -> int:
     stats = Counter()
     raw_lines: list[str] = []
 
+    seen_raw: set[str] = set()
     for fn in INPUT_LISTS:
-        path = os.path.normpath(os.path.join(BRAVE_DATA_DIR, fn))
+        path = os.path.normpath(fn) if os.path.isabs(fn) else os.path.normpath(os.path.join(BRAVE_DATA_DIR, fn))
         if not os.path.exists(path):
             print(f"ERROR: Missing input file: {path}", file=sys.stderr)
             return 1
@@ -775,7 +798,12 @@ def main() -> int:
                 s = raw.strip()
                 if not s or s.startswith("!") or s.startswith("["):
                     continue
-                raw_lines.append(s)
+                if s in SUPPRESSED_RULES:
+                    stats["suppressed_override_rules"] += 1
+                    continue
+                if s not in seen_raw:
+                    seen_raw.add(s)
+                    raw_lines.append(s)
 
     parsed_net = []
     badfilter_keys = set()
@@ -1181,9 +1209,17 @@ def main() -> int:
         separators=(",", ":"),
     ).encode("utf-8")
 
-    # Pack resources from brave-resources.json with base64 decoded -> compact JSON + base64 or length-prefixed binary!
-    with open(os.path.join(BRAVE_DATA_DIR, RESOURCES_JSON), encoding="utf-8") as f:
-        res_raw = json.load(f)
+    # Pack resources from brave-resources.json + adblock-resources-master (deduplicated by name)
+    res_by_name: dict[str, dict] = {}
+    for res_path in RESOURCES_JSONS:
+        if not os.path.exists(res_path):
+            print(f"ERROR: Missing resources file: {res_path}", file=sys.stderr)
+            return 1
+        with open(res_path, encoding="utf-8") as f:
+            for r in json.load(f):
+                if r["name"] not in res_by_name:
+                    res_by_name[r["name"]] = r
+    res_raw = list(res_by_name.values())
     res_entries = []
     res_blob = bytearray()
     for r in res_raw:
@@ -1216,7 +1252,7 @@ def main() -> int:
 
     meta = {
         "format": "LEXSHLD2",
-        "sources": INPUT_LISTS + [RESOURCES_JSON],
+        "sources": [os.path.relpath(p, ROOT) for p in INPUT_LISTS + RESOURCES_JSONS],
         "counts": {
             "rawLines": len(raw_lines),
             "pureHosts": len(sorted_pure),

@@ -60,6 +60,8 @@ public sealed class BraveResourceStore
 
     public int Count => _entries.Count;
 
+    internal IReadOnlyList<BraveResourceEntry> Entries => _entries;
+
     public static BraveResourceStore Empty { get; } =
         new(new Dictionary<string, BraveResourceEntry>(StringComparer.OrdinalIgnoreCase), Array.Empty<BraveResourceEntry>());
 

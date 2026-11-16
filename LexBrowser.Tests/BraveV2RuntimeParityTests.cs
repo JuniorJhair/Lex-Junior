@@ -7,6 +7,7 @@ using System.Text.Json;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
 using LexBrowser.Core.AdBlock.Brave;
+using LexBrowser.UI.Models;
 using Microsoft.Web.WebView2.Core;
 using Xunit;
 
@@ -380,7 +381,7 @@ public sealed class BraveV2RuntimeParityTests
                 var root = planDoc.RootElement;
                 Assert.True(root.GetProperty("enabled").GetBoolean());
                 Assert.Equal("hentaila.com", root.GetProperty("host").GetString());
-                Assert.Contains("popMagic", root.GetProperty("scriptlets").GetString() ?? "", StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("popMagic", root.GetProperty("scriptletCalls").GetRawText(), StringComparison.OrdinalIgnoreCase);
                 Assert.Contains("#onhsl", root.GetProperty("hostCss").GetString() ?? "", StringComparison.Ordinal);
             }
 
@@ -392,7 +393,7 @@ public sealed class BraveV2RuntimeParityTests
                 var root = blankFrameDefaultSub.RootElement;
                 Assert.True(root.GetProperty("enabled").GetBoolean());
                 Assert.Equal("hentaila.com", root.GetProperty("host").GetString());
-                Assert.Contains("popMagic", root.GetProperty("scriptlets").GetString() ?? "", StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("popMagic", root.GetProperty("scriptletCalls").GetRawText(), StringComparison.OrdinalIgnoreCase);
             }
 
             // En Modo Compatible sí se omiten subframes en Brave
@@ -511,7 +512,7 @@ function runScenario(opts) {
                   host: 'hentaila.com',
                   cosmetic: true,
                   ghide: false,
-                  scriptlets: 'window.__ranBeforeHead = (document.head === null);',
+                  scriptletCalls: [{ n: 'set', a: ['__ranBeforeHead', 'true'] }],
                   hostCss: '#onhsl{display:none!important;}',
                   mgCss: '.mg-ad{display:none!important;}',
                   csp: ["script-src 'self'"],
@@ -539,10 +540,18 @@ function runScenario(opts) {
     }
   };
   sandbox.window = sandbox;
+  sandbox.self = sandbox;
+  sandbox.Request = function(){};
+  sandbox.Request.prototype = { clone(){ return {}; } };
+  sandbox.XMLHttpRequest = function(){};
+  sandbox.XMLHttpRequest.prototype = { open(){}, send(){} };
+  sandbox.EventTarget = function(){};
+  sandbox.EventTarget.prototype = { addEventListener(){}, removeEventListener(){} };
   sandbox.top = opts.isTop ? sandbox : { location: { href: 'https://hentaila.com/' } };
   sandbox.parent = sandbox.top;
 
   vm.runInNewContext(bootCode, sandbox);
+  const ranBeforeHead = Boolean(sandbox.__ranBeforeHead && doc.head === null);
 
   if (!opts.startWithHead) {
     // Simular aparición tardía de <html> y <head> en el parser
@@ -560,7 +569,7 @@ function runScenario(opts) {
   for (const fn of timerCbs) fn();
 
   return {
-    ranBeforeHead: sandbox.__ranBeforeHead,
+    ranBeforeHead: ranBeforeHead,
     headChildren: headEl.children.map(c => ({ tag: c.tagName, id: c.id || '', httpEquiv: c.httpEquiv || '', content: c.content || '', text: c.textContent || '' })),
     windowOpenBlocked: sandbox.window.open('https://pop.example') === null,
     diag: sandbox.__lexBraveDiag || null,
@@ -817,5 +826,87 @@ console.log(JSON.stringify({ topRes, subRes, fbRes }));
             strBlob: blob.ToArray(),
             fallbackRules: fallback);
         return (data, new BraveNetworkEngine(() => data));
+    }
+
+    [Fact]
+    public void BraveNetworkEngine_WhenDataIsNull_MarksUnavailableAndLogsRequestAllowedEvenWithoutDiagnosticMode()
+    {
+        bool origDiag = ShieldLogger.DiagnosticMode;
+        ShieldLogger.DiagnosticMode = false;
+        ShieldLogger.Clear();
+
+        try
+        {
+            var nullEngine = new BraveNetworkEngine(() => null);
+            var firstPartyScript = new Uri("https://example.com/app.js");
+            var decision = nullEngine.EvaluateNetwork(
+                firstPartyScript,
+                "example.com",
+                NormalPolicy("example.com"),
+                CoreWebView2WebResourceContext.Script);
+
+            Assert.False(decision.ShouldBlock);
+            Assert.True(decision.IsDataUnavailable);
+            Assert.Contains("data == null", decision.Reason ?? "", StringComparison.OrdinalIgnoreCase);
+
+            Assert.True(ShieldRouter.TryFormatAllowedNetworkLog(
+                in decision,
+                firstPartyScript,
+                policyHost: "example.com",
+                currentHost: "example.com",
+                frameDesc: "Script",
+                resourceContext: CoreWebView2WebResourceContext.Script,
+                engineName: ShieldSettings.EngineBrave,
+                diagnosticMode: false,
+                out string reasonText,
+                out bool bypassDiag));
+
+            Assert.True(bypassDiag);
+            Assert.Contains("Brave data == null", reasonText, StringComparison.Ordinal);
+
+            var guestTab = new BrowserTab { IsGuest = true };
+            ShieldLogger.LogForTab(
+                guestTab,
+                "REQUEST_ALLOWED",
+                "example.com",
+                firstPartyScript.AbsoluteUri,
+                "Script",
+                reasonText,
+                bypassDiagnosticFilter: bypassDiag);
+            Assert.Equal(0, ShieldLogger.Count);
+
+            var normalTab = new BrowserTab { IsGuest = false, IsIncognito = false };
+            ShieldLogger.LogForTab(
+                normalTab,
+                "REQUEST_ALLOWED",
+                "example.com",
+                firstPartyScript.AbsoluteUri,
+                "Script",
+                reasonText,
+                bypassDiagnosticFilter: bypassDiag);
+            Assert.Equal(1, ShieldLogger.Count);
+
+            string dump = ShieldLogger.DumpLog();
+            Assert.Contains("[REQUEST_ALLOWED]", dump, StringComparison.Ordinal);
+            Assert.Contains("Brave data == null", dump, StringComparison.Ordinal);
+
+            var normalAllow = ShieldNetworkDecision.Allow;
+            Assert.False(ShieldRouter.TryFormatAllowedNetworkLog(
+                in normalAllow,
+                firstPartyScript,
+                policyHost: "example.com",
+                currentHost: "example.com",
+                frameDesc: "Script",
+                resourceContext: CoreWebView2WebResourceContext.Script,
+                engineName: ShieldSettings.EngineBrave,
+                diagnosticMode: false,
+                out _,
+                out _));
+        }
+        finally
+        {
+            ShieldLogger.DiagnosticMode = origDiag;
+            ShieldLogger.Clear();
+        }
     }
 }

@@ -12,6 +12,7 @@ public readonly struct ShieldNetworkDecision
     public bool IsRedirectStub { get; init; }
     public bool HasException { get; init; }
     public bool IsImportant { get; init; }
+    public bool IsDataUnavailable { get; init; }
     public byte[] RedirectBytes { get; init; }
     public string RedirectContentType { get; init; }
     public string? Reason { get; init; }
@@ -29,6 +30,16 @@ public readonly struct ShieldNetworkDecision
         ShouldBlock = false,
         IsRedirectStub = false,
         HasException = hasException,
+        RedirectBytes = Array.Empty<byte>(),
+        RedirectContentType = string.Empty,
+        Reason = reason
+    };
+
+    public static ShieldNetworkDecision AllowDataUnavailable(string reason) => new()
+    {
+        ShouldBlock = false,
+        IsRedirectStub = false,
+        IsDataUnavailable = true,
         RedirectBytes = Array.Empty<byte>(),
         RedirectContentType = string.Empty,
         Reason = reason
