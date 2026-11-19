@@ -26,10 +26,7 @@ public sealed class SavedCredential
         get
         {
             if (string.IsNullOrWhiteSpace(Domain)) return null;
-            var cached = Engine.FaviconService.GetCachedFavicon(Domain);
-            if (cached != null) return cached;
-            _ = Engine.FaviconService.ResolveFaviconAsync("https://" + Domain);
-            return null;
+            return Engine.FaviconService.GetCachedFavicon(Domain);
         }
     }
 
@@ -121,6 +118,13 @@ public sealed class PasswordVaultStore
         if (parts.Length <= 2)
             return host;
 
+        string registrable = AdBlock.PublicSuffix.GetRegistrableDomain(host);
+        if (!string.IsNullOrEmpty(registrable) &&
+            !string.Equals(registrable, $"{parts[^2]}.{parts[^1]}", StringComparison.OrdinalIgnoreCase))
+        {
+            return registrable;
+        }
+
         // Si termina en un TLD de país de 2 letras (ej. .pe, .ar, .mx, .uk, .br, .es, .co)
         // y la penúltima parte es un dominio compuesto (.com, .gob, .edu, .org, .co), tomar los últimos 3 segmentos.
         string last = parts[^1];
@@ -130,7 +134,7 @@ public sealed class PasswordVaultStore
             return $"{parts[^3]}.{secondLast}.{last}";
         }
 
-        return $"{secondLast}.{last}";
+        return !string.IsNullOrEmpty(registrable) ? registrable : $"{secondLast}.{last}";
     }
 
     public static string ExtractHost(string? url)
@@ -139,9 +143,51 @@ public sealed class PasswordVaultStore
         if (Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) &&
             (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
         {
-            return uri.Host.ToLowerInvariant();
+            return uri.Host.Trim().Trim('.').ToLowerInvariant();
         }
-        return ExtractBaseDomain(url);
+        if (Uri.TryCreate("https://" + url.Trim(), UriKind.Absolute, out var fallbackUri) &&
+            !url.Contains("://", StringComparison.Ordinal))
+        {
+            return fallbackUri.Host.Trim().Trim('.').ToLowerInvariant();
+        }
+        return string.Empty;
+    }
+
+    private static string StripLeadingWww(string host) =>
+        host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
+
+    public static bool IsSameExactOrWwwHost(string? urlOrHostA, string? urlOrHostB)
+    {
+        string hostA = ExtractHost(urlOrHostA);
+        string hostB = ExtractHost(urlOrHostB);
+        if (string.IsNullOrEmpty(hostA) || string.IsNullOrEmpty(hostB))
+            return false;
+
+        return string.Equals(StripLeadingWww(hostA), StripLeadingWww(hostB), StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsAutofillMatch(string? pageUrl, SavedCredential? credential)
+    {
+        if (credential == null || string.IsNullOrWhiteSpace(pageUrl))
+            return false;
+
+        if (!IsDomainMatch(pageUrl, pageUrl, requireHttpsForAutofill: true))
+            return false;
+
+        string targetHost = !string.IsNullOrWhiteSpace(credential.OriginHost)
+            ? credential.OriginHost
+            : credential.Domain;
+
+        if (string.IsNullOrWhiteSpace(targetHost))
+            return false;
+
+        if (!IsSameExactOrWwwHost(pageUrl, targetHost))
+            return false;
+
+        string pageBase = ExtractBaseDomain(pageUrl);
+        string credBase = ExtractBaseDomain(targetHost);
+        return !string.IsNullOrEmpty(pageBase) &&
+               string.Equals(pageBase, credBase, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -201,7 +247,31 @@ public sealed class PasswordVaultStore
         {
             // Priorizar coincidencia exacta de host primero, luego mismo dominio base (.com / .com.pe)
             return _credentials
-                .Where(c => string.Equals(c.Domain, baseDomain, StringComparison.OrdinalIgnoreCase))
+                .Where(c =>
+                {
+                    string credBase = !string.IsNullOrWhiteSpace(c.OriginHost)
+                        ? ExtractBaseDomain(c.OriginHost)
+                        : c.Domain;
+                    return string.Equals(credBase, baseDomain, StringComparison.OrdinalIgnoreCase) &&
+                           !AdBlock.PublicSuffix.IsSharedHostingSuffix(c.Domain);
+                })
+                .OrderByDescending(c => string.Equals(c.OriginHost, exactHost, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(c => c.UpdatedAtUtc)
+                .Select(CloneCredential)
+                .ToList();
+        }
+    }
+
+    public IReadOnlyList<SavedCredential> GetAutofillCredentialsForUrl(string? pageUrl)
+    {
+        string exactHost = ExtractHost(pageUrl);
+        if (string.IsNullOrEmpty(exactHost))
+            return Array.Empty<SavedCredential>();
+
+        lock (_lock)
+        {
+            return _credentials
+                .Where(c => IsAutofillMatch(pageUrl, c))
                 .OrderByDescending(c => string.Equals(c.OriginHost, exactHost, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(c => c.UpdatedAtUtc)
                 .Select(CloneCredential)
@@ -409,7 +479,20 @@ public sealed class PasswordVaultStore
                         foreach (var c in model.Credentials)
                         {
                             if (!string.IsNullOrWhiteSpace(c.Domain))
+                            {
+                                if (AdBlock.PublicSuffix.IsSharedHostingSuffix(c.Domain) &&
+                                    !string.IsNullOrWhiteSpace(c.OriginHost))
+                                {
+                                    string isolated = ExtractBaseDomain(c.OriginHost);
+                                    if (!string.IsNullOrEmpty(isolated) &&
+                                        !string.Equals(isolated, c.Domain, StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        c.Domain = isolated;
+                                        migrateFromPlainText = true;
+                                    }
+                                }
                                 _credentials.Add(c);
+                            }
                         }
                     }
                     if (model.ExcludedDomains != null)
@@ -734,11 +817,16 @@ public static class PasswordManager
         return false;
     }
 
+    public static bool IsVaultLockedByRecovery => SettingsManager.IsVaultRecoveryLockActive;
+
     /// <summary>
     /// Determina si se debe pedir el PIN antes de abrir la bóveda, ver una contraseña o desactivar el guardador.
     /// </summary>
     public static bool ShouldRequireUnlockForVaultAction()
     {
+        if (IsVaultLockedByRecovery)
+            return true;
+
         if (!HasMasterPasswordConfigured())
             return false;
 
@@ -962,6 +1050,8 @@ public static class PasswordManager
         s.PinLockoutUntilUtcTicks = 0;
         IsUnlockedInCurrentProcess = true;
 
+        SettingsManager.ClearRecoveryLockRestriction();
+        SettingsManager.ResolveRecoveryAndAllowSaves();
         SettingsManager.Save();
         return recoveryCode;
     }
@@ -1073,6 +1163,8 @@ public static class PasswordManager
     public static void EmergencyResetLockAndClearVault()
     {
         Store.ClearAllCredentials(clearExcludedDomains: false);
+        SettingsManager.ClearRecoveryLockRestriction();
+        SettingsManager.ResolveRecoveryAndAllowSaves();
         DisableMasterPassword();
     }
 
@@ -1114,6 +1206,20 @@ public static class PasswordManager
     let lastSentTime = 0;
     let lastAutofillReqTime = 0;
 
+    function isElementActuallyVisible(el) {
+        if (!el || el.disabled || el.readOnly) return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width < 20 || rect.height < 10) return false;
+        if (rect.bottom <= 0 || rect.right <= 0) return false;
+        try {
+            const st = window.getComputedStyle(el);
+            if (!st || st.display === 'none' || st.visibility === 'hidden' || st.visibility === 'collapse') return false;
+            if (parseFloat(st.opacity || '1') <= 0.05) return false;
+            if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+        } catch (_) {}
+        return true;
+    }
+
     function findUsernameField(pwdInput) {
         const container = pwdInput.closest('form') || pwdInput.closest('div[role=""dialog""], main, section, body') || document.body;
         if (!container) return null;
@@ -1121,9 +1227,7 @@ public static class PasswordManager
         const inputs = Array.from(container.querySelectorAll('input:not([type=""hidden""]):not([type=""password""]):not([type=""submit""]):not([type=""button""]):not([type=""checkbox""]):not([type=""radio""])'));
         let best = null;
         for (const inp of inputs) {
-            if (inp.disabled || inp.readOnly) continue;
-            const rect = inp.getBoundingClientRect();
-            if (rect.width < 20 || rect.height < 10) continue;
+            if (!isElementActuallyVisible(inp)) continue;
 
             const type = (inp.type || 'text').toLowerCase();
             const nameId = ((inp.name || '') + ' ' + (inp.id || '') + ' ' + (inp.autocomplete || '') + ' ' + (inp.placeholder || '')).toLowerCase();
@@ -1203,18 +1307,20 @@ public static class PasswordManager
         }
     }, true);
 
-    // E5: Solicitar autocompletado únicamente cuando el usuario hace foco/clic en un campo de login
+    // E5: Solicitar autocompletado únicamente cuando el usuario interactúa con un campo visible de login
     window.addEventListener('focusin', function(e) {
         try {
+            if (navigator.userActivation && !navigator.userActivation.isActive) return;
             const el = e.target;
-            if (!el || el.tagName !== 'INPUT' || el.disabled || el.readOnly) return;
+            if (!el || el.tagName !== 'INPUT' || !isElementActuallyVisible(el)) return;
             if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
 
             const type = (el.type || 'text').toLowerCase();
             let isLoginInput = (type === 'password');
             if (!isLoginInput && (type === 'email' || type === 'text' || type === 'tel')) {
                 const container = el.closest('form') || document;
-                if (container.querySelector('input[type=""password""]')) {
+                const pwdField = container.querySelector('input[type=""password""]');
+                if (pwdField && isElementActuallyVisible(pwdField)) {
                     isLoginInput = true;
                 }
             }
@@ -1246,12 +1352,20 @@ public static class PasswordManager
 
     window.__lexApplyAutofill = function(username, password) {
         try {
+            if (navigator.userActivation && !navigator.userActivation.isActive) return;
+            const activeEl = document.activeElement;
             const pwdInputs = Array.from(document.querySelectorAll('input[type=""password""]'));
             for (const pwd of pwdInputs) {
-                const rect = pwd.getBoundingClientRect();
-                if (rect.width < 20 || rect.height < 10 || pwd.disabled || pwd.readOnly) continue;
+                if (!isElementActuallyVisible(pwd)) continue;
 
                 const userInp = findUsernameField(pwd);
+                const formScope = pwd.closest('form') || pwd.closest('div[role=""dialog""], main, section, body');
+                if (activeEl && activeEl !== document.body && activeEl !== document.documentElement &&
+                    activeEl !== pwd && activeEl !== userInp &&
+                    (!formScope || !formScope.contains(activeEl))) {
+                    continue;
+                }
+
                 if (userInp && username && !userInp.value) {
                     setNativeInputValue(userInp, username);
                 }

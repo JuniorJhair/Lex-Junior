@@ -51,6 +51,8 @@ public partial class MainWindow : Window
     private string? _initialUrl;
     private readonly bool _startInIncognito = false;
     private readonly bool _startInGuest = false;
+    private bool _hasInitializedSession = false;
+    private DispatcherTimer? _sessionSaveTimer;
 
     private static readonly SolidColorBrush BrushBrandGuest = CreateFrozenBrush(0x38, 0xBD, 0xF8);
     private static readonly SolidColorBrush BrushBrandOwner = CreateFrozenBrush(0x81, 0x8C, 0xF8);
@@ -93,8 +95,19 @@ public partial class MainWindow : Window
         InitializeTranslateLanguageList();
         TabsItemsControl.ItemsSource = Tabs;
         ItemsOmniboxSuggestions.ItemsSource = _omniboxSuggestions;
-        Tabs.CollectionChanged += (s, e) => UpdateTabWidths();
-        BookmarksItemsControl.ItemsSource = BookmarkManager.Bookmarks;
+        Tabs.CollectionChanged += (s, e) =>
+        {
+            UpdateTabWidths();
+            ScheduleSessionSave();
+        };
+
+        bool deferBookmarksInit =
+            _isGuestSession ||
+            !FaviconService.IsStartupNetworkGateOpen ||
+            SettingsManager.DowngradeDetected ||
+            ShouldShowPrivacyOnboardingWindow(SettingsManager.Current, _isGuestSession, _initialAttachedTab != null) ||
+            PasswordManager.ShouldRequireUnlockOnStartup();
+        BookmarksItemsControl.ItemsSource = deferBookmarksInit ? null : BookmarkManager.Bookmarks;
 
         // Configurar temporizador de 10 segundos para Deshacer
         _undoBookmarkTimer.Interval = TimeSpan.FromSeconds(10);
@@ -120,8 +133,9 @@ public partial class MainWindow : Window
             if (PopupZoomWidget != null) PopupZoomWidget.IsOpen = false;
         };
 
-        // Escuchar cambios de configuración, descargas y notificaciones
+        // Escuchar cambios de configuración, descargas, actualizaciones y notificaciones
         SettingsManager.SettingsChanged += ApplySettings;
+        UpdateManager.UpdateDiscovered += OnUpdateDiscovered;
         DownloadManager.Load();
         DownloadManager.DownloadsChanged += OnDownloadsChanged;
         NotificationManager.OnNotificationsChanged += UpdateNotificationBadge;
@@ -178,6 +192,162 @@ public partial class MainWindow : Window
         UpdateWindowMargin();
     }
 
+    private static bool _hasShownSettingsRecoveryNotice = false;
+    private bool _hasStartedPostOnboardingTasks = false;
+
+    public enum StartupExecutionStage
+    {
+        GuestSession,
+        FirstTimePinSetupOverlay,
+        PinUnlockOverlay,
+        AttachExistingTab,
+        OnboardingAndTabs,
+        DirectTabs
+    }
+
+    internal static bool ShouldShowPrivacyOnboardingWindow(
+        BrowserSettings? settings,
+        bool isGuestSession,
+        bool hasInitialAttachedTab)
+    {
+        if (isGuestSession || hasInitialAttachedTab)
+            return false;
+
+        return (settings?.PrivacyProfileOnboardingVersion ?? 0) < PrivacyProfiles.CurrentOnboardingVersion;
+    }
+
+    internal static StartupExecutionStage DetermineStartupStage(
+        bool startInGuest,
+        bool hasInitialAttachedTab,
+        bool hasCompletedSecuritySetup,
+        bool hasMasterPasswordConfigured,
+        bool lockSettingsPotentiallyLost,
+        bool shouldRequireUnlockOnStartup,
+        int tabsCount,
+        int privacyOnboardingVersion)
+    {
+        if (startInGuest)
+            return StartupExecutionStage.GuestSession;
+
+        if (!hasInitialAttachedTab &&
+            !hasCompletedSecuritySetup &&
+            !hasMasterPasswordConfigured &&
+            !lockSettingsPotentiallyLost)
+        {
+            return StartupExecutionStage.FirstTimePinSetupOverlay;
+        }
+
+        if (!hasInitialAttachedTab && shouldRequireUnlockOnStartup)
+            return StartupExecutionStage.PinUnlockOverlay;
+
+        if (hasInitialAttachedTab)
+            return StartupExecutionStage.AttachExistingTab;
+
+        if (tabsCount == 0 && privacyOnboardingVersion < PrivacyProfiles.CurrentOnboardingVersion)
+            return StartupExecutionStage.OnboardingAndTabs;
+
+        return StartupExecutionStage.DirectTabs;
+    }
+
+    private Task EnsurePrivacyOnboardingCompletedBeforeTabsAsync()
+    {
+        if (!ShouldShowPrivacyOnboardingWindow(SettingsManager.Current, _isGuestSession, _initialAttachedTab != null))
+            return Task.CompletedTask;
+
+        // Si el archivo original está exclusivamente bloqueado sin poder copiarse respaldo, no forzar escritura ni perfil B
+        if (SettingsManager.HadUnreadableSettingsFile && string.IsNullOrEmpty(SettingsManager.CorruptSettingsBackupPath))
+            return Task.CompletedTask;
+
+        bool engineAlreadyCreated = BrowserEngine.IsEnvironmentCreated;
+        bool isFreshInstall = SettingsManager.IsFreshInstall;
+        bool closedWithoutChoice = false;
+        bool settingsWereChanged = false;
+
+        _isPrivacyOnboardingOpen = true;
+        FaviconService.SetStartupNetworkGate(false);
+        try
+        {
+            var setupWin = new PrivacyProfileSetupWindow(
+                isFreshInstall: isFreshInstall,
+                isEnvironmentAlreadyCreated: engineAlreadyCreated,
+                isReopenedManually: false)
+            {
+                Owner = this
+            };
+            setupWin.ShowDialog();
+            closedWithoutChoice = setupWin.ClosedWithoutChoice;
+            settingsWereChanged = setupWin.SettingsWereChanged;
+        }
+        finally
+        {
+            _isPrivacyOnboardingOpen = false;
+        }
+
+        if (closedWithoutChoice)
+        {
+            ShowToast(
+                "Puedes ajustar tu perfil cuando quieras en Configuración → Privacidad y seguridad.",
+                "Abrir ajustes",
+                () => OpenSettings("Privacy"),
+                durationSeconds: 7);
+        }
+
+        if (engineAlreadyCreated && settingsWereChanged && BrowserEngine.RequiresRestartForCurrentSettings())
+        {
+            ShowToast(
+                "Los cambios en SmartScreen o detección de phishing se aplican al reiniciar Lex Junior.",
+                "Reiniciar ahora",
+                () => App.RestartBrowserSafely(),
+                durationSeconds: 8);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ReleaseFaviconGateAndRefreshBookmarks()
+    {
+        if (_isGuestSession)
+        {
+            if (BookmarksItemsControl.ItemsSource != null)
+                BookmarksItemsControl.ItemsSource = null;
+            return;
+        }
+
+        FaviconService.SetStartupNetworkGate(true);
+
+        if (BookmarksItemsControl.ItemsSource == null)
+        {
+            BookmarksItemsControl.ItemsSource = BookmarkManager.Bookmarks;
+        }
+
+        foreach (var bk in BookmarkManager.Bookmarks)
+        {
+            bk.RefreshFaviconFromProfileState();
+        }
+    }
+
+    private void StartPostOnboardingBackgroundTasks()
+    {
+        if (_isGuestSession || IsLocked || _hasStartedPostOnboardingTasks)
+            return;
+
+        _hasStartedPostOnboardingTasks = true;
+        _ = CheckForBrowserUpdateInBackgroundAsync();
+        _ = CheckDefaultBrowserStatusAsync();
+    }
+
+    internal void PersistOwnerSessionNowIfEligible()
+    {
+        try
+        {
+            if (!_isGuestSession && !IsLocked && SettingsManager.Current.RestorePreviousSession && Tabs.Count > 0)
+            {
+                SessionManager.SaveSession(Tabs, _activeTab);
+            }
+        }
+        catch { }
+    }
+
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         CleanLegacyDiagnosticLogs();
@@ -189,55 +359,126 @@ public partial class MainWindow : Window
             ApplySettings();
             await AddNewTabAsync(_initialUrl, isIncognito: true);
             ShowToast("👤 Modo Invitado activo: navegas en una sesión aislada sin acceso a las contraseñas ni marcadores del propietario.");
+            return;
         }
-        else
-        {
-            // Verificar si es la primera vez que abre el navegador (para ofrecer configurar PIN o elegir "No me gustaría usar contraseña")
-            bool hasCompletedSecuritySetup = SettingsManager.Current.HasCompletedInitialSecuritySetup ||
-                                             File.Exists(SettingsManager.SecuritySetupMarkerPath);
 
-            if (_initialAttachedTab == null &&
-                !hasCompletedSecuritySetup &&
-                !PasswordManager.HasMasterPasswordConfigured())
+        if (SettingsManager.DowngradeDetected)
+        {
+            var downgradeDlg = new VersionDowngradeDialog(
+                SettingsManager.CurrentAppVersion.ToString(3),
+                SettingsManager.DetectedNewerProfileVersion ?? "superior")
             {
+                Owner = this
+            };
+            downgradeDlg.ShowDialog();
+            Application.Current?.Shutdown();
+            return;
+        }
+
+        bool canShowOnboardingWindow =
+            ShouldShowPrivacyOnboardingWindow(SettingsManager.Current, _isGuestSession, _initialAttachedTab != null) &&
+            (!SettingsManager.HadUnreadableSettingsFile || !string.IsNullOrEmpty(SettingsManager.CorruptSettingsBackupPath));
+
+        if (SettingsManager.AutoSavesSuspended && !canShowOnboardingWindow && !_hasShownSettingsRecoveryNotice)
+        {
+            _hasShownSettingsRecoveryNotice = true;
+            if (!string.IsNullOrEmpty(SettingsManager.CorruptSettingsBackupPath) || !File.Exists(SettingsManager.SettingsPath))
+            {
+                var recoveryDialog = new SettingsRecoveryDialog(SettingsManager.SettingsRecoveryWarningMessage)
+                {
+                    Owner = this
+                };
+                recoveryDialog.ShowDialog();
+            }
+            else
+            {
+                MessageBox.Show(
+                    SettingsManager.SettingsRecoveryWarningMessage ??
+                    "No se pudo leer ni respaldar settings.json porque está bloqueado en disco. El guardado automático seguirá desactivado para no sobrescribirlo.",
+                    "Recuperación de configuración — Lex Junior",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+        else if (SettingsManager.HadUnreadableSettingsFile && !_hasShownSettingsRecoveryNotice)
+        {
+            _hasShownSettingsRecoveryNotice = true;
+            MessageBox.Show(
+                SettingsManager.SettingsRecoveryWarningMessage ?? "No se pudo leer settings.json y se creó un respaldo preventivo.",
+                "Recuperación de configuración — Lex Junior",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
+        // Orden en propietario: (1) setup/desbloqueo PIN; (2) ventana inicial de perfiles; (3) pestañas + tareas de fondo
+        bool hasCompletedSecuritySetup = SettingsManager.Current.HasCompletedInitialSecuritySetup ||
+                                         File.Exists(SettingsManager.SecuritySetupMarkerPath);
+
+        var stage = DetermineStartupStage(
+            startInGuest: false,
+            hasInitialAttachedTab: _initialAttachedTab != null,
+            hasCompletedSecuritySetup: hasCompletedSecuritySetup,
+            hasMasterPasswordConfigured: PasswordManager.HasMasterPasswordConfigured(),
+            lockSettingsPotentiallyLost: SettingsManager.IsVaultRecoveryLockActive,
+            shouldRequireUnlockOnStartup: PasswordManager.ShouldRequireUnlockOnStartup(),
+            tabsCount: Tabs.Count,
+            privacyOnboardingVersion: SettingsManager.Current.PrivacyProfileOnboardingVersion);
+
+        switch (stage)
+        {
+            case StartupExecutionStage.FirstTimePinSetupOverlay:
                 ShowFirstTimeSecuritySetupOverlay();
-            }
-            else if (_initialAttachedTab == null && PasswordManager.ShouldRequireUnlockOnStartup())
-            {
+                return;
+
+            case StartupExecutionStage.PinUnlockOverlay:
                 ShowBrowserLockOverlay();
-            }
-            else if (_initialAttachedTab != null)
-            {
-                var initial = _initialAttachedTab;
+                return;
+
+            case StartupExecutionStage.AttachExistingTab:
+                var initial = _initialAttachedTab!;
                 _initialAttachedTab = null;
                 AttachExistingTab(initial);
-            }
-            else if (Tabs.Count == 0)
-            {
-                if (_startInIncognito)
+                _hasInitializedSession = true;
+                ReleaseFaviconGateAndRefreshBookmarks();
+                ScheduleSessionSave();
+                StartPostOnboardingBackgroundTasks();
+                return;
+
+            case StartupExecutionStage.OnboardingAndTabs:
+            case StartupExecutionStage.DirectTabs:
+            default:
+                await EnsurePrivacyOnboardingCompletedBeforeTabsAsync();
+                ReleaseFaviconGateAndRefreshBookmarks();
+                ApplySettings();
+
+                if (Tabs.Count == 0)
                 {
-                    await AddNewTabAsync(_initialUrl, isIncognito: true);
+                    if (_startInIncognito)
+                    {
+                        string? incUrl = _initialUrl;
+                        _initialUrl = null;
+                        await AddNewTabAsync(incUrl, isIncognito: true);
+                    }
+                    else
+                    {
+                        await RestoreOrInitializeSessionTabsAsync();
+                    }
                 }
-                else
-                {
-                    await RestoreOrInitializeSessionTabsAsync();
-                }
-            }
+
+                StartPostOnboardingBackgroundTasks();
+                return;
         }
-
-        // Comprobar silenciosamente si existe una nueva versión publicada en GitHub Releases
-        _ = CheckForBrowserUpdateInBackgroundAsync();
-
-        // Comprobar una sola vez al iniciar si es el navegador predeterminado
-        _ = CheckDefaultBrowserStatusAsync();
     }
+
+    internal static bool ShouldPromptActiveDownloadsOnClose(bool isRestartingProcess, bool hasActiveDownloads)
+        => !isRestartingProcess && hasActiveDownloads;
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         try
         {
             bool hasActiveDownloads = DownloadManager.GetActiveSummary().HasActive;
-            if (hasActiveDownloads)
+            if (ShouldPromptActiveDownloadsOnClose(App.IsRestartingProcess, hasActiveDownloads))
             {
                 var confirm = MessageBox.Show(
                     "Hay descargas activas en progreso.\n\n¿Deseas cerrar el navegador de todos modos y cancelar las descargas en curso?",
@@ -253,8 +494,14 @@ public partial class MainWindow : Window
 
                 DownloadManager.CancelAllActive();
             }
+            else if (hasActiveDownloads)
+            {
+                DownloadManager.CancelAllActive();
+            }
         }
         catch { }
+
+        _sessionSaveTimer?.Stop();
 
         bool isLastOwnerWindow = false;
         try
@@ -264,7 +511,12 @@ public partial class MainWindow : Window
         }
         catch { }
 
-        if (!_isGuestSession && isLastOwnerWindow && SettingsManager.Current.RestorePreviousSession)
+        if (ShouldPersistSessionOnClose(
+            _isGuestSession,
+            isLastOwnerWindow,
+            SettingsManager.Current.RestorePreviousSession,
+            _hasInitializedSession,
+            IsLocked))
         {
             SessionManager.SaveSession(Tabs, _activeTab);
         }
@@ -274,6 +526,64 @@ public partial class MainWindow : Window
         }
 
         base.OnClosing(e);
+    }
+
+    internal static bool ShouldPersistSessionOnClose(
+        bool isGuestSession,
+        bool isLastOwnerWindow,
+        bool restorePreviousSession,
+        bool hasInitializedSession,
+        bool isLocked)
+    {
+        return !isGuestSession &&
+               isLastOwnerWindow &&
+               restorePreviousSession &&
+               hasInitializedSession &&
+               !isLocked;
+    }
+
+    private void ScheduleSessionSave()
+    {
+        if (_isWindowClosing || _isGuestSession || IsLocked || !_hasInitializedSession ||
+            !SettingsManager.Current.RestorePreviousSession)
+        {
+            return;
+        }
+
+        if (_sessionSaveTimer == null)
+        {
+            _sessionSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _sessionSaveTimer.Tick += (_, _) =>
+            {
+                _sessionSaveTimer?.Stop();
+                if (_isWindowClosing || _isGuestSession || IsLocked || !_hasInitializedSession ||
+                    !SettingsManager.Current.RestorePreviousSession)
+                {
+                    return;
+                }
+
+                var validTabs = Tabs
+                    .Where(t => !t.IsIncognito && !t.IsDisposed && !string.IsNullOrWhiteSpace(t.Url) &&
+                                !t.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase) &&
+                                t.Url != "about:blank" && !t.IsNewTab)
+                    .ToList();
+
+                int activeIdx = _activeTab != null ? validTabs.IndexOf(_activeTab) : 0;
+                if (activeIdx < 0) activeIdx = 0;
+
+                var items = validTabs.Select(t => new SessionTabItem
+                {
+                    Url = t.Url,
+                    Title = t.Title,
+                    IsPinned = t.IsPinned
+                }).ToList();
+
+                _ = Task.Run(() => SessionManager.SaveSessionSnapshot(items, activeIdx));
+            };
+        }
+
+        _sessionSaveTimer.Stop();
+        _sessionSaveTimer.Start();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -288,11 +598,13 @@ public partial class MainWindow : Window
             SettingsManager.Save(notify: false);
 
             SettingsManager.SettingsChanged -= ApplySettings;
+            UpdateManager.UpdateDiscovered -= OnUpdateDiscovered;
             DownloadManager.DownloadsChanged -= OnDownloadsChanged;
             NotificationManager.OnNotificationsChanged -= UpdateNotificationBadge;
             DownloadManager.Flush();
             ReadAloudService.Stop();
             _isWindowClosing = true;
+            _sessionSaveTimer?.Stop();
             _suspensionTimer?.Stop();
             _nativePipTimer?.Stop();
             _undoBookmarkTimer.Stop();
@@ -415,6 +727,12 @@ public partial class MainWindow : Window
         {
             await AddNewTabAsync(null, isIncognito: false, bypassLockCheck: true);
         }
+
+        _hasInitializedSession = true;
+        if (!string.IsNullOrWhiteSpace(launchUrl) && !IsLocked && !_isGuestSession)
+        {
+            ScheduleSessionSave();
+        }
     }
 
     private static string? NormalizeExternalUrl(string? raw)
@@ -487,13 +805,32 @@ public partial class MainWindow : Window
         await AddNewTabAsync(normalized, isIncognito: _isGuestSession);
     }
 
+    private void OnUpdateDiscovered(UpdateReleaseInfo update)
+    {
+        if (_isGuestSession || update == null) return;
+        try
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_isGuestSession) return;
+                TxtUpdateAvailableLabel.Text = $"Actualizar ({update.VersionTag})";
+                BtnUpdateAvailable.ToolTip = $"¡Nueva versión {update.VersionTag} disponible! Haz clic para instalarla automáticamente.";
+                BtnUpdateAvailable.Visibility = Visibility.Visible;
+            });
+        }
+        catch { }
+    }
+
     private async Task CheckForBrowserUpdateInBackgroundAsync()
     {
+        if (_isGuestSession || IsLocked) return;
+
         try
         {
             await Task.Delay(2500);
-            var update = await UpdateManager.CheckForUpdatesAsync();
-            if (update != null)
+            if (_isGuestSession) return;
+            var update = await UpdateManager.CheckForUpdatesAsync(isUserInitiated: false);
+            if (update != null && !_isGuestSession)
             {
                 Dispatcher.Invoke(() =>
                 {
@@ -605,6 +942,16 @@ public partial class MainWindow : Window
         if (BorderGuestSessionBanner != null)
         {
             BorderGuestSessionBanner.Visibility = _isGuestSession ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (_isGuestSession || IsLocked || !FaviconService.IsStartupNetworkGateOpen)
+        {
+            if (BookmarksItemsControl.ItemsSource != null)
+                BookmarksItemsControl.ItemsSource = null;
+        }
+        else if (BookmarksItemsControl.ItemsSource == null)
+        {
+            BookmarksItemsControl.ItemsSource = BookmarkManager.Bookmarks;
         }
 
         if (TxtBrandTitle != null)
@@ -752,229 +1099,230 @@ public partial class MainWindow : Window
         return closedAny;
     }
 
-    private async void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (IsLocked)
         {
             return;
         }
 
-        if (e.Key == Key.Escape && CloseOpenToolbarPopups())
+        Key actualKey = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (HandleBrowserShortcutKey(actualKey, Keyboard.Modifiers, _activeTab?.WebView?.CoreWebView2))
         {
             e.Handled = true;
-            return;
+        }
+    }
+
+    internal bool HandleBrowserShortcutKey(Key key, ModifierKeys modifiers, Microsoft.Web.WebView2.Core.CoreWebView2? activeWebViewCore = null)
+    {
+        if (IsLocked || IsBrowserLockOverlayActive())
+        {
+            return false;
+        }
+
+        if (key == Key.Escape && CloseOpenToolbarPopups())
+        {
+            return true;
         }
 
         // 0. F12 o Ctrl + Shift + I: Abrir Herramientas de Desarrollo (DevTools) en la pestaña activa
-        if (e.Key == Key.F12 || (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I))
+        if (key == Key.F12 || (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.I))
         {
-            e.Handled = true;
-            OpenDevToolsForActiveTab();
-            return;
+            if (activeWebViewCore != null)
+            {
+                try { activeWebViewCore.OpenDevToolsWindow(); } catch { }
+            }
+            else
+            {
+                OpenDevToolsForActiveTab();
+            }
+            return true;
         }
 
-        // 0.05 Ctrl + Shift + L: Volcar y copiar Shield Logger (registro de seguridad y bloqueos)
-        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
+        // 0.05 Ctrl + Shift + L: Exportar Shield Logger a carpeta Logs\
+        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.L)
         {
-            e.Handled = true;
             CopyOrExportShieldLog();
-            return;
+            return true;
         }
 
         // 0.08 Atajo configurable para No Molestar (por defecto Ctrl + Shift + D)
-        if (IsNotificationDndShortcut(e))
+        if (IsNotificationDndShortcut(key, modifiers))
         {
-            e.Handled = true;
             if (!_isGuestSession)
             {
                 ToggleNotificationDoNotDisturb();
             }
-            return;
+            return true;
         }
 
         // 0.1 Ctrl + Shift + K: Abrir Bóveda de Contraseñas
-        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.K)
+        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.K)
         {
-            e.Handled = true;
             OpenPasswordVault();
-            return;
+            return true;
         }
 
-        // 1. Ctrl + Tab: Cambiar a la siguiente pestaña cíclicamente
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.Tab)
+        // 1. Ctrl + Tab: Siguiente pestaña
+        if (modifiers == ModifierKeys.Control && key == Key.Tab)
         {
-            e.Handled = true;
             if (Tabs.Count > 1 && _activeTab != null)
             {
                 int currentIdx = Tabs.IndexOf(_activeTab);
                 int nextIdx = (currentIdx + 1) % Tabs.Count;
                 SelectTab(Tabs[nextIdx]);
             }
-            return;
+            return true;
         }
 
-        // 2. Ctrl + Shift + Tab: Cambiar a la pestaña anterior
-        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.Tab)
+        // 2. Ctrl + Shift + Tab: Pestaña anterior
+        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.Tab)
         {
-            e.Handled = true;
             if (Tabs.Count > 1 && _activeTab != null)
             {
                 int currentIdx = Tabs.IndexOf(_activeTab);
                 int prevIdx = (currentIdx - 1 + Tabs.Count) % Tabs.Count;
                 SelectTab(Tabs[prevIdx]);
             }
-            return;
+            return true;
         }
 
-        // 3. Ctrl + Shift + B: Mostrar / Ocultar Barra de Accesos Directos
-        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.B)
+        // 3. Ctrl + Shift + B: Barra de Accesos Directos
+        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.B)
         {
-            e.Handled = true;
-            if (_isGuestSession) return;
+            if (_isGuestSession) return true;
             SettingsManager.Current.ShowBookmarksBar = !SettingsManager.Current.ShowBookmarksBar;
             SettingsManager.Save();
             if (!SettingsManager.Current.ShowBookmarksBar)
             {
                 ShowToast("Barra de accesos directos oculta. Para volver a activarla ve a Configuración (o presiona Ctrl+Shift+B)");
             }
-            return;
+            return true;
         }
 
         // 4. Ctrl + T o Ctrl + N: Abrir nueva pestaña
-        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.T || e.Key == Key.N))
+        if (modifiers == ModifierKeys.Control && (key == Key.T || key == Key.N))
         {
-            e.Handled = true;
-            await AddNewTabAsync(null, isIncognito: _isGuestSession);
-            return;
+            _ = AddNewTabAsync(null, isIncognito: _isGuestSession);
+            return true;
         }
 
         // 5. Ctrl + Shift + N: Modo Incógnito
-        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.N)
+        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.N)
         {
-            e.Handled = true;
             if (_isGuestSession)
             {
                 if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
-                    return;
+                    return true;
             }
-            await AddNewTabAsync(null, isIncognito: true);
-            return;
+            _ = AddNewTabAsync(null, isIncognito: true);
+            return true;
         }
 
         // 6. Ctrl + Shift + T: Reabrir última pestaña cerrada
-        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.T)
+        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.T)
         {
-            e.Handled = true;
             if (!_isGuestSession)
             {
                 ReopenLastClosedTab();
             }
-            return;
+            return true;
         }
 
         // 7. Ctrl + W: Cerrar pestaña actual
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.W)
+        if (modifiers == ModifierKeys.Control && key == Key.W)
         {
-            e.Handled = true;
             if (_activeTab != null) CloseTab(_activeTab);
-            return;
+            return true;
         }
 
         // 8. Ctrl + R o F5: Recargar
-        if ((Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.R) || e.Key == Key.F5)
+        if ((modifiers == ModifierKeys.Control && key == Key.R) || (modifiers == ModifierKeys.None && key == Key.F5))
         {
-            e.Handled = true;
             if (_activeTab != null)
             {
                 RecordUserReloadAndCheckCompat(_activeTab);
                 _activeTab.WebView?.CoreWebView2?.Reload();
             }
-            return;
+            return true;
         }
 
         // 9. Ctrl + L o Alt + D: Enfocar y seleccionar barra de URL
-        if ((Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.L) ||
-            (Keyboard.Modifiers == ModifierKeys.Alt && e.Key == Key.D))
+        if ((modifiers == ModifierKeys.Control && key == Key.L) ||
+            (modifiers == ModifierKeys.Alt && key == Key.D))
         {
-            e.Handled = true;
             TxtUrl.Focus();
             TxtUrl.SelectAll();
-            return;
+            return true;
         }
 
         // 10. Ctrl + ,: Abrir Configuración
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.OemComma)
+        if (modifiers == ModifierKeys.Control && key == Key.OemComma)
         {
-            e.Handled = true;
             OpenSettings("General");
-            return;
+            return true;
         }
 
         // 10.1 Ctrl + H: Abrir Historial de Navegación y Limpieza
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.H)
+        if (modifiers == ModifierKeys.Control && key == Key.H)
         {
-            e.Handled = true;
             OpenHistory();
-            return;
+            return true;
         }
 
         // 10.1b Ctrl + J: Abrir Historial de Descargas
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.J)
+        if (modifiers == ModifierKeys.Control && key == Key.J)
         {
-            e.Handled = true;
             if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial de Descargas"))
-                return;
+                return true;
             RefreshDownloadsPopupUI();
             PopupDownloads.IsOpen = !PopupDownloads.IsOpen;
-            return;
+            return true;
         }
 
         // 10.2 Ctrl + 0: Restablecer zoom a 100%
-        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.D0 || e.Key == Key.NumPad0))
+        if (modifiers == ModifierKeys.Control && (key == Key.D0 || key == Key.NumPad0))
         {
-            e.Handled = true;
             ResetZoom();
-            return;
+            return true;
         }
 
-        // 10.3 Ctrl + +: Aumentar zoom (solo teclas estándar de zoom para no interferir con atajos de código/IDE web)
-        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add))
+        // 10.3 Ctrl + +: Aumentar zoom
+        if (modifiers == ModifierKeys.Control && (key == Key.OemPlus || key == Key.Add || key == Key.Oem1 || key == Key.Oem6))
         {
-            e.Handled = true;
             ZoomIn();
-            return;
+            return true;
         }
 
         // 10.4 Ctrl + -: Reducir zoom
-        if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract))
+        if (modifiers == ModifierKeys.Control && (key == Key.OemMinus || key == Key.Subtract || key == Key.OemQuestion || key == Key.OemPeriod))
         {
-            e.Handled = true;
             ZoomOut();
-            return;
+            return true;
         }
 
         // 11. Ctrl + 1 a 8: Salto a pestaña por número
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key >= Key.D1 && e.Key <= Key.D8)
+        if (modifiers == ModifierKeys.Control && key >= Key.D1 && key <= Key.D8)
         {
-            int index = e.Key - Key.D1;
+            int index = key - Key.D1;
             if (index < Tabs.Count)
             {
-                e.Handled = true;
                 SelectTab(Tabs[index]);
-                return;
+                return true;
             }
         }
 
         // 12. Ctrl + 9: Salto a la última pestaña
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.D9)
+        if (modifiers == ModifierKeys.Control && key == Key.D9)
         {
             if (Tabs.Count > 0)
             {
-                e.Handled = true;
                 SelectTab(Tabs.Last());
-                return;
+                return true;
             }
         }
+
+        return false;
     }
 
     private void ScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)

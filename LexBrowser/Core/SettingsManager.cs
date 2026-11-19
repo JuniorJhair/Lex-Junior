@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using LexBrowser.Core.AdBlock;
 
 namespace LexBrowser.Core;
@@ -36,6 +40,14 @@ public class BrowserSettings
     public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
     public bool EnableSearchSuggestions { get; set; } = true;
     public bool EnableExternalFaviconService { get; set; } = true;
+    public bool EnableSmartScreen { get; set; } = false;
+    public bool EnableClientSidePhishingDetection { get; set; } = false;
+    public bool EnableLinkFaviconDownload { get; set; } = true;
+    public bool EnableDirectFaviconIco { get; set; } = true;
+    public string AutoUpdateCheckMode { get; set; } = "OnStartup"; // "Manual" | "OnStartup"
+    public int PrivacyProfileOnboardingVersion { get; set; } = 0;
+    public bool FreshInstallOnboardingPending { get; set; } = false;
+    public string LastAppVersion { get; set; } = string.Empty;
     public bool RestorePreviousSession { get; set; } = true;
     public bool CapturePermissionsMigrationV1Done { get; set; } = false;
 
@@ -139,7 +151,65 @@ public static class SettingsManager
         ".security_setup_done"
     );
 
+    public static string VaultLockRecoveryMarkerPath => Path.Combine(
+        Path.GetDirectoryName(SettingsPath) ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexBrowser"),
+        ".vault_lock_recovery_pending"
+    );
+
+    public static string LastAppVersionMarkerPath => Path.Combine(
+        Path.GetDirectoryName(SettingsPath) ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LexBrowser"),
+        ".last_app_version"
+    );
+
+    private static Version _activeLoadedAppVersion = GetCurrentAppVersion();
+    public static Version CurrentAppVersion => _activeLoadedAppVersion;
+
+    public static bool HasPendingVaultLockRecoveryMarker()
+    {
+        try
+        {
+            return File.Exists(VaultLockRecoveryMarkerPath);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    public static bool IsVaultRecoveryLockActive =>
+        LockSettingsPotentiallyLost || HasPendingVaultLockRecoveryMarker();
+
     public static BrowserSettings Current { get; private set; } = new();
+
+    /// <summary>
+    /// Indica si en el Load() más reciente NO existía ninguna señal previa de usuario
+    /// (settings.json, settings.json.tmp, .security_setup_done, bookmarks.json, vault.dat, history.json, session_tabs.json ni UserData\ con contenido).
+    /// </summary>
+    public static bool IsFreshInstall { get; private set; }
+
+    /// <summary>Indica que settings.json existía pero falló al deserializarse de forma estándar.</summary>
+    public static bool HadUnreadableSettingsFile { get; private set; }
+
+    /// <summary>Bloquea todo guardado automático (SaveDeferred, OnClosed, bounds, Load) mientras settings.json no esté resuelto.</summary>
+    public static bool AutoSavesSuspended { get; private set; }
+
+    /// <summary>Ruta de la copia de respaldo .corrupt-AAAAMMDD-HHmmss creada antes de cualquier escritura.</summary>
+    public static string? CorruptSettingsBackupPath { get; private set; }
+
+    /// <summary>Indica que falló la recuperación del bloqueo por PIN habiendo vault.dat o .security_setup_done.</summary>
+    public static bool LockSettingsPotentiallyLost { get; private set; }
+
+    /// <summary>Mensaje informativo para el usuario si settings.json fue ilegible o requirió recuperación parcial.</summary>
+    public static string? SettingsRecoveryWarningMessage { get; private set; }
+
+    /// <summary>Indica que el perfil en disco pertenece a una versión más reciente que la actualmente ejecutada.</summary>
+    public static bool DowngradeDetected { get; private set; }
+
+    /// <summary>Versión más reciente registrada en el perfil cuando se detecta una ejecución en versión anterior.</summary>
+    public static string? DetectedNewerProfileVersion { get; private set; }
+
+    /// <summary>Mensaje obligatorio mostrado cuando el usuario abre una versión anterior sobre un perfil más reciente.</summary>
+    public static string? DowngradeWarningMessage { get; private set; }
 
     public static event Action? SettingsChanged;
 
@@ -148,10 +218,148 @@ public static class SettingsManager
         Load();
     }
 
-    public static void Load()
+    internal static bool HasPriorUserDataSignals(string settingsPath, string tempPath)
+    {
+        try
+        {
+            if (File.Exists(settingsPath) || File.Exists(tempPath))
+                return true;
+
+            string? dir = Path.GetDirectoryName(settingsPath);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+                return false;
+
+            if (File.Exists(Path.Combine(dir, ".security_setup_done")) ||
+                File.Exists(Path.Combine(dir, ".vault_lock_recovery_pending")) ||
+                File.Exists(Path.Combine(dir, ".last_app_version")) ||
+                File.Exists(Path.Combine(dir, "bookmarks.json")) ||
+                File.Exists(Path.Combine(dir, "vault.dat")) ||
+                File.Exists(Path.Combine(dir, "history.json")) ||
+                File.Exists(Path.Combine(dir, "history.json.tmp")) ||
+                File.Exists(Path.Combine(dir, "session_tabs.json")))
+            {
+                return true;
+            }
+
+            string userDataDir = Path.Combine(dir, "UserData");
+            if (Directory.Exists(userDataDir))
+            {
+                using var entries = Directory.EnumerateFileSystemEntries(userDataDir).GetEnumerator();
+                if (entries.MoveNext())
+                    return true;
+            }
+        }
+        catch
+        {
+            // Ante duda de E/S al verificar señales previas, no asumir instalación nueva.
+            return true;
+        }
+
+        return false;
+    }
+
+    private static Version GetCurrentAppVersion()
+    {
+        var v = typeof(SettingsManager).Assembly.GetName().Version;
+        return v != null ? new Version(v.Major, v.Minor, Math.Max(0, v.Build)) : new Version(1, 0, 0);
+    }
+
+    internal static Version? TryParseNormalizedVersion(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        string cleaned = raw.Trim().TrimStart('v', 'V');
+        int dash = cleaned.IndexOf('-');
+        if (dash > 0) cleaned = cleaned[..dash];
+        if (!Version.TryParse(cleaned, out var parsed)) return null;
+        return new Version(parsed.Major, Math.Max(0, parsed.Minor), Math.Max(0, parsed.Build));
+    }
+
+    private static Version NormalizeVersion(Version v) =>
+        new(v.Major, Math.Max(0, v.Minor), Math.Max(0, v.Build));
+
+    private static Version? MaxVersion(Version? a, Version? b)
+    {
+        if (a == null) return b;
+        if (b == null) return a;
+        return a >= b ? a : b;
+    }
+
+    private static Version? ReadLastAppVersionMarker()
+    {
+        try
+        {
+            string markerPath = LastAppVersionMarkerPath;
+            if (!File.Exists(markerPath)) return null;
+            return TryParseNormalizedVersion(File.ReadAllText(markerPath));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void WriteLastAppVersionMarker(Version version)
+    {
+        if (DowngradeDetected || AutoSavesSuspended) return;
+        try
+        {
+            string markerPath = LastAppVersionMarkerPath;
+            string? dir = Path.GetDirectoryName(markerPath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            File.WriteAllText(markerPath, NormalizeVersion(version).ToString(3));
+        }
+        catch { }
+    }
+
+    private static void ActivateDowngradeProtection(Version recordedNewerVersion, Version runningVersion)
+    {
+        DowngradeDetected = true;
+        AutoSavesSuspended = true;
+        DetectedNewerProfileVersion = NormalizeVersion(recordedNewerVersion).ToString(3);
+        DowngradeWarningMessage =
+            $"Este perfil se usó anteriormente con una versión más reciente de Lex Junior (v{DetectedNewerProfileVersion}) y estás abriendo una versión anterior (v{NormalizeVersion(runningVersion).ToString(3)}).\n\n" +
+            "Para evitar pérdida de ajustes o incompatibilidades, debes actualizar a una versión igual o superior antes de continuar.\n" +
+            "Tu archivo settings.json permanecerá intacto sin sobrescribirse.";
+        LogSettingsEvent($"[DOWNGRADE_DETECTED] {DowngradeWarningMessage}");
+    }
+
+    private static bool FinalizeLoadedSettings(BrowserSettings settings)
+    {
+        bool migrated = MigrateAndSyncShieldSettings(settings);
+        if (settings.PrivacyProfileOnboardingVersion >= PrivacyProfiles.CurrentOnboardingVersion &&
+            settings.FreshInstallOnboardingPending)
+        {
+            settings.FreshInstallOnboardingPending = false;
+            migrated = true;
+        }
+
+        IsFreshInstall = settings.FreshInstallOnboardingPending &&
+                         settings.PrivacyProfileOnboardingVersion < PrivacyProfiles.CurrentOnboardingVersion;
+        return migrated;
+    }
+
+    public static void Load() => Load(appVersionOverride: null);
+
+    internal static void Load(Version? appVersionOverride)
     {
         string path = SettingsPath;
         string tempPath = path + ".tmp";
+
+        Version runningVersion = NormalizeVersion(appVersionOverride ?? GetCurrentAppVersion());
+        _activeLoadedAppVersion = runningVersion;
+
+        HadUnreadableSettingsFile = false;
+        AutoSavesSuspended = false;
+        CorruptSettingsBackupPath = null;
+        LockSettingsPotentiallyLost = false;
+        SettingsRecoveryWarningMessage = null;
+        DowngradeDetected = false;
+        DetectedNewerProfileVersion = null;
+        DowngradeWarningMessage = null;
+
+        Version? markerVersion = ReadLastAppVersionMarker();
+        bool freshNoPriorSignals = !HasPriorUserDataSignals(path, tempPath);
+        IsFreshInstall = freshNoPriorSignals;
 
         // Si el archivo temporal es más reciente que el principal (por fallo en guardado previo), priorizarlo
         bool tempIsNewer = false;
@@ -164,45 +372,520 @@ public static class SettingsManager
         }
         catch { }
 
-        if (tempIsNewer && TryLoadFromFile(tempPath, out var fromTemp))
+        if (tempIsNewer && File.Exists(path) && TryLoadFromFile(path, out _) && TryLoadFromFile(tempPath, out var fromTemp))
         {
             Current = fromTemp!;
-            MigrateAndSyncShieldSettings(Current);
-        BumpSettingsRevision();
+            Version? recorded = MaxVersion(markerVersion, TryParseNormalizedVersion(Current.LastAppVersion));
+            if (recorded != null && recorded > runningVersion)
+            {
+                ActivateDowngradeProtection(recorded, runningVersion);
+                return;
+            }
+
+            Current.LastAppVersion = MaxVersion(recorded, runningVersion)!.ToString(3);
+            FinalizeLoadedSettings(Current);
+            BumpSettingsRevision();
             SyncSecurityMarker();
             Save(notify: false);
+            WriteLastAppVersionMarker(runningVersion);
             return;
         }
 
-        // 1. Intentar cargar desde el archivo principal
+        // 1. Intentar cargar desde el archivo principal de forma estricta
         if (TryLoadFromFile(path, out var loaded))
         {
+            if (tempIsNewer && TryLoadFromFile(tempPath, out var newerTemp))
+            {
+                Current = newerTemp!;
+                Version? recordedTemp = MaxVersion(markerVersion, TryParseNormalizedVersion(Current.LastAppVersion));
+                if (recordedTemp != null && recordedTemp > runningVersion)
+                {
+                    ActivateDowngradeProtection(recordedTemp, runningVersion);
+                    return;
+                }
+
+                Current.LastAppVersion = MaxVersion(recordedTemp, runningVersion)!.ToString(3);
+                FinalizeLoadedSettings(Current);
+                BumpSettingsRevision();
+                SyncSecurityMarker();
+                Save(notify: false);
+                WriteLastAppVersionMarker(runningVersion);
+                return;
+            }
+
             Current = loaded!;
-            bool migrated = MigrateAndSyncShieldSettings(Current);
+            Version? recordedPrimary = MaxVersion(markerVersion, TryParseNormalizedVersion(Current.LastAppVersion));
+            if (recordedPrimary != null && recordedPrimary > runningVersion)
+            {
+                ActivateDowngradeProtection(recordedPrimary, runningVersion);
+                return;
+            }
+
+            Current.LastAppVersion = MaxVersion(recordedPrimary, runningVersion)!.ToString(3);
+            bool migrated = FinalizeLoadedSettings(Current);
             SyncSecurityMarker();
             if (migrated) Save(notify: false);
+            if (markerVersion == null || markerVersion < runningVersion)
+            {
+                WriteLastAppVersionMarker(runningVersion);
+            }
             return;
         }
 
-        // 2. Si el archivo principal falló o está ausente, intentar recuperar desde el .tmp
+        // 2. Si settings.json EXISTÍA pero no se pudo leer (corrupto, vacío, truncado o bloqueado):
+        //    JAMÁS tratar como instalación nueva ni sobrescribir settings.json en ninguna rama.
+        bool mainFileExists = false;
+        try { mainFileExists = File.Exists(path); } catch { }
+
+        if (mainFileExists)
+        {
+            HandleUnreadablePrimarySettings(path, tempPath);
+            Version? recordedCorrupt = MaxVersion(markerVersion, TryParseNormalizedVersion(Current.LastAppVersion));
+            if (recordedCorrupt != null && recordedCorrupt > runningVersion)
+            {
+                ActivateDowngradeProtection(recordedCorrupt, runningVersion);
+            }
+            return;
+        }
+
+        // 3. Si el archivo principal no existía, intentar recuperar desde .tmp
         if (File.Exists(tempPath) && TryLoadFromFile(tempPath, out var recovered))
         {
             LogSettingsEvent($"[RECOVERY] settings.json recuperado exitosamente desde {tempPath}");
             Current = recovered!;
-            MigrateAndSyncShieldSettings(Current);
-        BumpSettingsRevision();
+            Version? recordedRec = MaxVersion(markerVersion, TryParseNormalizedVersion(Current.LastAppVersion));
+            if (recordedRec != null && recordedRec > runningVersion)
+            {
+                ActivateDowngradeProtection(recordedRec, runningVersion);
+                return;
+            }
+
+            Current.LastAppVersion = MaxVersion(recordedRec, runningVersion)!.ToString(3);
+            FinalizeLoadedSettings(Current);
+            BumpSettingsRevision();
             SyncSecurityMarker();
             Save(notify: false);
+            WriteLastAppVersionMarker(runningVersion);
             return;
         }
 
-        Current = new BrowserSettings { SettingsSchemaVersion = ShieldSettings.CurrentShieldVersion };
+        // Si settings.json fue eliminado pero .last_app_version apunta a una versión más reciente, bloquear antes de recrearlo
+        if (markerVersion != null && markerVersion > runningVersion)
+        {
+            Current = new BrowserSettings
+            {
+                SettingsSchemaVersion = ShieldSettings.CurrentShieldVersion,
+                LastAppVersion = markerVersion.ToString(3)
+            };
+            ActivateDowngradeProtection(markerVersion, runningVersion);
+            return;
+        }
+
+        // 4. Sin archivo principal ni .tmp: inicializar en memoria/disco con valores v2.6.0 (sin aplicar Perfil B)
+        // y registrar FreshInstallOnboardingPending solo cuando NO existía ninguna señal previa de usuario.
+        Current = new BrowserSettings
+        {
+            SettingsSchemaVersion = ShieldSettings.CurrentShieldVersion,
+            FreshInstallOnboardingPending = freshNoPriorSignals,
+            LastAppVersion = runningVersion.ToString(3)
+        };
         Current.Shield.Version = ShieldSettings.CurrentShieldVersion;
         Current.Shield.Engine = ShieldSettings.EngineLexShield;
         MigrateAndSyncShieldSettings(Current);
         BumpSettingsRevision();
         SyncSecurityMarker();
+        IsFreshInstall = freshNoPriorSignals;
         Save(notify: false);
+        WriteLastAppVersionMarker(runningVersion);
+    }
+
+    private static void HandleUnreadablePrimarySettings(string path, string tempPath)
+    {
+        IsFreshInstall = false;
+        HadUnreadableSettingsFile = true;
+        AutoSavesSuspended = true;
+
+        string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        bool backupCreated = false;
+        byte[]? rawBytes = null;
+
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var ms = new MemoryStream();
+            fs.CopyTo(ms);
+            rawBytes = ms.ToArray();
+
+            string? existingBackup = TryFindIdenticalCorruptBackup(path, rawBytes);
+            if (!string.IsNullOrEmpty(existingBackup))
+            {
+                CorruptSettingsBackupPath = existingBackup;
+            }
+            else
+            {
+                string backupPath = BuildUniqueCorruptBackupPath(path, stamp);
+                File.WriteAllBytes(backupPath, rawBytes);
+                CorruptSettingsBackupPath = backupPath;
+            }
+            backupCreated = true;
+
+            if (File.Exists(tempPath))
+            {
+                try
+                {
+                    byte[] tmpBytes = File.ReadAllBytes(tempPath);
+                    if (string.IsNullOrEmpty(TryFindIdenticalCorruptBackup(tempPath, tmpBytes)))
+                    {
+                        string tmpBackup = BuildUniqueCorruptBackupPath(tempPath, stamp);
+                        File.Copy(tempPath, tmpBackup, overwrite: false);
+                    }
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogSettingsEvent($"[CORRUPT_BACKUP_FAILED] No se pudo leer/respaldar {path}: {ex.Message}");
+        }
+
+        // Intentar recuperación tolerante propiedad por propiedad desde el .tmp válido o desde los bytes del corrupto
+        BrowserSettings? recoveredSettings = null;
+        bool recoveredAnyProperty = false;
+        bool recoveredExplicitNoneLockMode = false;
+
+        if (File.Exists(tempPath) && TryLoadFromFile(tempPath, out var tmpLoaded) && tmpLoaded != null)
+        {
+            recoveredSettings = tmpLoaded;
+            recoveredAnyProperty = true;
+            recoveredExplicitNoneLockMode = string.Equals(tmpLoaded.BrowserLockMode, "None", StringComparison.OrdinalIgnoreCase);
+        }
+        else if (rawBytes != null && rawBytes.Length > 0)
+        {
+            recoveredSettings = TryRecoverPartialSettingsFromBytes(rawBytes, out int rescuedCount, out recoveredExplicitNoneLockMode);
+            recoveredAnyProperty = rescuedCount > 0;
+        }
+
+        Current = recoveredSettings ?? new BrowserSettings
+        {
+            SettingsSchemaVersion = ShieldSettings.CurrentShieldVersion
+        };
+        Current.Shield ??= new ShieldSettings();
+        MigrateAndSyncShieldSettings(Current);
+        BumpSettingsRevision();
+
+        // Verificar si hay riesgo de haber perdido bloqueo por PIN mientras existe bóveda o marca de seguridad
+        string? dir = Path.GetDirectoryName(path);
+        bool vaultExistsWithContent = false;
+        bool securityMarkerExists = false;
+        if (!string.IsNullOrEmpty(dir))
+        {
+            try
+            {
+                string vaultPath = Path.Combine(dir, "vault.dat");
+                vaultExistsWithContent = File.Exists(vaultPath) && new FileInfo(vaultPath).Length > 0;
+            }
+            catch { }
+            try
+            {
+                securityMarkerExists = File.Exists(Path.Combine(dir, ".security_setup_done"));
+            }
+            catch { }
+        }
+
+        bool hasConfiguredPinAfterRecovery =
+            !string.IsNullOrWhiteSpace(Current.MasterPasswordHash) &&
+            !string.IsNullOrWhiteSpace(Current.MasterPasswordSalt);
+
+        // Solo un modo "None" explícitamente rescatado prueba ausencia intencional de PIN.
+        // Cualquier otro modo (o corte antes de recuperarlo) sin hash+sal completos debe activar el marcador persistente.
+        if ((vaultExistsWithContent || securityMarkerExists) &&
+            !hasConfiguredPinAfterRecovery &&
+            !recoveredExplicitNoneLockMode)
+        {
+            LockSettingsPotentiallyLost = true;
+            WriteVaultLockRecoveryMarker();
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("⚠️ No se pudo leer normalmente tu archivo settings.json (dañado, truncado, vacío o bloqueado).");
+        if (backupCreated && !string.IsNullOrEmpty(CorruptSettingsBackupPath))
+        {
+            sb.AppendLine($"• Copia original conservada en: {CorruptSettingsBackupPath}");
+        }
+        else
+        {
+            sb.AppendLine("• El archivo original no pudo copiarse por bloqueo en disco y se dejó intacto (sin sobrescribir).");
+        }
+
+        if (recoveredAnyProperty)
+        {
+            sb.AppendLine("• Se recuperaron parcialmente los ajustes válidos (incluidos los campos de PIN/seguridad si estaban intactos); lo no recuperado usa valores seguros por defecto.");
+        }
+        else
+        {
+            sb.AppendLine("• No se pudieron recuperar propiedades válidas; se cargaron los valores seguros actuales en memoria sin sobrescribir el archivo.");
+        }
+
+        if (LockSettingsPotentiallyLost)
+        {
+            sb.AppendLine("• PROTECCIÓN ACTIVA: No se pudo verificar tu configuración de bloqueo por PIN habiendo una bóveda o configuración de seguridad previa. El acceso a contraseñas guardadas y autocompletado permanecerá restringido hasta que revises la bóveda o restablezcas el acceso.");
+        }
+
+        SettingsRecoveryWarningMessage = sb.ToString().Trim();
+        LogSettingsEvent($"[UNREADABLE_SETTINGS] {SettingsRecoveryWarningMessage}");
+    }
+
+    private static string BuildUniqueCorruptBackupPath(string originalPath, string stamp)
+    {
+        string baseBackup = $"{originalPath}.corrupt-{stamp}";
+        if (!File.Exists(baseBackup))
+            return baseBackup;
+
+        for (int i = 1; i < 100; i++)
+        {
+            string candidate = $"{baseBackup}_{i}";
+            if (!File.Exists(candidate))
+                return candidate;
+        }
+        return $"{baseBackup}_{Guid.NewGuid():N}";
+    }
+
+    private static string? TryFindIdenticalCorruptBackup(string originalPath, byte[] currentBytes)
+    {
+        try
+        {
+            string? dir = Path.GetDirectoryName(originalPath);
+            string baseName = Path.GetFileName(originalPath);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir) || string.IsNullOrEmpty(baseName))
+                return null;
+
+            string prefix = baseName + ".corrupt-";
+            foreach (string candidate in Directory.EnumerateFiles(dir, prefix + "*", SearchOption.TopDirectoryOnly)
+                         .OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var info = new FileInfo(candidate);
+                    if (!info.Exists || info.Length != currentBytes.LongLength)
+                        continue;
+
+                    byte[] existingBytes = File.ReadAllBytes(candidate);
+                    if (existingBytes.AsSpan().SequenceEqual(currentBytes))
+                        return candidate;
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    private static void WriteVaultLockRecoveryMarker()
+    {
+        try
+        {
+            string markerPath = VaultLockRecoveryMarkerPath;
+            string? dir = Path.GetDirectoryName(markerPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            File.WriteAllText(markerPath, DateTime.UtcNow.ToString("O"));
+        }
+        catch (Exception ex)
+        {
+            LogSettingsEvent($"[VAULT_MARKER_ERROR] No se pudo escribir {VaultLockRecoveryMarkerPath}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Permite desbloquear los guardados solo cuando ya existe respaldo o el usuario resolvió el estado en UI.
+    /// Nunca sobrescribe si settings.json no tiene copia previa cuando estaba corrupto.
+    /// </summary>
+    public static bool ResolveRecoveryAndAllowSaves()
+    {
+        if (DowngradeDetected)
+            return false;
+
+        if (HadUnreadableSettingsFile &&
+            File.Exists(SettingsPath) &&
+            string.IsNullOrEmpty(CorruptSettingsBackupPath))
+        {
+            return false;
+        }
+
+        AutoSavesSuspended = false;
+        return true;
+    }
+
+    internal static void ClearRecoveryLockRestriction()
+    {
+        LockSettingsPotentiallyLost = false;
+        try
+        {
+            string markerPath = VaultLockRecoveryMarkerPath;
+            if (File.Exists(markerPath))
+            {
+                File.Delete(markerPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogSettingsEvent($"[VAULT_MARKER_CLEAR_ERROR] No se pudo eliminar {VaultLockRecoveryMarkerPath}: {ex.Message}");
+        }
+    }
+
+    internal static BrowserSettings TryRecoverPartialSettingsFromBytes(
+        byte[] rawBytes,
+        out int rescuedPropertiesCount,
+        out bool rescuedExplicitNoneLockMode)
+    {
+        var result = new BrowserSettings { SettingsSchemaVersion = ShieldSettings.CurrentShieldVersion };
+        rescuedPropertiesCount = 0;
+        rescuedExplicitNoneLockMode = false;
+
+        try
+        {
+            string text = Encoding.UTF8.GetString(rawBytes)
+                .TrimStart('\uFEFF')
+                .Replace("\0", string.Empty)
+                .Trim();
+
+            if (string.IsNullOrWhiteSpace(text))
+                return result;
+
+            int braceStart = text.IndexOf('{');
+            if (braceStart > 0) text = text[braceStart..];
+            if (!text.StartsWith("{", StringComparison.Ordinal))
+                return result;
+
+            byte[] cleanUtf8 = Encoding.UTF8.GetBytes(text);
+            var readerOptions = new JsonReaderOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            };
+
+            var reader = new Utf8JsonReader(cleanUtf8, isFinalBlock: true, new JsonReaderState(readerOptions));
+
+            try
+            {
+                if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+                    return result;
+
+                while (reader.Read())
+                {
+                    if (reader.TokenType == JsonTokenType.EndObject)
+                        break;
+
+                    if (reader.TokenType != JsonTokenType.PropertyName)
+                        continue;
+
+                    string? propName = reader.GetString();
+                    if (string.IsNullOrWhiteSpace(propName))
+                        continue;
+
+                    if (!reader.Read())
+                        break;
+
+                    if (!JsonDocument.TryParseValue(ref reader, out JsonDocument? valueDoc) || valueDoc == null)
+                        break;
+
+                    using (valueDoc)
+                    {
+                        if (ApplyRecoveredProperty(result, propName, valueDoc.RootElement, ref rescuedExplicitNoneLockMode))
+                        {
+                            rescuedPropertiesCount++;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Tolerante ante truncamiento repentino: conservamos todo lo rescatado hasta el corte.
+            }
+        }
+        catch { }
+
+        return result;
+    }
+
+    private static readonly Dictionary<string, System.Reflection.PropertyInfo> RecoverableProperties =
+        typeof(BrowserSettings)
+            .GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0)
+            .ToDictionary(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
+
+    private static bool ApplyRecoveredProperty(
+        BrowserSettings target,
+        string propName,
+        JsonElement el,
+        ref bool rescuedExplicitNoneLockMode)
+    {
+        if (!RecoverableProperties.TryGetValue(propName, out var prop))
+            return false;
+
+        if (el.ValueKind == JsonValueKind.Null && prop.PropertyType == typeof(string))
+        {
+            prop.SetValue(target, string.Empty);
+            return true;
+        }
+
+        object? deserialized;
+        try
+        {
+            deserialized = JsonSerializer.Deserialize(el.GetRawText(), prop.PropertyType, JsonOptions);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (deserialized == null)
+            return false;
+
+        if (deserialized is double dbl)
+        {
+            if (double.IsInfinity(dbl))
+                return false;
+
+            if ((prop.Name is nameof(BrowserSettings.FloatingPipWidth) or
+                 nameof(BrowserSettings.FloatingPipHeight) or
+                 nameof(BrowserSettings.MainWindowWidth) or
+                 nameof(BrowserSettings.MainWindowHeight)) &&
+                (double.IsNaN(dbl) || dbl <= 0))
+            {
+                return false;
+            }
+        }
+
+        if (prop.Name.Equals(nameof(BrowserSettings.TabSuspensionMinutes), StringComparison.Ordinal) &&
+            deserialized is int suspMins && suspMins < 0)
+        {
+            return false;
+        }
+
+        if (prop.Name.Equals(nameof(BrowserSettings.Theme), StringComparison.Ordinal) &&
+            deserialized is string rawTheme)
+        {
+            deserialized = BrowserThemeManager.NormalizeTheme(rawTheme);
+        }
+        else if (prop.Name.Equals(nameof(BrowserSettings.AutoUpdateCheckMode), StringComparison.Ordinal) &&
+                 deserialized is string rawUpdateMode)
+        {
+            deserialized = PrivacyProfiles.NormalizeAutoUpdateCheckMode(rawUpdateMode);
+        }
+        else if (prop.Name.Equals(nameof(BrowserSettings.BrowserLockMode), StringComparison.Ordinal) &&
+                 deserialized is string lockMode)
+        {
+            rescuedExplicitNoneLockMode = string.Equals(lockMode.Trim(), "None", StringComparison.OrdinalIgnoreCase);
+            if (rescuedExplicitNoneLockMode)
+                deserialized = "None";
+        }
+
+        prop.SetValue(target, deserialized);
+        return true;
     }
 
     public static bool MigrateAndSyncShieldSettings(BrowserSettings settings)
@@ -249,6 +932,13 @@ public static class SettingsManager
         if (!string.Equals(settings.Theme, normalizedTheme, StringComparison.Ordinal))
         {
             settings.Theme = normalizedTheme;
+            migrated = true;
+        }
+
+        string normalizedUpdateMode = PrivacyProfiles.NormalizeAutoUpdateCheckMode(settings.AutoUpdateCheckMode);
+        if (!string.Equals(settings.AutoUpdateCheckMode, normalizedUpdateMode, StringComparison.Ordinal))
+        {
+            settings.AutoUpdateCheckMode = normalizedUpdateMode;
             migrated = true;
         }
 
@@ -317,6 +1007,7 @@ public static class SettingsManager
     /// </summary>
     public static void SaveDeferred(int delayMs = 600, bool notify = false)
     {
+        if (AutoSavesSuspended) return;
         lock (_saveLock)
         {
             _deferredSavePending = true;
@@ -376,6 +1067,12 @@ public static class SettingsManager
 
     public static void Save(bool notify = true)
     {
+        if (AutoSavesSuspended)
+        {
+            LogSettingsEvent("[SAVE_BLOCKED] Guardado bloqueado porque settings.json se encuentra en estado no recuperado.");
+            return;
+        }
+
         string path = SettingsPath;
         string tempPath = path + ".tmp";
         string? dir = Path.GetDirectoryName(path);
@@ -384,6 +1081,8 @@ public static class SettingsManager
         {
             lock (_saveLock)
             {
+                if (AutoSavesSuspended)
+                    return;
                 _deferredSavePending = false;
                 _deferredSaveNotify = false;
                 _deferredSaveTimer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
@@ -404,6 +1103,8 @@ public static class SettingsManager
                 }
 
                 Current.SettingsSchemaVersion = Math.Max(3, Current.SettingsSchemaVersion);
+                Version effectiveVersion = MaxVersion(TryParseNormalizedVersion(Current.LastAppVersion), _activeLoadedAppVersion)!;
+                Current.LastAppVersion = effectiveVersion.ToString(3);
         if (Current.Shield != null)
         {
             Current.Shield.Version = Math.Max(3, Current.Shield.Version);

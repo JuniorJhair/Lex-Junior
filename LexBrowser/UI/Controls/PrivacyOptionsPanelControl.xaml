@@ -1,0 +1,28 @@
+<UserControl x:Class="LexBrowser.UI.Controls.PrivacyOptionsPanelControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Foreground="{DynamicResource PanelTextBody}">
+    <StackPanel>
+        <StackPanel x:Name="RowsHost"/>
+
+        <!-- Avisos de coherencia (sección 6.7): no bloquean combinaciones, solo informan -->
+        <Border x:Name="BorderCoherenceNotices"
+                Background="{DynamicResource PanelCardSubtleBg}"
+                BorderBrush="{DynamicResource PanelWarningBadgeFg}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="14,10"
+                Margin="0,6,0,0"
+                Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Text="ℹ️ Ten en cuenta sobre tu combinación actual:"
+                           FontWeight="Bold"
+                           FontSize="12"
+                           Foreground="{DynamicResource PanelWarningBadgeFg}"
+                           Margin="0,0,0,4"/>
+                <StackPanel x:Name="NoticesHost"/>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

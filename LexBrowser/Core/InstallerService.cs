@@ -126,16 +126,17 @@ public static class InstallerService
         {
             if (createDesktopShortcut)
             {
-                CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
+                CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y sin telemetría propia");
             }
             if (createStartMenuShortcut)
             {
-                CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
+                CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y sin telemetría propia");
             }
 
             RegisterInWindowsAddRemovePrograms(iconPath);
             RegisterAsDefaultBrowser(InstalledExePath, iconPath);
             RefreshWindowsIconCache(iconPath);
+            MarkIconCacheRefreshedForVersion(UpdateManager.CurrentVersionString);
         });
 
         progress?.Report((100, "¡Instalación completada con éxito!"));
@@ -347,19 +348,32 @@ public static class InstallerService
     {
         try
         {
-            string tempDir = Path.GetTempPath();
             string currentExe = Environment.ProcessPath ?? "";
-            var oldInstallers = Directory.GetFiles(tempDir, "LexJuniorSetup*.exe");
-            foreach (var file in oldInstallers)
+            string fullCurrentExe = string.IsNullOrEmpty(currentExe) ? "" : Path.GetFullPath(currentExe);
+            string[] dirs =
             {
-                try
+                Path.GetTempPath(),
+                Path.Combine(UserDataDir, "Updates")
+            };
+
+            foreach (string dir in dirs)
+            {
+                if (!Directory.Exists(dir)) continue;
+                foreach (string pattern in new[] { "LexJuniorSetup*.exe", "LexJuniorSetup*.part" })
                 {
-                    if (!string.Equals(Path.GetFullPath(file), Path.GetFullPath(currentExe), StringComparison.OrdinalIgnoreCase))
+                    foreach (var file in Directory.GetFiles(dir, pattern))
                     {
-                        File.Delete(file);
+                        try
+                        {
+                            if (string.IsNullOrEmpty(fullCurrentExe) ||
+                                !string.Equals(Path.GetFullPath(file), fullCurrentExe, StringComparison.OrdinalIgnoreCase))
+                            {
+                                File.Delete(file);
+                            }
+                        }
+                        catch { }
                     }
                 }
-                catch { }
             }
         }
         catch { }
@@ -441,7 +455,7 @@ public static class InstallerService
 
                     using (var cap = clientKey.CreateSubKey("Capabilities"))
                     {
-                        cap.SetValue("ApplicationDescription", "Lex Junior - Navegador privado con LexShield Core y 0 telemetría.", RegistryValueKind.String);
+                        cap.SetValue("ApplicationDescription", "Lex Junior - Navegador privado con LexShield Core y sin telemetría propia.", RegistryValueKind.String);
                         cap.SetValue("ApplicationIcon", $"{targetIcon},0", RegistryValueKind.String);
                         cap.SetValue("ApplicationName", "Lex Junior Browser", RegistryValueKind.String);
 
@@ -667,6 +681,44 @@ public static class InstallerService
     public const uint SHCNF_IDLIST = 0x0000;
     public const uint SHCNF_FLUSH = 0x1000;
 
+    private static string IconCacheVersionMarkerPath => Path.Combine(UserDataDir, ".icon_cache_version");
+
+    public static void MarkIconCacheRefreshedForVersion(string version)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(version)) return;
+            Directory.CreateDirectory(UserDataDir);
+            File.WriteAllText(IconCacheVersionMarkerPath, version.Trim());
+        }
+        catch { }
+    }
+
+    public static bool RefreshIconCacheOnceIfVersionChanged(string currentVersion)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(currentVersion) || !File.Exists(InstalledExePath))
+                return false;
+
+            string target = currentVersion.Trim();
+            if (File.Exists(IconCacheVersionMarkerPath))
+            {
+                string recorded = File.ReadAllText(IconCacheVersionMarkerPath).Trim();
+                if (string.Equals(recorded, target, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+
+            RefreshWindowsIconCache();
+            MarkIconCacheRefreshedForVersion(target);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static void RefreshWindowsIconCache(string? customIconPath = null)
     {
         try
@@ -682,13 +734,13 @@ public static class InstallerService
                 // 1. Recrear acceso directo en el Escritorio
                 if (File.Exists(DesktopShortcutPath))
                 {
-                    CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
+                    CreateWindowsShortcut(DesktopShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y sin telemetría propia");
                 }
 
                 // 2. Recrear acceso directo en el Menú Inicio
                 if (File.Exists(StartMenuShortcutPath))
                 {
-                    CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y 0 telemetría");
+                    CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y sin telemetría propia");
                 }
 
                 // 3. Actualizar accesos directos anclados en la barra de tareas de Windows

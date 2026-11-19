@@ -680,45 +680,6 @@ public static class MediaRuntime
         });
     }
 
-    // Atajos de teclado dentro de la página web (Ctrl+N, Ctrl+T, Ctrl+Shift+N, Ctrl+Shift+T, Ctrl+W, Ctrl+H)
-    try {
-        window.addEventListener('keydown', function(e) {
-            if (!e.ctrlKey || e.altKey) return;
-            const k = (e.key || '').toLowerCase();
-            if (!e.shiftKey && k === 'h') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'open_history' });
-                }
-            } else if (!e.shiftKey && (k === 'n' || k === 't')) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'shortcut_new_tab', incognito: false });
-                }
-            } else if (e.shiftKey && k === 'n') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'shortcut_new_tab', incognito: true });
-                }
-            } else if (e.shiftKey && k === 't') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'shortcut_reopen_tab' });
-                }
-            } else if (!e.shiftKey && k === 'w') {
-                e.preventDefault();
-                e.stopPropagation();
-                if (window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage({ type: 'shortcut_close_tab' });
-                }
-            }
-        }, true);
-    } catch(_) {}
-
     const onReady = (fn) => {
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
         else fn();

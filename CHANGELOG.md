@@ -2,6 +2,29 @@
 
 Todos los cambios notables de **Lex Junior Browser** se documentan en este archivo usando [Semantic Versioning](https://semver.org/).
 
+## [2.7.0] - 2026-11-18
+
+### Novedades y mejoras
+- **Lex PDF Studio con soporte para PDFs locales y virtuales (`http://` y `https://`)**:
+  - Nuevo canal interno autenticado `api/load-remote-pdf` en `https://pdf.lex.local/viewer.html` con lista blanca por sesión (`AuthorizeRemoteUrl`), reenvío de cookies de WebView2 acotado por salto (`CookieManager.GetCookiesAsync`), hasta 8 redirecciones seguras con protección anti-SSRF y DNS pinning (`TvUrlGuard.CreatePinnedHttpClient`), validación de firma mágica `%PDF-`, límite de 100 MB y rechazo explícito (`415`) de portales HTML de inicio de sesión.
+  - Conservación de `AppState.pdfBytes` en memoria (pasando copia `.slice(0)` al worker de PDF.js) para hacer zoom, anotar, resaltar, estampar firma digital y guardar PDFs virtuales sin errores de CORS, más tarjeta de estado con botones **Reintentar** y **Abrir en modo navegador** (`open_raw_pdf`).
+- **Botón y adelanto oficial de `Lex Junior Class` (`Disponible en la próxima actualización`)**:
+  - Incorporación del botón **🎓 Lex Class (PRONTO)** en la barra de navegación principal, acceso directo en Nueva Pestaña y soporte para `lex://class` / `https://class.lex.local/index.html`, abriendo la ventana ilustrada `LexClassComingSoonDialog` inspirada en el logotipo oficial de Lex Junior.
+- **Nuevo diálogo de actualización con formato rico y desplazamiento (`UpdatePromptDialog`)**:
+  - Sustitución del antiguo `MessageBox.Show` por una ventana WPF tematizada con `ScrollViewer`, insignias comparativas de versión (`v2.6.0 ➔ v2.7.0`), barra de progreso de descarga en vivo y motor de renderizado Markdown (`ParseReleaseNotesBlocks`) que convierte encabezados, listas, código inline y texto en **negrita** sin mostrar asteriscos `**` crudos.
+- **Perfiles de Privacidad y Seguridad (`Perfil A`, `Perfil B`, `Perfil C` y `Personalizado`)**:
+  - Nuevo asistente de bienvenida (`PrivacyProfileSetupWindow`) y matriz comparativa en Configuración (`PrivacyProfileMatrixControl`) que gobiernan 7 políticas con conexión de red (`EnableSmartScreen`, `EnableClientSidePhishingDetection`, `EnableLinkFaviconDownload`, `EnableDirectFaviconIco`, `EnableExternalFaviconService`, `EnableSearchSuggestions`, `AutoUpdateCheckMode`).
+  - Nueva compuerta de red de arranque (`FaviconService.SetStartupNetworkGate`) que impide descargas de favicons o tráfico auxiliar antes de completar el desbloqueo por PIN y la elección inicial de perfil.
+- **Instalador expandido sin recortes visuales (`InstallerWindow`)**:
+  - Ampliación del margen del encabezado y plantilla `ControlTemplate` dedicada (`32×32 px`, `Padding="0"`, `Panel.ZIndex="10"`) para el botón de cierre (`✕`) de modo que siempre se visualice completo y nítido.
+- **Recuperación inteligente de `settings.json` y protección Anti-Downgrade**:
+  - Rescate propiedad por propiedad ante archivos `settings.json` dañados con respaldo único `.corrupt.<timestamp>.bak`, marcador `vault.lock` para preservar el bloqueo PIN y diálogo `VersionDowngradeDialog` que evita que ejecutables antiguos sobrescriban perfiles de versiones más recientes.
+- **Endurecimiento del actualizador, bóveda DPAPI y gestor de descargas**:
+  - Verificación criptográfica **SHA-256** y tamaño de `LexJuniorSetup.exe` desde GitHub Releases antes de ejecutar la actualización en `%LOCALAPPDATA%\LexBrowser\Updates`.
+  - Autocompletado de contraseñas restringido a `IsSameExactOrWwwHost` (bloqueando fugas entre subdominios de hosting compartido como `github.io`, `vercel.app`, `pages.dev`, `netlify.app`) y sincronización fluida de descargas activas cada `350 ms`.
+- **Sitio web oficial renovado con arquitectura multi-ruta (`website/`)**:
+  - Navegación estructurada por rutas (`#/inicio`, `#/funciones`, `#/lex-class`, `#/documentacion`, `#/faq`, `#/novedades`), simulador interactivo actualizado con la vista de **Lex Junior Class**, manual técnico completo y buscador interactivo de Preguntas y Respuestas.
+
 ## [2.6.0] - 2026-11-16
 
 ### Novedades y mejoras

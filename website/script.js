@@ -1,36 +1,105 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// LEX JUNIOR BROWSER — OFFICIAL WEBSITE INTERACTIVE LOGIC
+// LEX JUNIOR BROWSER v2.7.0 — MULTI-ROUTE WEBSITE & INTERACTIVE SIMULATOR
 // ═══════════════════════════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. Animaciones al hacer scroll (IntersectionObserver)
-  const revealItems = document.querySelectorAll('.reveal');
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.12 }
-  );
-  revealItems.forEach((el) => observer.observe(el));
+  // 1. Router Cliente Multi-Ruta (#/inicio, #/funciones, #/lex-class, #/documentacion, #/faq, #/novedades)
+  const routePages = document.querySelectorAll('.route-page');
+  const navRouteLinks = document.querySelectorAll('.nav-route-link');
+  const navLinksContainer = document.getElementById('nav-links');
 
-  // 2. Menú móvil adaptable
-  const mobileBtn = document.getElementById('mobile-menu-btn');
-  const navLinks = document.getElementById('nav-links');
-  if (mobileBtn && navLinks) {
-    mobileBtn.addEventListener('click', () => {
-      navLinks.classList.toggle('open');
+  const routeTitles = {
+    'inicio': 'Lex Junior Browser v2.7.0 — Navegador Privado, Rápido y Cero Telemetría',
+    'funciones': 'Funciones y Perfiles de Privacidad A/B/C — Lex Junior Browser v2.7.0',
+    'lex-class': 'Lex Junior Class (Muy Pronto) — Academia Interactiva en Lex Junior',
+    'documentacion': 'Documentación Oficial y Manual Técnico — Lex Junior Browser v2.7.0',
+    'faq': 'Preguntas y Respuestas (FAQ) — Lex Junior Browser v2.7.0',
+    'novedades': 'Novedades y Changelog v2.7.0 — Lex Junior Browser'
+  };
+
+  const normalizeRoute = (rawHash) => {
+    const clean = (rawHash || '').replace(/^#\/?/, '').trim().toLowerCase();
+    if (!clean || clean === 'inicio' || clean === 'preview') return 'inicio';
+    if (clean === 'funciones' || clean === 'features' || clean === 'telemetry') return 'funciones';
+    if (clean === 'lex-class' || clean === 'lexclass' || clean === 'class') return 'lex-class';
+    if (clean === 'documentacion' || clean === 'docs' || clean === 'specs') return 'documentacion';
+    if (clean === 'faq' || clean === 'preguntas') return 'faq';
+    if (clean === 'novedades' || clean === 'changelog') return 'novedades';
+    return 'inicio';
+  };
+
+  const activateRoute = (routeName, scrollToTop = true) => {
+    const targetRoute = routeTitles[routeName] ? routeName : 'inicio';
+
+    routePages.forEach((page) => {
+      const isMatch = page.dataset.routePage === targetRoute;
+      page.classList.toggle('active', isMatch);
     });
-    navLinks.querySelectorAll('a').forEach((link) => {
-      link.addEventListener('click', () => navLinks.classList.remove('open'));
+
+    navRouteLinks.forEach((link) => {
+      link.classList.toggle('active', link.dataset.route === targetRoute);
+    });
+
+    if (routeTitles[targetRoute]) {
+      document.title = routeTitles[targetRoute];
+    }
+
+    if (navLinksContainer) {
+      navLinksContainer.classList.remove('open');
+    }
+
+    if (scrollToTop) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  window.addEventListener('hashchange', () => {
+    const route = normalizeRoute(window.location.hash);
+    activateRoute(route, true);
+  });
+
+  document.querySelectorAll('[data-route-link]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      const target = el.getAttribute('data-route-link');
+      if (target) {
+        e.preventDefault();
+        window.location.hash = `#/${target}`;
+        activateRoute(target, true);
+      }
+    });
+  });
+
+  // Activar ruta inicial según el hash de la URL
+  activateRoute(normalizeRoute(window.location.hash), false);
+
+  // 2. Animaciones Reveal
+  const revealItems = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+    revealItems.forEach((el) => observer.observe(el));
+  } else {
+    revealItems.forEach((el) => el.classList.add('visible'));
+  }
+
+  // 3. Menú móvil adaptable
+  const mobileBtn = document.getElementById('mobile-menu-btn');
+  if (mobileBtn && navLinksContainer) {
+    mobileBtn.addEventListener('click', () => {
+      navLinksContainer.classList.toggle('open');
     });
   }
 
-  // 3. Reloj en vivo dentro de la vista "Nueva Pestaña"
+  // 4. Reloj en vivo dentro de la vista "Nueva Pestaña"
   const clockEl = document.getElementById('live-demo-clock');
   const updateClock = () => {
     if (!clockEl) return;
@@ -42,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateClock();
   setInterval(updateClock, 15000);
 
-  // 4. Selector interactivo de las 5 vistas del navegador
+  // 5. Simulador interactivo de vistas del navegador (incluyendo Lex Class y PDF Virtual)
   const viewMeta = {
     'view-newtab': {
       icon: '⚡',
@@ -50,10 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
       url: 'lex://nueva-pestana',
       ads: '0 bloqueados'
     },
+    'view-lexclass': {
+      icon: '🎓',
+      title: 'Lex Junior Class — Disponible en la próxima actualización',
+      url: 'https://class.lex.local/index.html',
+      ads: 'Próxima actualización'
+    },
     'view-tv': {
       icon: '📺',
       title: 'Lex TV — Reproductor Multimedia Personal',
-      url: 'http://tv.lex.local/',
+      url: 'https://tv.lex.local/index.html',
       ads: '0 Telemetría · Bajo demanda'
     },
     'view-youtube': {
@@ -76,9 +151,9 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     'view-pdf': {
       icon: '📑',
-      title: 'Contrato_Acuerdo_Servicios.pdf — Lex PDF Studio',
-      url: 'file:///C:/Users/Documentos/Contrato_Acuerdo_Servicios.pdf',
-      ads: '100% Offline · Local'
+      title: 'Silabo_2026.pdf — Lex PDF Studio (Local y Virtual)',
+      url: 'https://pdf.lex.local/viewer.html?file=https%3A%2F%2Funiversidad.edu%2FSilabo_2026.pdf',
+      ads: 'Proxy Seguro · Anti-SSRF'
     },
     'view-incognito': {
       icon: '🕵️',
@@ -111,17 +186,23 @@ document.addEventListener('DOMContentLoaded', () => {
     tab.addEventListener('click', () => activateView(tab.dataset.view));
   });
 
-  // Botones dentro de la barra del navegador simulado también cambian la vista
   const mockBtnTv = document.getElementById('mock-btn-tv');
+  const mockBtnClass = document.getElementById('mock-btn-class');
+  const mockBkClass = document.getElementById('mock-bk-class');
+  const mockNtClassCard = document.getElementById('mock-nt-class-card');
   const mockBtnPip = document.getElementById('mock-btn-pip');
   const mockBtnVol = document.getElementById('mock-btn-vol');
   const mockBtnMedia = document.getElementById('mock-btn-media');
+
   if (mockBtnTv) mockBtnTv.addEventListener('click', () => activateView('view-tv'));
+  if (mockBtnClass) mockBtnClass.addEventListener('click', () => activateView('view-lexclass'));
+  if (mockBkClass) mockBkClass.addEventListener('click', () => activateView('view-lexclass'));
+  if (mockNtClassCard) mockNtClassCard.addEventListener('click', () => activateView('view-lexclass'));
   if (mockBtnPip) mockBtnPip.addEventListener('click', () => activateView('view-pip'));
   if (mockBtnVol) mockBtnVol.addEventListener('click', () => activateView('view-youtube'));
   if (mockBtnMedia) mockBtnMedia.addEventListener('click', () => activateView('view-sniffer'));
 
-  // 4b. Selector de tema visual del navegador de ejemplo (Principal: Clásico Original)
+  // 6. Selector de tema visual del navegador simulado
   const browserMockup = document.getElementById('browser-mockup');
   const themeButtons = document.querySelectorAll('.theme-pill');
   const setMockupTheme = (theme) => {
@@ -140,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   setMockupTheme('classic');
 
-  // 5. Slider interactivo del Amplificador de Volumen 300%
+  // 7. Slider interactivo del Amplificador de Volumen 300%
   const volSlider = document.getElementById('demo-vol-slider');
   const volLabel = document.getElementById('demo-vol-label');
   const navVolBadge = document.getElementById('mock-vol-badge');
@@ -160,7 +241,55 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.addEventListener('click', () => setDemoVolume(btn.dataset.vol));
   });
 
-  // 6. Sincronización automática con la última Release de GitHub
+  // 8. Navegación lateral dentro de #/documentacion
+  const docNavBtns = document.querySelectorAll('.doc-nav-btn');
+  docNavBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      docNavBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const targetId = btn.dataset.docTarget;
+      const targetEl = targetId ? document.getElementById(targetId) : null;
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // 9. Buscador y filtro por categorías en #/faq
+  const faqSearchInput = document.getElementById('faq-search-input');
+  const faqCatPills = document.querySelectorAll('.faq-cat-pill');
+  const faqItems = document.querySelectorAll('#faq-list .faq-item');
+  let activeFaqCat = 'all';
+
+  const filterFaq = () => {
+    const q = (faqSearchInput ? faqSearchInput.value : '').trim().toLowerCase();
+    faqItems.forEach((item) => {
+      const cat = item.dataset.cat || 'general';
+      const matchesCat = activeFaqCat === 'all' || cat === activeFaqCat;
+      const text = (item.textContent || '').toLowerCase();
+      const matchesQuery = !q || text.includes(q);
+      const visible = matchesCat && matchesQuery;
+      item.style.display = visible ? '' : 'none';
+      if (q && visible) {
+        item.open = true;
+      }
+    });
+  };
+
+  if (faqSearchInput) {
+    faqSearchInput.addEventListener('input', filterFaq);
+  }
+
+  faqCatPills.forEach((pill) => {
+    pill.addEventListener('click', () => {
+      faqCatPills.forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeFaqCat = pill.dataset.faqCat || 'all';
+      filterFaq();
+    });
+  });
+
+  // 10. Sincronización automática con la última Release de GitHub
   fetch('https://api.github.com/repos/JuniorJhair/Lex-Junior/releases/latest')
     .then((res) => (res.ok ? res.json() : null))
     .then((data) => {
@@ -180,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
           data.assets.find((a) => a.name === 'LexJuniorSetup.exe') || data.assets[0];
         if (setupAsset && setupAsset.size) {
           const sizeMb = (setupAsset.size / (1024 * 1024)).toFixed(1);
-          metaLabel.textContent = `Instalador Oficial (${version} · ${sizeMb} MB) · Gratis`;
+          metaLabel.textContent = `Instalador Oficial Verificado SHA-256 (${version} · ${sizeMb} MB) · Gratis`;
         }
       }
     })
@@ -188,4 +317,3 @@ document.addEventListener('DOMContentLoaded', () => {
       // Silencioso si el usuario navega sin conexión
     });
 });
-

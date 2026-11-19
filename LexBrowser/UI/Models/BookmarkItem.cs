@@ -61,7 +61,7 @@ public class BookmarkItem : INotifyPropertyChanged
                     return _faviconImage;
                 }
 
-                if (!_isLoadingFavicon)
+                if (!_isLoadingFavicon && FaviconService.IsStartupNetworkGateOpen)
                 {
                     _isLoadingFavicon = true;
                     _ = LoadFaviconAsync(Url);
@@ -77,6 +77,29 @@ public class BookmarkItem : INotifyPropertyChanged
                 OnPropertyChanged(nameof(HasNoFaviconImage));
             }
         }
+    }
+
+    public void RefreshFaviconFromProfileState()
+    {
+        _isLoadingFavicon = false;
+        if (string.IsNullOrWhiteSpace(Url))
+        {
+            FaviconImage = null;
+            return;
+        }
+
+        string domain = FaviconService.ExtractDomain(Url);
+        var cached = FaviconService.GetCachedFavicon(domain);
+        if (cached != null)
+        {
+            FaviconImage = cached;
+            return;
+        }
+
+        _faviconImage = null;
+        OnPropertyChanged(nameof(FaviconImage));
+        OnPropertyChanged(nameof(HasFaviconImage));
+        OnPropertyChanged(nameof(HasNoFaviconImage));
     }
 
     private async Task LoadFaviconAsync(string url)

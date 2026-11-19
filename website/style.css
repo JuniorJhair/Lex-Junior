@@ -2360,3 +2360,724 @@ section {
   }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   v2.7.0 — MULTI-ROUTE ARCHITECTURE, LEX CLASS SHOWCASE, DOCS & INTERACTIVE FAQ
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.route-page {
+  display: none;
+  animation: routeFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.route-page.active {
+  display: block;
+}
+
+@keyframes routeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nav-links {
+  gap: 8px;
+}
+
+.nav-route-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 10px;
+  font-size: 0.89rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.nav-route-link:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-route-link.active {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, rgba(255, 107, 0, 0.18), rgba(124, 58, 237, 0.22));
+  border-color: rgba(255, 107, 0, 0.45);
+  box-shadow: 0 4px 16px rgba(255, 107, 0, 0.16);
+}
+
+.nav-soon-pill {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: rgba(255, 107, 0, 0.22);
+  border: 1px solid rgba(255, 107, 0, 0.55);
+  color: #FDBA74;
+}
+
+/* ─── Hero Banner: Lex Junior Class Teaser ─── */
+.hero-class-teaser {
+  margin: 28px auto 12px;
+  max-width: 820px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  text-align: left;
+  padding: 18px 22px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 107, 0, 0.12), rgba(124, 58, 237, 0.18));
+  border: 1px solid rgba(255, 107, 0, 0.38);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+}
+
+.hct-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #FDBA74;
+  background: rgba(255, 107, 0, 0.18);
+  border: 1px solid rgba(255, 107, 0, 0.45);
+  padding: 2px 9px;
+  border-radius: 99px;
+  margin-bottom: 6px;
+}
+
+.hct-left h3 {
+  font-size: 1.08rem;
+  color: #FFFFFF;
+  margin-bottom: 3px;
+}
+
+.hct-left p {
+  font-size: 0.87rem;
+  color: var(--text-secondary);
+}
+
+/* ─── Mockup: Botón Lex Class y Vista Interna ─── */
+.bw-class-btn {
+  cursor: pointer;
+  border: 1px solid rgba(255, 107, 0, 0.4) !important;
+  background: linear-gradient(135deg, rgba(255, 107, 0, 0.16), rgba(124, 58, 237, 0.22)) !important;
+}
+
+.bw-mini-soon {
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 107, 0, 0.25);
+  color: #FDBA74;
+  margin-left: 4px;
+}
+
+.nt-card-lexclass {
+  cursor: pointer;
+  border-color: rgba(255, 107, 0, 0.4) !important;
+}
+
+.lc-mock-dialog {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.lc-mock-banner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #090912 0%, #151026 55%, #201035 100%);
+  border: 1px solid rgba(255, 107, 0, 0.42);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+.lc-mock-emblem {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  flex-shrink: 0;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 107, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 28px rgba(255, 107, 0, 0.28), 0 0 36px rgba(124, 58, 237, 0.28);
+}
+
+.lc-mock-emblem img {
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
+}
+
+.lc-cap-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: #1A102A;
+  border: 1px solid #FF6B00;
+  color: #FDBA74;
+}
+
+.lc-soon-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: rgba(255, 107, 0, 0.2);
+  border: 1px solid rgba(255, 107, 0, 0.55);
+  color: #FDBA74;
+  margin-bottom: 8px;
+}
+
+.lc-mock-copy h3 {
+  font-size: 1.32rem;
+  color: #FFFFFF;
+  margin-bottom: 6px;
+}
+
+.lc-mock-copy p {
+  font-size: 0.9rem;
+  color: #D1D5DB;
+  margin-bottom: 12px;
+}
+
+.lc-mock-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lc-mock-pills span {
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #F3F4F6;
+}
+
+.lc-mock-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.lc-mini-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.lc-mini-card strong {
+  display: block;
+  font-size: 0.9rem;
+  color: #FFFFFF;
+  margin-bottom: 5px;
+}
+
+.lc-mini-card p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+/* ─── Tarjetas de Exploración por Rutas en Inicio ─── */
+.route-hub-grid {
+  margin-top: 38px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.route-hub-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 22px;
+  border-radius: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.route-hub-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(255, 107, 0, 0.48);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.rh-card-accent {
+  background: linear-gradient(135deg, rgba(255, 107, 0, 0.12), rgba(124, 58, 237, 0.18));
+  border-color: rgba(255, 107, 0, 0.36);
+}
+
+.rh-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+}
+
+.route-hub-card strong {
+  display: block;
+  font-size: 1.02rem;
+  margin-bottom: 3px;
+}
+
+.route-hub-card p {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+}
+
+.rh-arrow {
+  margin-left: auto;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent-amber);
+}
+
+/* ─── Tabla de Perfiles de Privacidad y Atajos ─── */
+.profiles-section {
+  padding: 36px 0 64px;
+}
+
+.profiles-table-wrap,
+.shortcuts-table-wrap {
+  overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.profiles-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.profiles-table th,
+.profiles-table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.profiles-table th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #FFFFFF;
+  font-weight: 700;
+}
+
+.profiles-table tr:last-child td {
+  border-bottom: none;
+}
+
+.pill-on,
+.pill-off,
+.pill-neutral {
+  display: inline-block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+
+.pill-on {
+  background: rgba(16, 185, 129, 0.16);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #6EE7B7;
+}
+
+.pill-off {
+  background: rgba(244, 63, 94, 0.14);
+  border: 1px solid rgba(244, 63, 94, 0.35);
+  color: #FDA4AF;
+}
+
+.pill-neutral {
+  background: rgba(251, 146, 60, 0.16);
+  border: 1px solid rgba(251, 146, 60, 0.4);
+  color: #FDBA74;
+}
+
+/* ─── Ruta #/lex-class Showcase Dedicado ─── */
+.lexclass-showcase-section {
+  padding: 56px 0 72px;
+}
+
+.lc-hero-card {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 32px;
+  align-items: center;
+  padding: 36px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #080811 0%, #130F24 52%, #1E0F32 100%);
+  border: 1.5px solid rgba(255, 107, 0, 0.42);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72);
+  position: relative;
+  overflow: hidden;
+}
+
+.lc-hero-art {
+  position: relative;
+  height: 260px;
+  border-radius: 18px;
+  background: radial-gradient(circle at center, rgba(255, 107, 0, 0.14), rgba(124, 58, 237, 0.18), rgba(7, 7, 13, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.lc-swoosh-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.lc-art-center {
+  position: relative;
+  width: 168px;
+  height: 168px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lc-ring-outer {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px dashed rgba(251, 146, 60, 0.45);
+}
+
+.lc-logo-glass {
+  width: 118px;
+  height: 118px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 107, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 32px rgba(255, 107, 0, 0.35), 0 0 44px rgba(124, 58, 237, 0.35);
+}
+
+.lc-logo-glass img {
+  width: 82px;
+  height: 82px;
+  border-radius: 16px;
+}
+
+.lc-floating-badge {
+  position: absolute;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 99px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+
+.lc-fb-top {
+  top: 4px;
+  right: -12px;
+  background: #1B102C;
+  border: 1px solid #FF6B00;
+  color: #FDBA74;
+}
+
+.lc-fb-bottom {
+  bottom: 4px;
+  left: -14px;
+  background: #111326;
+  border: 1px solid #A855F7;
+  color: #DDD6FE;
+}
+
+.lc-status-pill {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 5px 14px;
+  border-radius: 99px;
+  background: rgba(255, 107, 0, 0.2);
+  border: 1px solid rgba(255, 107, 0, 0.55);
+  color: #FDBA74;
+  margin-bottom: 12px;
+}
+
+.lc-hero-text h1 {
+  font-size: clamp(1.9rem, 3.4vw, 2.7rem);
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.lc-lead {
+  font-size: 1.02rem;
+  color: #D1D5DB;
+  margin-bottom: 18px;
+}
+
+.lc-highlight-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lc-highlight-tags span {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #F9FAFB;
+}
+
+/* ─── Ruta #/documentacion ─── */
+.docs-section,
+.changelog-section {
+  padding: 52px 0 72px;
+}
+
+.docs-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 28px;
+  align-items: start;
+}
+
+.docs-sidebar {
+  position: sticky;
+  top: 92px;
+}
+
+.docs-sidebar-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.docs-sidebar-title {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  padding: 4px 10px 8px;
+}
+
+.doc-nav-btn {
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.doc-nav-btn:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.doc-nav-btn.active {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, rgba(255, 107, 0, 0.18), rgba(124, 58, 237, 0.22));
+  border-color: rgba(255, 107, 0, 0.45);
+}
+
+.docs-content {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.doc-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  padding: 26px 28px;
+  scroll-margin-top: 96px;
+}
+
+.doc-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: rgba(255, 107, 0, 0.16);
+  border: 1px solid rgba(255, 107, 0, 0.42);
+  color: #FDBA74;
+  margin-bottom: 10px;
+}
+
+.doc-card h3 {
+  font-size: 1.28rem;
+  margin-bottom: 10px;
+  color: #FFFFFF;
+}
+
+.doc-card p {
+  color: var(--text-secondary);
+  font-size: 0.94rem;
+  margin-bottom: 14px;
+}
+
+.doc-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.doc-list li {
+  position: relative;
+  padding-left: 22px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.doc-list li::before {
+  content: "✦";
+  position: absolute;
+  left: 0;
+  color: var(--accent-amber);
+  font-weight: 800;
+}
+
+.doc-list strong {
+  color: var(--text-primary);
+}
+
+/* ─── Ruta #/faq Controles de Búsqueda y Categorías ─── */
+.faq-controls {
+  margin-bottom: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.faq-search-box {
+  width: 100%;
+  padding: 13px 18px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.faq-search-box:focus {
+  outline: none;
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.18);
+}
+
+.faq-category-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.faq-cat-pill {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 0.83rem;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.faq-cat-pill:hover {
+  color: #FFFFFF;
+}
+
+.faq-cat-pill.active {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #FF6B00, #7C3AED);
+  border-color: transparent;
+}
+
+/* ─── Ruta #/novedades ─── */
+.changelog-card {
+  margin-bottom: 20px;
+}
+
+.cl-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.cl-date {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+@media (max-width: 920px) {
+  .hero-class-teaser {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .route-hub-grid,
+  .lc-hero-card,
+  .lc-mock-cards,
+  .docs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .lc-mock-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .docs-sidebar {
+    position: static;
+  }
+}

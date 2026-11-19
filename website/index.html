@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lex Junior Browser</title>
-  <meta name="description" content="Descarga Lex Junior Browser para Windows 10/11. Navegador privado con LexShield Core integrado (menos anuncios y 0 telemetría), amplificador de volumen hasta 300%, detector multimedia y Lex TV (IPTV, VOD &amp; Xtream Codes)." />
+  <title>Lex Junior Browser v2.7.0 — Navegador Privado, Rápido y Cero Telemetría</title>
+  <meta name="description" content="Descarga Lex Junior Browser v2.7.0 para Windows 10/11. Navegador privado con Perfiles de Privacidad A/B/C, LexShield Core, Lex PDF Studio (locales y virtuales), amplificador 300%, Lex TV y próximamente Lex Junior Class." />
   <link rel="canonical" href="https://juniorjhair.github.io/Lex-Junior/" />
   <meta name="theme-color" content="#07070B" />
-  <meta property="og:title" content="Lex Junior Browser — Navegador Privado para Windows" />
-  <meta property="og:description" content="Cero telemetría, escudo nativo LexShield Core para navegar con menos anuncios, amplificador de volumen hasta 300%, detector multimedia y Lex TV (IPTV, VOD &amp; Xtream Codes)." />
+  <meta property="og:title" content="Lex Junior Browser v2.7.0 — Navegador Privado para Windows" />
+  <meta property="og:description" content="Cero telemetría, Perfiles de Privacidad A/B/C, LexShield Core, Lex PDF Studio (locales y virtuales), amplificador de volumen hasta 300%, Lex TV y muy pronto Lex Junior Class." />
   <meta property="og:url" content="https://juniorjhair.github.io/Lex-Junior/" />
   <meta property="og:image" content="https://juniorjhair.github.io/Lex-Junior/assets/logo.png" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Lex Junior Browser" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Lex Junior Browser — Navegador Privado para Windows" />
-  <meta name="twitter:description" content="Cero telemetría, escudo nativo LexShield Core para navegar con menos anuncios, amplificador de volumen hasta 300%, detector multimedia y Lex TV (IPTV, VOD &amp; Xtream Codes)." />
+  <meta name="twitter:title" content="Lex Junior Browser v2.7.0 — Navegador Privado para Windows" />
+  <meta name="twitter:description" content="Cero telemetría, Perfiles de Privacidad A/B/C, LexShield Core, Lex PDF Studio (locales y virtuales), amplificador 300%, Lex TV y muy pronto Lex Junior Class." />
   <meta name="twitter:image" content="https://juniorjhair.github.io/Lex-Junior/assets/logo.png" />
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
   <link rel="stylesheet" href="style.css" />
@@ -26,663 +26,1143 @@
   <div class="ambient-orb orb-2"></div>
   <div class="ambient-grid"></div>
 
-  <!-- Barra de navegación superior con Glassmorphism -->
+  <!-- Barra de navegación superior multi-ruta con Glassmorphism -->
   <header class="navbar" id="navbar">
     <div class="container nav-inner">
-      <a href="#" class="brand">
+      <a href="#/inicio" class="brand" data-route-link="inicio">
         <img src="assets/logo.png" alt="Lex Junior Logo" class="brand-logo" />
         <span class="brand-name">LEX JUNIOR</span>
-        <span class="brand-badge" id="nav-version-badge">v2.6.0</span>
+        <span class="brand-badge" id="nav-version-badge">v2.7.0</span>
       </a>
 
-      <nav class="nav-links" id="nav-links">
-        <a href="#preview">Vista en Vivo</a>
-        <a href="#features">Funciones</a>
-        <a href="#telemetry">0 Telemetría</a>
-        <a href="#specs">Requisitos</a>
-        <a href="#faq">Preguntas</a>
+      <nav class="nav-links" id="nav-links" aria-label="Navegación principal por rutas">
+        <a href="#/inicio" class="nav-route-link active" data-route="inicio">Inicio</a>
+        <a href="#/funciones" class="nav-route-link" data-route="funciones">Funciones</a>
+        <a href="#/lex-class" class="nav-route-link nav-link-class" data-route="lex-class">
+          <span>🎓 Lex Class</span>
+          <span class="nav-soon-pill">MUY PRONTO</span>
+        </a>
+        <a href="#/documentacion" class="nav-route-link" data-route="documentacion">Documentación</a>
+        <a href="#/faq" class="nav-route-link" data-route="faq">Preguntas y Respuestas</a>
+        <a href="#/novedades" class="nav-route-link" data-route="novedades">Novedades</a>
       </nav>
 
       <div class="nav-actions">
         <a href="https://github.com/JuniorJhair/Lex-Junior/releases/latest/download/LexJuniorSetup.exe" class="btn btn-primary btn-sm" download>
-          <span>⬇ Descargar</span>
+          <span>⬇ Descargar v2.7.0</span>
         </a>
         <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Abrir menú">☰</button>
       </div>
     </div>
   </header>
 
-  <main>
+  <main class="routes-viewport">
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- HERO PRINCIPAL -->
+    <!-- RUTA 1: #/inicio (PORTADA, SIMULADOR EN VIVO Y ACCESOS RÁPIDOS)     -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <section class="hero">
-      <div class="container hero-content">
-        <div class="hero-pill reveal">
-          <span class="pulse-dot"></span>
-          <span id="hero-release-text">Lanzamiento Oficial v2.6.0 · Windows 10 y 11 (64-bit)</span>
-        </div>
-
-        <h1 class="hero-title reveal">
-          Navega privado y sin distracciones.<br />
-          <span class="gradient-text">Menos anuncios. Cero telemetría.</span>
-        </h1>
-
-        <p class="hero-subtitle reveal">
-          <strong>Lex Junior Browser</strong> está desarrollado en C# y .NET 8 con escudo LexShield Core integrado, bloqueo de anuncios sin instalar extensiones externas, amplificador de audio hasta <strong>300%</strong> y detector multimedia bajo demanda.
-        </p>
-
-        <div class="hero-cta-group reveal">
-          <a href="https://github.com/JuniorJhair/Lex-Junior/releases/latest/download/LexJuniorSetup.exe" class="btn btn-primary btn-lg" id="main-download-btn" download>
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M3 5.5L10.5 4.5V11.5H3V5.5ZM11.5 4.35L21 3V11.5H11.5V4.35ZM3 12.5H10.5V19.5L3 18.5V12.5ZM11.5 12.5H21V21L11.5 19.65V12.5Z" fill="currentColor"/></svg>
-            <div class="btn-text-wrap">
-              <span class="btn-main-label">Descargar para Windows</span>
-              <span class="btn-sub-label" id="download-meta-label">Instalador Oficial (LexJuniorSetup.exe) · Gratis</span>
-            </div>
-          </a>
-
-          <a href="#preview" class="btn btn-secondary btn-lg">
-            <span>Probar Interfaz Interactiva ↓</span>
-          </a>
-        </div>
-
-        <div class="hero-trust-badges reveal">
-          <div class="trust-item">🛡️ <strong>LexShield</strong> integrado de fábrica</div>
-          <div class="trust-item">📺 <strong>Lex TV</strong> IPTV, VOD &amp; Xtream Codes</div>
-          <div class="trust-item">🔑 <strong>Bóveda Cifrada + PIN</strong> y Modo Invitado</div>
-          <div class="trust-item">🟢 <strong>0 Telemetría</strong> verificable</div>
-          <div class="trust-item">🚀 <strong>Volume Master 300%</strong> nativo</div>
-          <div class="trust-item">🧹 <strong>Desinstalador 100% limpio</strong> incluido</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- SHOWCASE INTERACTIVO DEL NAVEGADOR (VISTA EN VIVO) -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <section class="showcase-section" id="preview">
-      <div class="container">
-        <div class="section-header reveal">
-          <span class="section-tag">EXPERIENCIA REAL DE ESCRITORIO</span>
-          <h2>Explora el diseño de Lex Junior por dentro</h2>
-          <p>Alterna entre los 3 temas visuales del navegador (Original, Oscuro y Claro) y haz clic en cada modo para probar sus herramientas integradas.</p>
-        </div>
-
-        <!-- Selector de tema del navegador de ejemplo (Principal: Clásico Original) -->
-        <div class="theme-switcher-bar reveal" role="group" aria-label="Selector de tema del navegador">
-          <span class="theme-switcher-label">🎨 Tema del navegador:</span>
-          <div class="theme-switcher-pills">
-            <button type="button" class="theme-pill active" data-theme="classic" aria-pressed="true">🔥 Original (Clásico)</button>
-            <button type="button" class="theme-pill" data-theme="dark" aria-pressed="false">🌙 Oscuro</button>
-            <button type="button" class="theme-pill" data-theme="light" aria-pressed="false">☀️ Claro</button>
+    <div class="route-page active" id="route-inicio" data-route-page="inicio">
+      <section class="hero">
+        <div class="container hero-content">
+          <div class="hero-pill reveal visible">
+            <span class="pulse-dot"></span>
+            <span id="hero-release-text">Lanzamiento Oficial v2.7.0 · Windows 10 y 11 (64-bit)</span>
           </div>
-        </div>
 
-        <!-- Selector de vistas del navegador -->
-        <div class="showcase-tabs reveal" role="tablist">
-          <button class="showcase-tab active" data-view="view-newtab">⚡ Nueva Pestaña</button>
-          <button class="showcase-tab" data-view="view-tv">📺 Lex TV &amp; Xtream</button>
-          <button class="showcase-tab" data-view="view-youtube">🛡️ YouTube + Volumen 300%</button>
-          <button class="showcase-tab" data-view="view-sniffer">📥 Detector Multimedia</button>
-          <button class="showcase-tab" data-view="view-pip">🗖 Página Flotante &amp; PiP</button>
-          <button class="showcase-tab" data-view="view-pdf">📑 Lex PDF Studio</button>
-          <button class="showcase-tab" data-view="view-incognito">🕵️ Modo Incógnito Real</button>
-        </div>
+          <h1 class="hero-title reveal visible">
+            Navega privado, veloz y sin distracciones.<br />
+            <span class="gradient-text">Perfiles de Privacidad. Cero telemetría.</span>
+          </h1>
 
-        <!-- Ventana Mockup Realista de Lex Junior Browser (Tema principal: Original/Clásico) -->
-        <div class="browser-window reveal theme-classic" id="browser-mockup">
-          <!-- Fila 0: Barra de Pestañas de Lex Junior -->
-          <div class="bw-titlebar">
-            <div class="bw-brand">
-              <img src="assets/logo.png" alt="LJ" />
-              <span>LEX JUNIOR</span>
-            </div>
-            <div class="bw-tabs" tabindex="0" role="region" aria-label="Tira de pestañas simulada">
-              <div class="bw-tab active" id="mock-active-tab">
-                <span class="bw-tab-icon" id="mock-tab-icon">⚡</span>
-                <span class="bw-tab-title" id="mock-tab-title">Nueva pestaña</span>
-                <span class="bw-tab-close">✕</span>
+          <p class="hero-subtitle reveal visible">
+            <strong>Lex Junior Browser v2.7.0</strong> combina el escudo nativo <strong>LexShield Core</strong>, nuevos <strong>Perfiles de Privacidad (A / B / C)</strong>, <strong>Lex PDF Studio</strong> para archivos locales y virtuales de Internet, amplificador de audio hasta <strong>300%</strong>, <strong>Lex TV</strong> y el adelanto oficial de <strong>Lex Junior Class</strong>.
+          </p>
+
+          <div class="hero-cta-group reveal visible">
+            <a href="https://github.com/JuniorJhair/Lex-Junior/releases/latest/download/LexJuniorSetup.exe" class="btn btn-primary btn-lg" id="main-download-btn" download>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none"><path d="M3 5.5L10.5 4.5V11.5H3V5.5ZM11.5 4.35L21 3V11.5H11.5V4.35ZM3 12.5H10.5V19.5L3 18.5V12.5ZM11.5 12.5H21V21L11.5 19.65V12.5Z" fill="currentColor"/></svg>
+              <div class="btn-text-wrap">
+                <span class="btn-main-label">Descargar para Windows</span>
+                <span class="btn-sub-label" id="download-meta-label">Instalador Oficial Verificado SHA-256 (LexJuniorSetup.exe) · Gratis</span>
               </div>
-              <div class="bw-tab bw-tab-inactive">
-                <span>▶</span>
-                <span>YouTube — 4K 60fps</span>
-                <span class="bw-tab-audio">🔊</span>
-              </div>
-              <button class="bw-newtab-btn" title="Nueva pestaña (Ctrl+N / Ctrl+T)">＋</button>
-              <button class="bw-incog-btn" title="Nueva pestaña Incógnito al costado (Ctrl+Shift+N)">🕵️</button>
+            </a>
+
+            <a href="#/documentacion" class="btn btn-secondary btn-lg" data-route-link="documentacion">
+              <span>📘 Leer Documentación Oficial →</span>
+            </a>
+          </div>
+
+          <!-- Banner Destacado: Lex Junior Class Muy Pronto -->
+          <div class="hero-class-teaser reveal visible">
+            <div class="hct-left">
+              <span class="hct-badge">🎓 MUY PRONTO EN LA PRÓXIMA ACTUALIZACIÓN</span>
+              <h3>Lex Junior Class — Tu Academia Interactiva Paso a Paso</h3>
+              <p>Desde 1.° de Primaria hasta Preuniversitario con micro-lecciones desde cero, Modo Estudio, Práctica, Examen y 0 telemetría.</p>
             </div>
-            <div class="bw-win-controls">
-              <span>─</span>
-              <span>□</span>
-              <span class="bw-close">✕</span>
+            <a href="#/lex-class" class="btn btn-primary btn-sm" data-route-link="lex-class">Ver adelanto de Lex Class →</a>
+          </div>
+
+          <div class="hero-trust-badges reveal visible">
+            <div class="trust-item">🛡️ <strong>LexShield Core</strong> integrado</div>
+            <div class="trust-item">🔒 <strong>Perfiles A / B / C</strong> de privacidad</div>
+            <div class="trust-item">📑 <strong>PDF Studio</strong> Locales y Virtuales</div>
+            <div class="trust-item">📺 <strong>Lex TV</strong> IPTV, VOD &amp; Xtream</div>
+            <div class="trust-item">🔑 <strong>Bóveda DPAPI + PIN</strong> e Invitado</div>
+            <div class="trust-item">🎓 <strong>Lex Class</strong> (Próxima actualización)</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SHOWCASE INTERACTIVO DEL NAVEGADOR (VISTA EN VIVO) -->
+      <section class="showcase-section" id="preview">
+        <div class="container">
+          <div class="section-header reveal visible">
+            <span class="section-tag">SIMULADOR INTERACTIVO EN VIVO</span>
+            <h2>Explora Lex Junior Browser v2.7.0 por dentro</h2>
+            <p>Alterna entre los 3 temas visuales (Original, Oscuro y Claro) y haz clic en cualquier herramienta —incluido el nuevo botón <strong>🎓 Lex Class</strong> o <strong>📑 Lex PDF Studio</strong>— para probar su interfaz.</p>
+          </div>
+
+          <!-- Selector de tema del navegador -->
+          <div class="theme-switcher-bar reveal visible" role="group" aria-label="Selector de tema del navegador">
+            <span class="theme-switcher-label">🎨 Tema del navegador:</span>
+            <div class="theme-switcher-pills">
+              <button type="button" class="theme-pill active" data-theme="classic" aria-pressed="true">🔥 Original (Clásico)</button>
+              <button type="button" class="theme-pill" data-theme="dark" aria-pressed="false">🌙 Oscuro</button>
+              <button type="button" class="theme-pill" data-theme="light" aria-pressed="false">☀️ Claro</button>
             </div>
           </div>
 
-          <!-- Fila 1: Barra de Navegación y Utilidades -->
-          <div class="bw-navbar">
-            <div class="bw-nav-btns">
-              <span>←</span><span>→</span><span>↻</span><span>⌂</span>
-            </div>
-            <div class="bw-omnibox">
-              <span class="bw-lock">🔒</span>
-              <span class="bw-url" id="mock-url-text">lex://nueva-pestana</span>
-              <div class="bw-shield-pill">🛡️ <span id="mock-ads-count">28 bloqueados</span></div>
-            </div>
-            <div class="bw-utilities" tabindex="0" role="region" aria-label="Herramientas de barra superior">
-              <div class="bw-util-btn bw-tv-btn" id="mock-btn-tv">📺 Lex TV</div>
-              <div class="bw-util-btn" id="mock-btn-pip">🗖 Página Flotante</div>
-              <div class="bw-util-btn bw-vol-btn" id="mock-btn-vol">🚀 <span id="mock-vol-badge">240%</span></div>
-              <div class="bw-util-btn bw-media-btn" id="mock-btn-media"><span class="dot-green"></span>📥 Multimedia (4)</div>
-              <div class="bw-telemetry-pill"><span class="dot-green"></span>0 Telemetría</div>
-              <span class="bw-icon-btn" title="Historial de Descargas (Ctrl+J)">⬇</span>
-              <span class="bw-icon-btn" title="Bóveda de Contraseñas (Ctrl+Shift+K)">🔑</span>
-              <span class="bw-icon-btn" title="Historial (Ctrl+H)">🕒</span>
-              <span class="bw-icon-btn" title="Configuración (Ctrl+,)">⚙</span>
-            </div>
+          <!-- Selector de vistas del navegador -->
+          <div class="showcase-tabs reveal visible" role="tablist">
+            <button class="showcase-tab active" data-view="view-newtab">⚡ Nueva Pestaña</button>
+            <button class="showcase-tab" data-view="view-lexclass">🎓 Lex Class (Pronto)</button>
+            <button class="showcase-tab" data-view="view-pdf">📑 PDF Local y Virtual</button>
+            <button class="showcase-tab" data-view="view-tv">📺 Lex TV &amp; Xtream</button>
+            <button class="showcase-tab" data-view="view-youtube">🛡️ YouTube + Volumen 300%</button>
+            <button class="showcase-tab" data-view="view-sniffer">📥 Detector Multimedia</button>
+            <button class="showcase-tab" data-view="view-pip">🗖 Página Flotante &amp; PiP</button>
+            <button class="showcase-tab" data-view="view-incognito">🕵️ Modo Incógnito Real</button>
           </div>
 
-          <!-- Fila 2: Barra de Accesos Directos -->
-          <div class="bw-bookmarks" tabindex="0" role="region" aria-label="Barra de marcadores simulada">
-            <div class="bw-bk-pin">＋ Anclar página</div>
-            <div class="bw-bk-sep"></div>
-            <div class="bw-bk-item"><span class="yt-dot">▶</span> YouTube</div>
-            <div class="bw-bk-item"><span class="g-dot">G</span> Google</div>
-            <div class="bw-bk-item"><span class="tw-dot">👾</span> Twitch</div>
-            <div class="bw-bk-item">𝕏 X</div>
-          </div>
-
-          <!-- Fila 3: Contenido dinámico según la pestaña seleccionada -->
-          <div class="bw-viewport">
-            <!-- VISTA 1: NUEVA PESTAÑA OFICIAL -->
-            <div class="bw-view active" id="view-newtab">
-              <div class="nt-glow"></div>
-              <div class="nt-brand">
-                <img src="assets/logo.png" alt="Lex Junior" />
+          <!-- Ventana Mockup Realista de Lex Junior Browser -->
+          <div class="browser-window reveal theme-classic" id="browser-mockup">
+            <!-- Fila 0: Barra de Pestañas -->
+            <div class="bw-titlebar">
+              <div class="bw-brand">
+                <img src="assets/logo.png" alt="LJ" />
                 <span>LEX JUNIOR</span>
               </div>
-              <div class="nt-clock" id="live-demo-clock">18:30</div>
-              <div class="nt-date">Navegación instantánea · Cero telemetría</div>
-              <div class="nt-search">
-                <span class="nt-g-icon">G</span>
-                <input type="text" readonly value="Buscar en Google, DuckDuckGo, Brave o escribir una URL..." />
-                <button>Buscar</button>
+              <div class="bw-tabs" tabindex="0" role="region" aria-label="Tira de pestañas simulada">
+                <div class="bw-tab active" id="mock-active-tab">
+                  <span class="bw-tab-icon" id="mock-tab-icon">⚡</span>
+                  <span class="bw-tab-title" id="mock-tab-title">Nueva pestaña</span>
+                  <span class="bw-tab-close">✕</span>
+                </div>
+                <div class="bw-tab bw-tab-inactive">
+                  <span>▶</span>
+                  <span>YouTube — 4K 60fps</span>
+                  <span class="bw-tab-audio">🔊</span>
+                </div>
+                <button class="bw-newtab-btn" title="Nueva pestaña (Ctrl+N / Ctrl+T)">＋</button>
+                <button class="bw-incog-btn" title="Nueva pestaña Incógnito al costado (Ctrl+Shift+N)">🕵️</button>
               </div>
-              <div class="nt-quick-links">
-                <div class="nt-card">
-                  <svg viewBox="0 0 24 24"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8z" fill="#FF0000"/><path d="M9.5 15.6V8.4L15.8 12l-6.3 3.6z" fill="#FFF"/></svg>
-                  <span>YouTube</span>
-                </div>
-                <div class="nt-card">
-                  <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                  <span>Google</span>
-                </div>
-                <div class="nt-card">
-                  <svg viewBox="0 0 24 24"><path d="M2 6.5V18c0 1.1.9 2 2 2h2V9.8l6 4.5 6-4.5V20h2c1.1 0 2-.9 2-2V6.5c0-1.8-2.1-2.8-3.5-1.7L12 10 5.5 4.8C4.1 3.7 2 4.7 2 6.5z" fill="#EA4335"/><path d="M2 6.5V18c0 1.1.9 2 2 2h2V9.8L2 6.5z" fill="#4285F4"/><path d="M22 6.5V18c0 1.1-.9 2-2 2h-2V9.8l4-3.3z" fill="#34A853"/></svg>
-                  <span>Gmail</span>
-                </div>
-                <div class="nt-card">
-                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" fill="#FFF"/><path d="M3 6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v2H3V6z" fill="#4285F4"/><text x="12" y="16.2" text-anchor="middle" font-weight="800" font-size="8.5" fill="#1A73E8">31</text></svg>
-                  <span>Calendar</span>
-                </div>
-                <div class="nt-card">
-                  <svg viewBox="0 0 24 24"><path d="M8.5 3.5L15.5 3.5L22 14.8L15 14.8Z" fill="#FBBC04"/><path d="M8.5 3.5L12 9.5L5.5 20.5L2 14.8Z" fill="#0F9D58"/><path d="M5.5 20.5L18.5 20.5L22 14.8L9 14.8Z" fill="#4285F4"/></svg>
-                  <span>Drive</span>
-                </div>
-                <div class="nt-card">
-                  <svg viewBox="0 0 24 24"><path d="M4.3 3H21v11.7l-4.7 4.7h-3.9l-2.5 2.4H7v-2.4H3V6.2L4.3 3z" fill="#9146FF"/><path d="M19 13.8V5H6v12h3v2.4l2.4-2.4h4.5L19 13.8z" fill="#FFF"/></svg>
-                  <span>Twitch</span>
-                </div>
-                <div class="nt-card">
-                  <svg viewBox="0 0 24 24"><path class="nt-x-icon-path" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231z" fill="#F4F4F5"/></svg>
-                  <span>X</span>
-                </div>
+              <div class="bw-win-controls">
+                <span>─</span>
+                <span>□</span>
+                <span class="bw-close">✕</span>
               </div>
             </div>
 
-            <!-- VISTA 2: YOUTUBE CON MENOS ANUNCIOS + AMPLIFICADOR DE VOLUMEN 300% -->
-            <div class="bw-view" id="view-youtube">
-              <div class="yt-demo-layout">
-                <div class="yt-video-stage">
-                  <div class="yt-badge-shield">⚡ LexShield: Anuncio pre-roll bloqueado automáticamente</div>
-                  <div class="yt-screen-art">
-                    <div class="yt-wave-bars">
-                      <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                    </div>
-                    <p>Reproducción fluida 4K · Sin pausas ni capas fantasma</p>
-                  </div>
-                </div>
-
-                <!-- Popup flotante del Amplificador 300% -->
-                <div class="popup-card vol-popup-demo">
-                  <div class="popup-head">
-                    <span>🔊 Amplificador de Volumen</span>
-                    <span class="vol-pill" id="demo-vol-label">240%</span>
-                  </div>
-                  <input type="range" min="0" max="300" value="240" class="demo-slider" id="demo-vol-slider" />
-                  <div class="popup-scale">
-                    <span>0%</span><span>100%</span><span>200%</span><span class="cyan">300% Máx</span>
-                  </div>
-                  <div class="popup-presets">
-                    <button class="preset-btn primary" data-vol="100">↺ 100%</button>
-                    <button class="preset-btn" data-vol="150">150%</button>
-                    <button class="preset-btn" data-vol="200">200%</button>
-                    <button class="preset-btn cyan-txt" data-vol="300">300%</button>
-                  </div>
-                  <p class="popup-note">Usa <code>AudioContext + GainNode + DynamicsCompressor</code> y permanece inactivo cuando está en 100%.</p>
-                </div>
+            <!-- Fila 1: Barra de Navegación y Utilidades -->
+            <div class="bw-navbar">
+              <div class="bw-nav-btns">
+                <span>←</span><span>→</span><span>↻</span><span>⌂</span>
+              </div>
+              <div class="bw-omnibox">
+                <span class="bw-lock">🔒</span>
+                <span class="bw-url" id="mock-url-text">lex://nueva-pestana</span>
+                <div class="bw-shield-pill">🛡️ <span id="mock-ads-count">28 bloqueados</span></div>
+              </div>
+              <div class="bw-utilities" tabindex="0" role="region" aria-label="Herramientas de barra superior">
+                <div class="bw-util-btn bw-tv-btn" id="mock-btn-tv">📺 Lex TV</div>
+                <div class="bw-util-btn bw-class-btn" id="mock-btn-class">🎓 Lex Class <span class="bw-mini-soon">PRONTO</span></div>
+                <div class="bw-util-btn" id="mock-btn-pip">🗖 Página Flotante</div>
+                <div class="bw-util-btn bw-vol-btn" id="mock-btn-vol">🚀 <span id="mock-vol-badge">240%</span></div>
+                <div class="bw-util-btn bw-media-btn" id="mock-btn-media"><span class="dot-green"></span>📥 Multimedia (4)</div>
+                <div class="bw-telemetry-pill"><span class="dot-green"></span>0 Telemetría</div>
+                <span class="bw-icon-btn" title="Historial de Descargas (Ctrl+J)">⬇</span>
+                <span class="bw-icon-btn" title="Bóveda de Contraseñas (Ctrl+Shift+K)">🔑</span>
+                <span class="bw-icon-btn" title="Historial (Ctrl+H)">🕒</span>
+                <span class="bw-icon-btn" title="Configuración (Ctrl+,)">⚙</span>
               </div>
             </div>
 
-            <!-- VISTA 3: DETECTOR Y DESCARGADOR MULTIMEDIA BAJO DEMANDA -->
-            <div class="bw-view" id="view-sniffer">
-              <div class="sniffer-demo-wrap">
-                <div class="popup-card sniffer-popup-demo">
-                  <div class="popup-head">
-                    <div>
-                      <strong>📥 Detector Multimedia y Documentos</strong>
-                      <div class="sub-green">🟢 Activo bajo demanda en esta pestaña (4 detectados)</div>
+            <!-- Fila 2: Barra de Accesos Directos -->
+            <div class="bw-bookmarks" tabindex="0" role="region" aria-label="Barra de marcadores simulada">
+              <div class="bw-bk-pin">＋ Anclar página</div>
+              <div class="bw-bk-sep"></div>
+              <div class="bw-bk-item"><span class="yt-dot">▶</span> YouTube</div>
+              <div class="bw-bk-item"><span class="g-dot">G</span> Google</div>
+              <div class="bw-bk-item"><span class="tw-dot">👾</span> Twitch</div>
+              <div class="bw-bk-item">𝕏 X</div>
+              <div class="bw-bk-item" id="mock-bk-class">🎓 Lex Class</div>
+            </div>
+
+            <!-- Fila 3: Contenido dinámico según la pestaña seleccionada -->
+            <div class="bw-viewport">
+              <!-- VISTA 1: NUEVA PESTAÑA OFICIAL -->
+              <div class="bw-view active" id="view-newtab">
+                <div class="nt-glow"></div>
+                <div class="nt-brand">
+                  <img src="assets/logo.png" alt="Lex Junior" />
+                  <span>LEX JUNIOR</span>
+                </div>
+                <div class="nt-clock" id="live-demo-clock">18:30</div>
+                <div class="nt-date">Navegación instantánea · Perfiles de Privacidad · Cero telemetría</div>
+                <div class="nt-search">
+                  <span class="nt-g-icon">G</span>
+                  <input type="text" readonly value="Buscar en Google, DuckDuckGo, Brave o escribir lex://class..." />
+                  <button>Buscar</button>
+                </div>
+                <div class="nt-quick-links">
+                  <div class="nt-card">
+                    <svg viewBox="0 0 24 24"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8z" fill="#FF0000"/><path d="M9.5 15.6V8.4L15.8 12l-6.3 3.6z" fill="#FFF"/></svg>
+                    <span>YouTube</span>
+                  </div>
+                  <div class="nt-card">
+                    <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                    <span>Google</span>
+                  </div>
+                  <div class="nt-card">
+                    <svg viewBox="0 0 24 24"><path d="M2 6.5V18c0 1.1.9 2 2 2h2V9.8l6 4.5 6-4.5V20h2c1.1 0 2-.9 2-2V6.5c0-1.8-2.1-2.8-3.5-1.7L12 10 5.5 4.8C4.1 3.7 2 4.7 2 6.5z" fill="#EA4335"/><path d="M2 6.5V18c0 1.1.9 2 2 2h2V9.8L2 6.5z" fill="#4285F4"/><path d="M22 6.5V18c0 1.1-.9 2-2 2h-2V9.8l4-3.3z" fill="#34A853"/></svg>
+                    <span>Gmail</span>
+                  </div>
+                  <div class="nt-card">
+                    <svg viewBox="0 0 24 24"><path d="M8.5 3.5L15.5 3.5L22 14.8L15 14.8Z" fill="#FBBC04"/><path d="M8.5 3.5L12 9.5L5.5 20.5L2 14.8Z" fill="#0F9D58"/><path d="M5.5 20.5L18.5 20.5L22 14.8L9 14.8Z" fill="#4285F4"/></svg>
+                    <span>Drive</span>
+                  </div>
+                  <div class="nt-card">
+                    <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3" fill="#6366F1"/><polygon points="10,10 16,13 10,16" fill="#FFFFFF"/></svg>
+                    <span>TV en vivo</span>
+                  </div>
+                  <div class="nt-card nt-card-lexclass" id="mock-nt-class-card" title="Ver adelanto de Lex Junior Class">
+                    <svg viewBox="0 0 24 24"><path d="M12 3L1 8.5L12 14L21 9.5V16H23V8.5L12 3Z" fill="#FF6B00"/><path d="M5 12.2V16.8C5 18.9 8.1 20.5 12 20.5C15.9 20.5 19 18.9 19 16.8V12.2L12 15.8L5 12.2Z" fill="#A855F7"/></svg>
+                    <span>Lex Class</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VISTA NUEVA: LEX JUNIOR CLASS (DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN) -->
+              <div class="bw-view" id="view-lexclass">
+                <div class="lc-mock-dialog">
+                  <div class="lc-mock-banner">
+                    <div class="lc-mock-emblem">
+                      <img src="assets/logo.png" alt="Lex Junior Class" />
+                      <span class="lc-cap-badge">🎓 CLASS</span>
                     </div>
-                    <span class="btn-stop-demo">⏹ Desactivar</span>
-                  </div>
-                  <div class="sniffer-filters">
-                    <span class="active">Todos</span>
-                    <span>🎬 Video</span>
-                    <span>🎵 Audio</span>
-                    <span>🖼️ Imágenes</span>
-                    <span>📄 Docs</span>
-                  </div>
-                  <div class="sniffer-list">
-                    <div class="sniffer-item">
-                      <span class="fmt-badge">🎬 MP4 1080p HD</span>
-                      <div class="sniffer-info">
-                        <strong>Video_Oficial_1080p_60fps.mp4</strong>
-                        <span>148.4 MB · Video + Audio acoplado</span>
+                    <div class="lc-mock-copy">
+                      <span class="lc-soon-tag">✨ DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN</span>
+                      <h3>Lex Junior Class — Academia Interactiva Integrada</h3>
+                      <p>Estamos afinando cada micro-lección paso a paso desde <strong>1.° de Primaria hasta Preuniversitario</strong> para que aprendas desde cero absoluto con analogías claras, práctica guiada y 0 telemetría.</p>
+                      <div class="lc-mock-pills">
+                        <span>📚 1.° Primaria → Pre</span>
+                        <span>🎯 Estudio · Práctica · Examen</span>
+                        <span>🛡️ 100% Local · 0 Telemetría</span>
                       </div>
-                      <button class="dl-mini-btn">⬇ Descargar</button>
                     </div>
-                    <div class="sniffer-item">
-                      <span class="fmt-badge">🎵 AUDIO MP3</span>
-                      <div class="sniffer-info">
-                        <strong>Cancion_Oficial_HQ.mp3</strong>
-                        <span>8.2 MB · Audio estéreo 320 kbps</span>
+                  </div>
+                  <div class="lc-mock-cards">
+                    <div class="lc-mini-card">
+                      <strong>📘 Micro-lecciones Paso a Paso</strong>
+                      <p>Explicaciones desde cero sin dar nada por sentado, con ejemplos traducidos y alertas de errores frecuentes.</p>
+                    </div>
+                    <div class="lc-mini-card">
+                      <strong>🧠 Práctica y Nota Vigesimal</strong>
+                      <p>Ejercicios en rampa con pistas graduales, retroalimentación específica y simulacros calificados de 0 a 20.</p>
+                    </div>
+                    <div class="lc-mini-card">
+                      <strong>🎮 Arcade &amp; Laboratorio de Voz</strong>
+                      <p>Pronunciación interactiva en inglés, retos mentales y brújula vocacional integrada en el navegador.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VISTA 2: YOUTUBE CON MENOS ANUNCIOS + AMPLIFICADOR DE VOLUMEN 300% -->
+              <div class="bw-view" id="view-youtube">
+                <div class="yt-demo-layout">
+                  <div class="yt-video-stage">
+                    <div class="yt-badge-shield">⚡ LexShield: Anuncio pre-roll bloqueado automáticamente</div>
+                    <div class="yt-screen-art">
+                      <div class="yt-wave-bars">
+                        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
                       </div>
-                      <button class="dl-mini-btn">⬇ Descargar</button>
+                      <p>Reproducción fluida 4K · Sin pausas ni capas fantasma</p>
                     </div>
-                    <div class="sniffer-item">
-                      <span class="fmt-badge">📄 PDF</span>
-                      <div class="sniffer-info">
-                        <strong>Guia_Arquitectura_Sistemas.pdf</strong>
-                        <span>3.6 MB · Documento</span>
+                  </div>
+
+                  <div class="popup-card vol-popup-demo">
+                    <div class="popup-head">
+                      <span>🔊 Amplificador de Volumen</span>
+                      <span class="vol-pill" id="demo-vol-label">240%</span>
+                    </div>
+                    <input type="range" min="0" max="300" value="240" class="demo-slider" id="demo-vol-slider" />
+                    <div class="popup-scale">
+                      <span>0%</span><span>100%</span><span>200%</span><span class="cyan">300% Máx</span>
+                    </div>
+                    <div class="popup-presets">
+                      <button class="preset-btn primary" data-vol="100">↺ 100%</button>
+                      <button class="preset-btn" data-vol="150">150%</button>
+                      <button class="preset-btn" data-vol="200">200%</button>
+                      <button class="preset-btn cyan-txt" data-vol="300">300%</button>
+                    </div>
+                    <p class="popup-note">Usa <code>AudioContext + GainNode + DynamicsCompressor</code> y permanece inactivo cuando está en 100%.</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VISTA 3: DETECTOR Y DESCARGADOR MULTIMEDIA BAJO DEMANDA -->
+              <div class="bw-view" id="view-sniffer">
+                <div class="sniffer-demo-wrap">
+                  <div class="popup-card sniffer-popup-demo">
+                    <div class="popup-head">
+                      <div>
+                        <strong>📥 Detector Multimedia y Documentos</strong>
+                        <div class="sub-green">🟢 Activo bajo demanda en esta pestaña (4 detectados)</div>
                       </div>
-                      <button class="dl-mini-btn">⬇ Descargar</button>
+                      <span class="btn-stop-demo">⏹ Desactivar</span>
                     </div>
-                  </div>
-                  <div class="sniffer-footer-note">
-                    ⚡ <strong>Auto-apagado bajo demanda:</strong> al salir o actualizar la página, el detector se desactiva y detiene la captura automáticamente.
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- VISTA 4: PÁGINA FLOTANTE & PICTURE-IN-PICTURE -->
-            <div class="bw-view" id="view-pip">
-              <div class="pip-demo-stage">
-                <div class="pip-bg-code">
-                  <h4>Multitarea sin límites</h4>
-                  <p>Estira la <strong>Página Flotante</strong> desde cualquier borde o esquina, conserva tu tamaño favorito incluso tras cerrar el navegador, o desprende cualquier pestaña arrastrándola hacia afuera (<em>Tab Tear-Off</em>).</p>
-                </div>
-                <div class="floating-page-mock">
-                  <div class="fp-header">
-                    <span class="fp-badge">🗖 Página Flotante</span>
-                    <span class="fp-title">Transmisión en Vivo · Web Completa</span>
-                    <span class="fp-btn">📐 Tamaño ▾</span>
-                    <span class="fp-btn">─</span>
-                    <span class="fp-btn">🗖</span>
-                    <span class="fp-btn">⇱ Volver</span>
-                    <span class="fp-close">✕</span>
-                  </div>
-                  <div class="fp-body">
-                    <div class="fp-video-box">▶ Reproduciendo siempre encima de tus ventanas</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- VISTA 5: MODO INCÓGNITO REAL -->
-            <div class="bw-view" id="view-incognito">
-              <div class="incog-demo-stage">
-                <div class="incog-pill">🕵️ Modo Incógnito Activo (Ctrl + Shift + N al costado de tu pestaña)</div>
-                <h3>Aislamiento Real a Nivel de Motor (<code>IsInPrivateModeEnabled</code>)</h3>
-                <div class="incog-grid">
-                  <div class="incog-box">
-                    <strong>0 Historial ni Caché</strong>
-                    <p>Sesión privada aislada (<code>IsInPrivateModeEnabled</code>) que descarta historial, cookies y caché al cerrar.</p>
-                  </div>
-                  <div class="incog-box">
-                    <strong>0 Fugas de Favicons</strong>
-                    <p>Sin peticiones a servidores externos ni almacenamiento en la caché de iconos ni en <code>Ctrl+Shift+T</code>.</p>
-                  </div>
-                  <div class="incog-box">
-                    <strong>En la misma ventana</strong>
-                    <p>Abre pestañas privadas justo al lado de tu pestaña actual con <code>Ctrl+Shift+N</code> sin saturar tu barra de tareas.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- VISTA 6: LEX PDF STUDIO -->
-            <div class="bw-view" id="view-pdf">
-              <div class="pdf-mockup-wrapper">
-                <div class="pdf-mockup-toolbar">
-                  <div class="pdf-mock-left">
-                    <span class="pdf-badge">📄 Contrato_Acuerdo_Servicios.pdf</span>
-                    <span class="pdf-pages">1 / 4</span>
-                  </div>
-                  <div class="pdf-mock-tools">
-                    <span class="pdf-btn active">✏️ Lápiz (4px)</span>
-                    <span class="pdf-btn">🖍️ Resaltador</span>
-                    <span class="pdf-btn">🧽 Borrador</span>
-                    <span class="pdf-btn">T Texto</span>
-                    <span class="pdf-btn">✍️ Firma</span>
-                    <span class="pdf-btn">🖼️ Sello</span>
-                  </div>
-                  <div class="pdf-mock-right">
-                    <span class="pdf-btn">🌙 Modo Noche</span>
-                    <span class="pdf-btn pdf-btn-save">💾 Guardar PDF</span>
-                  </div>
-                </div>
-                <div class="pdf-mock-sheet">
-                  <div class="pdf-sheet-header">
-                    <h4>CONTRATO DE PRESTACIÓN DE SERVICIOS</h4>
-                    <p class="pdf-sheet-date">Acuerdo de Confidencialidad y Desarrollo de Software</p>
-                  </div>
-                  <div class="pdf-sheet-body">
-                    <p>Por medio del presente documento, las partes certifican la entrega del navegador de escritorio con herramientas bajo demanda, ejecución local y 0 telemetría propia...</p>
-                    <div class="pdf-mock-highlight">Se aprueba la edición nativa de documentos sin extensiones ni programas de terceros.</div>
-                    <div class="pdf-signature-stamp">
-                      <div class="pdf-sig-draw">Junior Jhair P.</div>
-                      <span class="pdf-sig-label">✍️ Firma Digital Registrada (Estampada en 1 Clic)</span>
+                    <div class="sniffer-filters">
+                      <span class="active">Todos</span>
+                      <span>🎬 Video</span>
+                      <span>🎵 Audio</span>
+                      <span>🖼️ Imágenes</span>
+                      <span>📄 Docs</span>
+                    </div>
+                    <div class="sniffer-list">
+                      <div class="sniffer-item">
+                        <span class="fmt-badge">🎬 MP4 1080p HD</span>
+                        <div class="sniffer-info">
+                          <strong>Video_Oficial_1080p_60fps.mp4</strong>
+                          <span>148.4 MB · Video + Audio acoplado</span>
+                        </div>
+                        <button class="dl-mini-btn">⬇ Descargar</button>
+                      </div>
+                      <div class="sniffer-item">
+                        <span class="fmt-badge">🎵 AUDIO MP3</span>
+                        <div class="sniffer-info">
+                          <strong>Cancion_Oficial_HQ.mp3</strong>
+                          <span>8.2 MB · Audio estéreo 320 kbps</span>
+                        </div>
+                        <button class="dl-mini-btn">⬇ Descargar</button>
+                      </div>
+                      <div class="sniffer-item">
+                        <span class="fmt-badge">📄 PDF</span>
+                        <div class="sniffer-info">
+                          <strong>Guia_Arquitectura_Sistemas.pdf</strong>
+                          <span>3.6 MB · Documento</span>
+                        </div>
+                        <button class="dl-mini-btn">⬇ Descargar</button>
+                      </div>
+                    </div>
+                    <div class="sniffer-footer-note">
+                      ⚡ <strong>Auto-apagado bajo demanda:</strong> al salir o actualizar la página, el detector se desactiva y detiene la captura automáticamente.
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- VISTA 7: LEX TV (IPTV, VOD & XTREAM CODES) -->
-            <div class="bw-view" id="view-tv">
-              <div class="tv-mockup-wrapper">
-                <div class="tv-mockup-header">
-                  <div class="tv-mock-brand">
-                    <span class="tv-dot-live"></span>
-                    <strong>Lex TV</strong>
-                    <span class="tv-badge">Reproductor Personal</span>
+              <!-- VISTA 4: PÁGINA FLOTANTE & PICTURE-IN-PICTURE -->
+              <div class="bw-view" id="view-pip">
+                <div class="pip-demo-stage">
+                  <div class="pip-bg-code">
+                    <h4>Multitarea sin límites</h4>
+                    <p>Estira la <strong>Página Flotante</strong> desde cualquier borde o esquina, conserva tu tamaño favorito incluso tras cerrar el navegador, o desprende cualquier pestaña arrastrándola hacia afuera (<em>Tab Tear-Off</em>).</p>
                   </div>
-                  <div class="tv-mock-nav">
-                    <span class="tv-nav-link active">Inicio</span>
-                    <span class="tv-nav-link">TV en vivo</span>
-                    <span class="tv-nav-link">VOD (Cine)</span>
-                    <span class="tv-nav-link">Xtream Codes</span>
+                  <div class="floating-page-mock">
+                    <div class="fp-header">
+                      <span class="fp-badge">🗖 Página Flotante</span>
+                      <span class="fp-title">Transmisión en Vivo · Web Completa</span>
+                      <span class="fp-btn">📐 Tamaño ▾</span>
+                      <span class="fp-btn">─</span>
+                      <span class="fp-btn">🗖</span>
+                      <span class="fp-btn">⇱ Volver</span>
+                      <span class="fp-close">✕</span>
+                    </div>
+                    <div class="fp-body">
+                      <div class="fp-video-box">▶ Reproduciendo siempre encima de tus ventanas</div>
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                <div class="tv-mockup-body">
-                  <div class="tv-mockup-hero">
-                    <h3>Lex TV — Tu Centro Multimedia Bajo Demanda</h3>
-                    <p>100% privado · Sin telemetría · Bajo demanda</p>
+              <!-- VISTA 5: MODO INCÓGNITO REAL -->
+              <div class="bw-view" id="view-incognito">
+                <div class="incog-demo-stage">
+                  <div class="incog-pill">🕵️ Modo Incógnito Activo (Ctrl + Shift + N al costado de tu pestaña)</div>
+                  <h3>Aislamiento Real a Nivel de Motor (<code>IsInPrivateModeEnabled</code>)</h3>
+                  <div class="incog-grid">
+                    <div class="incog-box">
+                      <strong>0 Historial ni Caché</strong>
+                      <p>Sesión privada aislada (<code>IsInPrivateModeEnabled</code>) que descarta historial, cookies y caché al cerrar.</p>
+                    </div>
+                    <div class="incog-box">
+                      <strong>0 Fugas de Favicons</strong>
+                      <p>Sin peticiones a servidores externos ni almacenamiento en la caché de iconos ni en <code>Ctrl+Shift+T</code>.</p>
+                    </div>
+                    <div class="incog-box">
+                      <strong>En la misma ventana</strong>
+                      <p>Abre pestañas privadas justo al lado de tu pestaña actual con <code>Ctrl+Shift+N</code> sin saturar tu barra de tareas.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VISTA 6: LEX PDF STUDIO (LOCALES Y VIRTUALES) -->
+              <div class="bw-view" id="view-pdf">
+                <div class="pdf-mockup-wrapper">
+                  <div class="pdf-mockup-toolbar">
+                    <div class="pdf-mock-left">
+                      <span class="pdf-badge">🌐 https://universidad.edu/Silabo_2026.pdf</span>
+                      <span class="pdf-pages">1 / 12 · Virtual &amp; Local</span>
+                    </div>
+                    <div class="pdf-mock-tools">
+                      <span class="pdf-btn active">✏️ Lápiz (4px)</span>
+                      <span class="pdf-btn">🖍️ Resaltador</span>
+                      <span class="pdf-btn">🧽 Borrador</span>
+                      <span class="pdf-btn">T Texto</span>
+                      <span class="pdf-btn">✍️ Firma</span>
+                      <span class="pdf-btn">🖼️ Sello</span>
+                    </div>
+                    <div class="pdf-mock-right">
+                      <span class="pdf-btn">🌙 Modo Noche</span>
+                      <span class="pdf-btn pdf-btn-save">💾 Guardar PDF</span>
+                    </div>
+                  </div>
+                  <div class="pdf-mock-sheet">
+                    <div class="pdf-sheet-header">
+                      <h4>LEX PDF STUDIO — SOPORTE NATIVO LOCAL Y VIRTUAL (HTTP/HTTPS)</h4>
+                      <p class="pdf-sheet-date">Proxy autenticado con cookies de sesión · Protección anti-SSRF · Guardado sin pérdida</p>
+                    </div>
+                    <div class="pdf-sheet-body">
+                      <p>Ahora puedes abrir tanto archivos PDF de tu disco duro (<code>C:\...</code>) como enlaces PDF directos de Internet o aulas virtuales autenticadas sin errores de CORS, editándolos y guardándolos con un clic.</p>
+                      <div class="pdf-mock-highlight">✔ Anota, resalta, firma y guarda cualquier PDF virtual o local sin salir de Lex Junior.</div>
+                      <div class="pdf-signature-stamp">
+                        <div class="pdf-sig-draw">Junior Jhair P.</div>
+                        <span class="pdf-sig-label">✍️ Firma Digital Registrada (Estampada en 1 Clic)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VISTA 7: LEX TV (IPTV, VOD & XTREAM CODES) -->
+              <div class="bw-view" id="view-tv">
+                <div class="tv-mockup-wrapper">
+                  <div class="tv-mockup-header">
+                    <div class="tv-mock-brand">
+                      <span class="tv-dot-live"></span>
+                      <strong>Lex TV</strong>
+                      <span class="tv-badge">Reproductor Personal</span>
+                    </div>
+                    <div class="tv-mock-nav">
+                      <span class="tv-nav-link active">Inicio</span>
+                      <span class="tv-nav-link">TV en vivo</span>
+                      <span class="tv-nav-link">VOD (Cine)</span>
+                      <span class="tv-nav-link">Xtream Codes</span>
+                    </div>
                   </div>
 
-                  <div class="tv-mockup-cards">
-                    <div class="tv-mock-card">
-                      <div class="tv-card-icon">📺</div>
-                      <h4>IPTV en Vivo</h4>
-                      <p>Sintoniza listas M3U/M3U8 con cambio de canal directo y favoritos locales.</p>
-                      <span class="tv-card-btn">Abrir TV en vivo →</span>
+                  <div class="tv-mockup-body">
+                    <div class="tv-mockup-hero">
+                      <h3>Lex TV — Tu Centro Multimedia Bajo Demanda</h3>
+                      <p>100% privado · Sin telemetría · Bajo demanda</p>
                     </div>
 
-                    <div class="tv-mock-card">
-                      <div class="tv-card-icon">🎬</div>
-                      <h4>Películas y Series (VOD)</h4>
-                      <p>Videoteca organizada por temporadas y episodios con control de reproducción.</p>
-                      <span class="tv-card-btn">Abrir Cine VOD →</span>
-                    </div>
+                    <div class="tv-mockup-cards">
+                      <div class="tv-mock-card">
+                        <div class="tv-card-icon">📺</div>
+                        <h4>IPTV en Vivo</h4>
+                        <p>Sintoniza listas M3U/M3U8 con cambio de canal directo y favoritos locales.</p>
+                        <span class="tv-card-btn">Abrir TV en vivo →</span>
+                      </div>
 
-                    <div class="tv-mock-card tv-card-highlight">
-                      <div class="tv-card-icon">⚡</div>
-                      <h4>Xtream Codes</h4>
-                      <p>Conexión directa a servidores con protección cifrada de credenciales DPAPI.</p>
-                      <span class="tv-card-btn">Conectar Servidor →</span>
+                      <div class="tv-mock-card">
+                        <div class="tv-card-icon">🎬</div>
+                        <h4>Películas y Series (VOD)</h4>
+                        <p>Videoteca organizada por temporadas y episodios con control de reproducción.</p>
+                        <span class="tv-card-btn">Abrir Cine VOD →</span>
+                      </div>
+
+                      <div class="tv-mock-card tv-card-highlight">
+                        <div class="tv-card-icon">⚡</div>
+                        <h4>Xtream Codes</h4>
+                        <p>Conexión directa a servidores con protección cifrada de credenciales DPAPI.</p>
+                        <span class="tv-card-btn">Conectar Servidor →</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+
+          <!-- Tarjetas de Exploración por Rutas -->
+          <div class="route-hub-grid">
+            <a href="#/funciones" class="route-hub-card" data-route-link="funciones">
+              <span class="rh-icon">🛡️</span>
+              <div>
+                <strong>Funciones y Perfiles A/B/C</strong>
+                <p>Conoce LexShield Core, los 3 perfiles de privacidad, PDF Studio virtual y Lex TV.</p>
+              </div>
+              <span class="rh-arrow">→</span>
+            </a>
+            <a href="#/lex-class" class="route-hub-card rh-card-accent" data-route-link="lex-class">
+              <span class="rh-icon">🎓</span>
+              <div>
+                <strong>Lex Junior Class (Muy Pronto)</strong>
+                <p>Descubre la academia interactiva integrada para Primaria, Secundaria y Pre.</p>
+              </div>
+              <span class="rh-arrow">→</span>
+            </a>
+            <a href="#/documentacion" class="route-hub-card" data-route-link="documentacion">
+              <span class="rh-icon">📘</span>
+              <div>
+                <strong>Documentación Oficial</strong>
+                <p>Guía técnica completa, arquitectura de seguridad, atajos y configuración.</p>
+              </div>
+              <span class="rh-arrow">→</span>
+            </a>
+            <a href="#/faq" class="route-hub-card" data-route-link="faq">
+              <span class="rh-icon">💬</span>
+              <div>
+                <strong>Preguntas y Respuestas</strong>
+                <p>Resuelve todas tus dudas con nuestro buscador interactivo por categorías.</p>
+              </div>
+              <span class="rh-arrow">→</span>
+            </a>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- BENTO GRID DE CARACTERÍSTICAS -->
+    <!-- RUTA 2: #/funciones (HERRAMIENTAS, PERFILES A/B/C Y 0 TELEMETRÍA)   -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <section class="features-section" id="features">
-      <div class="container">
-        <div class="section-header reveal">
-          <span class="section-tag">HERRAMIENTAS INTEGRADAS</span>
-          <h2>Todo integrado de fábrica. Sin instalar extensiones.</h2>
-          <p>Cada función está integrada directamente en la aplicación y se activa solo cuando la utilizas.</p>
+    <div class="route-page" id="route-funciones" data-route-page="funciones">
+      <section class="features-section">
+        <div class="container">
+          <div class="section-header">
+            <span class="section-tag">ARQUITECTURA Y HERRAMIENTAS NATIVAS</span>
+            <h2>Todo integrado de fábrica. Sin instalar extensiones.</h2>
+            <p>Desarrollado en C# y .NET 8 sobre WebView2 con módulos bajo demanda que consumen cero recursos mientras no los utilizas.</p>
+          </div>
+
+          <div class="bento-grid">
+            <article class="bento-card bento-wide">
+              <div class="card-icon">🛡️</div>
+              <h3>Escudo LexShield Core (<code>lex-shield.lex</code>) &amp; Reproducción Fluida</h3>
+              <p>
+                Motor unificado de bloqueo a nivel de red en C# con búsqueda <code>O(1)</code>, filtros cosméticos, inyección segura de scriptlets con token por pestaña, <strong>Video Player Defuser</strong> contra overlays engañosos y optimizadores dedicados para YouTube y Dailymotion. Incluye <strong>Modo Compatibilidad Temporal</strong> si una página requiere relajar filtros puntualmente.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🔒</div>
+              <h3>Perfiles de Privacidad (A / B / C)</h3>
+              <p>
+                Elige desde el primer arranque entre <strong>Perfil A (Privacidad Estricta)</strong>, <strong>Perfil B (Equilibrado — Recomendado)</strong>, <strong>Perfil C (Completo)</strong> o <strong>Personalizado</strong>, gobernando 7 conexiones de red con total transparencia.
+              </p>
+            </article>
+
+            <article class="bento-card bento-wide">
+              <div class="card-icon">📑</div>
+              <h3>Lex PDF Studio · Documentos Locales y Virtuales (<code>http/https</code>)</h3>
+              <p>
+                Abre y edita tanto archivos PDF de tu equipo como enlaces PDF directos de la web o plataformas autenticadas. Utiliza un proxy interno seguro (<code>api/load-remote-pdf</code>) que reenvía tus cookies de sesión de WebView2 por salto, bloquea redirecciones SSRF a redes privadas, verifica la firma mágica <code>%PDF-</code> y conserva los bytes en memoria para hacer zoom, dibujar con 8 grosores, resaltar, estampar tu firma digital y guardar sin pérdida con <code>pdf-lib</code>.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🚀</div>
+              <h3>Amplificador de Volumen 300%</h3>
+              <p>
+                Sube el volumen de videos bajos, clases grabadas o transmisiones hasta el triple (<code>300%</code>) con compresor dinámico integrado para evitar saturación o distorsión.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">📥</div>
+              <h3>Descargador Multimedia Bajo Demanda</h3>
+              <p>
+                Detecta y descarga videos (<code>MP4</code>, <code>M3U8 HLS</code>), audios (<code>MP3</code>, <code>M4A</code>) y documentos con barra de progreso sincronizada a 350 ms y auto-apagado al salir de la pestaña.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🗖</div>
+              <h3>Página Flotante &amp; Auto-PiP</h3>
+              <p>
+                Lleva cualquier web o transmisión a una mini-ventana siempre visible que recuerda tu tamaño favorito, o activa Picture-in-Picture automático al cambiar de pestaña.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🧩</div>
+              <h3>Desprendimiento de Pestañas (Tab Tear-Off)</h3>
+              <p>
+                Arrastra cualquier pestaña hacia afuera para convertirla en una ventana independiente sin recargar la página ni cortar tu video, o vuelve a acoplarla cuando quieras.
+              </p>
+            </article>
+
+            <article class="bento-card bento-wide">
+              <div class="card-icon">🔑</div>
+              <h3>Bóveda DPAPI, Coincidencia Estricta de Dominio, PIN &amp; Modo Invitado</h3>
+              <p>
+                Cifrado nativo de Windows (<code>DPAPI</code>) con autocompletado endurecido por host exacto (<code>IsSameExactOrWwwHost</code>) que impide fugas entre subdominios de hosting compartido (<code>github.io</code>, <code>vercel.app</code>, <code>pages.dev</code>). Incluye bloqueo con PIN de 6 caracteres, bloqueo automático al presionar <code>Win + L</code>, <strong>Modo Invitado</strong> aislado y limpieza de portapapeles a los 20 segundos.
+              </p>
+            </article>
+
+            <article class="bento-card bento-wide">
+              <div class="card-icon">📺</div>
+              <h3>Lex TV · Centro Multimedia Personal (IPTV, Cine VOD &amp; Xtream Codes)</h3>
+              <p>
+                Sintoniza listas <code>M3U/M3U8</code> en vivo, organiza tu videoteca VOD por temporadas y episodios, y conecta servidores <strong>Xtream Codes</strong> o <strong>Jellyfin/Emby</strong> con credenciales cifradas en DPAPI y protección anti-SSRF con DNS pinning.
+              </p>
+            </article>
+          </div>
         </div>
+      </section>
 
-        <div class="bento-grid">
-          <article class="bento-card bento-wide reveal">
-            <div class="card-icon">🛡️</div>
-            <h3>Escudo LexShield &amp; Reproducción Fluida</h3>
-            <p>
-              Bloquea dominios publicitarios y rastreadores conocidos a nivel de red en C# con búsqueda <code>O(1)</code> antes de descargar recursos externos. En YouTube, filtra la mayoría de interrupciones tanto en la carga inicial como en navegación SPA (<code>fetch</code> y <code>XHR</code>) sin romper los comentarios ni los menús.
-            </p>
-          </article>
+      <!-- MATRIZ COMPARATIVA DE PERFILES DE PRIVACIDAD -->
+      <section class="profiles-section">
+        <div class="container">
+          <div class="section-header">
+            <span class="section-tag">NUEVO EN LA VERSIÓN 2.7.0</span>
+            <h2>Perfiles de Privacidad Transparentes (A / B / C)</h2>
+            <p>Ninguna conexión de red ocurre a tus espaldas. Además, la compuerta de red de arranque (<code>StartupNetworkGate</code>) permanece cerrada hasta que desbloqueas tu PIN y eliges tu perfil.</p>
+          </div>
 
-          <article class="bento-card reveal">
-            <div class="card-icon">🚀</div>
-            <h3>Amplificador de Volumen 300%</h3>
-            <p>
-              Sube el volumen de videos bajos, clases grabadas o transmisiones hasta el triple (<code>300%</code>) con compresor dinámico integrado para evitar distorsión en los parlantes de tu laptop.
-            </p>
-          </article>
-
-          <article class="bento-card reveal">
-            <div class="card-icon">📥</div>
-            <h3>Descargador Multimedia Universal</h3>
-            <p>
-              Captura y descarga videos (<code>MP4 1080p/720p</code>, <code>M3U8 HLS</code>) y pistas de audio separadas (<code>MP3</code>, <code>M4A</code>) sin archivos basura, con aviso interactivo, barra de progreso en vivo y auto-apagado al salir.
-            </p>
-          </article>
-
-          <article class="bento-card reveal">
-            <div class="card-icon">🗖</div>
-            <h3>Página Flotante &amp; Mini-Reproductor</h3>
-            <p>
-              Lleva cualquier página web o video a una ventana flotante siempre visible que recuerda tu último tamaño personalizado, o usa el Picture-in-Picture automático al cambiar de pestaña.
-            </p>
-          </article>
-
-          <article class="bento-card reveal">
-            <div class="card-icon">🧩</div>
-            <h3>Desprendimiento de Pestañas (Tab Tear-Off)</h3>
-            <p>
-              Arrastra cualquier pestaña hacia afuera para convertirla en una nueva ventana independiente sin recargar la página ni cortar tu video, o vuelve a acoplarla en otra ventana.
-            </p>
-          </article>
-
-          <article class="bento-card bento-wide reveal">
-            <div class="card-icon">📑</div>
-            <h3>Lex PDF Studio · Editor y Lector Nativo Integrado</h3>
-            <p>
-              Sin necesidad de programas externos ni complementos. Dibuja a mano alzada con lápiz y 8 grosores calibrados (desde 1px ultra fino hasta 28px), usa el marcador resaltador translúcido, borrador de trazos, añade cuadros de texto móviles para rellenar formularios, estampa tu firma digital guardada en 1 clic e inserta imágenes o sellos con transparencia. Incluye <strong>Modo Noche</strong> y <strong>Modo Sepia</strong> para no quemar la vista, impresión limpia hoja por hoja y guardado vectorial sin pérdida con <code>pdf-lib</code> (100% offline, activo solo mientras editas).
-            </p>
-          </article>
-
-          <article class="bento-card bento-wide reveal">
-            <div class="card-icon">🔑</div>
-            <h3>Bóveda de Contraseñas Cifrada, Bloqueo con PIN &amp; Modo Invitado</h3>
-            <p>
-              Guarda y autocompleta tus accesos con cifrado nativo de Windows (<code>DPAPI</code>) agrupando rutas inteligentemente por dominio raíz (<code>eTLD+1</code>). Protege tu navegador con un PIN de 6 caracteres (al abrir o por sesión/bloqueo de Windows), permite entrar en <strong>Modo Invitado</strong> sin exponer tus contraseñas, incluye recuperación por pregunta secreta y limpia el portapapeles automáticamente a los <strong>20 segundos</strong> de copiar una clave.
-            </p>
-          </article>
-
-          <article class="bento-card bento-wide reveal">
-            <div class="card-icon">📺</div>
-            <h3>Lex TV · Centro Multimedia Personal (IPTV, VOD &amp; Xtream Codes)</h3>
-            <p>
-              Tu reproductor y organizador de contenidos bajo demanda 100% privado y sin telemetría. Sintoniza televisión en vivo desde tus propias listas <code>M3U</code> o <code>M3U8</code> con cambio de canal directo y favoritos locales, organiza tu videoteca <strong>Cine VOD</strong> (películas y series) con detección automática de temporadas y episodios, y conecta tus servidores de <strong>Xtream Codes</strong> con almacenamiento cifrado nativo (<code>DPAPI</code>) y validación anti-SSRF. Compatible opcionalmente con <strong>Jellyfin</strong> y <strong>Emby</strong>. Todo funciona localmente bajo demanda y se detiene al cerrar la pestaña.
-            </p>
-          </article>
+          <div class="profiles-table-wrap">
+            <table class="profiles-table">
+              <thead>
+                <tr>
+                  <th>Función / Conexión de Red</th>
+                  <th>🔒 Perfil A (Estricto)</th>
+                  <th>⚖️ Perfil B (Equilibrado · Recomendado)</th>
+                  <th>🌐 Perfil C (Completo)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Microsoft SmartScreen</strong> (Filtro anti-malware de WebView2)</td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Detección anti-phishing local</strong></td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Descarga de favicons declarados por el sitio</strong> (con guardia anti-SSRF)</td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Sondeo directo de <code>/favicon.ico</code></strong></td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Servicio externo de favicons (DuckDuckGo)</strong></td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Sugerencias de búsqueda en tiempo real en el Omnibox</strong></td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-off">Desactivado</span></td>
+                  <td><span class="pill-on">Activado</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Búsqueda de actualizaciones en GitHub Releases</strong></td>
+                  <td><span class="pill-neutral">Solo manual</span></td>
+                  <td><span class="pill-on">Al iniciar</span></td>
+                  <td><span class="pill-on">Al iniciar</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- SECCIÓN 0 TELEMETRÍA -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <section class="telemetry-section" id="telemetry">
-      <div class="container telemetry-grid">
-        <div class="telemetry-info reveal">
-          <span class="section-tag">PRIVACIDAD Y TRANSPARENCIA</span>
-          <h2>¿Qué significa realmente <span class="gradient-text">0 Telemetría</span>?</h2>
-          <p>
-            Muchos navegadores comerciales mantienen servicios en segundo plano que envían métricas de uso, informes de fallos y perfiles publicitarios a sus servidores.
-          </p>
-          <ul class="telemetry-list">
-            <li><strong>Banderas de Privacidad en Chromium:</strong> Configura el motor con <code>--disable-background-networking</code>, <code>--disable-sync</code>, <code>--no-pings</code>, <code>--disable-breakpad</code> y desactivación de <code>InterestCohort</code>.</li>
-            <li><strong>Aislamiento Local y WebRTC:</strong> Protección <code>WebRtcHideLocalIpsWithMdns</code>, bóveda cifrada con Windows <code>DPAPI</code> y controles explícitos para sugerencias e íconos externos.</li>
-            <li><strong>Actualizaciones Transparentes:</strong> Te avisa en la barra superior cuando hay una nueva versión oficial en GitHub y se actualiza con un clic conservando tus datos.</li>
-          </ul>
-        </div>
+      <!-- SECCIÓN 0 TELEMETRÍA -->
+      <section class="telemetry-section" id="telemetry">
+        <div class="container telemetry-grid">
+          <div class="telemetry-info">
+            <span class="section-tag">PRIVACIDAD Y TRANSPARENCIA</span>
+            <h2>¿Qué significa realmente <span class="gradient-text">0 Telemetría</span>?</h2>
+            <p>
+              Lex Junior no posee servidores de analítica ni recolecta tu historial, búsquedas o hábitos de navegación.
+            </p>
+            <ul class="telemetry-list">
+              <li><strong>Banderas de Privacidad en Chromium:</strong> Ejecuta el motor con <code>--disable-background-networking</code>, <code>--disable-sync</code>, <code>--no-pings</code>, <code>--disable-breakpad</code> y desactivación de <code>InterestCohort</code>.</li>
+              <li><strong>Aislamiento Local y WebRTC:</strong> Protección <code>WebRtcHideLocalIpsWithMdns</code>, bóveda cifrada con Windows <code>DPAPI</code> y cero escritura en disco durante Modo Incógnito o Invitado.</li>
+              <li><strong>Actualizaciones Verificadas con SHA-256:</strong> Comprueba el hash criptográfico del instalador oficial publicado en GitHub antes de ejecutarlo.</li>
+            </ul>
+          </div>
 
-        <div class="telemetry-bars reveal">
-          <div class="bar-card">
-            <div class="bar-header">
-              <span>Telemetría y Analítica Propia</span>
-              <span class="badge-emerald">0 servidores propios</span>
+          <div class="telemetry-bars">
+            <div class="bar-card">
+              <div class="bar-header">
+                <span>Telemetría y Analítica Propia</span>
+                <span class="badge-emerald">0 servidores propios</span>
+              </div>
+              <div class="compare-row">
+                <span class="comp-name">Lex Junior</span>
+                <div class="comp-track"><div class="comp-fill fill-lex" style="width: 4%"></div></div>
+                <span class="comp-val">0 propia</span>
+              </div>
+              <div class="compare-row">
+                <span class="comp-name">Navegadores comerciales</span>
+                <div class="comp-track"><div class="comp-fill fill-other" style="width: 92%"></div></div>
+                <span class="comp-val">Activa</span>
+              </div>
             </div>
-            <div class="compare-row">
-              <span class="comp-name">Lex Junior</span>
-              <div class="comp-track"><div class="comp-fill fill-lex" style="width: 4%"></div></div>
-              <span class="comp-val">0 propia</span>
+
+            <div class="bar-card">
+              <div class="bar-header">
+                <span>Complementos externos requeridos (Escudo, Volumen, PDF, TV)</span>
+                <span class="badge-emerald">Todo integrado</span>
+              </div>
+              <div class="compare-row">
+                <span class="comp-name">Lex Junior (Nativo)</span>
+                <div class="comp-track"><div class="comp-fill fill-lex" style="width: 5%"></div></div>
+                <span class="comp-val">0 extra</span>
+              </div>
+              <div class="compare-row">
+                <span class="comp-name">Flujo con add-ons</span>
+                <div class="comp-track"><div class="comp-fill fill-other" style="width: 85%"></div></div>
+                <span class="comp-val">Múltiples</span>
+              </div>
             </div>
-            <div class="compare-row">
-              <span class="comp-name">Navegadores comerciales</span>
-              <div class="comp-track"><div class="comp-fill fill-other" style="width: 92%"></div></div>
-              <span class="comp-val">Activa</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- RUTA 3: #/lex-class (ADELANTO OFICIAL DE LEX JUNIOR CLASS)          -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="route-page" id="route-lex-class" data-route-page="lex-class">
+      <section class="lexclass-showcase-section">
+        <div class="container">
+          <!-- Hero Artístico de Lex Junior Class con el Logo Oficial -->
+          <div class="lc-hero-card">
+            <div class="lc-hero-art">
+              <div class="lc-orb-orange"></div>
+              <div class="lc-orb-purple"></div>
+              <svg class="lc-swoosh-svg" viewBox="0 0 600 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="lcGrad1" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#FF6B00" stop-opacity="0.7"/>
+                    <stop offset="50%" stop-color="#FB923C" stop-opacity="0.5"/>
+                    <stop offset="100%" stop-color="#A855F7" stop-opacity="0.7"/>
+                  </linearGradient>
+                  <linearGradient id="lcGrad2" x1="0" y1="1" x2="1" y2="0">
+                    <stop offset="0%" stop-color="#7C3AED" stop-opacity="0.5"/>
+                    <stop offset="100%" stop-color="#FF6B00" stop-opacity="0.4"/>
+                  </linearGradient>
+                </defs>
+                <path d="M-20 260 C 120 160, 240 290, 380 175 C 470 100, 540 130, 620 60" stroke="url(#lcGrad1)" stroke-width="4" fill="none"/>
+                <path d="M-10 290 C 160 210, 290 300, 440 205 C 520 155, 570 175, 620 120" stroke="url(#lcGrad2)" stroke-width="2.5" fill="none"/>
+              </svg>
+
+              <div class="lc-art-center">
+                <div class="lc-ring-outer"></div>
+                <div class="lc-logo-glass">
+                  <img src="assets/logo.png" alt="Lex Junior Class Logo" />
+                </div>
+                <div class="lc-floating-badge lc-fb-top">🎓 LEX CLASS</div>
+                <div class="lc-floating-badge lc-fb-bottom">📘 1.° Primaria → Pre</div>
+              </div>
+            </div>
+
+            <div class="lc-hero-text">
+              <div class="lc-status-pill">✨ DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN</div>
+              <h1>Lex Junior Class</h1>
+              <p class="lc-lead">
+                Tu academia interactiva paso a paso integrada nativamente en <strong>Lex Junior Browser</strong>. En v2.7.0 ya verás el botón <strong>🎓 Lex Class</strong> en tu barra de herramientas; estamos completando la revisión pedagógica unidad por unidad para que se active automáticamente en la próxima actualización.
+              </p>
+              <div class="lc-highlight-tags">
+                <span>⚡ Explicado desde cero absoluto</span>
+                <span>🧩 Micro-lecciones paso a paso</span>
+                <span>🎯 Nota vigesimal (0 a 20)</span>
+                <span>🛡️ 100% Local y 0 Telemetría</span>
+              </div>
             </div>
           </div>
 
-          <div class="bar-card">
-            <div class="bar-header">
-              <span>Complementos necesarios (Escudo, Volumen, PDF, TV)</span>
-              <span class="badge-emerald">Integrados</span>
+          <!-- Pilares Pedagógicos de Lex Junior Class -->
+          <div class="section-header" style="margin-top: 56px;">
+            <span class="section-tag">¿POR QUÉ ESTAMOS CONSTRUYENDO LEX CLASS CON TANTO CUIDADO?</span>
+            <h2>Aprendizaje real desde cero, sin vacíos ni relleno</h2>
+            <p>Diseñado para que cualquier estudiante de Primaria, Secundaria o Preuniversitario entienda el porqué de cada concepto antes de pasar al siguiente.</p>
+          </div>
+
+          <div class="bento-grid">
+            <article class="bento-card">
+              <div class="card-icon">🧱</div>
+              <h3>1. Micro-lecciones Graduadas desde Cero</h3>
+              <p>
+                Ningún término técnico se evalúa sin haberse explicado antes en español sencillo. Cada unidad se divide en bloques breves: una idea clara, una analogía cotidiana, ejemplos paso a paso y de 3 a 5 ejercicios en rampa.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🔍</div>
+              <h3>2. Explicación de Errores Frecuentes</h3>
+              <p>
+                Si te equivocas en una pregunta, Lex Class no solo te dice «incorrecto»: analiza la opción que elegiste y te explica con calma qué regla se confundió y cómo razonarlo correctamente.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">📊</div>
+              <h3>3. Estudio, Práctica Guiada y Simulacro (0–20)</h3>
+              <p>
+                Alterna entre <strong>Modo Estudio</strong> (teoría interactiva y mapas visuales), <strong>Modo Práctica</strong> (con pistas progresivas y banco de palabras) y <strong>Modo Examen</strong> con calificación vigesimal peruana (<code>AD</code>, <code>A</code>, <code>B</code>, <code>C</code>).
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🗣️</div>
+              <h3>4. Laboratorio de Inglés y Pronunciación</h3>
+              <p>
+                Aprende inglés desde los cimientos (qué es un pronombre, qué es un verbo, <em>to be</em>, Presente Simple y Continuo paso a paso) con traducción clara y práctica auditiva.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🎮</div>
+              <h3>5. Arcade Educativo &amp; Brújula Humana</h3>
+              <p>
+                Minijuegos de agilidad mental para reforzar cálculo, vocabulario y lógica, acompañados de módulos de orientación vocacional, ética y bienestar estudiantil.
+              </p>
+            </article>
+
+            <article class="bento-card">
+              <div class="card-icon">🔒</div>
+              <h3>6. 100% Privado y Sin Suscripciones</h3>
+              <p>
+                Tu progreso académico se guarda localmente en tu equipo sin cuentas en la nube obligatorias, sin anuncios y sin telemetría comercial.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- RUTA 4: #/documentacion (DOCUMENTACIÓN OFICIAL COMPLETA)            -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="route-page" id="route-documentacion" data-route-page="documentacion">
+      <section class="docs-section">
+        <div class="container">
+          <div class="section-header">
+            <span class="section-tag">MANUAL TÉCNICO Y DE USUARIO · v2.7.0</span>
+            <h2>Documentación Oficial de Lex Junior Browser</h2>
+            <p>Guía completa de instalación, perfiles de privacidad, Lex PDF Studio (local y virtual), LexShield Core, seguridad DPAPI y atajos de teclado.</p>
+          </div>
+
+          <div class="docs-layout">
+            <!-- Menú lateral de documentación -->
+            <aside class="docs-sidebar" aria-label="Índice de documentación">
+              <div class="docs-sidebar-box">
+                <div class="docs-sidebar-title">CONTENIDO</div>
+                <button type="button" class="doc-nav-btn active" data-doc-target="doc-instalacion">1. Instalación y Actualizador SHA-256</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-perfiles">2. Perfiles de Privacidad (A / B / C)</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-pdf">3. Lex PDF Studio (Local y Virtual)</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-shield">4. LexShield Core y Compatibilidad</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-seguridad">5. Bóveda PIN, Anti-Downgrade y Recuperación</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-tv">6. Lex TV, Amplificador 300% y Multimedia</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-atajos">7. Referencia de Atajos de Teclado</button>
+              </div>
+            </aside>
+
+            <!-- Contenido principal de documentación -->
+            <div class="docs-content">
+              <!-- DOC 1 -->
+              <article class="doc-card" id="doc-instalacion">
+                <span class="doc-badge">SECCIÓN 1</span>
+                <h3>Instalación, Requisitos y Actualizador con Verificación SHA-256</h3>
+                <p>
+                  El instalador oficial <code>LexJuniorSetup.exe</code> empaqueta el navegador compilado en .NET 8 para Windows 10 y Windows 11 (64-bit) junto con su desinstalador limpio registrado en Windows.
+                </p>
+                <ul class="doc-list">
+                  <li><strong>Requisitos del sistema:</strong> Windows 10 (64-bit) o Windows 11 (64-bit) con <em>Microsoft Edge WebView2 Runtime</em> (preinstalado en Windows 10/11).</li>
+                  <li><strong>Ventana de instalación mejorada (v2.7.0):</strong> El encabezado del instalador cuenta con margen ampliado y botón de cierre (<code>✕</code>) independiente de <code>32×32 px</code> para evitar cualquier recorte visual.</li>
+                  <li><strong>Actualizador integrado con formato rico y verificación SHA-256:</strong> Cuando hay una nueva versión en GitHub Releases, aparece el botón <strong>⬆️ Actualizar</strong> en la barra superior. Al pulsarlo se abre el nuevo diálogo con <code>ScrollViewer</code>, notas de versión formateadas (encabezados, negritas, código y listas sin mostrar asteriscos <code>**</code> crudos) y barra de progreso en vivo.</li>
+                  <li><strong>Seguridad de descarga:</strong> El actualizador solo acepta hosts oficiales de GitHub (<code>github.com</code> / <code>objects.githubusercontent.com</code>), descarga en <code>%LOCALAPPDATA%\LexBrowser\Updates</code> y verifica el tamaño exacto y el digest <strong>SHA-256</strong> antes de iniciar la actualización.</li>
+                </ul>
+              </article>
+
+              <!-- DOC 2 -->
+              <article class="doc-card" id="doc-perfiles">
+                <span class="doc-badge">SECCIÓN 2</span>
+                <h3>Perfiles de Privacidad (A / B / C / Personalizado) y Compuerta de Red</h3>
+                <p>
+                  En tu primer inicio (o en cualquier momento desde <strong>Configuración → Privacidad y Seguridad</strong>), Lex Junior te permite elegir qué funciones con acceso a red deseas permitir:
+                </p>
+                <ul class="doc-list">
+                  <li><strong>🔒 Perfil A — Privacidad Estricta:</strong> Desactiva SmartScreen, detección anti-phishing, descarga de favicons remotos, sugerencias de búsqueda en tiempo real y comprobación automática de actualizaciones (solo manual). Ideal para máximo aislamiento.</li>
+                  <li><strong>⚖️ Perfil B — Equilibrado (Recomendado):</strong> Mantiene activos SmartScreen, anti-phishing, descarga de favicons del propio sitio (protegida contra SSRF) y búsqueda de actualizaciones al iniciar, pero mantiene desactivados el servicio externo de favicons de terceros y las sugerencias de búsqueda mientras escribes.</li>
+                  <li><strong>🌐 Perfil C — Completo:</strong> Activa todas las ayudas visuales, incluyendo sugerencias de búsqueda en vivo en el Omnibox y respaldo externo de iconos con DuckDuckGo.</li>
+                  <li><strong>🛠️ Personalizado:</strong> Si cambias cualquier interruptor individual en Configuración, el navegador cambia automáticamente al estado <em>Personalizado</em> respetando tu combinación exacta.</li>
+                  <li><strong>Compuerta de Red en el Arranque (<code>StartupNetworkGate</code>):</strong> Ninguna petición de favicons ni sincronización de marcadores se ejecuta hasta que hayas completado el desbloqueo por PIN y la elección inicial de tu perfil de privacidad.</li>
+                </ul>
+              </article>
+
+              <!-- DOC 3 -->
+              <article class="doc-card" id="doc-pdf">
+                <span class="doc-badge">SECCIÓN 3</span>
+                <h3>Lex PDF Studio: Edición de PDFs Locales y Virtuales (<code>http/https</code>)</h3>
+                <p>
+                  <strong>Lex PDF Studio</strong> (<code>https://pdf.lex.local/viewer.html</code>) abre automáticamente tanto archivos PDF de tu disco local como documentos PDF alojados en Internet o intranets académicas.
+                </p>
+                <ul class="doc-list">
+                  <li><strong>Soporte para PDFs Virtuales (Nuevo en v2.7.0):</strong> Cuando abres un enlace <code>https://.../documento.pdf</code> (o escribes <code>dominio.com/archivo.pdf</code> en la barra de direcciones), Lex Junior autoriza la URL en la sesión actual y la carga mediante el canal interno <code>api/load-remote-pdf</code>.</li>
+                  <li><strong>Compatibilidad con Aulas Virtuales y Sesiones Iniciadas:</strong> El proxy interno adjunta automáticamente las cookies de sesión de WebView2 correspondientes a cada salto de redirección (hasta 8 redirecciones seguras), permitiendo abrir PDFs protegidos por inicio de sesión sin errores de CORS.</li>
+                  <li><strong>Defensa Anti-SSRF y Validación Binaria:</strong> Bloquea redirecciones desde dominios públicos hacia IPs privadas/locales (<code>127.0.0.1</code>, <code>10.x</code>, <code>192.168.x</code>, <code>169.254.x</code>) con DNS pinning y verifica la cabecera mágica <code>%PDF-</code> para no confundir páginas HTML de login con documentos PDF. Si un servidor devuelve HTML o falla, ofrece los botones <strong>Reintentar</strong> y <strong>Abrir en modo navegador</strong>.</li>
+                  <li><strong>Edición y Guardado Sin Pérdida:</strong> Los bytes del PDF se conservan en memoria (<code>AppState.pdfBytes</code>), permitiendo hacer zoom sin volver a descargar el archivo, dibujar con lápiz (8 grosores), resaltar, borrar, agregar texto, estampar tu firma digital o sellos y guardar el PDF modificado directamente en tu equipo.</li>
+                </ul>
+              </article>
+
+              <!-- DOC 4 -->
+              <article class="doc-card" id="doc-shield">
+                <span class="doc-badge">SECCIÓN 4</span>
+                <h3>LexShield Core (<code>lex-shield.lex</code>) y Diagnóstico</h3>
+                <p>
+                  El escudo nativo <strong>LexShield Core</strong> filtra publicidad, rastreadores y ventanas emergentes invasivas directamente desde el motor en C#.
+                </p>
+                <ul class="doc-list">
+                  <li><strong>Bloqueo de Red <code>O(1)</code> y Reglas Cosméticas:</strong> Evalúa peticiones antes de que se descarguen y oculta contenedores publicitarios vacíos.</li>
+                  <li><strong>Puente Seguro por Pestaña:</strong> Los scriptlets se comunican con el host mediante un token único por pestaña, impidiendo que scripts de la página suplanten o desactiven el escudo.</li>
+                  <li><strong>Modo Compatibilidad Temporal:</strong> Si un sitio bancario o gubernamental falla por bloqueos estrictos, puedes activar el <em>Modo Compatibilidad Temporal</em> desde el icono del escudo en la barra de direcciones o recargando repetidamente la pestaña.</li>
+                  <li><strong>Exportación de Diagnóstico (<code>Ctrl + Shift + L</code>):</strong> Permite exportar el registro técnico de LexShield a la carpeta <code>Logs\</code> para auditar qué reglas se aplicaron en cada pestaña.</li>
+                </ul>
+              </article>
+
+              <!-- DOC 5 -->
+              <article class="doc-card" id="doc-seguridad">
+                <span class="doc-badge">SECCIÓN 5</span>
+                <h3>Bóveda PIN, Autocompletado Estricto, Anti-Downgrade y Recuperación</h3>
+                <p>
+                  Lex Junior v2.7.0 incorpora protecciones de grado empresarial para tus credenciales y tu archivo de configuración:
+                </p>
+                <ul class="doc-list">
+                  <li><strong>Cifrado DPAPI y Coincidencia Exacta de Host:</strong> Las contraseñas se cifran con la clave de tu usuario de Windows (<code>DPAPI</code>). El autocompletado valida <code>IsSameExactOrWwwHost</code>, evitando que un sitio en <code>usuarioA.github.io</code> reciba credenciales guardadas en <code>usuarioB.github.io</code>, y exige interacción real sobre campos de login visibles.</li>
+                  <li><strong>Bloqueo con PIN y Modo Invitado:</strong> Configura un PIN de 6 caracteres (al abrir siempre o por sesión de Windows / bloqueo <code>Win + L</code>). Quienes usen tu PC pueden pulsar <strong>Entrar como Invitado</strong> en una sesión efímera sin acceso a tu bóveda, historial ni marcadores.</li>
+                  <li><strong>Recuperación Inteligente de <code>settings.json</code>:</strong> Si un corte de energía corrompe <code>settings.json</code>, Lex Junior rescata propiedad por propiedad las preferencias legibles, crea un respaldo único <code>.corrupt.&lt;timestamp&gt;.bak</code> y protege el estado de bloqueo PIN mediante el marcador <code>vault.lock</code>.</li>
+                  <li><strong>Protección Anti-Downgrade:</strong> Si intentas abrir una versión antigua del navegador sobre un perfil actualizado, <code>VersionDowngradeDialog</code> bloquea la sobrescritura destructiva de <code>settings.json</code> y te permite actualizar en un clic.</li>
+                </ul>
+              </article>
+
+              <!-- DOC 6 -->
+              <article class="doc-card" id="doc-tv">
+                <span class="doc-badge">SECCIÓN 6</span>
+                <h3>Lex TV, Amplificador de Volumen 300% y Detector Multimedia</h3>
+                <ul class="doc-list">
+                  <li><strong>Lex TV (<code>lex://tv</code> o botón 📺 Lex TV):</strong> Reproduce listas IPTV (<code>M3U/M3U8</code>), organiza películas y series VOD por temporadas y conecta servidores <strong>Xtream Codes</strong> o <strong>Jellyfin/Emby</strong> con credenciales cifradas en DPAPI. Al cerrar la pestaña de Lex TV, todos los flujos se detienen por completo.</li>
+                  <li><strong>Amplificador de Volumen 300%:</strong> Utiliza <code>AudioContext + GainNode + DynamicsCompressor</code> para triplicar el volumen de cualquier video o clase grabada sin distorsionar las voces. En <code>100%</code> permanece desconectado para no alterar el audio original.</li>
+                  <li><strong>Detector Multimedia Bajo Demanda:</strong> Captura streams <code>MP4</code>, <code>M3U8</code>, <code>MP3</code> y documentos solo cuando lo activas en la pestaña actual, apagándose automáticamente al navegar a otra página.</li>
+                </ul>
+              </article>
+
+              <!-- DOC 7 -->
+              <article class="doc-card" id="doc-atajos">
+                <span class="doc-badge">SECCIÓN 7</span>
+                <h3>Referencia Completa de Atajos de Teclado</h3>
+                <div class="shortcuts-table-wrap">
+                  <table class="profiles-table">
+                    <thead>
+                      <tr>
+                        <th>Atajo de Teclado</th>
+                        <th>Acción en Lex Junior Browser</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td><code>Ctrl + T</code> / <code>Ctrl + N</code></td><td>Abrir una nueva pestaña</td></tr>
+                      <tr><td><code>Ctrl + Shift + N</code></td><td>Abrir pestaña en Modo Incógnito Real justo al costado</td></tr>
+                      <tr><td><code>Ctrl + Shift + T</code></td><td>Reabrir la última pestaña cerrada</td></tr>
+                      <tr><td><code>Ctrl + W</code></td><td>Cerrar la pestaña activa</td></tr>
+                      <tr><td><code>Ctrl + Tab</code> / <code>Ctrl + Shift + Tab</code></td><td>Avanzar o retroceder entre pestañas abiertas</td></tr>
+                      <tr><td><code>Ctrl + 1..8</code> / <code>Ctrl + 9</code></td><td>Saltar directamente a la pestaña 1..8 o a la última pestaña</td></tr>
+                      <tr><td><code>Ctrl + L</code> / <code>Alt + D</code></td><td>Enfocar y seleccionar la barra de direcciones (Omnibox)</td></tr>
+                      <tr><td><code>Ctrl + H</code></td><td>Abrir Historial de Navegación y Limpieza</td></tr>
+                      <tr><td><code>Ctrl + J</code></td><td>Abrir el panel de Historial de Descargas</td></tr>
+                      <tr><td><code>Ctrl + Shift + K</code></td><td>Abrir la Bóveda Cifrada de Contraseñas</td></tr>
+                      <tr><td><code>Ctrl + Shift + B</code></td><td>Mostrar u ocultar la Barra de Accesos Directos</td></tr>
+                      <tr><td><code>Ctrl + Shift + D</code></td><td>Activar o desactivar el modo No Molestar de notificaciones</td></tr>
+                      <tr><td><code>Ctrl + Shift + L</code></td><td>Exportar registro de diagnóstico de LexShield a <code>Logs\</code></td></tr>
+                      <tr><td><code>Ctrl + ,</code></td><td>Abrir la ventana de Configuración</td></tr>
+                      <tr><td><code>Ctrl + +</code> / <code>Ctrl + -</code> / <code>Ctrl + 0</code></td><td>Aumentar, reducir o restablecer el zoom al 100%</td></tr>
+                      <tr><td><code>F12</code> / <code>Ctrl + Shift + I</code></td><td>Abrir Herramientas de Desarrollo (DevTools)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
             </div>
-            <div class="compare-row">
-              <span class="comp-name">Lex Junior (Nativo)</span>
-              <div class="comp-track"><div class="comp-fill fill-lex" style="width: 5%"></div></div>
-              <span class="comp-val">0 extra</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- RUTA 5: #/faq (PREGUNTAS Y RESPUESTAS CON BUSCADOR Y CATEGORÍAS)    -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="route-page" id="route-faq" data-route-page="faq">
+      <section class="faq-section">
+        <div class="container faq-container">
+          <div class="section-header">
+            <span class="section-tag">CENTRO DE AYUDA Y SOPORTE</span>
+            <h2>Preguntas y Respuestas (FAQ)</h2>
+            <p>Filtra por categoría o escribe cualquier palabra clave para resolver tus dudas al instante.</p>
+          </div>
+
+          <!-- Buscador y Filtros de FAQ -->
+          <div class="faq-controls">
+            <input type="search" id="faq-search-input" class="faq-search-box" placeholder="🔍 Buscar pregunta (ej. PDF virtual, perfiles, PIN, actualizar, Lex Class)..." aria-label="Buscar en preguntas frecuentes" />
+            <div class="faq-category-pills" role="tablist">
+              <button type="button" class="faq-cat-pill active" data-faq-cat="all">Todas</button>
+              <button type="button" class="faq-cat-pill" data-faq-cat="general">General</button>
+              <button type="button" class="faq-cat-pill" data-faq-cat="privacidad">Privacidad y Perfiles</button>
+              <button type="button" class="faq-cat-pill" data-faq-cat="pdf-media">PDFs y Multimedia</button>
+              <button type="button" class="faq-cat-pill" data-faq-cat="actualizaciones">Actualizaciones y Seguridad</button>
+              <button type="button" class="faq-cat-pill" data-faq-cat="lexclass">Lex Junior Class</button>
             </div>
-            <div class="compare-row">
-              <span class="comp-name">Flujo con add-ons</span>
-              <div class="comp-track"><div class="comp-fill fill-other" style="width: 85%"></div></div>
-              <span class="comp-val">Múltiples</span>
+          </div>
+
+          <div class="faq-list" id="faq-list">
+            <details class="faq-item" data-cat="general" open>
+              <summary>¿Necesito instalar extensiones para bloquear anuncios, editar PDFs o subir el volumen a 300%?</summary>
+              <p>No. Todas las herramientas vienen integradas de forma nativa en el código C# de Lex Junior Browser: el escudo <strong>LexShield Core</strong>, <strong>Lex PDF Studio</strong> (locales y virtuales), el amplificador de volumen hasta <strong>300%</strong>, el detector multimedia y <strong>Lex TV</strong> funcionan desde el primer segundo sin instalar complementos externos.</p>
+            </details>
+
+            <details class="faq-item" data-cat="actualizaciones" open>
+              <summary>¿Por qué antes se veían asteriscos (**) en el anuncio de actualización y cómo se solucionó en v2.7.0?</summary>
+              <p>En versiones anteriores el aviso de actualización usaba un cuadro de mensaje básico de Windows que mostraba el texto Markdown sin procesar. En <strong>v2.7.0</strong> estrenamos una ventana propia con diseño adaptable al tema, <strong>barra de desplazamiento (Scroll)</strong>, insignias comparativas de versión, barra de progreso en vivo y un motor de formato que convierte encabezados, listas, código y <strong>texto en negrita</strong> limpiamente sin mostrar ningún <code>**</code>.</p>
+            </details>
+
+            <details class="faq-item" data-cat="pdf-media" open>
+              <summary>¿Lex PDF Studio ahora abre tanto archivos PDF locales como PDFs virtuales de Internet?</summary>
+              <p>¡Sí! En <strong>v2.7.0</strong> solucionamos la apertura de PDFs virtuales (<code>http://</code> y <code>https://</code>). Ahora cuando haces clic en un PDF en la web o en tu aula virtual, Lex PDF Studio lo descarga de forma segura a través de un canal interno autenticado que respeta tus cookies de sesión, valida que sea un archivo <code>%PDF-</code> real y mantiene los bytes en memoria para que puedas hacer zoom, anotar, resaltar, estampar tu firma digital y guardarlo en tu PC sin errores de CORS.</p>
+            </details>
+
+            <details class="faq-item" data-cat="lexclass" open>
+              <summary>¿Qué pasa cuando presiono el botón «🎓 Lex Class» en esta versión?</summary>
+              <p>Al presionar el botón <strong>🎓 Lex Class</strong> en la barra superior (o desde la Nueva Pestaña), se abre una ventana especial con una ilustración inspirada en el logo oficial de Lex Junior anunciando que <strong>Lex Junior Class estará disponible en la próxima actualización</strong>, junto con un adelanto de sus cursos paso a paso de 1.° de Primaria a Preuniversitario.</p>
+            </details>
+
+            <details class="faq-item" data-cat="privacidad">
+              <summary>¿Cuál es la diferencia entre los nuevos Perfiles de Privacidad A, B y C?</summary>
+              <p>El <strong>Perfil A (Privacidad Estricta)</strong> desactiva cualquier conexión auxiliar (sin SmartScreen, sin favicons externos, sin sugerencias en tiempo real y con actualizaciones solo manuales). El <strong>Perfil B (Equilibrado — Recomendado)</strong> mantiene activa la protección SmartScreen, anti-phishing, favicons propios del sitio y aviso de actualizaciones al iniciar, pero sin enviar lo que escribes a motores de sugerencias ni pedir iconos a servicios externos. El <strong>Perfil C (Completo)</strong> activa todas las comodidades visuales y sugerencias en vivo. Puedes cambiar de perfil cuando quieras en Configuración.</p>
+            </details>
+
+            <details class="faq-item" data-cat="privacidad">
+              <summary>¿Cómo protege Lex Junior mi privacidad durante el arranque antes de desbloquear mi PIN?</summary>
+              <p>Mediante la nueva <strong>Compuerta de Red en el Arranque (<code>StartupNetworkGate</code>)</strong>. Mientras la pantalla de bloqueo por PIN o el asistente inicial de perfil de privacidad están abiertos, Lex Junior bloquea por completo la carga de favicons de marcadores y las consultas de red en segundo plano.</p>
+            </details>
+
+            <details class="faq-item" data-cat="actualizaciones">
+              <summary>¿Qué ocurre si mi archivo settings.json se daña por un apagón o si abro una versión antigua?</summary>
+              <p>En <strong>v2.7.0</strong> añadimos dos defensas automáticas: <strong>1) Recuperación parcial inteligente</strong>, que rescata todas las preferencias válidas de un <code>settings.json</code> dañado, guarda una copia <code>.corrupt.bak</code> y preserva tu bloqueo PIN gracias a <code>vault.lock</code>; y <strong>2) Protección Anti-Downgrade</strong>, que impide que un ejecutable antiguo sobrescriba la configuración creada por una versión más nueva.</p>
+            </details>
+
+            <details class="faq-item" data-cat="actualizaciones">
+              <summary>¿Cómo funciona la Bóveda de Contraseñas, el PIN y el Modo Invitado?</summary>
+              <p>Tus contraseñas se cifran localmente mediante <strong>Windows DPAPI</strong> y solo se autocompletan en el dominio exacto (<code>IsSameExactOrWwwHost</code>) tras interacción real del usuario. Puedes proteger el navegador con un PIN de 6 caracteres (al abrir o al bloquear Windows con <code>Win + L</code>), y si prestas tu PC, otra persona puede pulsar <strong>«Entrar como Invitado»</strong> para navegar sin ver tus claves ni tu historial.</p>
+            </details>
+
+            <details class="faq-item" data-cat="pdf-media">
+              <summary>¿El detector de archivos multimedia permanece siempre activo?</summary>
+              <p>No, funciona <strong>bajo demanda</strong>. Permanece apagado mientras navegas normalmente y, cuando lo activas para capturar un video o audio, se apaga automáticamente al cambiar de página o recargar la pestaña.</p>
+            </details>
+
+            <details class="faq-item" data-cat="pdf-media">
+              <summary>¿Qué es Lex TV y cómo funciona con IPTV, VOD y Xtream Codes?</summary>
+              <p><strong>Lex TV</strong> es tu centro multimedia personal bajo demanda. Permite cargar listas <code>M3U/M3U8</code>, organizar películas y series (VOD) y conectar servidores <strong>Xtream Codes</strong> o <strong>Jellyfin/Emby</strong> con credenciales cifradas en Windows DPAPI y validación anti-SSRF. Al cerrar la pestaña de Lex TV, todas las conexiones se detienen.</p>
+            </details>
+
+            <details class="faq-item" data-cat="general">
+              <summary>¿Puedo cambiar el tema visual entre Original (Clásico), Oscuro y Claro?</summary>
+              <p>Sí. En <strong>Configuración → General</strong> puedes alternar en tiempo real entre <strong>Clásico (Original)</strong>, <strong>Oscuro</strong> y <strong>Claro</strong>, aplicándose al instante a todas las barras, diálogos, Nueva Pestaña e Historial.</p>
+            </details>
+
+            <details class="faq-item" data-cat="general">
+              <summary>¿Por qué Windows SmartScreen puede mostrar un aviso al ejecutar el instalador por primera vez?</summary>
+              <p>Como cualquier software independiente distribuido sin un certificado EV comercial de pago anual, Windows puede mostrar <em>«Windows protegió su PC»</em>. Solo haz clic en <strong>«Más información» → «Ejecutar de todas formas»</strong>. Además, cuando actualizas desde dentro del navegador, Lex Junior verifica automáticamente la firma <strong>SHA-256</strong> oficial del instalador.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- RUTA 6: #/novedades (CHANGELOG OFICIAL v2.7.0 Y VERSIONES PREVIAS)  -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="route-page" id="route-novedades" data-route-page="novedades">
+      <section class="changelog-section">
+        <div class="container faq-container">
+          <div class="section-header">
+            <span class="section-tag">HISTORIAL DE LANZAMIENTOS</span>
+            <h2>Novedades de Lex Junior Browser v2.7.0</h2>
+            <p>Resumen transparente de todas las mejoras, correcciones y blindajes de seguridad incluidos en esta actualización.</p>
+          </div>
+
+          <article class="doc-card changelog-card">
+            <div class="cl-header">
+              <span class="doc-badge">LANZAMIENTO ACTUAL · v2.7.0</span>
+              <span class="cl-date">Windows 10 / 11 (64-bit) · 750 Pruebas Automatizadas Superadas</span>
             </div>
-          </div>
+            <h3>🚀 Todo lo que incluye la actualización v2.7.0</h3>
+            <ul class="doc-list">
+              <li><strong>📑 Lex PDF Studio (Locales y Virtuales):</strong> Soporte completo para abrir, editar, firmar y guardar tanto archivos PDF locales como enlaces PDF virtuales (<code>http://</code> y <code>https://</code>) mediante el proxy interno autenticado <code>api/load-remote-pdf</code> con reenvío de cookies por salto, protección anti-SSRF, validación de firma <code>%PDF-</code>, caché en memoria y botón de respaldo para abrir en modo navegador.</li>
+              <li><strong>🎓 Botón y Adelanto de Lex Junior Class:</strong> Nuevo botón <strong>🎓 Lex Class (PRONTO)</strong> en la barra de herramientas, tarjeta rápida en Nueva Pestaña y atajo <code>lex://class</code> que abren la ventana ilustrada <em>«Disponible en la próxima actualización»</em>.</li>
+              <li><strong>✨ Nuevo Diálogo de Actualización Formateado y con Scroll:</strong> Reemplazo del antiguo cuadro de texto básico por la nueva ventana <code>UpdatePromptDialog</code> con <code>ScrollViewer</code>, renderizado limpio de Markdown (títulos, negritas, código y viñetas sin mostrar <code>**</code> crudos), insignias de versión y barra de progreso en vivo.</li>
+              <li><strong>🔒 Perfiles de Privacidad (A / B / C / Personalizado):</strong> Asistente inicial y matriz en Configuración para controlar las 7 funciones con acceso a red (SmartScreen, Anti-Phishing, Favicons, Sugerencias y Modo de Actualización) + compuerta <code>StartupNetworkGate</code> antes del desbloqueo PIN.</li>
+              <li><strong>🛠️ Instalador Expandido sin Recortes Visuales:</strong> Encabezado del instalador con margen ampliado y botón de cierre (<code>✕</code>) con plantilla dedicada de <code>32×32 px</code> para que siempre se vea nítido y completo.</li>
+              <li><strong>🛡️ Recuperación de Configuración y Protección Anti-Downgrade:</strong> Rescate parcial de propiedades ante archivos <code>settings.json</code> corruptos, marcador <code>vault.lock</code> para proteger el bloqueo PIN y ventana <code>VersionDowngradeDialog</code> contra degradaciones accidentales de versión.</li>
+              <li><strong>🔐 Endurecimiento de Bóveda, Descargas y Actualizador:</strong> Verificación criptográfica <strong>SHA-256</strong> del instalador descargado, autocompletado restringido a <code>IsSameExactOrWwwHost</code> (protegiendo subdominios en <code>github.io</code>, <code>vercel.app</code>, etc.) y sincronización fluida de descargas cada 350 ms.</li>
+            </ul>
+          </article>
+
+          <article class="doc-card changelog-card">
+            <div class="cl-header">
+              <span class="doc-badge">VERSIÓN ANTERIOR · v2.6.0</span>
+            </div>
+            <h3>🛡️ Unificación de LexShield Core (<code>lex-shield.lex</code>)</h3>
+            <ul class="doc-list">
+              <li>Motor unificado <strong>LexShield Core</strong> con empaquetado binario <code>lex-shield.lex</code>, scriptlets endurecidos con token por pestaña, Video Player Defuser y Modo Compatibilidad Temporal.</li>
+            </ul>
+          </article>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- REQUISITOS E INSTALACIÓN LIMPIA -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <section class="specs-section" id="specs">
-      <div class="container">
-        <div class="section-header reveal">
-          <span class="section-tag">INSTALACIÓN PROFESIONAL</span>
-          <h2>Requisitos y Desinstalación 100% Limpia</h2>
-          <p>El instalador oficial <code>LexJuniorSetup.exe</code> incluye todo lo necesario para funcionar en tu equipo.</p>
-        </div>
-
-        <div class="specs-grid">
-          <div class="spec-card reveal">
-            <h4>💻 Sistema Operativo</h4>
-            <p>Windows 10 (64-bit) o Windows 11 (64-bit). Incluye el runtime de .NET 8 autocontenido dentro del instalador.</p>
-          </div>
-          <div class="spec-card reveal">
-            <h4>💾 Runtime y Almacenamiento</h4>
-            <p>Requiere Microsoft Edge WebView2 Runtime en Windows y almacenamiento local para el navegador y tu perfil.</p>
-          </div>
-          <div class="spec-card reveal">
-            <h4>🧹 Desinstalador Limpio</h4>
-            <p>Registrado en <em>Configuración de Windows → Aplicaciones instaladas</em>. Si decides desinstalarlo, borra accesos directos, programa y caché dejando 0 rastros.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- PREGUNTAS FRECUENTES (FAQ) -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <section class="faq-section" id="faq">
-      <div class="container faq-container">
-        <div class="section-header reveal">
-          <span class="section-tag">DUDAS FRECUENTES</span>
-          <h2>Preguntas Frecuentes</h2>
-        </div>
-
-        <div class="faq-list">
-          <details class="faq-item reveal" open>
-            <summary>¿Necesito instalar extensiones para bloquear anuncios o subir el volumen a 300%?</summary>
-            <p>No. Todo viene integrado de forma nativa en el código de Lex Junior Browser. Desde el primer segundo tienes un escudo que reduce anuncios y rastreadores, amplificador de volumen hasta 300% y detector multimedia sin instalar nada extra.</p>
-          </details>
-
-          <details class="faq-item reveal">
-            <summary>¿Cómo se actualiza Lex Junior cuando sale una nueva versión?</summary>
-            <p>Automáticamente. Cuando publicamos una mejora, verás aparecer un botón verde <strong>"⬆️ Actualizar"</strong> en la barra superior de tu navegador. Con un solo clic se descarga, actualiza y reinicia conservando tus marcadores, historial y configuración.</p>
-          </details>
-
-          <details class="faq-item reveal">
-            <summary>¿El detector de archivos multimedia permanece siempre activo?</summary>
-            <p>No, porque funciona <strong>bajo demanda</strong>. Mientras no lo actives en la pestaña actual permanece inactivo. Cuando lo activas para detectar un video o documento, se desactiva automáticamente al salir o recargar la página (salvo que marques mantenerlo activo).</p>
-          </details>
-
-          <details class="faq-item reveal">
-            <summary>¿Cómo funciona la Bóveda de Contraseñas, el PIN y el Modo Invitado?</summary>
-            <p>Tus contraseñas se cifran en tu equipo mediante <strong>Windows DPAPI</strong> (0 servidores externos). Puedes elegir no usar PIN, pedirlo siempre al abrir el navegador, o el <strong>Modo Inteligente por Sesión de Windows</strong> (solo lo pide una vez al encender la PC o si bloqueas tu usuario con <code>Win + L</code>). Si prestas tu PC, otra persona puede elegir <strong>"Entrar como Invitado"</strong> para navegar sin ver ni autocompletar tus contraseñas.</p>
-          </details>
-
-          <details class="faq-item reveal">
-            <summary>¿Qué es Lex TV y cómo funciona con IPTV, VOD y Xtream Codes?</summary>
-            <p><strong>Lex TV</strong> es un reproductor y organizador multimedia personal que funciona bajo demanda. Te permite cargar tus propias listas de canales <code>M3U/M3U8</code>, organizar tu videoteca de películas y series (VOD) y conectar servidores <strong>Xtream Codes</strong> con almacenamiento cifrado nativo en tu equipo (Windows DPAPI). Al cerrar la pestaña de Lex TV, las sesiones de reproducción y flujos activos se detienen.</p>
-          </details>
-
-          <details class="faq-item reveal">
-            <summary>¿Puedo cambiar el tema visual entre Original, Oscuro y Claro?</summary>
-            <p>Sí. En <strong>Configuración → General</strong> puedes alternar en tiempo real entre <strong>Clásico (Original)</strong>, <strong>Oscuro</strong> y <strong>Claro</strong>. El tema seleccionado se aplica de inmediato a la ventana principal, la página de Nueva Pestaña, el Historial y la ventana de Configuración.</p>
-          </details>
-
-          <details class="faq-item reveal">
-            <summary>¿Por qué Windows SmartScreen puede mostrar un aviso la primera vez?</summary>
-            <p>Como cualquier software independiente recién lanzado sin certificado EV de pago anual de Microsoft, Windows puede mostrar <em>"Windows protegió su PC"</em>. Solo haz clic en <strong>"Más información" → "Ejecutar de todas formas"</strong> para abrir el instalador oficial de Lex Junior.</p>
-          </details>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
-    <!-- CTA FINAL -->
-    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- CTA FINAL COMÚN -->
     <section class="final-cta">
-      <div class="container final-cta-box reveal">
+      <div class="container final-cta-box">
         <img src="assets/logo.png" alt="Lex Junior Logo" class="cta-logo" />
-        <h2>¿Listo para navegar con privacidad y herramientas integradas?</h2>
-        <p>Descarga el instalador oficial para Windows y mantén el control en cada pestaña.</p>
+        <h2>¿Listo para navegar con privacidad real y herramientas integradas?</h2>
+        <p>Descarga el instalador oficial v2.7.0 para Windows y mantén el control total en cada pestaña.</p>
         <a href="https://github.com/JuniorJhair/Lex-Junior/releases/latest/download/LexJuniorSetup.exe" class="btn btn-primary btn-lg" download>
-          <span>⬇ Descargar Lex Junior Browser Gratis</span>
+          <span>⬇ Descargar Lex Junior Browser v2.7.0 Gratis</span>
         </a>
       </div>
     </section>
@@ -692,13 +1172,16 @@
     <div class="container footer-inner">
       <div class="footer-brand">
         <img src="assets/logo.png" alt="Lex Junior" />
-        <span><strong>Lex Junior Browser</strong> · Por Junior Pacherrez — Cero telemetría · Menos anuncios · Privado</span>
+        <span><strong>Lex Junior Browser v2.7.0</strong> · Por Junior Pacherrez — Cero telemetría · Menos anuncios · Privado</span>
       </div>
       <div class="footer-links">
+        <a href="#/inicio" data-route-link="inicio">Inicio</a>
+        <a href="#/funciones" data-route-link="funciones">Funciones</a>
+        <a href="#/lex-class" data-route-link="lex-class">Lex Class (Muy Pronto)</a>
+        <a href="#/documentacion" data-route-link="documentacion">Documentación</a>
+        <a href="#/faq" data-route-link="faq">Preguntas y Respuestas</a>
+        <a href="#/novedades" data-route-link="novedades">Novedades</a>
         <a href="https://github.com/JuniorJhair/Lex-Junior/releases/latest/download/LexJuniorSetup.exe" download>Descargar Instalador</a>
-        <a href="#features">Funciones</a>
-        <a href="#telemetry">Privacidad</a>
-        <a href="#faq">Soporte</a>
       </div>
     </div>
   </footer>
@@ -706,4 +1189,3 @@
   <script src="script.js"></script>
 </body>
 </html>
-

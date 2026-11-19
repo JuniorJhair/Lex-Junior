@@ -140,6 +140,34 @@ public partial class PasswordVaultWindow : Window
         }
     }
 
+    internal static bool TryResolveVaultRecoveryLockPrompt(Window? owner)
+    {
+        if (!PasswordManager.IsVaultLockedByRecovery)
+            return true;
+
+        string message =
+            "PROTECCIÓN DE BÓVEDA ACTIVA\n\n" +
+            "Tu archivo settings.json anterior estaba dañado y no se pudo recuperar tu configuración de bloqueo por PIN.\n" +
+            (!string.IsNullOrEmpty(SettingsManager.CorruptSettingsBackupPath)
+                ? $"Copia original preservada en:\n{SettingsManager.CorruptSettingsBackupPath}\n\n"
+                : "\n") +
+            "Por seguridad, tus contraseñas no se abrirán ni autocompletarán sin confirmar protección.\n\n" +
+            "¿Deseas realizar un Restablecimiento de Emergencia (elimina solo las contraseñas guardadas para permitir nuevo acceso limpio)?\n" +
+            "Pulsa 'No' para conservar vault.dat intacto sin abrir la bóveda.";
+
+        var choice = owner != null
+            ? MessageBox.Show(owner, message, "Bóveda protegida — Lex Junior", MessageBoxButton.YesNo, MessageBoxImage.Warning)
+            : MessageBox.Show(message, "Bóveda protegida — Lex Junior", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+
+        if (choice == MessageBoxResult.Yes)
+        {
+            PasswordManager.EmergencyResetLockAndClearVault();
+            return true;
+        }
+
+        return false;
+    }
+
     private void LoadStateIntoUI()
     {
         var s = SettingsManager.Current;
@@ -190,10 +218,6 @@ public partial class PasswordVaultWindow : Window
         {
             var vm = new CredentialViewModel(cred);
             _currentItems.Add(vm);
-            if (vm.FaviconImage == null && !string.IsNullOrWhiteSpace(vm.Domain))
-            {
-                _ = LoadFaviconForCredentialAsync(vm);
-            }
         }
 
         ItemsVaultCredentials.ItemsSource = null;
@@ -210,22 +234,6 @@ public partial class PasswordVaultWindow : Window
             ItemsExcludedDomains.ItemsSource = excluded;
             BorderExcludedDomainsSection.Visibility = excluded.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
-    }
-
-    private async Task LoadFaviconForCredentialAsync(CredentialViewModel vm)
-    {
-        try
-        {
-            var icon = await FaviconService.ResolveFaviconAsync("https://" + vm.Domain).ConfigureAwait(false);
-            if (icon != null)
-            {
-                _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
-                {
-                    vm.FaviconImage = icon;
-                }));
-            }
-        }
-        catch { }
     }
 
     private void ShowInternalBanner(string message)

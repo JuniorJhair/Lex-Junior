@@ -6,6 +6,8 @@ obj/
 UserData/
 *.log
 dist/
+node_modules/
+*.tsbuildinfo
 lmjnegcaeklhafolokijcfjliaokphfk/
 adblock-rust-master/
 *.pdf
@@ -22,3 +24,4 @@ Magma.apk_Decompiler.com/
 *.p12
 .env
 .env.*
+LexJuniorClass/

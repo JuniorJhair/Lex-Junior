@@ -1,54 +1,323 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using LexBrowser.Core;
+using Microsoft.Web.WebView2.Core;
 
 namespace LexBrowser;
 
 public partial class MainWindow
 {
+    private static readonly SolidColorBrush BrushDownloadIdle = CreateFrozenBrush(0xA1, 0xA1, 0xAA);
+    private static readonly SolidColorBrush BrushDownloadActive = CreateFrozenBrush(0x38, 0xBD, 0xF8);
+
+    internal sealed class TrackedWebViewDownload
+    {
+        public required string EntryId { get; init; }
+        public required CoreWebView2DownloadOperation Operation { get; init; }
+        public required string FileName { get; init; }
+        public required string ResultPath { get; init; }
+        public long LastReportedTick;
+        public long LastReportedBytes = -1;
+        public long LastReportedTotal = -1;
+        public CoreWebView2DownloadState? LastReportedState;
+        public bool IsTerminal;
+        public Action? DetachHandlersAction;
+    }
+
+    private static readonly object _activeOpsLock = new();
+    private static readonly Dictionary<string, TrackedWebViewDownload> _activeWebViewDownloads = new(StringComparer.Ordinal);
+    private static DispatcherTimer? _activeDownloadSyncTimer;
+
     private bool _isDownloadingBrowserUpdate = false;
+    private readonly object _downloadsUiSync = new();
     private long _lastDownloadsUiRefreshTick = 0;
     private bool _downloadsUiRefreshPending = false;
     private readonly System.Collections.ObjectModel.ObservableCollection<DownloadEntry> _downloadsObservable = new();
 
-    // ─────────────────────────────────────────────────────────────────────
-    // HISTORIAL DE DESCARGAS EN SESIÓN (BAJO DEMANDA + THROTTLE UI ~4/s)
-    // ─────────────────────────────────────────────────────────────────────
-    private void OnDownloadsChanged()
+    internal static void RegisterTrackedDownloadOperation(TrackedWebViewDownload tracked)
     {
-        long now = Environment.TickCount64;
-        if (now - _lastDownloadsUiRefreshTick >= 220)
+        lock (_activeOpsLock)
         {
-            _lastDownloadsUiRefreshTick = now;
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            _activeWebViewDownloads[tracked.EntryId] = tracked;
+        }
+        EnsureActiveDownloadSyncTimer();
+    }
+
+    internal static void NotifyTrackedDownloadResumed()
+    {
+        EnsureActiveDownloadSyncTimer();
+    }
+
+    private static void EnsureActiveDownloadSyncTimer()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher == null) return;
+
+        void EnsureOnUi()
+        {
+            bool hasInProgress;
+            lock (_activeOpsLock)
             {
-                UpdateDownloadsToolbarIndicator();
-                if (PopupDownloads != null && PopupDownloads.IsOpen)
+                hasInProgress = _activeWebViewDownloads.Values.Any(t =>
                 {
-                    RefreshDownloadsPopupUI();
+                    if (t.IsTerminal) return false;
+                    try { return t.Operation.State == CoreWebView2DownloadState.InProgress; }
+                    catch { return false; }
+                });
+            }
+
+            if (hasInProgress)
+            {
+                if (_activeDownloadSyncTimer == null)
+                {
+                    _activeDownloadSyncTimer = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
+                    {
+                        Interval = TimeSpan.FromMilliseconds(350)
+                    };
+                    _activeDownloadSyncTimer.Tick += (_, _) => SyncAllTrackedDownloadsOnUi();
                 }
+                if (!_activeDownloadSyncTimer.IsEnabled)
+                    _activeDownloadSyncTimer.Start();
+            }
+            else if (_activeDownloadSyncTimer != null && _activeDownloadSyncTimer.IsEnabled)
+            {
+                _activeDownloadSyncTimer.Stop();
+            }
+        }
+
+        if (dispatcher.CheckAccess())
+            EnsureOnUi();
+        else
+            _ = dispatcher.BeginInvoke(DispatcherPriority.Normal, EnsureOnUi);
+    }
+
+    private static void SyncAllTrackedDownloadsOnUi()
+    {
+        List<TrackedWebViewDownload> snapshot;
+        lock (_activeOpsLock)
+        {
+            snapshot = _activeWebViewDownloads.Values.ToList();
+        }
+
+        foreach (var tracked in snapshot)
+        {
+            SyncTrackedDownloadOperation(tracked, forceProgressUpdate: true);
+        }
+
+        EnsureActiveDownloadSyncTimer();
+    }
+
+    private static MainWindow? FindActiveHostWindowForDownloadToast()
+    {
+        if (Application.Current == null) return null;
+        var windows = Application.Current.Windows.OfType<MainWindow>().Where(w => !w._isWindowClosing).ToList();
+        return windows.FirstOrDefault(w => w.IsActive && !w._isGuestSession)
+               ?? windows.FirstOrDefault(w => !w._isGuestSession)
+               ?? windows.FirstOrDefault();
+    }
+
+    internal static void SyncTrackedDownloadOperation(TrackedWebViewDownload tracked, bool forceProgressUpdate)
+    {
+        if (tracked.IsTerminal) return;
+
+        CoreWebView2DownloadOperation op = tracked.Operation;
+        CoreWebView2DownloadState state;
+        long received;
+        long tot;
+        DateTime estEnd;
+        try
+        {
+            state = op.State;
+            received = op.BytesReceived;
+            tot = DownloadManager.SafeBytesFromUlong(op.TotalBytesToReceive);
+            estEnd = DateTime.MinValue;
+            try { estEnd = op.EstimatedEndTime; } catch { }
+        }
+        catch
+        {
+            return;
+        }
+
+        if (state == CoreWebView2DownloadState.InProgress)
+        {
+            long now = Environment.TickCount64;
+            bool changed =
+                tracked.LastReportedState != state ||
+                received != tracked.LastReportedBytes ||
+                tot != tracked.LastReportedTotal;
+
+            if (!changed)
+                return;
+
+            bool stateTransition = tracked.LastReportedState != state;
+            if (!forceProgressUpdate && !stateTransition && now - tracked.LastReportedTick < 220 && (tot <= 0 || received < tot))
+                return;
+
+            tracked.LastReportedTick = now;
+            tracked.LastReportedState = state;
+            tracked.LastReportedBytes = received;
+            tracked.LastReportedTotal = tot;
+
+            double? etaSec = estEnd > DateTime.Now ? (estEnd - DateTime.Now).TotalSeconds : null;
+            DownloadManager.UpdateDownloadProgress(tracked.EntryId, received, tot, "En progreso", estimatedSecondsRemaining: etaSec);
+            return;
+        }
+
+        if (state == CoreWebView2DownloadState.Completed)
+        {
+            tracked.IsTerminal = true;
+            tracked.LastReportedState = state;
+            lock (_activeOpsLock)
+            {
+                _activeWebViewDownloads.Remove(tracked.EntryId);
+            }
+            tracked.DetachHandlersAction?.Invoke();
+
+            long finalTotal = tot > 0 ? tot : received;
+            DownloadManager.UpdateDownloadProgress(tracked.EntryId, received > 0 ? received : finalTotal, finalTotal, "Completado");
+            EnsureActiveDownloadSyncTimer();
+
+            var host = FindActiveHostWindowForDownloadToast();
+            host?.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+            {
+                host.RefreshDownloadsUiOnDispatcher();
+                host.ShowToast($"✅ Descarga completada: {tracked.FileName}", "Abrir carpeta 📂", () =>
+                {
+                    host.RevealFileInExplorer(tracked.ResultPath);
+                }, durationSeconds: 6);
             });
             return;
         }
 
-        if (_downloadsUiRefreshPending) return;
-        _downloadsUiRefreshPending = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, async () =>
+        if (state == CoreWebView2DownloadState.Interrupted)
         {
-            await Task.Delay(220);
-            _downloadsUiRefreshPending = false;
-            _lastDownloadsUiRefreshTick = Environment.TickCount64;
-            UpdateDownloadsToolbarIndicator();
-            if (PopupDownloads != null && PopupDownloads.IsOpen)
+            CoreWebView2DownloadInterruptReason reason;
+            bool canResume;
+            try
             {
-                RefreshDownloadsPopupUI();
+                reason = op.InterruptReason;
+                canResume = op.CanResume;
             }
-        });
+            catch
+            {
+                return;
+            }
+
+            if (reason == CoreWebView2DownloadInterruptReason.UserPaused && canResume)
+            {
+                if (tracked.LastReportedState == state && tracked.LastReportedBytes == received && tracked.LastReportedTotal == tot)
+                    return;
+
+                tracked.LastReportedState = state;
+                tracked.LastReportedBytes = received;
+                tracked.LastReportedTotal = tot;
+                DownloadManager.UpdateDownloadProgress(tracked.EntryId, received, tot, "Pausado", canResume: true);
+                EnsureActiveDownloadSyncTimer();
+                return;
+            }
+
+            if (reason == CoreWebView2DownloadInterruptReason.UserCanceled)
+            {
+                tracked.IsTerminal = true;
+                tracked.LastReportedState = state;
+                lock (_activeOpsLock)
+                {
+                    _activeWebViewDownloads.Remove(tracked.EntryId);
+                }
+                tracked.DetachHandlersAction?.Invoke();
+                DownloadManager.UpdateDownloadProgress(tracked.EntryId, received, tot, "Cancelado", "Cancelada por el usuario");
+                EnsureActiveDownloadSyncTimer();
+                FindActiveHostWindowForDownloadToast()?.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+                    FindActiveHostWindowForDownloadToast()?.RefreshDownloadsUiOnDispatcher());
+                return;
+            }
+
+            tracked.LastReportedState = state;
+
+            if (!canResume)
+            {
+                tracked.IsTerminal = true;
+                lock (_activeOpsLock)
+                {
+                    _activeWebViewDownloads.Remove(tracked.EntryId);
+                }
+                tracked.DetachHandlersAction?.Invoke();
+            }
+
+            string reasonLabel = FormatDownloadInterruptReason(reason);
+            DownloadManager.UpdateDownloadProgress(tracked.EntryId, received, tot, "Interrumpido", reasonLabel, canResume: canResume);
+            EnsureActiveDownloadSyncTimer();
+
+            var host = FindActiveHostWindowForDownloadToast();
+            host?.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+            {
+                host.RefreshDownloadsUiOnDispatcher();
+                host.ShowToast($"⚠️ Descarga interrumpida: {tracked.FileName} ({reasonLabel})", "Ver descargas", () =>
+                {
+                    host.RefreshDownloadsPopupUI();
+                    if (host.PopupDownloads != null) host.PopupDownloads.IsOpen = true;
+                });
+            });
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HISTORIAL DE DESCARGAS EN SESIÓN (BAJO DEMANDA + THROTTLE UI ~5/s CON TRAILING GARANTIZADO)
+    // ─────────────────────────────────────────────────────────────────────
+    private void OnDownloadsChanged()
+    {
+        bool runImmediately = false;
+        bool scheduleTrailing = false;
+
+        lock (_downloadsUiSync)
+        {
+            long now = Environment.TickCount64;
+            if (!_downloadsUiRefreshPending && now - _lastDownloadsUiRefreshTick >= 180)
+            {
+                _lastDownloadsUiRefreshTick = now;
+                runImmediately = true;
+            }
+            else if (!_downloadsUiRefreshPending)
+            {
+                _downloadsUiRefreshPending = true;
+                scheduleTrailing = true;
+            }
+        }
+
+        if (runImmediately)
+        {
+            try { Dispatcher.BeginInvoke(DispatcherPriority.Normal, RefreshDownloadsUiOnDispatcher); } catch { }
+        }
+        else if (scheduleTrailing)
+        {
+            _ = Task.Delay(180).ContinueWith(_ =>
+            {
+                lock (_downloadsUiSync)
+                {
+                    _downloadsUiRefreshPending = false;
+                    _lastDownloadsUiRefreshTick = Environment.TickCount64;
+                }
+                try { Dispatcher.BeginInvoke(DispatcherPriority.Normal, RefreshDownloadsUiOnDispatcher); } catch { }
+            }, TaskScheduler.Default);
+        }
+    }
+
+    private void RefreshDownloadsUiOnDispatcher()
+    {
+        if (_isWindowClosing) return;
+        UpdateDownloadsToolbarIndicator();
+        if (PopupDownloads != null && PopupDownloads.IsOpen)
+        {
+            RefreshDownloadsPopupUI();
+        }
     }
 
     internal void UpdateDownloadsToolbarIndicator()
@@ -67,13 +336,13 @@ public partial class MainWindow
                 PbDownloadsToolbar.Value = 0;
             }
             if (TxtDownloadsBtnIcon != null)
-                TxtDownloadsBtnIcon.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xA1, 0xA1, 0xAA));
+                TxtDownloadsBtnIcon.Foreground = BrushDownloadIdle;
             BtnDownloads.ToolTip = "Historial de Descargas (Ctrl+J)";
             return;
         }
 
         if (TxtDownloadsBtnIcon != null)
-            TxtDownloadsBtnIcon.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x38, 0xBD, 0xF8));
+            TxtDownloadsBtnIcon.Foreground = BrushDownloadActive;
 
         if (BadgeDownloadsCount != null && TxtDownloadsBadgeCount != null)
         {
@@ -308,37 +577,32 @@ public partial class MainWindow
     // ─────────────────────────────────────────────────────────────────────
     // AUTO-ACTUALIZADOR CONECTADO A GITHUB RELEASES (JuniorJhair/Lex-Junior)
     // ─────────────────────────────────────────────────────────────────────
-    private async void BtnUpdateAvailable_Click(object sender, RoutedEventArgs e)
+    private void BtnUpdateAvailable_Click(object sender, RoutedEventArgs e)
     {
         if (_isDownloadingBrowserUpdate || IsLocked) return;
         var update = UpdateManager.AvailableUpdate;
         if (update == null) return;
 
-        var confirm = MessageBox.Show(
-            $"Está disponible la nueva versión {update.VersionTag} de Lex Junior Browser.\n\n" +
-            $"{(string.IsNullOrWhiteSpace(update.ReleaseNotes) ? "Incluye mejoras de rendimiento, seguridad y estabilidad." : update.ReleaseNotes)}\n\n" +
-            "¿Deseas descargar e instalar la actualización ahora mismo? (Tus marcadores, historial y configuración se conservarán intactos).",
-            "Actualización disponible — Lex Junior",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Information);
-
-        if (confirm != MessageBoxResult.Yes) return;
-
-        _isDownloadingBrowserUpdate = true;
-        BtnUpdateAvailable.IsEnabled = false;
-
-        var progress = new Progress<int>(pct =>
+        try
         {
-            TxtUpdateAvailableLabel.Text = $"Descargando {pct}%";
-        });
+            var dlg = new UI.Views.UpdatePromptDialog(
+                update,
+                pct =>
+                {
+                    _isDownloadingBrowserUpdate = pct > 0 && pct < 100;
+                    TxtUpdateAvailableLabel.Text = $"Descargando {pct}%";
+                })
+            {
+                Owner = this
+            };
 
-        bool ok = await UpdateManager.DownloadAndApplyUpdateAsync(update, progress);
-        if (!ok)
+            dlg.ShowDialog();
+        }
+        finally
         {
             _isDownloadingBrowserUpdate = false;
             BtnUpdateAvailable.IsEnabled = true;
             TxtUpdateAvailableLabel.Text = $"Actualizar ({update.VersionTag})";
-            ShowToast("⚠️ No se pudo descargar la actualización. Verifica tu conexión a internet.");
         }
     }
 }

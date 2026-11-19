@@ -29,9 +29,10 @@ public partial class MainWindow
     private string _lastCopiedSecretPassword = string.Empty;
     private string? _lastRejectedOverlayCandidate;
     private bool _isVerifyingOverlayPin = false;
+    private bool _isPrivacyOnboardingOpen = false;
 
-    /// <summary>Indica si la pantalla de bloqueo por PIN está activa.</summary>
-    public bool IsLocked => BrowserLockOverlay != null && BrowserLockOverlay.Visibility == Visibility.Visible;
+    /// <summary>Indica si la pantalla de bloqueo por PIN o la ventana modal inicial de perfiles están activas.</summary>
+    public bool IsLocked => (BrowserLockOverlay != null && BrowserLockOverlay.Visibility == Visibility.Visible) || _isPrivacyOnboardingOpen || SettingsManager.DowngradeDetected;
 
     public bool IsBrowserLockOverlayActive() => IsLocked;
 
@@ -127,6 +128,13 @@ public partial class MainWindow
         {
             if (!TryUnlockFromGuestMode("Desbloquea con tu PIN de propietario para acceder a la Bóveda de Contraseñas"))
                 return;
+        }
+        else if (PasswordManager.IsVaultLockedByRecovery)
+        {
+            if (!PasswordVaultWindow.TryResolveVaultRecoveryLockPrompt(this))
+                return;
+
+            ShowToast("🔓 Bóveda restablecida de forma segura tras recuperación.");
         }
         else if (PasswordManager.ShouldRequireUnlockForVaultAction())
         {
@@ -325,22 +333,21 @@ public partial class MainWindow
     {
         try
         {
-            if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed || tab.IsIncognito || _isGuestSession || IsLocked)
+            if (tab?.WebView?.CoreWebView2 == null || tab.IsDisposed || tab.IsIncognito || _isGuestSession || IsLocked || PasswordManager.IsVaultLockedByRecovery)
                 return;
 
-            if (!SettingsManager.Current.EnablePasswordManager)
+            if (_activeTab != tab || !SettingsManager.Current.EnablePasswordManager)
                 return;
 
-            string mainUrl = tab.CurrentUri?.AbsoluteUri ?? tab.Url;
-            if (string.IsNullOrWhiteSpace(mainUrl))
+            string mainUrl = tab.WebView.CoreWebView2.Source ?? tab.CurrentUri?.AbsoluteUri ?? tab.Url;
+            if (string.IsNullOrWhiteSpace(mainUrl) || string.IsNullOrWhiteSpace(messageSourceUrl))
                 return;
 
-            // Verificar que el mensaje provenga del mismo dominio que la pestaña principal y sea HTTPS (o localhost)
-            string effectiveUrl = !string.IsNullOrWhiteSpace(messageSourceUrl) ? messageSourceUrl : mainUrl;
-            if (!PasswordVaultStore.IsDomainMatch(mainUrl, effectiveUrl, requireHttpsForAutofill: true))
+            // Verificar que el origen real entregado por WebView2 (e.Source) coincida exactamente con la pestaña principal
+            if (!IsSecureOriginForPasswordMessage(messageSourceUrl, tab.CurrentUri ?? (Uri.TryCreate(mainUrl, UriKind.Absolute, out var u) ? u : null)))
                 return;
 
-            var matches = PasswordManager.Store.GetCredentialsForUrl(effectiveUrl);
+            var matches = PasswordManager.Store.GetAutofillCredentialsForUrl(messageSourceUrl);
             if (matches.Count == 0) return;
 
             var primary = matches[0];
@@ -459,19 +466,26 @@ public partial class MainWindow
             PasswordManager.MarkSessionUnlocked();
             _isGuestSession = false;
             SetLockOverlayVisible(false);
+
+            await EnsurePrivacyOnboardingCompletedBeforeTabsAsync();
+            ReleaseFaviconGateAndRefreshBookmarks();
             ApplySettings();
 
             if (Tabs.Count == 0)
             {
                 if (_startInIncognito)
                 {
-                    await AddNewTabAsync(_initialUrl, isIncognito: true, bypassLockCheck: true);
+                    string? incUrl = _initialUrl;
+                    _initialUrl = null;
+                    await AddNewTabAsync(incUrl, isIncognito: true, bypassLockCheck: true);
                 }
                 else
                 {
                     await RestoreOrInitializeSessionTabsAsync();
                 }
             }
+
+            StartPostOnboardingBackgroundTasks();
         }
         catch (Exception ex)
         {

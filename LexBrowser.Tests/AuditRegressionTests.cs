@@ -330,7 +330,7 @@ public class AuditRegressionTests
             string classicHtml = NewTabPage.GetHtml();
             Assert.Contains("#000000", classicHtml);
             Assert.Contains("Menos anuncios", classicHtml);
-            Assert.Contains("Cero telemetría", classicHtml);
+            Assert.Contains("Sin telemetría propia", classicHtml);
             Assert.Contains("Privado", classicHtml);
             Assert.DoesNotContain("Ultra-ligero", classicHtml, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Navegación rápida", classicHtml, StringComparison.OrdinalIgnoreCase);
@@ -443,7 +443,7 @@ public class AuditRegressionTests
         string? repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string settingsXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "SettingsWindow.xaml"));
         string historyXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "HistoryWindow.xaml"));
-        string newTabFooter = "Cero telemetría · Menos anuncios · Privado";
+        string newTabFooter = "Sin telemetría propia · Menos anuncios · Privado";
 
         Assert.Contains(newTabFooter, settingsXaml, StringComparison.Ordinal);
         Assert.Contains(newTabFooter, NewTabPage.GetHtml(), StringComparison.Ordinal);
@@ -529,5 +529,176 @@ public class AuditRegressionTests
         Assert.DoesNotContain("neutralizado en 0.01s", webHtml, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("streaming-hd.example", webHtml, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("streaming-hd.example", webJs, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class ChunkedReadStream : Stream
+    {
+        private readonly byte[] _data;
+        private readonly int _maxChunk;
+        private int _pos;
+
+        public ChunkedReadStream(byte[] data, int maxChunk)
+        {
+            _data = data;
+            _maxChunk = maxChunk;
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => _data.Length;
+        public override long Position { get => _pos; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_pos >= _data.Length) return 0;
+            int n = Math.Min(Math.Min(count, _maxChunk), _data.Length - _pos);
+            Array.Copy(_data, _pos, buffer, offset, n);
+            _pos += n;
+            return n;
+        }
+        public override System.Threading.Tasks.ValueTask<int> ReadAsync(Memory<byte> buffer, System.Threading.CancellationToken cancellationToken = default)
+        {
+            if (_pos >= _data.Length) return new ValueTask<int>(0);
+            int n = Math.Min(Math.Min(buffer.Length, _maxChunk), _data.Length - _pos);
+            _data.AsSpan(_pos, n).CopyTo(buffer.Span);
+            _pos += n;
+            return new ValueTask<int>(n);
+        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void CriticalFix2_WebMessageOriginChecksAndNativeShortcuts_AreEnforced()
+    {
+        Uri tabUri = new("https://app.example.com/login");
+        Assert.True(LexBrowser.MainWindow.IsSameTopDocumentOrigin("https://app.example.com/oauth", tabUri));
+        Assert.True(LexBrowser.MainWindow.IsSecureOriginForPasswordMessage("https://app.example.com/oauth", tabUri));
+        Assert.True(LexBrowser.MainWindow.IsSecureOriginForPasswordMessage("http://localhost:3000/callback", new Uri("http://localhost:3000/login")));
+
+        Assert.False(LexBrowser.MainWindow.IsSameTopDocumentOrigin("https://evil.com/frame", tabUri));
+        Assert.False(LexBrowser.MainWindow.IsSameTopDocumentOrigin("https://app.example.com:8443/login", tabUri));
+        Assert.False(LexBrowser.MainWindow.IsSecureOriginForPasswordMessage("http://bank.example.com/login", new Uri("http://bank.example.com/login")));
+
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string tabsCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Tabs.cs"));
+        string mediaJs = MediaRuntime.InjectedScript;
+        string oauthCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "OAuthPopupWindow.xaml.cs"));
+
+        Assert.DoesNotContain("type: 'shortcut_new_tab'", mediaJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("type: 'shortcut_close_tab'", mediaJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("type: 'shortcut_reopen_tab'", mediaJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("type: 'open_history'", mediaJs, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("type == \"shortcut_new_tab\"", tabsCs, StringComparison.Ordinal);
+        Assert.DoesNotContain("type == \"shortcut_close_tab\"", tabsCs, StringComparison.Ordinal);
+        Assert.DoesNotContain("type == \"shortcut_reopen_tab\"", tabsCs, StringComparison.Ordinal);
+        Assert.DoesNotContain("type == \"open_history\"", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("AcceleratorKeyPressed", tabsCs, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("autofill_credentials", oauthCs, StringComparison.Ordinal);
+        Assert.Contains("IsSecureOriginForPasswordMessage", oauthCs, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CriticalFix3_SessionNotClearedWhenClosedWhileLocked()
+    {
+        // Cerrar en pantalla de PIN / antes de restaurar sesión no debe borrar session_tabs.json
+        Assert.False(LexBrowser.MainWindow.ShouldPersistSessionOnClose(
+            isGuestSession: false,
+            isLastOwnerWindow: true,
+            restorePreviousSession: true,
+            hasInitializedSession: false,
+            isLocked: true));
+        Assert.False(LexBrowser.MainWindow.ShouldPersistSessionOnClose(
+            isGuestSession: false,
+            isLastOwnerWindow: true,
+            restorePreviousSession: true,
+            hasInitializedSession: false,
+            isLocked: false));
+        Assert.False(LexBrowser.MainWindow.ShouldPersistSessionOnClose(
+            isGuestSession: false,
+            isLastOwnerWindow: true,
+            restorePreviousSession: true,
+            hasInitializedSession: true,
+            isLocked: true));
+        Assert.False(LexBrowser.MainWindow.ShouldPersistSessionOnClose(
+            isGuestSession: true,
+            isLastOwnerWindow: true,
+            restorePreviousSession: true,
+            hasInitializedSession: true,
+            isLocked: false));
+        Assert.True(LexBrowser.MainWindow.ShouldPersistSessionOnClose(
+            isGuestSession: false,
+            isLastOwnerWindow: true,
+            restorePreviousSession: true,
+            hasInitializedSession: true,
+            isLocked: false));
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task CriticalFix4_UpdateManagerVerifiesSha256AndUsesLocalAppDataFolder()
+    {
+        string sampleHex = "160b4171a6e085d370a4d50cf48e1a224b8f0ab33b1af966e670e07e13df5797";
+        Assert.Equal(sampleHex, UpdateManager.ParseAssetSha256Digest($"sha256:{sampleHex.ToUpperInvariant()}"));
+        Assert.Null(UpdateManager.ParseAssetSha256Digest("sha256:short"));
+        Assert.Null(UpdateManager.ParseAssetSha256Digest(null));
+
+        Assert.True(UpdateManager.IsTrustedGitHubReleaseDownloadUrl("https://github.com/JuniorJhair/Lex-Junior/releases/download/v2.6.0/LexJuniorSetup.exe"));
+        Assert.False(UpdateManager.IsTrustedGitHubReleaseDownloadUrl("http://github.com/JuniorJhair/Lex-Junior/releases/download/v2.6.0/LexJuniorSetup.exe"));
+        Assert.False(UpdateManager.IsTrustedGitHubReleaseDownloadUrl("https://github.com/OtherUser/Lex-Junior/releases/download/v2.6.0/LexJuniorSetup.exe"));
+
+        Assert.StartsWith(InstallerService.UserDataDir, UpdateManager.GetUpdatesDirectory(), StringComparison.OrdinalIgnoreCase);
+
+        string tempFile = Path.Combine(Path.GetTempPath(), $"lex_upd_verify_{Guid.NewGuid():N}.bin");
+        try
+        {
+            byte[] payload = System.Text.Encoding.UTF8.GetBytes("LexJuniorUpdaterPayload-v2.6.0");
+            await File.WriteAllBytesAsync(tempFile, payload);
+            string exactSha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload)).ToLowerInvariant();
+
+            Assert.True(await UpdateManager.VerifyDownloadedInstallerAsync(tempFile, $"sha256:{exactSha}", payload.Length));
+            Assert.False(await UpdateManager.VerifyDownloadedInstallerAsync(tempFile, null, payload.Length));
+            Assert.False(await UpdateManager.VerifyDownloadedInstallerAsync(tempFile, $"sha256:{new string('0', 64)}", payload.Length));
+            Assert.False(await UpdateManager.VerifyDownloadedInstallerAsync(tempFile, $"sha256:{exactSha}", payload.Length + 1));
+        }
+        finally
+        {
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+        }
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task CriticalFix5_SingleInstanceIpc_UsesCurrentUserOnlyAndReadsChunkedLongUrls()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string ipcCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "Core", "SingleInstanceIpc.cs"));
+        Assert.Contains("PipeOptions.CurrentUserOnly", ipcCs, StringComparison.Ordinal);
+
+        string longUrl = "https://example.com/path?" + new string('a', 2400);
+        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(longUrl);
+        using var chunked = new ChunkedReadStream(bytes, maxChunk: 300);
+
+        string decoded = await SingleInstanceIpc.ReadBoundedPayloadAsync(chunked, maxBytes: 16384);
+        Assert.Equal(longUrl, decoded);
+
+        using var cappedStream = new ChunkedReadStream(bytes, maxChunk: 200);
+        string capped = await SingleInstanceIpc.ReadBoundedPayloadAsync(cappedStream, maxBytes: 512);
+        Assert.Equal(512, capped.Length);
+    }
+
+    [Fact]
+    public void CriticalFix6_StartupDoesNotCallRefreshWindowsIconCacheOnUiThread()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string appCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "App.xaml.cs"));
+        int onStartupIdx = appCs.IndexOf("OnStartup(", StringComparison.Ordinal);
+        int bgTaskIdx = appCs.IndexOf("Task.Run(", onStartupIdx, StringComparison.Ordinal);
+        string uiStartupSlice = appCs.Substring(onStartupIdx, bgTaskIdx - onStartupIdx);
+
+        Assert.DoesNotContain("RefreshWindowsIconCache", uiStartupSlice, StringComparison.Ordinal);
+        Assert.Contains("RefreshIconCacheOnceIfVersionChanged", appCs, StringComparison.Ordinal);
     }
 }

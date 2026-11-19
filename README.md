@@ -4,9 +4,11 @@ Navegador web de escritorio privado y optimizado para multimedia en Windows, des
 
 ## ✨ Características Principales
 - **🛡️ LexShield Core (Menos anuncios) + Adaptadores Aislados:** Motor declarativo unificado en C#/.NET 8 (`lex-shield.lex`, scriptlets estáticos sin `eval`, `$csp`, `$popup` y capas anti-overlay sin doble conteo) con rutas estrictamente aisladas para YouTube y Dailymotion.
-- **🔒 Modo Incógnito Real y 0 Telemetría:** Sesiones privadas aisladas (`IsInPrivateModeEnabled = true`), sin registro en historial, sin retención en `Ctrl+Shift+T`, sin caché compartida de favicons y con protección mDNS para WebRTC.
+- **🔒 Perfiles de Privacidad (A / B / C / Personalizado), Modo Incógnito Real y Sin Telemetría Propia:** Sesiones privadas aisladas (`IsInPrivateModeEnabled = true`), sin registro en historial, sin retención en `Ctrl+Shift+T`, sin caché en disco de favicons y con protección mDNS para WebRTC. Incluye asistente de perfiles de privacidad (`A: Privacidad estricta`, `B: Equilibrado`, `C: Completo` y `Personalizado`) y compuerta de red de arranque (`StartupNetworkGate`).
+- **📑 Lex PDF Studio (Archivos Locales y Virtuales `http/https`):** Lector y editor nativo con dibujo a mano alzada (8 grosores), resaltador, texto, firma digital en 1 clic, sellos, Modo Noche/Sepia y guardado vectorial sin pérdida (`pdf-lib`), compatible tanto con archivos locales como con enlaces PDF virtuales autenticados mediante proxy interno con protección anti-SSRF.
+- **🎓 Lex Junior Class (Adelanto integrado — Próxima actualización):** Botón dedicado en la barra superior, tarjeta en Nueva Pestaña y ruta `lex://class` con el adelanto oficial de la plataforma educativa interactiva paso a paso (1.° de Primaria a Preuniversitario).
 - **🗖 Picture-in-Picture Inteligente (Auto-PiP y Página Flotante):** Mini-reproductor nativo automático al cambiar de pestaña con tamaño independiente guardado para videos 16:9 y Shorts 9:16, más ventana flotante manual.
-- **📑 Gestión Avanzada de Pestañas y Accesos Directos:** Navegación multi-pestaña con arrastrar y soltar, fijado de pestañas (solo icono o icono + título), indicador de seguridad HTTPS dinámico y barra de marcadores con persistencia atómica.
+- **📑 Gestión Avanzada de Pestañas, Bóveda DPAPI + PIN y Accesos Directos:** Navegación multi-pestaña con arrastrar y soltar, Bóveda de Contraseñas cifrada con Windows DPAPI y coincidencia estricta de host, bloqueo por PIN y Modo Invitado, actualizador con verificación SHA-256 y diálogo de novedades formateado con scroll.
 - **🔍 Buscador Configurable:** Omnibox y página de Nueva Pestaña sincronizados con Google, DuckDuckGo, Brave Search, Bing o buscador personalizado.
 
 ## 🏗️ Estructura del Proyecto

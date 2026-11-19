@@ -522,10 +522,24 @@ public static class NewTabPage
           </svg>
         </div>TV en vivo
       </a>
+      <a class=""quick-link"" href=""https://class.lex.local/index.html"" title=""Lex Junior Class — Disponible en la próxima actualización"">
+        <div class=""ico"">
+          <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
+            <defs>
+              <linearGradient id=""lexClassGrad"" x1=""0"" y1=""0"" x2=""1"" y2=""1"">
+                <stop offset=""0%"" stop-color=""#FF6B00""/>
+                <stop offset=""100%"" stop-color=""#7C3AED""/>
+              </linearGradient>
+            </defs>
+            <path d=""M12 3L1 8.5L12 14L21 9.5V16H23V8.5L12 3Z"" fill=""url(#lexClassGrad)""/>
+            <path d=""M5 12.2V16.8C5 18.9 8.1 20.5 12 20.5C15.9 20.5 19 18.9 19 16.8V12.2L12 15.8L5 12.2Z"" fill=""#FB923C""/>
+          </svg>
+        </div>Lex Class
+      </a>
     </div>
   </div>
 
-  <div class=""footer"">⚡ <b>Lex Junior Browser</b> — Cero telemetría · Menos anuncios · Privado</div>
+  <div class=""footer"">⚡ <b>Lex Junior Browser</b> — Sin telemetría propia · Menos anuncios · Privado</div>
 
   <script>
     function tick() {
@@ -545,6 +559,10 @@ public static class NewTabPage
       if (!v) return;
       if (/^lex:(?:\/\/)?tv$/i.test(v)) {
         window.location.href = 'https://tv.lex.local/index.html';
+        return;
+      }
+      if (/^lex:(?:\/\/)?class$/i.test(v)) {
+        window.location.href = 'https://class.lex.local/index.html';
         return;
       }
       if (/^(https?|file|about|view-source|data):/i.test(v)) {

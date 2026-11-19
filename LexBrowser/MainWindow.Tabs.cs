@@ -370,6 +370,39 @@ public partial class MainWindow
                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
+    internal static bool IsSameTopDocumentOrigin(string? messageSourceUrl, Uri? tabCurrentUri)
+    {
+        if (string.IsNullOrWhiteSpace(messageSourceUrl) || tabCurrentUri == null)
+            return false;
+
+        if (!Uri.TryCreate(messageSourceUrl.Trim(), UriKind.Absolute, out var msgUri))
+            return false;
+
+        if ((msgUri.Scheme != Uri.UriSchemeHttp && msgUri.Scheme != Uri.UriSchemeHttps) ||
+            (tabCurrentUri.Scheme != Uri.UriSchemeHttp && tabCurrentUri.Scheme != Uri.UriSchemeHttps))
+        {
+            return false;
+        }
+
+        return string.Equals(msgUri.Scheme, tabCurrentUri.Scheme, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(msgUri.Host, tabCurrentUri.Host, StringComparison.OrdinalIgnoreCase) &&
+               msgUri.Port == tabCurrentUri.Port;
+    }
+
+    internal static bool IsSecureOriginForPasswordMessage(string? messageSourceUrl, Uri? tabCurrentUri)
+    {
+        if (!IsSameTopDocumentOrigin(messageSourceUrl, tabCurrentUri))
+            return false;
+
+        if (!Uri.TryCreate(messageSourceUrl!.Trim(), UriKind.Absolute, out var msgUri))
+            return false;
+
+        bool isLocal = msgUri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                       msgUri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase);
+
+        return msgUri.Scheme == Uri.UriSchemeHttps || isLocal;
+    }
+
     // Pinceles estáticos congelados para evitar asignaciones repetidas (Auditoría L3)
     private static readonly SolidColorBrush s_bookmarkDefaultBorderBrush = CreateFrozenBrush(0x2E, 0x2E, 0x3A);
     private static readonly SolidColorBrush s_bookmarkDefaultBgBrush = CreateFrozenBrush(0x18, 0x18, 0x22);
@@ -545,13 +578,34 @@ public partial class MainWindow
         var core = tab.WebView.CoreWebView2;
         if (core == null) return;
 
+        var controller = GetController(tab.WebView);
         try
         {
             tab.WebView.ZoomFactor = 1.0;
-            var controller = GetController(tab.WebView);
             if (controller != null)
             {
                 controller.NotifyParentWindowPositionChanged();
+                controller.AcceleratorKeyPressed += (s, args) =>
+                {
+                    if (args.KeyEventKind != CoreWebView2KeyEventKind.KeyDown &&
+                        args.KeyEventKind != CoreWebView2KeyEventKind.SystemKeyDown)
+                    {
+                        return;
+                    }
+
+                    var win = tab.OwnerWindow ?? this;
+                    if (win.IsBrowserLockOverlayActive())
+                    {
+                        args.Handled = true;
+                        return;
+                    }
+
+                    Key key = KeyInterop.KeyFromVirtualKey((int)args.VirtualKey);
+                    if (win.HandleBrowserShortcutKey(key, Keyboard.Modifiers, core))
+                    {
+                        args.Handled = true;
+                    }
+                };
             }
         }
         catch { }
@@ -567,7 +621,7 @@ public partial class MainWindow
             _ = ResetStaleCapturePermissionsOnceAsync(core);
         }
 
-        // Atajos F12, Ctrl+Shift+I (DevTools), Ctrl+Shift+L (Shield Logger) y control de Zoom cuando el foco está sobre el WebView
+        // Atajos nativos en WPF para cuando el foco está en el control contenedor de WebView
         tab.WebView.PreviewKeyDown += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
@@ -577,36 +631,10 @@ public partial class MainWindow
                 return;
             }
 
-            if (e.Key == Key.Escape && win.CloseOpenToolbarPopups())
+            Key actualKey = e.Key == Key.System ? e.SystemKey : e.Key;
+            if (win.HandleBrowserShortcutKey(actualKey, Keyboard.Modifiers, core))
             {
                 e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.F12 || (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.I))
-            {
-                e.Handled = true;
-                try { core.OpenDevToolsWindow(); } catch { }
-            }
-            else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.L)
-            {
-                e.Handled = true;
-                win.CopyOrExportShieldLog();
-            }
-            else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.D0 || e.Key == Key.NumPad0))
-            {
-                e.Handled = true;
-                win.ResetZoom();
-            }
-            else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemPlus || e.Key == Key.Add || e.Key == Key.Oem1 || e.Key == Key.Oem6))
-            {
-                e.Handled = true;
-                win.ZoomIn();
-            }
-            else if (Keyboard.Modifiers == ModifierKeys.Control && (e.Key == Key.OemMinus || e.Key == Key.Subtract || e.Key == Key.OemQuestion || e.Key == Key.OemPeriod))
-            {
-                e.Handled = true;
-                win.ZoomOut();
             }
         };
 
@@ -879,7 +907,7 @@ public partial class MainWindow
         {
             try
             {
-                if (PdfStudioService.TryHandleWebResourceRequest(core.Environment, e))
+                if (PdfStudioService.TryHandleWebResourceRequest(core.Environment, e, core))
                     return;
                 if (TvStudioService.TryHandleWebResourceRequest(core.Environment, e))
                     return;
@@ -1422,6 +1450,21 @@ public partial class MainWindow
                 if (!root.TryGetProperty("type", out var typeProp)) return;
                 string type = typeProp.GetString() ?? "";
 
+                if (type == "open_raw_pdf")
+                {
+                    if (!PdfStudioService.IsInternalViewerPage(e.Source)) return;
+                    string rawPdfUrl = root.TryGetProperty("url", out var urlProp) ? (urlProp.GetString() ?? "") : "";
+                    if (!IsSafeHttpUrl(rawPdfUrl)) return;
+
+                    _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+                    {
+                        if (tab.IsDisposed || tab.WebView?.CoreWebView2 == null) return;
+                        tab.BypassPdfRedirectOnceUrl = rawPdfUrl;
+                        tab.WebView.CoreWebView2.Navigate(rawPdfUrl);
+                    });
+                    return;
+                }
+
                 if (type == "lex_shield_cosmetic_query")
                 {
                     string host = root.TryGetProperty("host", out var hProp) ? (hProp.GetString() ?? "") : "";
@@ -1522,31 +1565,6 @@ public partial class MainWindow
                             $"stripped={stripped}, skipClicks={skipClicks}, enforcement={enforcement}, breaker={breaker}", tabDesc);
                     }
                 }
-                else if (type == "shortcut_new_tab")
-                {
-                    bool incog = root.TryGetProperty("incognito", out var incProp) && incProp.GetBoolean();
-                    _ = win.Dispatcher.BeginInvoke(async () =>
-                    {
-                        if (win.IsBrowserLockOverlayActive()) return;
-                        int nextIdx = win._activeTab != null ? win.Tabs.IndexOf(win._activeTab) + 1 : win.Tabs.Count;
-                        await win.AddNewTabAsync(null, isIncognito: incog, insertIndex: nextIdx);
-                    });
-                }
-                else if (type == "shortcut_reopen_tab")
-                {
-                    _ = win.Dispatcher.BeginInvoke(() =>
-                    {
-                        if (!win.IsBrowserLockOverlayActive()) win.ReopenLastClosedTab();
-                    });
-                }
-                else if (type == "shortcut_close_tab")
-                {
-                    _ = win.Dispatcher.BeginInvoke(() =>
-                    {
-                        var active = win._activeTab;
-                        if (!win.IsBrowserLockOverlayActive() && active != null) win.CloseTab(active);
-                    });
-                }
                 else if (type == "pip_entered")
                 {
                     int vw = root.TryGetProperty("videoWidth", out var vwProp) ? vwProp.GetInt32() : 16;
@@ -1558,6 +1576,7 @@ public partial class MainWindow
                 }
                 else if (type == "pip_leaving_now")
                 {
+                    if (win._nativePipSourceTab != tab && win._activeTab != tab) return;
                     NativeMethods.GetCursorPos(out win._pipExitCursorPos);
                     win._pipSessionId++;
                     win._canRecordUserPipResize = false;
@@ -1572,6 +1591,7 @@ public partial class MainWindow
                 }
                 else if (type == "pip_left")
                 {
+                    if (win._nativePipSourceTab != tab && win._activeTab != tab) return;
                     bool isPaused = root.TryGetProperty("isPaused", out var pProp) && pProp.GetBoolean();
                     double scale = win._lastNativePipDpi > 0 ? win._lastNativePipDpi / 96.0 : 1.25;
                     if (scale <= 0) scale = 1.25;
@@ -1588,7 +1608,7 @@ public partial class MainWindow
                     {
                         win.Dispatcher.Invoke(() =>
                         {
-                            if (tab.IsDisposed) return;
+                            if (tab.IsDisposed || (win._nativePipSourceTab != null && win._nativePipSourceTab != tab && win._activeTab != tab)) return;
                             if (win.WindowState == WindowState.Minimized)
                             {
                                 win.WindowState = WindowState.Normal;
@@ -1613,6 +1633,7 @@ public partial class MainWindow
                 }
                 else if (type == "pip_return_requested")
                 {
+                    if (win._nativePipSourceTab != tab && win._activeTab != tab) return;
                     LogPipEvent(e.WebMessageAsJson);
                     win.Dispatcher.Invoke(() =>
                     {
@@ -1660,7 +1681,10 @@ public partial class MainWindow
                 else if (type == "cors_unlock_req")
                 {
                     if (tab.VolumeBoostPercent <= 100) return;
+                    if (win._activeTab != tab && win._pipWindow?.TargetTab != tab) return;
                     string origin = root.TryGetProperty("origin", out var oP) ? (oP.GetString() ?? "") : "";
+                    if (!IsSafeHttpUrl(origin)) return;
+
                     _ = win.Dispatcher.BeginInvoke(async () =>
                     {
                         if (tab.IsDisposed) return;
@@ -1690,35 +1714,39 @@ public partial class MainWindow
                         });
                     }
                 }
-                else if (type == "open_history")
-                {
-                    _ = win.Dispatcher.BeginInvoke(() => win.OpenHistory());
-                }
                 else if (type == "autofill_requested")
                 {
-                    // Auditoría E5: Autocompletado bajo interacción (foco en formulario) usando ExecuteScriptAsync aislado
-                    if (tab.IsIncognito || win._isGuestSession || !SettingsManager.Current.EnablePasswordManager)
+                    // Auditoría E5: Validar origen real (e.Source) y pestaña activa antes de autocompletar
+                    if (tab.IsIncognito || win._isGuestSession || win.IsLocked || !SettingsManager.Current.EnablePasswordManager)
                         return;
 
-                    string reqUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                    string actualSource = e.Source ?? string.Empty;
                     _ = win.Dispatcher.BeginInvoke(async () =>
                     {
-                        string targetUrl = !string.IsNullOrWhiteSpace(reqUrl) ? reqUrl : tab.Url;
-                        await win.HandleAutofillRequestAsync(tab, targetUrl);
+                        if (tab.IsDisposed || win._activeTab != tab || win.IsLocked) return;
+                        Uri? expectedUri = tab.CurrentUri ?? (Uri.TryCreate(core.Source, UriKind.Absolute, out var cu) ? cu : null);
+                        if (!IsSecureOriginForPasswordMessage(actualSource, expectedUri)) return;
+                        await win.HandleAutofillRequestAsync(tab, actualSource);
                     });
                 }
                 else if (type == "password_submitted")
                 {
-                    if (tab.IsIncognito || win._isGuestSession || !SettingsManager.Current.EnablePasswordManager)
+                    if (tab.IsIncognito || win._isGuestSession || win.IsLocked || !SettingsManager.Current.EnablePasswordManager)
                         return;
 
-                    string submittedUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                    string actualSource = e.Source ?? string.Empty;
                     string submittedUser = root.TryGetProperty("username", out var usrProp) ? (usrProp.GetString() ?? "") : "";
                     string submittedPwd = root.TryGetProperty("password", out var pwdProp) ? (pwdProp.GetString() ?? "") : "";
 
-                    if (!string.IsNullOrWhiteSpace(submittedUrl) && !string.IsNullOrEmpty(submittedPwd))
+                    if (!string.IsNullOrWhiteSpace(actualSource) && !string.IsNullOrEmpty(submittedPwd))
                     {
-                        _ = win.Dispatcher.BeginInvoke(() => win.PromptSaveOrUpdatePassword(submittedUrl, submittedUser, submittedPwd));
+                        _ = win.Dispatcher.BeginInvoke(() =>
+                        {
+                            if (tab.IsDisposed || win._activeTab != tab || win.IsLocked) return;
+                            Uri? expectedUri = tab.CurrentUri ?? (Uri.TryCreate(core.Source, UriKind.Absolute, out var cu) ? cu : null);
+                            if (!IsSecureOriginForPasswordMessage(actualSource, expectedUri)) return;
+                            win.PromptSaveOrUpdatePassword(actualSource, submittedUser, submittedPwd);
+                        });
                     }
                 }
                 else if (type == "media_detected_batch")
@@ -1782,20 +1810,38 @@ public partial class MainWindow
                 try { if (core.IsDefaultDownloadDialogOpen) core.CloseDefaultDownloadDialog(); } catch { }
 
                 string fileName = Path.GetFileName(resultPath);
-                long total = (long)(op.TotalBytesToReceive ?? 0UL);
+                long total = DownloadManager.SafeBytesFromUlong(op.TotalBytesToReceive);
                 bool isPrivate = tab.IsIncognito || tab.IsGuest;
                 var entry = DownloadManager.RegisterDownload(fileName, resultPath, op.Uri, total, "En progreso", isPrivate);
                 var win = tab.OwnerWindow ?? this;
 
-                entry.PauseAction = () => _ = win.Dispatcher.BeginInvoke(() => { try { op.Pause(); } catch { } });
-                entry.ResumeAction = () => _ = win.Dispatcher.BeginInvoke(() => { try { op.Resume(); } catch { } });
-                entry.CancelAction = () => _ = win.Dispatcher.BeginInvoke(() => { try { op.Cancel(); } catch { } });
-                entry.RetryAction = () => _ = win.Dispatcher.BeginInvoke(() =>
+                entry.PauseAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() => { try { op.Pause(); } catch { } });
+                entry.ResumeAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        op.Resume();
+                        NotifyTrackedDownloadResumed();
+                    }
+                    catch { }
+                });
+                entry.CancelAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() => { try { op.Cancel(); } catch { } });
+                entry.RetryAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() =>
                 {
                     try
                     {
                         if (!tab.IsDisposed && tab.WebView?.CoreWebView2 != null && !string.IsNullOrWhiteSpace(entry.Url))
+                        {
                             tab.WebView.CoreWebView2.Navigate(entry.Url);
+                            return;
+                        }
+
+                        var host = Application.Current?.Windows.OfType<MainWindow>()
+                            .FirstOrDefault(w => !w._isWindowClosing && !w._isGuestSession);
+                        if (host != null && !string.IsNullOrWhiteSpace(entry.Url))
+                        {
+                            _ = host.AddNewTabAsync(entry.Url, isIncognito: entry.IsIncognito);
+                        }
                     }
                     catch { }
                 });
@@ -1813,8 +1859,8 @@ public partial class MainWindow
                     }, durationSeconds: 4);
                 });
 
-                long lastReportTick = 0;
                 int handlersDetached = 0;
+                TrackedWebViewDownload tracked = null!;
 
                 void DetachHandlers()
                 {
@@ -1830,90 +1876,27 @@ public partial class MainWindow
 
                 void OnBytesReceived(object? sender, object args)
                 {
-                    var senderOp = sender as CoreWebView2DownloadOperation ?? op;
-                    if (tab.IsDisposed) { DetachHandlers(); return; }
-                    long received = senderOp.BytesReceived;
-                    long tot = (long)(senderOp.TotalBytesToReceive ?? 0UL);
-                    long now = Environment.TickCount64;
-                    if (now - lastReportTick < 250 && (tot <= 0 || received < tot))
-                        return;
-
-                    lastReportTick = now;
-                    double? etaSec = null;
-                    try
-                    {
-                        DateTime estEnd = senderOp.EstimatedEndTime;
-                        if (estEnd > DateTime.Now)
-                            etaSec = (estEnd - DateTime.Now).TotalSeconds;
-                    }
-                    catch { }
-
-                    DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "En progreso", estimatedSecondsRemaining: etaSec);
+                    SyncTrackedDownloadOperation(tracked, forceProgressUpdate: false);
                 }
 
                 void OnStateChanged(object? sender, object args)
                 {
-                    var senderOp = sender as CoreWebView2DownloadOperation ?? op;
-                    long received = senderOp.BytesReceived;
-                    long tot = (long)(senderOp.TotalBytesToReceive ?? 0UL);
-
-                    if (senderOp.State == CoreWebView2DownloadState.Completed)
-                    {
-                        DetachHandlers();
-                        long finalTotal = tot > 0 ? tot : received;
-                        DownloadManager.UpdateDownloadProgress(entry.Id, received > 0 ? received : finalTotal, finalTotal, "Completado");
-                        _ = win.Dispatcher.BeginInvoke(() =>
-                        {
-                            win.UpdateDownloadsToolbarIndicator();
-                            if (win.PopupDownloads != null && win.PopupDownloads.IsOpen)
-                                win.RefreshDownloadsPopupUI();
-
-                            win.ShowToast($"✅ Descarga completada: {fileName}", "Abrir carpeta 📂", () =>
-                            {
-                                win.RevealFileInExplorer(resultPath);
-                            }, durationSeconds: 6);
-                        });
-                        return;
-                    }
-
-                    if (senderOp.State == CoreWebView2DownloadState.Interrupted)
-                    {
-                        var reason = senderOp.InterruptReason;
-                        if (reason == CoreWebView2DownloadInterruptReason.UserPaused && senderOp.CanResume)
-                        {
-                            DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "Pausado", canResume: true);
-                        }
-                        else if (reason == CoreWebView2DownloadInterruptReason.UserCanceled)
-                        {
-                            DetachHandlers();
-                            DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "Cancelado", "Cancelada por el usuario");
-                        }
-                        else
-                        {
-                            if (!senderOp.CanResume) DetachHandlers();
-                            string reasonLabel = FormatDownloadInterruptReason(reason);
-                            DownloadManager.UpdateDownloadProgress(entry.Id, received, tot, "Interrumpido", reasonLabel, canResume: senderOp.CanResume);
-                            _ = win.Dispatcher.BeginInvoke(() =>
-                            {
-                                win.ShowToast($"⚠️ Descarga interrumpida: {fileName} ({reasonLabel})", "Ver descargas", () =>
-                                {
-                                    win.RefreshDownloadsPopupUI();
-                                    if (win.PopupDownloads != null) win.PopupDownloads.IsOpen = true;
-                                });
-                            });
-                        }
-
-                        _ = win.Dispatcher.BeginInvoke(() =>
-                        {
-                            win.UpdateDownloadsToolbarIndicator();
-                            if (win.PopupDownloads != null && win.PopupDownloads.IsOpen)
-                                win.RefreshDownloadsPopupUI();
-                        });
-                    }
+                    SyncTrackedDownloadOperation(tracked, forceProgressUpdate: true);
                 }
+
+                tracked = new TrackedWebViewDownload
+                {
+                    EntryId = entry.Id,
+                    Operation = op,
+                    FileName = fileName,
+                    ResultPath = resultPath,
+                    DetachHandlersAction = DetachHandlers
+                };
 
                 op.BytesReceivedChanged += OnBytesReceived;
                 op.StateChanged += OnStateChanged;
+                RegisterTrackedDownloadOperation(tracked);
+                _ = win.Dispatcher.BeginInvoke(() => SyncTrackedDownloadOperation(tracked, forceProgressUpdate: true));
             }
             catch { }
         };
@@ -1942,20 +1925,31 @@ public partial class MainWindow
                 ShieldLogger.LogForTab(tab, "NAVIGATION_STARTING", tab.CurrentUri?.Host ?? "initial", e.Uri, "MainFrame", $"IsUserInitiated={e.IsUserInitiated}, IsRedirected={e.IsRedirected}, NavigationKind={e.NavigationKind}", FormatTabDesc());
             }
 
+            // Reautorizar URL remota si el usuario vuelve/recarga una pestaña del visor interno (ej. Atrás/Adelante)
+            if (PdfStudioService.IsInternalViewerPage(e.Uri) &&
+                PdfStudioService.TryUnwrapInternalViewerUrl(e.Uri, out string? existingViewerTarget) &&
+                IsSafeHttpUrl(existingViewerTarget))
+            {
+                PdfStudioService.AuthorizeRemoteUrl(existingViewerTarget);
+            }
+
             // Redirección hacia Lex PDF Studio si el destino es un documento PDF
             if (PdfStudioService.IsPdfTarget(e.Uri))
             {
-                e.Cancel = true;
-                string viewerUrl = PdfStudioService.GetViewerUrl(e.Uri);
-                var winRef = tab.OwnerWindow ?? this;
-                _ = winRef.Dispatcher.BeginInvoke(new Action(() =>
+                if (!tab.ConsumeBypassPdfRedirect(e.Uri))
                 {
-                    if (!tab.IsDisposed)
+                    e.Cancel = true;
+                    string viewerUrl = PdfStudioService.GetViewerUrl(e.Uri);
+                    var winRef = tab.OwnerWindow ?? this;
+                    _ = winRef.Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        tab.WebView?.CoreWebView2?.Navigate(viewerUrl);
-                    }
-                }));
-                return;
+                        if (!tab.IsDisposed)
+                        {
+                            tab.WebView?.CoreWebView2?.Navigate(viewerUrl);
+                        }
+                    }));
+                    return;
+                }
             }
 
             if (TvStudioService.IsTvUrl(e.Uri))
@@ -1973,6 +1967,17 @@ public partial class MainWindow
                     {
                         tab.WebView?.CoreWebView2?.Navigate(TvStudioService.HomeUrl);
                     }
+                }));
+                return;
+            }
+
+            if (UI.Views.LexClassComingSoonDialog.IsLexClassUrl(e.Uri))
+            {
+                e.Cancel = true;
+                var winRef = tab.OwnerWindow ?? this;
+                _ = winRef.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    winRef.OpenLexClassComingSoon();
                 }));
                 return;
             }
@@ -2203,6 +2208,11 @@ public partial class MainWindow
                     win.UpdateMediaSnifferUI();
                     win.UpdateNavigationButtons();
                 }
+
+                if (!tab.IsNewTab && !tab.IsIncognito && !tab.IsGuest)
+                {
+                    win.ScheduleSessionSave();
+                }
             });
         };
 
@@ -2244,6 +2254,11 @@ public partial class MainWindow
                 if (win._activeTab == tab)
                 {
                     win.UpdateCurrentTabBookmarkUI();
+                }
+
+                if (!tab.IsNewTab && !tab.IsIncognito && !tab.IsGuest)
+                {
+                    win.ScheduleSessionSave();
                 }
             });
         };
@@ -3019,6 +3034,7 @@ public partial class MainWindow
         tab.PinMode = TabPinMode.LogoOnly;
         MoveToPinnedSection(tab);
         UpdateTabWidths();
+        ScheduleSessionSave();
     }
 
     private void MenuPinLogoAndName_Click(object sender, RoutedEventArgs e)
@@ -3029,6 +3045,7 @@ public partial class MainWindow
         tab.PinMode = TabPinMode.LogoAndName;
         MoveToPinnedSection(tab);
         UpdateTabWidths();
+        ScheduleSessionSave();
     }
 
     private void MenuUnpin_Click(object sender, RoutedEventArgs e)
@@ -3046,6 +3063,7 @@ public partial class MainWindow
         }
         UpdateTabWidths();
         RescheduleSuspensionTimer();
+        ScheduleSessionSave();
     }
 
     private void MoveToPinnedSection(BrowserTab tab)

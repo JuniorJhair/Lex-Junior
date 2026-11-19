@@ -259,6 +259,11 @@ public class DownloadEntry : INotifyPropertyChanged
                 string speedPart = SpeedBytesPerSec >= 1024 ? $" · {FormatSize((long)SpeedBytesPerSec)}/s" : string.Empty;
                 if (TotalBytes > 0)
                 {
+                    if (BytesReceived >= TotalBytes)
+                    {
+                        return $"⏳ 100% · Finalizando y verificando... ({FormatSize(TotalBytes)})";
+                    }
+
                     string etaPart = EstimatedSecondsRemaining.HasValue && EstimatedSecondsRemaining.Value >= 1
                         ? $" · {FormatEta(EstimatedSecondsRemaining.Value)}"
                         : string.Empty;
@@ -408,6 +413,9 @@ public class DownloadStore
 
         return stem + ext;
     }
+
+    public static long SafeBytesFromUlong(ulong? raw)
+        => raw is ulong v && v <= (ulong)long.MaxValue ? (long)v : 0L;
 
     public static string SanitizeAndMakeUniquePath(
         string targetDirectory,
@@ -824,6 +832,9 @@ public static class DownloadManager
 
     public static void Load() => _store.Load();
     public static void Flush() => _store.Flush();
+
+    public static long SafeBytesFromUlong(ulong? raw)
+        => DownloadStore.SafeBytesFromUlong(raw);
 
     public static string SanitizeAndMakeUniquePath(
         string targetDirectory,

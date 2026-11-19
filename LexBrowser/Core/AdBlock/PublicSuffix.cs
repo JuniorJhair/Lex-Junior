@@ -67,6 +67,24 @@ public static class PublicSuffix
         "com.ru", "org.ru", "net.ru"
     };
 
+    // Sufijos públicos privados (hostings multi-inquilino donde cada subdominio es un sitio distinto)
+    private static readonly HashSet<string> PrivateSharedHostingSuffixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "github.io", "gitlab.io", "vercel.app", "netlify.app", "blogspot.com",
+        "herokuapp.com", "pages.dev", "workers.dev", "web.app", "firebaseapp.com",
+        "azurewebsites.net", "cloudfront.net", "s3.amazonaws.com", "fly.dev",
+        "railway.app", "render.com", "onrender.com", "glitch.me", "replit.dev",
+        "itch.io", "tumblr.com", "wordpress.com", "wixsite.com", "weebly.com",
+        "carrd.co", "notion.site", "duckdns.org", "no-ip.org", "ddns.net",
+        "ngrok.io", "ngrok-free.app", "trycloudflare.com"
+    };
+
+    internal static bool IsSharedHostingSuffix(string? domain)
+    {
+        if (string.IsNullOrWhiteSpace(domain)) return false;
+        return PrivateSharedHostingSuffixes.Contains(domain.Trim().Trim('.'));
+    }
+
     /// <summary>
     /// Comprueba si un host es exactamente igual a <paramref name="domain"/> o es un subdominio
     /// válido precedido por un punto (evitando asignaciones de cadena en memoria).
@@ -109,8 +127,20 @@ public static class PublicSuffix
         if (parts.Length < 2)
             return clean;
 
+        if (parts.Length >= 3)
+        {
+            string lastThree = $"{parts[^3]}.{parts[^2]}.{parts[^1]}";
+            if (PrivateSharedHostingSuffixes.Contains(lastThree))
+            {
+                if (parts.Length >= 4)
+                    return $"{parts[^4]}.{lastThree}";
+
+                return clean;
+            }
+        }
+
         string lastTwo = $"{parts[^2]}.{parts[^1]}";
-        if (CompoundTwoLabelSuffixes.Contains(lastTwo))
+        if (CompoundTwoLabelSuffixes.Contains(lastTwo) || PrivateSharedHostingSuffixes.Contains(lastTwo))
         {
             if (parts.Length >= 3)
                 return $"{parts[^3]}.{lastTwo}";

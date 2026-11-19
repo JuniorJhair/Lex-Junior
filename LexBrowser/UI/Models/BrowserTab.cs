@@ -597,6 +597,26 @@ public class BrowserTab : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// URL exacta de un PDF que el usuario solicitó abrir directamente en el navegador
+    /// sin redirigirlo por única vez a Lex PDF Studio (p. ej. si requiere login o descarga directa).
+    /// </summary>
+    public string? BypassPdfRedirectOnceUrl { get; set; }
+
+    public bool ConsumeBypassPdfRedirect(string? targetUrl)
+    {
+        if (string.IsNullOrWhiteSpace(BypassPdfRedirectOnceUrl) || string.IsNullOrWhiteSpace(targetUrl))
+            return false;
+
+        if (string.Equals(BypassPdfRedirectOnceUrl.Trim(), targetUrl.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            BypassPdfRedirectOnceUrl = null;
+            return true;
+        }
+
+        return false;
+    }
+
     public BrowserTab(WebView2? webView = null)
     {
         WebView = webView!;

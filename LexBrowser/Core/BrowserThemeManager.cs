@@ -48,6 +48,18 @@ public static class BrowserThemeManager
                 {
                     hw.UpdateThemeStyles(target);
                 }
+                else if (win is UI.Views.PrivacyProfileSetupWindow pw)
+                {
+                    pw.UpdateThemeStyles(target);
+                }
+                else if (win is UI.Views.SettingsRecoveryDialog rw)
+                {
+                    rw.UpdateThemeStyles(target);
+                }
+                else if (win is UI.Views.VersionDowngradeDialog vw)
+                {
+                    vw.UpdateThemeStyles(target);
+                }
             }
         };
 
@@ -258,6 +270,11 @@ public static class BrowserThemeManager
             SetBrush(res, "PanelBadgeAskFg", Color.FromRgb(0x33, 0x41, 0x55));
             SetBrush(res, "PanelDrawerBg", Color.FromRgb(0xF8, 0xFA, 0xFC));
             SetBrush(res, "PanelDrawerBorder", Color.FromRgb(0x93, 0xC5, 0xFD));
+            SetBrush(res, "PanelOnAccentFg", Color.FromRgb(0xFF, 0xFF, 0xFF));
+            SetBrush(res, "PanelWarningBadgeBg", Color.FromRgb(0xFE, 0xF3, 0xC7));
+            SetBrush(res, "PanelWarningBadgeFg", Color.FromRgb(0xB4, 0x53, 0x09));
+            SetBrush(res, "PanelCloseHoverBg", Color.FromRgb(0xE1, 0x1D, 0x48));
+            SetBrush(res, "PanelCloseHoverFg", Color.FromRgb(0xFF, 0xFF, 0xFF));
             return;
         }
 
@@ -336,6 +353,11 @@ public static class BrowserThemeManager
         SetBrush(res, "PanelBadgeAskFg", Color.FromRgb(0xD4, 0xD4, 0xD8));
         SetBrush(res, "PanelDrawerBg", Color.FromRgb(0x14, 0x14, 0x1F));
         SetBrush(res, "PanelDrawerBorder", isClassic ? Color.FromRgb(0x9A, 0x34, 0x12) : Color.FromRgb(0x31, 0x2E, 0x81));
+        SetBrush(res, "PanelOnAccentFg", isClassic ? Color.FromRgb(0x0A, 0x0A, 0x0C) : Color.FromRgb(0xFF, 0xFF, 0xFF));
+        SetBrush(res, "PanelWarningBadgeBg", Color.FromRgb(0x3A, 0x28, 0x0A));
+        SetBrush(res, "PanelWarningBadgeFg", Color.FromRgb(0xFB, 0xBF, 0x24));
+        SetBrush(res, "PanelCloseHoverBg", Color.FromRgb(0xE1, 0x1D, 0x48));
+        SetBrush(res, "PanelCloseHoverFg", Color.FromRgb(0xFF, 0xFF, 0xFF));
     }
 
     private static void SetLinearGradient(ResourceDictionary res, string key, Color startColor, Color endColor)

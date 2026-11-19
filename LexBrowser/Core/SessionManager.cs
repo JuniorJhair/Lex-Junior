@@ -61,6 +61,28 @@ public static class SessionManager
                 }).ToList()
             };
 
+            SaveSessionSnapshot(state.Tabs, activeIdx);
+        }
+        catch { }
+    }
+
+    public static void SaveSessionSnapshot(IReadOnlyList<SessionTabItem> tabs, int activeIndex)
+    {
+        try
+        {
+            if (tabs == null || tabs.Count == 0)
+            {
+                ClearSession();
+                return;
+            }
+
+            int clampedIdx = Math.Clamp(activeIndex, 0, tabs.Count - 1);
+            var state = new SessionState
+            {
+                ActiveIndex = clampedIdx,
+                Tabs = new List<SessionTabItem>(tabs)
+            };
+
             string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
             string dir = Path.GetDirectoryName(SessionFilePath)!;
             Directory.CreateDirectory(dir);

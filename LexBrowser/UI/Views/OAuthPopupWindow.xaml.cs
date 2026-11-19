@@ -88,23 +88,8 @@ public partial class OAuthPopupWindow : Window
         {
             Dispatcher.Invoke(() =>
             {
-                if (e.IsSuccess && !_isIncognito && SettingsManager.Current.EnablePasswordManager && !string.IsNullOrWhiteSpace(core.Source))
-                {
-                    if (PasswordVaultStore.IsDomainMatch(core.Source, core.Source, requireHttpsForAutofill: true))
-                    {
-                        var matches = PasswordManager.Store.GetCredentialsForUrl(core.Source);
-                        if (matches.Count > 0)
-                        {
-                            string payload = System.Text.Json.JsonSerializer.Serialize(new
-                            {
-                                action = "autofill_credentials",
-                                username = matches[0].Username,
-                                password = matches[0].Password
-                            });
-                            try { core.PostWebMessageAsJson(payload); } catch { }
-                        }
-                    }
-                }
+                if (!e.IsSuccess || _isIncognito) return;
+                TxtPopupUrl.Text = core.Source ?? string.Empty;
             });
         };
 
@@ -113,19 +98,38 @@ public partial class OAuthPopupWindow : Window
             try
             {
                 if (_isIncognito || !SettingsManager.Current.EnablePasswordManager) return;
+                string actualSource = e.Source ?? string.Empty;
+                Uri? currentUri = Uri.TryCreate(core.Source, UriKind.Absolute, out var cu) ? cu : null;
+                if (!MainWindow.IsSecureOriginForPasswordMessage(actualSource, currentUri)) return;
+
                 string raw = e.WebMessageAsJson;
                 if (string.IsNullOrEmpty(raw) || raw.Length > 4096) return;
 
                 using var doc = System.Text.Json.JsonDocument.Parse(raw);
                 var root = doc.RootElement;
-                if (root.TryGetProperty("type", out var tProp) && tProp.GetString() == "password_submitted")
+                if (!root.TryGetProperty("type", out var tProp)) return;
+                string msgType = tProp.GetString() ?? "";
+
+                if (msgType == "autofill_requested")
                 {
-                    string u = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
+                    var matches = PasswordManager.Store.GetAutofillCredentialsForUrl(actualSource);
+                    if (matches.Count > 0)
+                    {
+                        var primary = matches[0];
+                        string script = PasswordManager.BuildSafeAutofillScript(primary.Username, primary.Password);
+                        Dispatcher.BeginInvoke(async () =>
+                        {
+                            try { await core.ExecuteScriptAsync(script); } catch { }
+                        });
+                    }
+                }
+                else if (msgType == "password_submitted")
+                {
                     string usr = root.TryGetProperty("username", out var usrProp) ? (usrProp.GetString() ?? "") : "";
                     string pwd = root.TryGetProperty("password", out var pwdProp) ? (pwdProp.GetString() ?? "") : "";
-                    if (!string.IsNullOrWhiteSpace(u) && !string.IsNullOrEmpty(pwd))
+                    if (!string.IsNullOrEmpty(pwd))
                     {
-                        Dispatcher.BeginInvoke(() => PasswordSubmittedInPopup?.Invoke(u, usr, pwd));
+                        Dispatcher.BeginInvoke(() => PasswordSubmittedInPopup?.Invoke(actualSource, usr, pwd));
                     }
                 }
             }

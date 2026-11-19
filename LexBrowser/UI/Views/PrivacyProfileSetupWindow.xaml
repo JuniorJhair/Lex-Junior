@@ -1,0 +1,366 @@
+<Window x:Class="LexBrowser.UI.Views.PrivacyProfileSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:LexBrowser.UI.Controls"
+        Title="Privacidad y seguridad — Lex Junior Browser"
+        Width="980"
+        Height="700"
+        MinWidth="760"
+        MinHeight="430"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        Background="{DynamicResource PanelWindowBg}"
+        Foreground="{DynamicResource PanelTextBody}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/Assets/logo.png">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="42" ResizeBorderThickness="6" CornerRadius="0" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <Style x:Key="ProfileCardRadioStyle" TargetType="RadioButton">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelCardBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorder}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PanelTextPrimary}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Top"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="CardBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1.5"
+                                CornerRadius="10"
+                                Padding="13,11">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource PanelRowHoverBg}"/>
+                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource PanelAccentFg}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource PanelRadioActiveBg}"/>
+                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource PanelAccentBg}"/>
+                                <Setter TargetName="CardBorder" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="AccentActionButtonStyle" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PanelOnAccentFg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsEnabled" Value="True"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource PanelAccentHoverBg}"/>
+                            </MultiTrigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource LexThemedScrollBar}"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- 0: Barra superior draggable -->
+            <RowDefinition Height="42"/>
+            <!-- 1: Contenido scrollable -->
+            <RowDefinition Height="*"/>
+            <!-- 2: Barra de acciones fija al pie -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Barra de título -->
+        <Border Grid.Row="0" Background="{DynamicResource PanelChromeBg}" BorderBrush="{DynamicResource PanelBorderSubtle}" BorderThickness="0,0,0,1" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid Margin="16,0,8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border CornerRadius="6" Width="22" Height="22" Margin="0,0,9,0" ClipToBounds="True">
+                        <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill"/>
+                    </Border>
+                    <TextBlock Text="LEX JUNIOR · Privacidad y seguridad" FontWeight="Bold" FontSize="12.5" Foreground="{DynamicResource PanelTextStrong}" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <Button x:Name="BtnClose" Grid.Column="2" Content="✕" Width="36" Height="32" Background="Transparent" BorderThickness="0"
+                        Foreground="{DynamicResource PanelTextMuted}" Cursor="Hand" Click="BtnClose_Click"
+                        WindowChrome.IsHitTestVisibleInChrome="True" FocusVisualStyle="{StaticResource LexFocusVisual}"
+                        ToolTip="Cerrar ventana">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="b" CornerRadius="6" Background="{TemplateBinding Background}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="b" Property="Background" Value="{DynamicResource PanelCloseHoverBg}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource PanelCloseHoverFg}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Cuerpo desplazable compatible con 1366x768 y DPI alto -->
+        <ScrollViewer x:Name="MainScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      ScrollViewer.CanContentScroll="False" PreviewMouseWheel="ScrollViewer_PreviewMouseWheel" Padding="24,18,24,18">
+            <StackPanel>
+
+                <!-- Encabezado y mensaje de marca -->
+                <Border Background="{DynamicResource PanelTelemetryBg}" BorderBrush="{DynamicResource PanelTelemetryBorder}" BorderThickness="1.2" CornerRadius="12" Padding="18,14" Margin="0,0,0,14">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <Border Background="{DynamicResource PanelTelemetryPillBg}" CornerRadius="6" Padding="8,3" VerticalAlignment="Center">
+                                <TextBlock Text="🛡️ TÚ DECIDES CÓMO NAVEGAR" Foreground="{DynamicResource PanelTelemetryPillFg}" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <Border x:Name="BadgeUpgradeCurrentProfile" Background="{DynamicResource PanelBadgeAskBg}" CornerRadius="6" Padding="9,3" Margin="10,0,0,0" Visibility="Collapsed" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtUpgradeCurrentProfileBadge" Text="Tu configuración actual: Personalizado" Foreground="{DynamicResource PanelBadgeAskFg}" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+
+                        <TextBlock Text="Tú decides cómo navegar" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}"/>
+                        <TextBlock Text="Lex Junior valora lo que quiere cada usuario. Por eso ofrece tres formas de usarlo y una cuarta para armar la tuya: elige la que mejor se adapte a ti, cada una con sus ventajas y desventajas."
+                                   FontSize="12.5" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" Margin="0,4,0,0" LineHeight="18"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Recuadro de conservación de datos (6.3f) -->
+                <Border Background="{DynamicResource PanelCardSubtleBg}" BorderBrush="{DynamicResource PanelSuccessFg}" BorderThickness="1.2" CornerRadius="10" Padding="14,10" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="✔ Tus marcadores, historial, contraseñas, pestañas abiertas y configuraciones anteriores se conservan. Esta elección solo cambia ajustes de funcionamiento; no borra tus datos."
+                                   FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PanelSuccessFg}" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TxtUpgradeDataNotice"
+                                   Text="Se conservará tu historial y todo lo que ya tienes; solo cambiarán algunos ajustes si eliges un perfil."
+                                   FontSize="11.5" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" Margin="0,4,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 4 Tarjetas seleccionables (A, B, C, D) -->
+                <Grid x:Name="CardsGrid" Margin="0,0,0,14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="10"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <RadioButton x:Name="CardA" Grid.Column="0" GroupName="ProfileCardsGroup" Style="{StaticResource ProfileCardRadioStyle}" Checked="ProfileCard_Checked">
+                        <StackPanel>
+                            <Border Background="{DynamicResource PanelBadgeAskBg}" CornerRadius="5" Padding="7,2" HorizontalAlignment="Left" Margin="0,0,0,6">
+                                <TextBlock Text="Máxima privacidad" Foreground="{DynamicResource PanelBadgeAskFg}" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Perfil A" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource PanelAccentFg}"/>
+                            <TextBlock Text="Privacidad estricta" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" TextWrapping="Wrap" Margin="0,1,0,4"/>
+                            <TextBlock Text="Sin consultas opcionales de seguridad, iconos desde C# ni sugerencias; actualizaciones manuales."
+                                       FontSize="11" Foreground="{DynamicResource PanelTextMuted}" TextWrapping="Wrap" LineHeight="15"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton x:Name="CardB" Grid.Column="2" GroupName="ProfileCardsGroup" Style="{StaticResource ProfileCardRadioStyle}" Checked="ProfileCard_Checked">
+                        <StackPanel>
+                            <Border Background="{DynamicResource PanelBadgeAllowBg}" CornerRadius="5" Padding="7,2" HorizontalAlignment="Left" Margin="0,0,0,6">
+                                <TextBlock Text="Recomendado" Foreground="{DynamicResource PanelBadgeAllowFg}" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Perfil B" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource PanelAccentFg}"/>
+                            <TextBlock Text="Equilibrado" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" TextWrapping="Wrap" Margin="0,1,0,4"/>
+                            <TextBlock Text="SmartScreen e iconos directos del sitio sin pasar por Google; avisos de versión bajo confirmación."
+                                       FontSize="11" Foreground="{DynamicResource PanelTextMuted}" TextWrapping="Wrap" LineHeight="15"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton x:Name="CardC" Grid.Column="4" GroupName="ProfileCardsGroup" Style="{StaticResource ProfileCardRadioStyle}" Checked="ProfileCard_Checked">
+                        <StackPanel>
+                            <Border Background="{DynamicResource PanelBadgeAskBg}" CornerRadius="5" Padding="7,2" HorizontalAlignment="Left" Margin="0,0,0,6">
+                                <TextBlock Text="Completo" Foreground="{DynamicResource PanelBadgeAskFg}" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Perfil C" FontSize="11.5" FontWeight="Bold" Foreground="{DynamicResource PanelAccentFg}"/>
+                            <TextBlock Text="Experiencia completa" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" TextWrapping="Wrap" Margin="0,1,0,4"/>
+                            <TextBlock Text="Todas las ayudas activas: SmartScreen, detección de phishing, Google Favicons, sugerencias y avisos."
+                                       FontSize="11" Foreground="{DynamicResource PanelTextMuted}" TextWrapping="Wrap" LineHeight="15"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton x:Name="CardD" Grid.Column="6" GroupName="ProfileCardsGroup" Style="{StaticResource ProfileCardRadioStyle}" Checked="ProfileCard_Checked">
+                        <StackPanel>
+                            <Border Background="{DynamicResource PanelTelemetryPillBg}" CornerRadius="5" Padding="7,2" HorizontalAlignment="Left" Margin="0,0,0,6">
+                                <TextBlock Text="Elige tú cada opción" Foreground="{DynamicResource PanelTelemetryPillFg}" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Personalizado" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" TextWrapping="Wrap" Margin="0,1,0,4"/>
+                            <TextBlock x:Name="TxtCardDSummary" Text="Arma tus valores uno por uno. Solo se guardan los ajustes individuales."
+                                       FontSize="11" Foreground="{DynamicResource PanelTextMuted}" TextWrapping="Wrap" LineHeight="15"/>
+                        </StackPanel>
+                    </RadioButton>
+                </Grid>
+
+                <!-- Bloque Ventajas / Desventajas para perfiles A, B o C -->
+                <Border x:Name="PanelSelectedProsCons"
+                        Background="{DynamicResource PanelCardBg}"
+                        BorderBrush="{DynamicResource PanelBorder}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="16,13"
+                        Margin="0,0,0,16">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TxtSelectedProfileTitle" Grid.Column="0" Text="Perfil B — Equilibrado" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" VerticalAlignment="Center"/>
+                            <Button x:Name="BtnCustomizeFromProfile" Grid.Column="1" Content="Personalizar estas opciones" Style="{StaticResource LexThemedSecondaryButton}"
+                                    Padding="12,5" FontSize="11.5" Click="BtnCustomizeFromProfile_Click"/>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="14"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Background="{DynamicResource PanelCardInsetBg}" BorderBrush="{DynamicResource PanelBorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                <StackPanel>
+                                    <TextBlock Text="✔ Ventajas" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource PanelSuccessFg}" Margin="0,0,0,4"/>
+                                    <TextBlock x:Name="TxtProfileAdvantages" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource PanelTextBody}" LineHeight="17"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Background="{DynamicResource PanelCardInsetBg}" BorderBrush="{DynamicResource PanelBorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="12,10">
+                                <StackPanel>
+                                    <TextBlock Text="⚖️ Desventajas" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource PanelWarningFg}" Margin="0,0,0,4"/>
+                                    <TextBlock x:Name="TxtProfileDisadvantages" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource PanelTextBody}" LineHeight="17"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <TextBlock x:Name="TxtProfileSpecificNote" Text="" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PanelTextMuted}"
+                                   TextWrapping="Wrap" Margin="0,8,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Bloque Tarjeta D (Personalizado): panel de opciones compartido con Configuración -->
+                <Border x:Name="PanelCustomOptionsContainer"
+                        Background="{DynamicResource PanelCardSubtleBg}"
+                        BorderBrush="{DynamicResource PanelBorder}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="16,13"
+                        Margin="0,0,0,16"
+                        Visibility="Collapsed">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Opciones individuales (Personalizado)" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}"/>
+                                <TextBlock Text="Ajusta cada función por separado sin alterar las demás. Lo único que se guarda son tus valores individuales."
+                                           FontSize="11.5" Foreground="{DynamicResource PanelTextMuted}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="{DynamicResource PanelBadgeAskBg}" CornerRadius="6" Padding="10,4" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtDraftResolvedProfileBadge" Text="Estado calculado: B — Equilibrado" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PanelBadgeAskFg}"/>
+                            </Border>
+                        </Grid>
+
+                        <controls:PrivacyOptionsPanelControl x:Name="CustomOptionsPanel"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Tabla comparativa completa -->
+                <TextBlock Text="Comparativa detallada por función" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,8"/>
+                <Border Background="{DynamicResource PanelCardBg}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,0,0,14">
+                    <Grid x:Name="ComparisonTableGrid"/>
+                </Border>
+
+                <!-- Avisos de ruta y honestidad (6.3g, 6.3h) -->
+                <Border Background="{DynamicResource PanelCardInsetBg}" BorderBrush="{DynamicResource PanelBorderSubtle}" BorderThickness="1" CornerRadius="9" Padding="14,10" Margin="0,0,0,8">
+                    <StackPanel>
+                        <TextBlock Text="Puedes cambiar tu perfil y cada opción individual cuando quieras en ⚙️ Configuración → Privacidad y seguridad."
+                                   FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PanelAccentFg}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <TextBlock Text="Lex Junior no incorpora telemetría propia. Las conexiones con servicios externos dependen de las funciones que actives. Las páginas que visites y el motor del navegador generan su propio tráfico."
+                                   FontSize="11.5" Foreground="{DynamicResource PanelTextMuted}" TextWrapping="Wrap" LineHeight="17"/>
+                        <TextBlock x:Name="TxtRestartHintOnExistingEngine"
+                                   Text="Nota: Como ya se inició una sesión del motor WebView2 (por ejemplo en Modo Invitado), los cambios en SmartScreen o detección de phishing se aplicarán por completo al reiniciar Lex Junior."
+                                   FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PanelWarningBadgeFg}" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Pie de botones fijo -->
+        <Border Grid.Row="2" Background="{DynamicResource PanelChromeBg}" BorderBrush="{DynamicResource PanelBorderSubtle}" BorderThickness="0,1,0,0" Padding="20,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="TxtFooterSummary" Grid.Column="0" VerticalAlignment="Center" FontSize="11.5" Foreground="{DynamicResource PanelTextMuted}" TextWrapping="Wrap" Margin="0,0,14,0"/>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnKeepExisting"
+                            Content="Conservar mi configuración actual"
+                            Style="{StaticResource AccentActionButtonStyle}"
+                            Click="BtnKeepExisting_Click"
+                            Margin="0,0,10,0"
+                            Visibility="Collapsed"/>
+
+                    <Button x:Name="BtnConfirmSelection"
+                            Content="Continuar con Perfil B — Equilibrado"
+                            Style="{StaticResource AccentActionButtonStyle}"
+                            Click="BtnConfirmSelection_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

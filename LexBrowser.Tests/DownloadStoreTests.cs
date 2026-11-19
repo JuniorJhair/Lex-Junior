@@ -183,5 +183,33 @@ public class DownloadStoreTests : IDisposable
         Assert.Equal("Interrumpido", zombie.State);
         Assert.Contains("cerrada", zombie.InterruptReason ?? "", StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void FinalizingAt100Percent_SafeUlongConversion_AndCompletion_WorkCleanly()
+    {
+        Assert.Equal(0L, DownloadStore.SafeBytesFromUlong(null));
+        Assert.Equal(0L, DownloadStore.SafeBytesFromUlong(ulong.MaxValue));
+        Assert.Equal(4096L, DownloadStore.SafeBytesFromUlong(4096UL));
+
+        string storePath = Path.Combine(_tempDir, "downloads_finalizing.json");
+        var store = new DownloadStore(storePath);
+        store.Load();
+
+        var entry = store.RegisterDownload("installer.exe", Path.Combine(_tempDir, "installer.exe"), "https://cdn.example.com/installer.exe", totalBytes: 2048);
+        store.UpdateDownloadProgress(entry.Id, 2048, 2048, "En progreso");
+
+        Assert.Equal(100, entry.ProgressPercent);
+        Assert.True(entry.IsInProgress);
+        Assert.Contains("Finalizando y verificando", entry.StatusDisplay);
+
+        var active = store.GetActiveSummary();
+        Assert.Equal(1, active.ActiveCount);
+        Assert.Equal(100, active.TotalProgressPercent);
+
+        store.UpdateDownloadProgress(entry.Id, 2048, 2048, "Completado");
+        Assert.True(entry.IsCompleted);
+        Assert.DoesNotContain("Finalizando", entry.StatusDisplay);
+        Assert.False(store.GetActiveSummary().HasActive);
+    }
 }
 

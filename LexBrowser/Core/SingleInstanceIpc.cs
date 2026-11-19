@@ -15,10 +15,30 @@ namespace LexBrowser.Core;
 /// </summary>
 public static class SingleInstanceIpc
 {
+    public const int MaxIpcPayloadBytes = 16 * 1024;
+    private const int ClientReadTimeoutMs = 2500;
     private static readonly string MutexName = "Global\\LexJunior_SingleInstance_Mutex_" + Environment.UserName;
     private static readonly string PipeName = "LexJunior_NavPipe_" + Environment.UserName;
     private static Mutex? _instanceMutex;
     private static CancellationTokenSource? _cts;
+
+    internal static async Task<string> ReadBoundedPayloadAsync(Stream stream, int maxBytes = MaxIpcPayloadBytes, CancellationToken cancellationToken = default)
+    {
+        using var ms = new MemoryStream();
+        byte[] buffer = new byte[1024];
+        while (ms.Length < maxBytes)
+        {
+            int remaining = maxBytes - (int)ms.Length;
+            int toRead = Math.Min(buffer.Length, remaining);
+            int bytesRead = await stream.ReadAsync(buffer, 0, toRead, cancellationToken).ConfigureAwait(false);
+            if (bytesRead <= 0)
+                break;
+
+            ms.Write(buffer, 0, bytesRead);
+        }
+
+        return Encoding.UTF8.GetString(ms.ToArray()).Trim();
+    }
 
     public static bool TryAcquireSingleInstance()
     {
@@ -69,20 +89,14 @@ public static class SingleInstanceIpc
                         PipeDirection.In,
                         1,
                         PipeTransmissionMode.Byte,
-                        PipeOptions.Asynchronous);
+                        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
                     await server.WaitForConnectionAsync(token);
 
-                    using var ms = new MemoryStream();
-                    byte[] buffer = new byte[1024];
-                    int bytesRead;
-                    while ((bytesRead = await server.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
-                    {
-                        ms.Write(buffer, 0, bytesRead);
-                        if (bytesRead < buffer.Length) break;
-                    }
+                    using var readCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    readCts.CancelAfter(ClientReadTimeoutMs);
 
-                    string received = Encoding.UTF8.GetString(ms.ToArray()).Trim();
+                    string received = await ReadBoundedPayloadAsync(server, MaxIpcPayloadBytes, readCts.Token);
                     try
                     {
                         onUrlReceived(received);

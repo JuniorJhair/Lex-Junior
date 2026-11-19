@@ -50,6 +50,9 @@ public partial class SettingsWindow : Window
     {
         _core = core;
         InitializeComponent();
+        PrivacySettingsOptionsPanel.ShowEngineRestartTags = true;
+        PrivacySettingsOptionsPanel.ShowManualUpdateCheckButton = true;
+        PrivacySettingsOptionsPanel.ValuesChanged += PrivacySettingsOptionsPanel_ValuesChanged;
         UpdateThemeStyles(SettingsManager.Current?.Theme);
 
         Loaded += (_, _) =>
@@ -94,7 +97,8 @@ public partial class SettingsWindow : Window
         ChkRestoreSession.IsChecked = s.RestorePreviousSession;
         ChkEnableHistory.IsChecked = s.EnableHistory;
         if (ChkEnableSearchSuggestions != null) ChkEnableSearchSuggestions.IsChecked = s.EnableSearchSuggestions;
-        if (ChkEnableExternalFavicons != null) ChkEnableExternalFavicons.IsChecked = s.EnableExternalFaviconService;
+        UpdateRecoverySaveWarningBanner();
+        UpdatePrivacyProfileUI();
         if (CmbTabSuspensionMinutes != null) SetComboByTag(CmbTabSuspensionMinutes, s.TabSuspensionMinutes.ToString());
         if (ChkSuspendPinnedTabs != null) ChkSuspendPinnedTabs.IsChecked = s.SuspendPinnedTabs;
         if (ChkCookieBannerHiding != null) ChkCookieBannerHiding.IsChecked = s.EnableCookieBannerHiding;
@@ -122,12 +126,7 @@ public partial class SettingsWindow : Window
         }
 
         TxtSettingsHistoryStorage.Text = $"Espacio ocupado: {HistoryManager.GetHistoryFileSizeFormatted()}";
-        if (TxtSettingsVaultSummary != null)
-        {
-            int pwdCount = PasswordManager.Store.GetTotalCount();
-            string lockLabel = PasswordManager.HasMasterPasswordConfigured() ? "Con PIN activo" : "Sin PIN";
-            TxtSettingsVaultSummary.Text = $"Contraseñas guardadas: {pwdCount} · Estado: {lockLabel}";
-        }
+        UpdateVaultSummaryLabel();
 
         TxtCustomSearchUrl.Text = s.CustomSearchUrl;
 
@@ -163,7 +162,9 @@ public partial class SettingsWindow : Window
 
     public void OpenToSection(string section)
     {
-        if (section.Equals("Telemetry", StringComparison.OrdinalIgnoreCase))
+        if (section.Equals("Telemetry", StringComparison.OrdinalIgnoreCase) ||
+            section.Equals("Privacy", StringComparison.OrdinalIgnoreCase) ||
+            section.Equals("PrivacySecurity", StringComparison.OrdinalIgnoreCase))
         {
             TabTelemetry.IsChecked = true;
         }
@@ -383,7 +384,6 @@ public partial class SettingsWindow : Window
         s.NotificationDiscardOlderThan24Hours = ChkDiscardOlder24h.IsChecked == true;
         s.NotificationDndOnFullscreen = ChkDndFullscreen.IsChecked == true;
         if (ChkEnableSearchSuggestions != null) s.EnableSearchSuggestions = ChkEnableSearchSuggestions.IsChecked == true;
-        if (ChkEnableExternalFavicons != null) s.EnableExternalFaviconService = ChkEnableExternalFavicons.IsChecked == true;
         if (ChkSuspendPinnedTabs != null) s.SuspendPinnedTabs = ChkSuspendPinnedTabs.IsChecked == true;
         if (ChkCookieBannerHiding != null) s.EnableCookieBannerHiding = ChkCookieBannerHiding.IsChecked == true;
         if (ChkEnableReadAloud != null) s.EnableReadAloud = ChkEnableReadAloud.IsChecked == true;
@@ -425,8 +425,252 @@ public partial class SettingsWindow : Window
             s.EnableHistory = wantsHistory;
         }
 
-        SettingsManager.Save();
+        SaveSettingsExplicitly();
         TxtSettingsHistoryStorage.Text = $"Espacio ocupado: {HistoryManager.GetHistoryFileSizeFormatted()}";
+
+        _isInitializing = true;
+        try
+        {
+            UpdatePrivacyProfileUI();
+        }
+        finally
+        {
+            _isInitializing = false;
+        }
+    }
+
+    private void UpdateRecoverySaveWarningBanner()
+    {
+        if (BorderSettingsSavesSuspended == null) return;
+
+        if (!SettingsManager.AutoSavesSuspended)
+        {
+            BorderSettingsSavesSuspended.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        BorderSettingsSavesSuspended.Visibility = Visibility.Visible;
+        if (SettingsManager.DowngradeDetected)
+        {
+            if (TxtSettingsSavesSuspendedDetail != null)
+            {
+                TxtSettingsSavesSuspendedDetail.Text = SettingsManager.DowngradeWarningMessage ??
+                    $"Este perfil requiere Lex Junior v{SettingsManager.DetectedNewerProfileVersion} o superior; los guardados permanecen bloqueados.";
+            }
+            if (BtnSettingsContinueRecovered != null)
+            {
+                BtnSettingsContinueRecovered.Visibility = Visibility.Collapsed;
+            }
+            return;
+        }
+
+        bool canResolve = !SettingsManager.HadUnreadableSettingsFile ||
+                          !string.IsNullOrEmpty(SettingsManager.CorruptSettingsBackupPath) ||
+                          !System.IO.File.Exists(SettingsManager.SettingsPath);
+
+        if (TxtSettingsSavesSuspendedDetail != null)
+        {
+            TxtSettingsSavesSuspendedDetail.Text = canResolve
+                ? (!string.IsNullOrEmpty(SettingsManager.CorruptSettingsBackupPath)
+                    ? $"Copia original conservada en: {SettingsManager.CorruptSettingsBackupPath}. Mientras no pulses «Continuar con lo recuperado», los cambios no se guardarán en disco."
+                    : "El guardado automático está pausado tras recuperar la configuración. Pulsa «Continuar con lo recuperado» para volver a guardar cambios.")
+                : "No se pudo leer ni respaldar settings.json porque está bloqueado en disco. El guardado automático seguirá pausado para no sobrescribirlo.";
+        }
+
+        if (BtnSettingsContinueRecovered != null)
+        {
+            BtnSettingsContinueRecovered.Visibility = canResolve ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void BtnSettingsContinueRecovered_Click(object sender, RoutedEventArgs e)
+    {
+        if (SettingsManager.ResolveRecoveryAndAllowSaves())
+        {
+            SettingsManager.Save();
+            UpdateRecoverySaveWarningBanner();
+            UpdatePrivacyProfileUI();
+        }
+        else
+        {
+            MessageBox.Show(
+                "No se pudo crear una copia de respaldo del archivo settings.json original; el guardado seguirá pausado para evitar sobrescribirlo.",
+                "Recuperación de configuración — Lex Junior",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void SaveSettingsExplicitly()
+    {
+        SettingsManager.Save();
+        UpdateRecoverySaveWarningBanner();
+    }
+
+    private void UpdatePrivacyProfileUI()
+    {
+        var s = SettingsManager.Current;
+        var currentValues = PrivacyProfiles.FromSettings(s);
+        string activeKey = PrivacyProfiles.ResolveActiveProfile(currentValues);
+
+        PrivacySettingsOptionsPanel?.LoadValues(currentValues, s.DefaultSearchEngine);
+
+        if (TxtSettingsActiveProfileBadge != null)
+        {
+            TxtSettingsActiveProfileBadge.Text = $"Perfil activo: {PrivacyProfiles.GetProfileDisplayName(activeKey)}";
+        }
+
+        if (CardSettingsProfileA != null) CardSettingsProfileA.IsChecked = activeKey == PrivacyProfiles.ProfileKeyA;
+        if (CardSettingsProfileB != null) CardSettingsProfileB.IsChecked = activeKey == PrivacyProfiles.ProfileKeyB;
+        if (CardSettingsProfileC != null) CardSettingsProfileC.IsChecked = activeKey == PrivacyProfiles.ProfileKeyC;
+
+        if (BorderSettingsRestartRequired != null)
+        {
+            BorderSettingsRestartRequired.Visibility = BrowserEngine.RequiresRestartForCurrentSettings()
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+    }
+
+    private void PrivacySettingsOptionsPanel_ValuesChanged(object? sender, PrivacyProfileValues updated)
+    {
+        if (_isInitializing) return;
+
+        var s = SettingsManager.Current;
+        var previous = PrivacyProfiles.FromSettings(s);
+
+        bool enabledAnyFaviconLayer =
+            (!previous.EnableLinkFaviconDownload && updated.EnableLinkFaviconDownload) ||
+            (!previous.EnableDirectFaviconIco && updated.EnableDirectFaviconIco) ||
+            (!previous.EnableExternalFaviconService && updated.EnableExternalFaviconService);
+
+        PrivacyProfiles.ApplyValuesToSettings(s, updated);
+        if (enabledAnyFaviconLayer)
+        {
+            FaviconService.ClearCache();
+        }
+
+        _isInitializing = true;
+        try
+        {
+            if (ChkEnableSearchSuggestions != null)
+                ChkEnableSearchSuggestions.IsChecked = updated.EnableSearchSuggestions;
+
+            UpdatePrivacyProfileUI();
+        }
+        finally
+        {
+            _isInitializing = false;
+        }
+
+        SaveSettingsExplicitly();
+
+        if (enabledAnyFaviconLayer)
+        {
+            foreach (var bk in BookmarkManager.Bookmarks)
+            {
+                bk.RefreshFaviconFromProfileState();
+            }
+        }
+    }
+
+    private void SettingsProfileCard_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isInitializing) return;
+
+        string targetKey = sender == CardSettingsProfileA ? PrivacyProfiles.ProfileKeyA
+            : sender == CardSettingsProfileC ? PrivacyProfiles.ProfileKeyC
+            : PrivacyProfiles.ProfileKeyB;
+
+        var current = PrivacyProfiles.FromSettings(SettingsManager.Current);
+        var target = PrivacyProfiles.GetValuesForProfileKey(targetKey);
+        var changes = PrivacyProfiles.DescribeChangesBetween(current, target);
+
+        if (changes.Count > 0)
+        {
+            var confirm = MessageBox.Show(
+                $"¿Aplicar {PrivacyProfiles.GetProfileDisplayName(targetKey)}?\n\n" +
+                "Cambios que se aplicarán:\n" +
+                string.Join("\n", changes) +
+                "\n\nTus marcadores, historial, contraseñas, tema y buscador no se modifican.",
+                "Cambiar perfil de privacidad — Lex Junior",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes)
+            {
+                _isInitializing = true;
+                try { UpdatePrivacyProfileUI(); }
+                finally { _isInitializing = false; }
+                return;
+            }
+        }
+
+        PrivacyProfiles.ApplyPredefinedProfile(SettingsManager.Current, targetKey);
+        FaviconService.ClearCache();
+
+        _isInitializing = true;
+        try
+        {
+            if (ChkEnableSearchSuggestions != null)
+                ChkEnableSearchSuggestions.IsChecked = SettingsManager.Current.EnableSearchSuggestions;
+
+            UpdatePrivacyProfileUI();
+        }
+        finally
+        {
+            _isInitializing = false;
+        }
+
+        SaveSettingsExplicitly();
+
+        foreach (var bk in BookmarkManager.Bookmarks)
+        {
+            bk.RefreshFaviconFromProfileState();
+        }
+    }
+
+    private void BtnOpenProfileComparison_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dlg = new PrivacyProfileSetupWindow(
+                isFreshInstall: false,
+                isEnvironmentAlreadyCreated: BrowserEngine.IsEnvironmentCreated,
+                isReopenedManually: true)
+            {
+                Owner = this
+            };
+            dlg.ShowDialog();
+
+            _isInitializing = true;
+            try
+            {
+                if (ChkEnableSearchSuggestions != null)
+                    ChkEnableSearchSuggestions.IsChecked = SettingsManager.Current.EnableSearchSuggestions;
+
+                UpdateRecoverySaveWarningBanner();
+                UpdatePrivacyProfileUI();
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
+
+            if (dlg.SettingsWereChanged)
+            {
+                foreach (var bk in BookmarkManager.Bookmarks)
+                {
+                    bk.RefreshFaviconFromProfileState();
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void BtnSettingsRestartNow_Click(object sender, RoutedEventArgs e)
+    {
+        App.RestartBrowserSafely();
     }
 
     private void BtnOpenHistoryFromSettings_Click(object sender, RoutedEventArgs e)
@@ -443,10 +687,29 @@ public partial class SettingsWindow : Window
         catch { }
     }
 
+    private void UpdateVaultSummaryLabel()
+    {
+        if (TxtSettingsVaultSummary == null) return;
+        int pwdCount = PasswordManager.Store.GetTotalCount();
+        string lockLabel = PasswordManager.IsVaultLockedByRecovery
+            ? "Protegida tras recuperación (requiere restablecimiento)"
+            : (PasswordManager.HasMasterPasswordConfigured() ? "Con PIN activo" : "Sin PIN");
+        TxtSettingsVaultSummary.Text = $"Contraseñas guardadas: {pwdCount} · Estado: {lockLabel}";
+    }
+
     private void BtnOpenVaultFromSettings_Click(object sender, RoutedEventArgs e)
     {
         try
         {
+            if (PasswordManager.IsVaultLockedByRecovery)
+            {
+                if (!PasswordVaultWindow.TryResolveVaultRecoveryLockPrompt(this))
+                    return;
+
+                UpdateRecoverySaveWarningBanner();
+                UpdateVaultSummaryLabel();
+            }
+
             if (PasswordManager.ShouldRequireUnlockForVaultAction())
             {
                 var pinPrompt = new PinPromptDialog("Confirma tu PIN para abrir la Bóveda de Contraseñas") { Owner = this };
@@ -456,9 +719,7 @@ public partial class SettingsWindow : Window
             var vaultWin = new PasswordVaultWindow { Owner = this };
             vaultWin.ShowDialog();
 
-            int pwdCount = PasswordManager.Store.GetTotalCount();
-            string lockLabel = PasswordManager.HasMasterPasswordConfigured() ? "Con PIN activo" : "Sin PIN";
-            TxtSettingsVaultSummary.Text = $"Contraseñas guardadas: {pwdCount} · Estado: {lockLabel}";
+            UpdateVaultSummaryLabel();
         }
         catch { }
     }
@@ -474,7 +735,17 @@ public partial class SettingsWindow : Window
         else if (RbCustom.IsChecked == true) s.DefaultSearchEngine = "Custom";
         else s.DefaultSearchEngine = "Google";
 
-        SettingsManager.Save();
+        SaveSettingsExplicitly();
+
+        _isInitializing = true;
+        try
+        {
+            UpdatePrivacyProfileUI();
+        }
+        finally
+        {
+            _isInitializing = false;
+        }
     }
 
     private void TxtCustomSearchUrl_TextChanged(object sender, TextChangedEventArgs e)
@@ -577,7 +848,7 @@ public partial class SettingsWindow : Window
         else if (RbPolicySilentAll.IsChecked == true) s.NotificationGlobalPolicy = "SilentAll";
         else s.NotificationGlobalPolicy = "Ask";
 
-        SettingsManager.Save();
+        SaveSettingsExplicitly();
     }
 
     private void Limits_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -595,7 +866,7 @@ public partial class SettingsWindow : Window
             s.NotificationDefaultSiteDailyLimit = siteLimit;
         }
 
-        SettingsManager.Save();
+        SaveSettingsExplicitly();
     }
 
     private void GeneralCombos_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -620,7 +891,7 @@ public partial class SettingsWindow : Window
             s.ReadAloudVoiceName = voiceItem.Tag?.ToString() ?? string.Empty;
         }
 
-        SettingsManager.Save();
+        SaveSettingsExplicitly();
     }
 
     private void BtnOpenImportWizard_Click(object sender, RoutedEventArgs e)

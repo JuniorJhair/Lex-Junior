@@ -169,6 +169,11 @@
     <SolidColorBrush x:Key="PanelBadgeAskFg" Color="#D4D4D8"/>
     <SolidColorBrush x:Key="PanelDrawerBg" Color="#14141F"/>
     <SolidColorBrush x:Key="PanelDrawerBorder" Color="#312E81"/>
+    <SolidColorBrush x:Key="PanelOnAccentFg" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="PanelWarningBadgeBg" Color="#3A280A"/>
+    <SolidColorBrush x:Key="PanelWarningBadgeFg" Color="#FBBF24"/>
+    <SolidColorBrush x:Key="PanelCloseHoverBg" Color="#E11D48"/>
+    <SolidColorBrush x:Key="PanelCloseHoverFg" Color="#FFFFFF"/>
 
     <!-- ======================================================== -->
     <!-- ESTILO DE FOCO ACCESIBLE DE TECLADO VISIBLE               -->

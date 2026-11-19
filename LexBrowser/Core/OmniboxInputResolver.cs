@@ -19,16 +19,15 @@ public static class OmniboxInputResolver
 
         string input = rawInput.Trim();
 
-        // 1. Si apunta a un documento PDF local o web, abrirlo en Lex PDF Studio
-        if (PdfStudioService.IsPdfTarget(input))
-        {
-            return PdfStudioService.GetViewerUrl(input);
-        }
-
-        // 1b. Acceso directo a Lex TV (IPTV bajo demanda)
+        // 1. Acceso directo a Lex TV (IPTV bajo demanda) o Lex Class
         if (TvStudioService.IsTvShortcut(input))
         {
             return TvStudioService.HomeUrl;
+        }
+
+        if (UI.Views.LexClassComingSoonDialog.IsLexClassUrl(input))
+        {
+            return UI.Views.LexClassComingSoonDialog.VirtualUrl;
         }
 
         // 2. Esquemas explícitos ya presentes
@@ -38,13 +37,20 @@ public static class OmniboxInputResolver
             input.StartsWith("edge://", StringComparison.OrdinalIgnoreCase) ||
             input.StartsWith("about:", StringComparison.OrdinalIgnoreCase))
         {
-            return input;
+            return PdfStudioService.IsPdfTarget(input)
+                ? PdfStudioService.GetViewerUrl(input)
+                : input;
         }
 
         // 3. Rutas locales de Windows (C:\... o \\servidor\...)
         if ((input.Length >= 2 && char.IsLetter(input[0]) && input[1] == ':' && (input.Length == 2 || input[2] is '\\' or '/')) ||
             input.StartsWith(@"\\", StringComparison.Ordinal))
         {
+            if (PdfStudioService.IsPdfTarget(input))
+            {
+                return PdfStudioService.GetViewerUrl(input);
+            }
+
             try
             {
                 return new Uri(input).AbsoluteUri;
@@ -74,22 +80,28 @@ public static class OmniboxInputResolver
                 }
             }
 
+            string? resolved = null;
             if ((hostPart.Contains('.') || hostPart.Equals("localhost", StringComparison.OrdinalIgnoreCase) || hostPart.StartsWith('[')) &&
                 IsLocalOrPrivateHost(hostPart))
             {
                 string scheme = port == 443 ? "https://" : "http://";
-                return scheme + input;
+                resolved = scheme + input;
             }
-
-            if (port > 0 && IsLikelyHostName(hostPart))
+            else if (port > 0 && IsLikelyHostName(hostPart))
             {
                 string scheme = port == 443 ? "https://" : "http://";
-                return scheme + input;
+                resolved = scheme + input;
+            }
+            else if (hostPart.Contains('.') && IsLikelyHostName(hostPart))
+            {
+                resolved = "https://" + input;
             }
 
-            if (hostPart.Contains('.') && IsLikelyHostName(hostPart))
+            if (resolved != null)
             {
-                return "https://" + input;
+                return PdfStudioService.IsPdfTarget(resolved)
+                    ? PdfStudioService.GetViewerUrl(resolved)
+                    : resolved;
             }
         }
 

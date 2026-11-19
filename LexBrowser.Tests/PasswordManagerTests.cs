@@ -366,4 +366,69 @@ public class PasswordManagerTests : IDisposable
         Assert.False(PasswordManager.HasMasterPasswordConfigured());
         Assert.False(PasswordManager.ShouldRequireUnlockOnStartup());
     }
+
+    [Theory]
+    [InlineData("https://miapp.vercel.app/login", "miapp.vercel.app")]
+    [InlineData("https://sub.miapp.vercel.app/login", "miapp.vercel.app")]
+    [InlineData("https://otra.vercel.app/login", "otra.vercel.app")]
+    [InlineData("https://usuario.github.io/panel", "usuario.github.io")]
+    [InlineData("https://app.netlify.app/auth", "app.netlify.app")]
+    [InlineData("https://miblog.blogspot.com/admin", "miblog.blogspot.com")]
+    [InlineData("https://bucket.s3.amazonaws.com/index.html", "bucket.s3.amazonaws.com")]
+    public void ExtractBaseDomain_IsolatesSharedHostingSubdomains(string url, string expected)
+    {
+        Assert.Equal(expected, PasswordVaultStore.ExtractBaseDomain(url));
+    }
+
+    [Fact]
+    public void SharedHostingCredentials_AreStrictlyIsolatedBetweenApps_EvenLegacyRecords()
+    {
+        var store = new PasswordVaultStore(_tempVaultPath);
+        store.SaveOrUpdateCredential("https://miapp.vercel.app/login", "admin", "secretoApp1");
+
+        Assert.Single(store.GetCredentialsForUrl("https://miapp.vercel.app/settings"));
+        Assert.Empty(store.GetCredentialsForUrl("https://otra.vercel.app/login"));
+        Assert.Empty(store.GetAutofillCredentialsForUrl("https://otra.vercel.app/login"));
+        Assert.False(PasswordVaultStore.IsDomainMatch("https://otra.vercel.app/login", "https://miapp.vercel.app/login", requireHttpsForAutofill: true));
+
+        // Simular registro heredado de versión previa guardado como Domain = "vercel.app"
+        var legacy = new VaultFileModel();
+        legacy.Credentials.Add(new SavedCredential
+        {
+            Domain = "vercel.app",
+            OriginHost = "miapp.vercel.app",
+            Username = "legacy",
+            Password = "claveLegacy"
+        });
+        File.WriteAllText(_tempVaultPath, JsonSerializer.Serialize(legacy));
+
+        var migrated = new PasswordVaultStore(_tempVaultPath);
+        Assert.Single(migrated.GetAutofillCredentialsForUrl("https://miapp.vercel.app/login"));
+        Assert.Empty(migrated.GetAutofillCredentialsForUrl("https://otra.vercel.app/login"));
+        Assert.Empty(migrated.GetCredentialsForUrl("https://otra.vercel.app/login"));
+    }
+
+    [Fact]
+    public void GetAutofillCredentialsForUrl_EnforcesExactOrWwwHost_BlocksOtherSubdomains()
+    {
+        var store = new PasswordVaultStore(_tempVaultPath);
+        store.SaveOrUpdateCredential("https://accounts.example.com/signin", "ana", "claveExacta");
+
+        // Mismo host y equivalente www. sí autocompletan
+        Assert.Single(store.GetAutofillCredentialsForUrl("https://accounts.example.com/oauth"));
+        Assert.Single(store.GetAutofillCredentialsForUrl("https://www.accounts.example.com/login"));
+
+        // Subdominio distinto del mismo dominio base NO debe autoinyectar silenciosamente
+        Assert.Empty(store.GetAutofillCredentialsForUrl("https://blog.example.com/login"));
+        Assert.Empty(store.GetAutofillCredentialsForUrl("http://accounts.example.com/signin"));
+    }
+
+    [Fact]
+    public void InjectedPasswordScript_RequiresUserActivationAndVisibility()
+    {
+        Assert.Contains("navigator.userActivation", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
+        Assert.Contains("isElementActuallyVisible", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
+        Assert.Contains("visibility === 'hidden'", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
+        Assert.Contains("formScope.contains(activeEl)", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
+    }
 }

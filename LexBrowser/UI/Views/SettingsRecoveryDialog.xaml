@@ -1,0 +1,126 @@
+<Window x:Class="LexBrowser.UI.Views.SettingsRecoveryDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Recuperación de configuración — Lex Junior"
+        Width="560"
+        MinWidth="460"
+        MaxWidth="640"
+        SizeToContent="Height"
+        MaxHeight="620"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="NoResize"
+        Background="{DynamicResource PanelWindowBg}"
+        Foreground="{DynamicResource PanelTextBody}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/Assets/logo.png">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="42" ResizeBorderThickness="4" CornerRadius="0" GlassFrameThickness="0"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <Style x:Key="RecoveryPrimaryBtnStyle" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelAccentBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PanelOnAccentFg}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="MinHeight" Value="34"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{DynamicResource PanelAccentHoverBg}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar" BasedOn="{StaticResource LexThemedScrollBar}"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="42"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{DynamicResource PanelChromeBg}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid Margin="16,0,8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="⚠️" FontSize="15" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="Recuperación de configuración" FontSize="13.5" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" VerticalAlignment="Center"/>
+                </StackPanel>
+                <Button x:Name="BtnClose" Grid.Column="1" Content="✕" Click="BtnLeaveAsIs_Click" Width="34" Height="30"
+                        WindowChrome.IsHitTestVisibleInChrome="True" Background="Transparent" BorderThickness="0"
+                        Foreground="{DynamicResource PanelTextMuted}" FontSize="13" Cursor="Hand" ToolTip="Dejar como está">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="6">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="b" Property="Background" Value="{DynamicResource PanelCloseHoverBg}"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource PanelCloseHoverFg}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="440" Padding="20,16">
+            <StackPanel>
+                <Border Background="{DynamicResource PanelWarningBadgeBg}" BorderBrush="{DynamicResource PanelWarningBadgeFg}"
+                        BorderThickness="1" CornerRadius="10" Padding="14,11" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="El archivo settings.json anterior estaba dañado o incompleto"
+                                   FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PanelWarningBadgeFg}" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TxtRecoveryDetails"
+                                   FontSize="12" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" Margin="0,6,0,0" LineHeight="18"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{DynamicResource PanelCardSubtleBg}" BorderBrush="{DynamicResource PanelBorderSubtle}"
+                        BorderThickness="1" CornerRadius="8" Padding="13,10">
+                    <StackPanel>
+                        <TextBlock Text="¿Qué prefieres hacer?" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,4"/>
+                        <TextBlock Text="• «Continuar con lo recuperado» conserva el respaldo original y vuelve a activar el guardado de tus ajustes desde ahora."
+                                   FontSize="11.5" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" Margin="0,0,0,3"/>
+                        <TextBlock Text="• «Dejar como está» mantiene el archivo intacto sin guardados automáticos durante esta sesión."
+                                   FontSize="11.5" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Background="{DynamicResource PanelChromeBg}" BorderBrush="{DynamicResource PanelBorder}" BorderThickness="0,1,0,0" Padding="18,12">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnLeaveAsIs" Content="Dejar como está" Click="BtnLeaveAsIs_Click"
+                        Style="{StaticResource LexSecondaryButton}" Padding="14,8" Margin="0,0,10,0" IsCancel="True"/>
+                <Button x:Name="BtnContinueRecovered" Content="Continuar con lo recuperado" Click="BtnContinueRecovered_Click"
+                        Style="{StaticResource RecoveryPrimaryBtnStyle}" IsDefault="True"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

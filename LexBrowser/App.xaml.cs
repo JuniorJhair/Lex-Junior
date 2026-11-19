@@ -1,11 +1,14 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using LexBrowser.Core;
 using LexBrowser.Core.AdBlock;
+using LexBrowser.Core.Engine;
 
 namespace LexBrowser;
 
@@ -39,7 +42,6 @@ public partial class App : Application
         {
             // Registrar AppID de Windows para que el icono anclado en la barra de tareas sea siempre el oficial
             SetCurrentProcessExplicitAppUserModelID("LexJunior.Browser");
-            InstallerService.RefreshWindowsIconCache();
         }
         catch { }
 
@@ -75,6 +77,12 @@ public partial class App : Application
         // Inicializar JumpList nativo en la barra de tareas de Windows (Tareas: Nueva pestaña, Incógnito, Invitado)
         JumpListManager.Initialize();
 
+        int? waitParentPid = ParseWaitPidArgument(e.Args);
+        if (waitParentPid.HasValue)
+        {
+            await WaitForParentProcessExitAsync(waitParentPid.Value, timeoutMs: 10_000);
+        }
+
         // Extraer comandos o URL si el navegador fue ejecutado con argumentos externos
         string? initialUrl = null;
         bool isIncognitoLaunch = false;
@@ -100,6 +108,11 @@ public partial class App : Application
                 {
                     isNewTabLaunch = true;
                 }
+                else if (arg.StartsWith("--wait-pid=", StringComparison.OrdinalIgnoreCase) ||
+                         arg.StartsWith("/wait-pid=", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Ya procesado antes de comprobar instancia única y crear WebView2
+                }
                 else if (!arg.StartsWith("-") && !arg.StartsWith("/"))
                 {
                     initialUrl = arg;
@@ -116,9 +129,18 @@ public partial class App : Application
                              isNewTabLaunch ? "CMD:NEW_TAB" :
                              (initialUrl ?? "CMD:NEW_TAB");
 
-            await SingleInstanceIpc.SendUrlToExistingInstanceAsync(payload);
-            Shutdown();
-            return;
+            bool sent = await SingleInstanceIpc.SendUrlToExistingInstanceAsync(payload);
+            if (!sent)
+            {
+                await Task.Delay(250);
+                sent = await SingleInstanceIpc.SendUrlToExistingInstanceAsync(payload, timeoutMs: 2000);
+            }
+
+            if (sent || !SingleInstanceIpc.TryAcquireSingleInstance())
+            {
+                Shutdown();
+                return;
+            }
         }
 
         // Auto-registro en segundo plano en Windows (StartMenuInternet), limpieza de instaladores residuales
@@ -129,10 +151,26 @@ public partial class App : Application
             try { _ = HistoryManager.GetTotalCount(); } catch { }
             try { _ = PasswordManager.Store.GetTotalCount(); } catch { }
             try { InstallerService.RegisterAsDefaultBrowser(); } catch { }
+            try { InstallerService.RefreshIconCacheOnceIfVersionChanged(UpdateManager.CurrentVersionString); } catch { }
             try { InstallerService.CleanOldTempInstallers(); } catch { }
         });
 
         BrowserThemeManager.ApplyTheme(SettingsManager.Current.Theme);
+
+        // Mantener cerrada la compuerta de red de favicons antes de instanciar MainWindow
+        // si el arranque requiere bloqueo PIN o elegir perfil inicial (evita fugas antes de elegir Perfil A).
+        bool needsLockOrSetupGate = !isGuestLaunch &&
+            (SettingsManager.DowngradeDetected ||
+             PasswordManager.ShouldRequireUnlockOnStartup() ||
+             (!SettingsManager.Current.HasCompletedInitialSecuritySetup &&
+              !File.Exists(SettingsManager.SecuritySetupMarkerPath) &&
+              !PasswordManager.HasMasterPasswordConfigured()) ||
+             LexBrowser.MainWindow.ShouldShowPrivacyOnboardingWindow(SettingsManager.Current, isGuestSession: false, hasInitialAttachedTab: false));
+
+        if (isGuestLaunch || needsLockOrSetupGate)
+        {
+            FaviconService.SetStartupNetworkGate(false);
+        }
 
         var browserWindow = new MainWindow(
             initialUrl: initialUrl,
@@ -205,5 +243,110 @@ public partial class App : Application
         try { SettingsManager.FlushDeferredSave(); } catch { }
         try { HistoryManager.Flush(); } catch { }
         base.OnExit(e);
+    }
+
+    internal static bool IsRestartingProcess { get; private set; }
+
+    internal static int? ParseWaitPidArgument(string[]? args)
+    {
+        if (args == null || args.Length == 0) return null;
+
+        foreach (string arg in args)
+        {
+            if (string.IsNullOrWhiteSpace(arg)) continue;
+            if (arg.StartsWith("--wait-pid=", StringComparison.OrdinalIgnoreCase) ||
+                arg.StartsWith("/wait-pid=", StringComparison.OrdinalIgnoreCase))
+            {
+                int eq = arg.IndexOf('=');
+                if (eq > 0 && int.TryParse(arg[(eq + 1)..], out int pid) && pid > 0 && pid != Environment.ProcessId)
+                {
+                    return pid;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    internal static async Task WaitForParentProcessExitAsync(int parentPid, int timeoutMs = 10_000, CancellationToken ct = default)
+    {
+        if (parentPid <= 0 || parentPid == Environment.ProcessId)
+            return;
+
+        try
+        {
+            using var parentProcess = Process.GetProcessById(parentPid);
+            if (parentProcess.HasExited)
+                return;
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(Math.Max(100, timeoutMs));
+            await parentProcess.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+        }
+        catch (ArgumentException) { }
+        catch (InvalidOperationException) { }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        catch { }
+    }
+
+    /// <summary>
+    /// Reinicia de forma segura el proceso actual de Lex Junior conservando la sesión abierta
+    /// y respetando el PIN al volver a arrancar.
+    /// </summary>
+    public static void RestartBrowserSafely()
+    {
+        try
+        {
+            if (DownloadManager.GetActiveSummary().HasActive)
+            {
+                var confirm = MessageBox.Show(
+                    "Hay descargas activas en progreso.\n\nSi reinicias ahora se cancelarán las descargas en curso.\n\n¿Deseas reiniciar Lex Junior de todos modos?",
+                    "Descargas en curso — Lex Junior",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (confirm != MessageBoxResult.Yes)
+                    return;
+
+                DownloadManager.CancelAllActive();
+            }
+        }
+        catch { }
+
+        IsRestartingProcess = true;
+
+        try
+        {
+            foreach (Window win in Current.Windows)
+            {
+                if (win is MainWindow mw)
+                {
+                    mw.PersistOwnerSessionNowIfEligible();
+                }
+            }
+        }
+        catch { }
+
+        try { SettingsManager.FlushDeferredSave(); } catch { }
+        try { HistoryManager.Flush(); } catch { }
+        try { SingleInstanceIpc.Release(); } catch { }
+
+        try
+        {
+            string? exePath = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(exePath) && File.Exists(exePath))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = $"--wait-pid={Environment.ProcessId}",
+                    WorkingDirectory = Path.GetDirectoryName(exePath) ?? AppContext.BaseDirectory,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch { }
+
+        try { Current?.Shutdown(); } catch { }
     }
 }

@@ -36,6 +36,12 @@ public partial class MainWindow
 
     private bool IsNotificationDndShortcut(KeyEventArgs e)
     {
+        Key actualKey = e.Key == Key.System ? e.SystemKey : e.Key;
+        return IsNotificationDndShortcut(actualKey, Keyboard.Modifiers);
+    }
+
+    private bool IsNotificationDndShortcut(Key actualKey, ModifierKeys modifiers)
+    {
         string raw = SettingsManager.Current.NotificationDndShortcut ?? "Ctrl+Shift+D";
         if (string.IsNullOrWhiteSpace(raw) || raw.Equals("Ninguno", StringComparison.OrdinalIgnoreCase))
             return false;
@@ -57,8 +63,7 @@ public partial class MainWindow
         }
 
         if (expectedKey == Key.None) return false;
-        Key actualKey = e.Key == Key.System ? e.SystemKey : e.Key;
-        return Keyboard.Modifiers == expectedMods && actualKey == expectedKey;
+        return modifiers == expectedMods && actualKey == expectedKey;
     }
 
     private void UpdateNotificationBadge()

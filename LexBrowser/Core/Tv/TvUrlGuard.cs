@@ -202,6 +202,16 @@ public static class TvUrlGuard
             byte[] b6 = ip.GetAddressBytes();
             if ((b6[0] & 0xFE) == 0xFC) return true; // Unique Local fc00::/7
 
+            // ::a.b.c.d (IPv4-compatible IPv6 obsoleto, primeros 12 bytes en cero) -> evaluar últimos 4 bytes como IPv4
+            if (b6.Length == 16 &&
+                b6[0] == 0 && b6[1] == 0 && b6[2] == 0 && b6[3] == 0 &&
+                b6[4] == 0 && b6[5] == 0 && b6[6] == 0 && b6[7] == 0 &&
+                b6[8] == 0 && b6[9] == 0 && b6[10] == 0 && b6[11] == 0)
+            {
+                var embeddedIpv4 = new IPAddress(b6.AsSpan(12, 4));
+                return IsPrivateIp(embeddedIpv4);
+            }
+
             // 64:ff9b::/96 (IPv4/IPv6 translation)
             if (b6[0] == 0x00 && b6[1] == 0x64 && b6[2] == 0xff && b6[3] == 0x9b &&
                 b6[4] == 0 && b6[5] == 0 && b6[6] == 0 && b6[7] == 0 &&

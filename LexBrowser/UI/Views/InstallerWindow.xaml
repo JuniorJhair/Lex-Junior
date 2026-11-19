@@ -26,13 +26,8 @@
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Botón Cerrar superior derecho -->
-            <Button Grid.Row="0" Content="✕" HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Width="28" Height="28" Background="Transparent" Foreground="#8B8B96"
-                    BorderThickness="0" FontSize="13" Cursor="Hand" Click="BtnClose_Click"/>
-
             <!-- Cabecera con Logo y Título -->
-            <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,16">
+            <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,42,16">
                 <Border CornerRadius="14" Width="56" Height="56" Margin="0,0,16,0" ClipToBounds="True" BorderBrush="#4F46E5" BorderThickness="1">
                     <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                 </Border>
@@ -43,10 +38,29 @@
                             <TextBlock x:Name="TxtVersionBadge" Text="v1.0.0" Foreground="#818CF8" FontSize="11" FontWeight="Bold"/>
                         </Border>
                     </StackPanel>
-                    <TextBlock x:Name="TxtSubtitle" Text="Instalador Oficial · Privado · Menos anuncios · 0 Telemetría"
+                    <TextBlock x:Name="TxtSubtitle" Text="Instalador Oficial · Privado · Menos anuncios · Sin telemetría propia"
                                Foreground="#9CA3AF" FontSize="12" Margin="0,4,0,0"/>
                 </StackPanel>
             </StackPanel>
+
+            <!-- Botón Cerrar superior derecho (template propio sin Padding="12,6" del estilo global) -->
+            <Button x:Name="BtnClose" Grid.Row="0" Panel.ZIndex="10" Content="✕" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="32" Height="32" Padding="0" Background="Transparent" Foreground="#A1A1AA"
+                    BorderThickness="0" FontSize="14" FontWeight="SemiBold" Cursor="Hand" Click="BtnClose_Click" ToolTip="Cerrar">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#E11D48"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
 
             <Border Grid.Row="1" Height="1" Background="#232332" Margin="0,0,0,16"/>
 

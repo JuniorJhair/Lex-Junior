@@ -1077,7 +1077,7 @@
                 </Border>
             </Popup>
 
-            <!-- Botones a la derecha: Lex TV, Página Flotante, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
+            <!-- Botones a la derecha: Lex TV, Lex Class, Página Flotante, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,8,0">
                 <!-- Botón Lex TV (Reproductor bajo demanda: IPTV y VOD) -->
                 <Button x:Name="BtnLiveTv" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
@@ -1086,6 +1086,20 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
                             <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        </StackPanel>
+                    </Border>
+                </Button>
+
+                <!-- Botón Lex Junior Class (Academia interactiva integrada — Próxima actualización) -->
+                <Button x:Name="BtnLexClass" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
+                        ToolTip="Lex Junior Class: Academia interactiva paso a paso (Disponible en la próxima actualización)" Click="BtnLexClass_Click">
+                    <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="10,4,12,4">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🎓" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="Lex Class" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <Border CornerRadius="4" Padding="4,1" Background="#28FF6B00" BorderBrush="#66FF6B00" BorderThickness="1" VerticalAlignment="Center">
+                                <TextBlock Text="PRONTO" FontSize="8.5" FontWeight="ExtraBold" Foreground="#FB923C"/>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -1347,11 +1361,11 @@
 
 
                 <!-- Pill Sin Telemetría (Clic abre la pestaña explicativa en Configuración) -->
-                <Border x:Name="BorderTelemetryBadge" Background="{DynamicResource TelemetryBadgeBg}" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="2,0" 
-                        Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="Sin telemetría propia: haz clic para ver los controles de privacidad">
+                <Border x:Name="BorderTelemetryBadge" Background="{DynamicResource TelemetryBadgeBg}" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="2,0"
+                        Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="Sin telemetría propia de Lex Junior: haz clic para abrir Privacidad y seguridad">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="7" Height="7" Fill="{DynamicResource TelemetryDotFg}" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtTelemetryLabel" Text="Sin telemetría" Margin="6,0,0,0" FontSize="11" Foreground="{DynamicResource TelemetryBadgeFg}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtTelemetryLabel" Text="Sin telemetría propia" Margin="6,0,0,0" FontSize="11" Foreground="{DynamicResource TelemetryBadgeFg}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 

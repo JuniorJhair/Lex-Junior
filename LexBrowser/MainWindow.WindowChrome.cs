@@ -862,6 +862,30 @@ public partial class MainWindow
         SelectTab(tvTab, force: true);
     }
 
+    private void BtnLexClass_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        OpenLexClassComingSoon();
+    }
+
+    internal void OpenLexClassComingSoon()
+    {
+        if (IsLocked) return;
+
+        try
+        {
+            var dlg = new UI.Views.LexClassComingSoonDialog
+            {
+                Owner = this
+            };
+            dlg.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LexClass] Error al abrir adelanto de Lex Class: {ex}");
+        }
+    }
+
     private void BtnSettings_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
