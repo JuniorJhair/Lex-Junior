@@ -21,6 +21,9 @@ public sealed class SavedCredential
     public string UpdatedDisplay => $"Guardado el {UpdatedAtUtc.ToLocalTime():dd/MM/yyyy HH:mm}";
 
     [System.Text.Json.Serialization.JsonIgnore]
+    public string DisplayUsername => string.IsNullOrWhiteSpace(Username) ? "(Sin usuario)" : Username;
+
+    [System.Text.Json.Serialization.JsonIgnore]
     public System.Windows.Media.ImageSource? FaviconImage
     {
         get
@@ -1173,10 +1176,11 @@ public static class PasswordManager
     /// A diferencia de PostWebMessageAsJson, ExecuteScriptAsync no emite ningún evento 'message'
     /// en window.chrome.webview, impidiendo que scripts de terceros en la página intercepten la clave.
     /// </summary>
-    public static string BuildSafeAutofillScript(string username, string password)
+    public static string BuildSafeAutofillScript(string username, string password, bool forceReplace = false)
     {
         string safeUserJson = JsonSerializer.Serialize(username ?? string.Empty);
         string safePassJson = JsonSerializer.Serialize(password ?? string.Empty);
+        string forceLiteral = forceReplace ? "true" : "false";
 
         return $@"
 (function() {{
@@ -1186,7 +1190,7 @@ public static class PasswordManager
         const u = {safeUserJson};
         const p = {safePassJson};
         if (typeof window.__lexApplyAutofill === 'function') {{
-            window.__lexApplyAutofill(u, p);
+            window.__lexApplyAutofill(u, p, {forceLiteral});
         }}
     }} catch (_) {{}}
 }})();";
@@ -1304,21 +1308,23 @@ public static class PasswordManager
         const btn = e.target.closest('button, input[type=""submit""], [role=""button""]');
         if (btn) {
             captureCredentialsFromNode(btn.closest('form') || document);
+            return;
+        }
+        if (e.target.tagName === 'INPUT' && document.activeElement === e.target) {
+            requestAutofillForInput(e.target, 500);
         }
     }, true);
 
-    // E5: Solicitar autocompletado únicamente cuando el usuario interactúa con un campo visible de login
-    window.addEventListener('focusin', function(e) {
+    function requestAutofillForInput(el, minIntervalMs) {
         try {
             if (navigator.userActivation && !navigator.userActivation.isActive) return;
-            const el = e.target;
             if (!el || el.tagName !== 'INPUT' || !isElementActuallyVisible(el)) return;
             if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') return;
 
             const type = (el.type || 'text').toLowerCase();
             let isLoginInput = (type === 'password');
             if (!isLoginInput && (type === 'email' || type === 'text' || type === 'tel')) {
-                const container = el.closest('form') || document;
+                const container = el.closest('form') || el.closest('div[role=""dialog""], main, section, body') || document;
                 const pwdField = container.querySelector('input[type=""password""]');
                 if (pwdField && isElementActuallyVisible(pwdField)) {
                     isLoginInput = true;
@@ -1327,15 +1333,28 @@ public static class PasswordManager
             if (!isLoginInput) return;
 
             const now = Date.now();
-            if (now - lastAutofillReqTime < 1200) return;
+            if (now - lastAutofillReqTime < minIntervalMs) return;
             lastAutofillReqTime = now;
+            window.__lexLastLoginField = el;
 
+            const r = el.getBoundingClientRect();
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
-                    type: 'autofill_requested'
+                    type: 'autofill_requested',
+                    rect: {
+                        left: r.left,
+                        top: r.top,
+                        right: r.right,
+                        bottom: r.bottom
+                    }
                 });
             }
         } catch (_) {}
+    }
+
+    // E5: Solicitar autocompletado únicamente cuando el usuario interactúa con un campo visible de login
+    window.addEventListener('focusin', function(e) {
+        requestAutofillForInput(e.target, 800);
     }, true);
 
     function setNativeInputValue(input, value) {
@@ -1350,26 +1369,45 @@ public static class PasswordManager
         input.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    window.__lexApplyAutofill = function(username, password) {
+    window.__lexApplyAutofill = function(username, password, forceReplace) {
         try {
-            if (navigator.userActivation && !navigator.userActivation.isActive) return;
-            const activeEl = document.activeElement;
-            const pwdInputs = Array.from(document.querySelectorAll('input[type=""password""]'));
-            for (const pwd of pwdInputs) {
-                if (!isElementActuallyVisible(pwd)) continue;
+            const allowReplace = forceReplace === true;
+            if (!allowReplace && navigator.userActivation && !navigator.userActivation.isActive) return;
 
+            const activeEl = document.activeElement;
+            const visiblePwds = Array.from(document.querySelectorAll('input[type=""password""]'))
+                .filter(p => isElementActuallyVisible(p));
+            if (visiblePwds.length === 0) return;
+
+            let targetPwd = null;
+            const lastField = window.__lexLastLoginField;
+            if (lastField && document.contains(lastField) && isElementActuallyVisible(lastField)) {
+                if ((lastField.type || '').toLowerCase() === 'password') {
+                    targetPwd = lastField;
+                } else {
+                    const lastScope = lastField.closest('form') || lastField.closest('div[role=""dialog""], main, section, body') || document;
+                    const scopedPwd = lastScope.querySelector('input[type=""password""]');
+                    if (scopedPwd && isElementActuallyVisible(scopedPwd)) {
+                        targetPwd = scopedPwd;
+                    }
+                }
+            }
+
+            const candidates = targetPwd ? [targetPwd, ...visiblePwds.filter(p => p !== targetPwd)] : visiblePwds;
+            for (const pwd of candidates) {
                 const userInp = findUsernameField(pwd);
                 const formScope = pwd.closest('form') || pwd.closest('div[role=""dialog""], main, section, body');
-                if (activeEl && activeEl !== document.body && activeEl !== document.documentElement &&
+                if (!allowReplace &&
+                    activeEl && activeEl !== document.body && activeEl !== document.documentElement &&
                     activeEl !== pwd && activeEl !== userInp &&
                     (!formScope || !formScope.contains(activeEl))) {
                     continue;
                 }
 
-                if (userInp && username && !userInp.value) {
+                if (userInp && username && (allowReplace || !userInp.value)) {
                     setNativeInputValue(userInp, username);
                 }
-                if (password && !pwd.value) {
+                if (password && (allowReplace || !pwd.value)) {
                     setNativeInputValue(pwd, password);
                 }
                 break;

@@ -21,25 +21,31 @@ public partial class MainWindow
     internal sealed class TrackedWebViewDownload
     {
         public required string EntryId { get; init; }
+        public required CoreWebView2 OwnerCore { get; init; }
         public required CoreWebView2DownloadOperation Operation { get; init; }
         public required string FileName { get; init; }
         public required string ResultPath { get; init; }
         public long LastReportedTick;
         public long LastReportedBytes = -1;
         public long LastReportedTotal = -1;
+        public long FirstAt100PercentTick;
         public CoreWebView2DownloadState? LastReportedState;
         public bool IsTerminal;
+        public Action? AttachHandlersAction;
         public Action? DetachHandlersAction;
     }
 
     private static readonly object _activeOpsLock = new();
     private static readonly Dictionary<string, TrackedWebViewDownload> _activeWebViewDownloads = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> _activeMediaDownloadIds = new(StringComparer.Ordinal);
     private static DispatcherTimer? _activeDownloadSyncTimer;
 
     private bool _isDownloadingBrowserUpdate = false;
+    private string _lastChosenDownloadDir = "";
     private readonly object _downloadsUiSync = new();
     private long _lastDownloadsUiRefreshTick = 0;
     private bool _downloadsUiRefreshPending = false;
+    private DispatcherTimer? _downloadsUiTrailingTimer;
     private readonly System.Collections.ObjectModel.ObservableCollection<DownloadEntry> _downloadsObservable = new();
 
     internal static void RegisterTrackedDownloadOperation(TrackedWebViewDownload tracked)
@@ -99,6 +105,78 @@ public partial class MainWindow
             _ = dispatcher.BeginInvoke(DispatcherPriority.Normal, EnsureOnUi);
     }
 
+    internal static void RegisterActiveMediaDownload(string entryId)
+    {
+        if (string.IsNullOrWhiteSpace(entryId)) return;
+        lock (_activeOpsLock)
+        {
+            _activeMediaDownloadIds.Add(entryId);
+        }
+    }
+
+    internal static void UnregisterActiveMediaDownload(string entryId)
+    {
+        if (string.IsNullOrWhiteSpace(entryId)) return;
+        lock (_activeOpsLock)
+        {
+            _activeMediaDownloadIds.Remove(entryId);
+        }
+    }
+
+    internal static bool HasActiveDownloadForCore(CoreWebView2? core)
+    {
+        if (core == null) return false;
+        List<TrackedWebViewDownload> matches;
+        lock (_activeOpsLock)
+        {
+            matches = _activeWebViewDownloads.Values
+                .Where(t => !t.IsTerminal && ReferenceEquals(t.OwnerCore, core))
+                .ToList();
+        }
+
+        foreach (var tracked in matches)
+        {
+            try
+            {
+                if (tracked.Operation.State == CoreWebView2DownloadState.InProgress)
+                    return true;
+            }
+            catch { }
+        }
+        return false;
+    }
+
+    internal static void SyncAndReconcileAllActiveDownloadsOnUi()
+    {
+        SyncAllTrackedDownloadsOnUi();
+
+        HashSet<string> liveIds = new(StringComparer.Ordinal);
+        lock (_activeOpsLock)
+        {
+            foreach (var kv in _activeWebViewDownloads)
+            {
+                if (kv.Value.IsTerminal) continue;
+                try
+                {
+                    var st = kv.Value.Operation.State;
+                    if (st == CoreWebView2DownloadState.InProgress ||
+                        (st == CoreWebView2DownloadState.Interrupted && kv.Value.Operation.CanResume))
+                    {
+                        liveIds.Add(kv.Key);
+                    }
+                }
+                catch { }
+            }
+
+            foreach (var id in _activeMediaDownloadIds)
+            {
+                liveIds.Add(id);
+            }
+        }
+
+        DownloadManager.ReconcileOrphanedActiveEntries(liveIds);
+    }
+
     private static void SyncAllTrackedDownloadsOnUi()
     {
         List<TrackedWebViewDownload> snapshot;
@@ -124,6 +202,84 @@ public partial class MainWindow
                ?? windows.FirstOrDefault();
     }
 
+    internal enum StalledAt100Action
+    {
+        KeepWaiting,
+        CompleteFromDisk,
+        ShowSecurityVerificationHint
+    }
+
+    internal static StalledAt100Action EvaluateStalledAt100Download(
+        string? resultPath,
+        long totalBytes,
+        long elapsedAt100Ms,
+        Func<string, bool>? fileExists = null,
+        Func<string, long>? getFileLength = null,
+        Func<string, bool>? canOpenForSharedRead = null)
+    {
+        if (totalBytes <= 0 || elapsedAt100Ms < 2000)
+            return StalledAt100Action.KeepWaiting;
+
+        if (!string.IsNullOrWhiteSpace(resultPath))
+        {
+            Func<string, bool> existsFn = fileExists ?? File.Exists;
+            Func<string, long> lengthFn = getFileLength ?? (p => new FileInfo(p).Length);
+            Func<string, bool> canReadFn = canOpenForSharedRead ?? CanOpenDownloadedFileSharedRead;
+
+            try
+            {
+                if (existsFn(resultPath) && lengthFn(resultPath) >= totalBytes && canReadFn(resultPath))
+                    return StalledAt100Action.CompleteFromDisk;
+            }
+            catch { }
+        }
+
+        return elapsedAt100Ms >= 15000
+            ? StalledAt100Action.ShowSecurityVerificationHint
+            : StalledAt100Action.KeepWaiting;
+    }
+
+    private static bool CanOpenDownloadedFileSharedRead(string filePath)
+    {
+        try
+        {
+            using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void CompleteTrackedDownloadOnUi(
+        TrackedWebViewDownload tracked,
+        long receivedBytes,
+        long finalTotal)
+    {
+        tracked.IsTerminal = true;
+        tracked.FirstAt100PercentTick = 0;
+        tracked.LastReportedState = CoreWebView2DownloadState.Completed;
+        lock (_activeOpsLock)
+        {
+            _activeWebViewDownloads.Remove(tracked.EntryId);
+        }
+        tracked.DetachHandlersAction?.Invoke();
+
+        DownloadManager.UpdateDownloadProgress(tracked.EntryId, receivedBytes, finalTotal, "Completado");
+        EnsureActiveDownloadSyncTimer();
+
+        var host = FindActiveHostWindowForDownloadToast();
+        host?.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+        {
+            host.RefreshDownloadsUiOnDispatcher();
+            host.ShowToast($"✅ Descarga completada: {tracked.FileName}", "Abrir carpeta 📂", () =>
+            {
+                host.RevealFileInExplorer(tracked.ResultPath);
+            }, durationSeconds: 6);
+        });
+    }
+
     internal static void SyncTrackedDownloadOperation(TrackedWebViewDownload tracked, bool forceProgressUpdate)
     {
         if (tracked.IsTerminal) return;
@@ -143,22 +299,63 @@ public partial class MainWindow
         }
         catch
         {
+            // El WebView u operación COM ya no existe: reconciliar para no dejar descarga fantasma activa
+            tracked.IsTerminal = true;
+            lock (_activeOpsLock)
+            {
+                _activeWebViewDownloads.Remove(tracked.EntryId);
+            }
+            tracked.DetachHandlersAction?.Invoke();
+            DownloadManager.ReconcileSingleOrphanEntry(tracked.EntryId);
+            EnsureActiveDownloadSyncTimer();
             return;
         }
 
         if (state == CoreWebView2DownloadState.InProgress)
         {
             long now = Environment.TickCount64;
+            bool isAt100 = tot > 0 && received >= tot;
+            bool isDelayedAt100 = false;
+
+            if (isAt100)
+            {
+                if (tracked.FirstAt100PercentTick == 0)
+                    tracked.FirstAt100PercentTick = now;
+
+                long elapsed100Ms = Math.Max(0, unchecked(now - tracked.FirstAt100PercentTick));
+                var action = EvaluateStalledAt100Download(tracked.ResultPath, tot, elapsed100Ms);
+                if (action == StalledAt100Action.CompleteFromDisk)
+                {
+                    long diskLen = tot;
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(tracked.ResultPath) && File.Exists(tracked.ResultPath))
+                            diskLen = Math.Max(tot, new FileInfo(tracked.ResultPath).Length);
+                    }
+                    catch { }
+
+                    CompleteTrackedDownloadOnUi(tracked, diskLen, diskLen);
+                    return;
+                }
+
+                isDelayedAt100 = action == StalledAt100Action.ShowSecurityVerificationHint;
+            }
+            else
+            {
+                tracked.FirstAt100PercentTick = 0;
+            }
+
             bool changed =
                 tracked.LastReportedState != state ||
                 received != tracked.LastReportedBytes ||
                 tot != tracked.LastReportedTotal;
 
-            if (!changed)
+            bool stalledTick = !changed && (now - tracked.LastReportedTick >= 1500);
+            if (!changed && !stalledTick)
                 return;
 
             bool stateTransition = tracked.LastReportedState != state;
-            if (!forceProgressUpdate && !stateTransition && now - tracked.LastReportedTick < 220 && (tot <= 0 || received < tot))
+            if (!forceProgressUpdate && !stateTransition && !stalledTick && now - tracked.LastReportedTick < 220 && !isAt100)
                 return;
 
             tracked.LastReportedTick = now;
@@ -166,34 +363,21 @@ public partial class MainWindow
             tracked.LastReportedBytes = received;
             tracked.LastReportedTotal = tot;
 
-            double? etaSec = estEnd > DateTime.Now ? (estEnd - DateTime.Now).TotalSeconds : null;
-            DownloadManager.UpdateDownloadProgress(tracked.EntryId, received, tot, "En progreso", estimatedSecondsRemaining: etaSec);
+            double? etaSec = (!stalledTick && !isAt100 && estEnd > DateTime.Now) ? (estEnd - DateTime.Now).TotalSeconds : null;
+            DownloadManager.UpdateDownloadProgress(
+                tracked.EntryId,
+                received,
+                tot,
+                "En progreso",
+                estimatedSecondsRemaining: etaSec,
+                isFinalizationDelayed: isDelayedAt100);
             return;
         }
 
         if (state == CoreWebView2DownloadState.Completed)
         {
-            tracked.IsTerminal = true;
-            tracked.LastReportedState = state;
-            lock (_activeOpsLock)
-            {
-                _activeWebViewDownloads.Remove(tracked.EntryId);
-            }
-            tracked.DetachHandlersAction?.Invoke();
-
             long finalTotal = tot > 0 ? tot : received;
-            DownloadManager.UpdateDownloadProgress(tracked.EntryId, received > 0 ? received : finalTotal, finalTotal, "Completado");
-            EnsureActiveDownloadSyncTimer();
-
-            var host = FindActiveHostWindowForDownloadToast();
-            host?.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
-            {
-                host.RefreshDownloadsUiOnDispatcher();
-                host.ShowToast($"✅ Descarga completada: {tracked.FileName}", "Abrir carpeta 📂", () =>
-                {
-                    host.RevealFileInExplorer(tracked.ResultPath);
-                }, durationSeconds: 6);
-            });
+            CompleteTrackedDownloadOnUi(tracked, received > 0 ? received : finalTotal, finalTotal);
             return;
         }
 
@@ -241,16 +425,12 @@ public partial class MainWindow
             }
 
             tracked.LastReportedState = state;
-
-            if (!canResume)
+            tracked.IsTerminal = true;
+            lock (_activeOpsLock)
             {
-                tracked.IsTerminal = true;
-                lock (_activeOpsLock)
-                {
-                    _activeWebViewDownloads.Remove(tracked.EntryId);
-                }
-                tracked.DetachHandlersAction?.Invoke();
+                _activeWebViewDownloads.Remove(tracked.EntryId);
             }
+            tracked.DetachHandlersAction?.Invoke();
 
             string reasonLabel = FormatDownloadInterruptReason(reason);
             DownloadManager.UpdateDownloadProgress(tracked.EntryId, received, tot, "Interrumpido", reasonLabel, canResume: canResume);
@@ -298,16 +478,39 @@ public partial class MainWindow
         }
         else if (scheduleTrailing)
         {
-            _ = Task.Delay(180).ContinueWith(_ =>
-            {
-                lock (_downloadsUiSync)
-                {
-                    _downloadsUiRefreshPending = false;
-                    _lastDownloadsUiRefreshTick = Environment.TickCount64;
-                }
-                try { Dispatcher.BeginInvoke(DispatcherPriority.Normal, RefreshDownloadsUiOnDispatcher); } catch { }
-            }, TaskScheduler.Default);
+            ScheduleTrailingDownloadsUiRefresh();
         }
+    }
+
+    private void ScheduleTrailingDownloadsUiRefresh()
+    {
+        try
+        {
+            _ = Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+            {
+                if (_isWindowClosing) return;
+                if (_downloadsUiTrailingTimer == null)
+                {
+                    _downloadsUiTrailingTimer = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher)
+                    {
+                        Interval = TimeSpan.FromMilliseconds(180)
+                    };
+                    _downloadsUiTrailingTimer.Tick += (_, _) =>
+                    {
+                        _downloadsUiTrailingTimer?.Stop();
+                        lock (_downloadsUiSync)
+                        {
+                            _downloadsUiRefreshPending = false;
+                            _lastDownloadsUiRefreshTick = Environment.TickCount64;
+                        }
+                        RefreshDownloadsUiOnDispatcher();
+                    };
+                }
+                if (!_downloadsUiTrailingTimer.IsEnabled)
+                    _downloadsUiTrailingTimer.Start();
+            });
+        }
+        catch { }
     }
 
     private void RefreshDownloadsUiOnDispatcher()
@@ -383,12 +586,47 @@ public partial class MainWindow
         PopupDownloads.IsOpen = !PopupDownloads.IsOpen;
     }
 
+    private void PopupDownloads_Opened(object? sender, EventArgs e)
+    {
+        SyncAllTrackedDownloadsOnUi();
+        RefreshDownloadsPopupUI();
+    }
+
+    private void BtnToggleDirectDownload_Click(object sender, RoutedEventArgs e)
+    {
+        bool askWhereToSave = !SettingsManager.Current.AskWhereToSaveDownloads;
+        SettingsManager.Current.AskWhereToSaveDownloads = askWhereToSave;
+        SettingsManager.Save();
+        UpdateDirectDownloadToggleUI();
+    }
+
+    private void UpdateDirectDownloadToggleUI()
+    {
+        if (BtnToggleDirectDownload == null || TxtDownloadSaveModeLabel == null) return;
+        bool askWhere = SettingsManager.Current.AskWhereToSaveDownloads;
+        if (askWhere)
+        {
+            TxtDownloadSaveModeLabel.Text = "📁 Guardar como: elige dónde guardar cada archivo";
+            TxtDownloadSaveModeLabel.Foreground = CreateFrozenBrush(0xA1, 0xA1, 0xAA);
+            BtnToggleDirectDownload.Content = "⚡ Descarga directa: OFF";
+        }
+        else
+        {
+            string dirName = Path.GetFileName(SettingsManager.GetEffectiveDownloadDirectory().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrWhiteSpace(dirName)) dirName = "Descargas";
+            TxtDownloadSaveModeLabel.Text = $"⚡ Descarga directa: guarda automático en «{dirName}»";
+            TxtDownloadSaveModeLabel.Foreground = BrushDownloadActive;
+            BtnToggleDirectDownload.Content = "⚡ Descarga directa: ON";
+        }
+    }
+
     private void RefreshDownloadsPopupUI()
     {
         if (ItemsDownloadsHistory == null || TxtDownloadsEmptyState == null || ScrollDownloadsHistory == null)
             return;
 
         UpdateDownloadsToolbarIndicator();
+        UpdateDirectDownloadToggleUI();
 
         var entries = DownloadManager.GetEntries();
         if (ItemsDownloadsHistory.ItemsSource != _downloadsObservable)
@@ -482,11 +720,7 @@ public partial class MainWindow
     {
         try
         {
-            string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-            if (!Directory.Exists(folder))
-            {
-                folder = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            }
+            string folder = SettingsManager.GetEffectiveDownloadDirectory();
             Process.Start(new ProcessStartInfo
             {
                 FileName = folder,

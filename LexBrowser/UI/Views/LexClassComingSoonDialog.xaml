@@ -1,10 +1,10 @@
 <Window x:Class="LexBrowser.UI.Views.LexClassComingSoonDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Lex Junior Class — Disponible en la próxima actualización"
-        Width="680"
-        MinWidth="580"
-        MaxWidth="720"
+        Title="Lex Junior Class — Academia Interactiva Local (Prototipo)"
+        Width="740"
+        MinWidth="640"
+        MaxWidth="780"
         SizeToContent="Height"
         WindowStyle="None"
         AllowsTransparency="False"
@@ -14,7 +14,7 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         WindowStartupLocation="CenterOwner"
-        Icon="pack://application:,,,/Assets/logo.png">
+        Icon="pack://application:,,,/Assets/lexclass.ico">
 
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="42" ResizeBorderThickness="4" CornerRadius="0" GlassFrameThickness="0"/>
@@ -38,9 +38,9 @@
             <Setter Property="Background" Value="{StaticResource LexBrandGradient}"/>
             <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontSize" Value="12.8"/>
+            <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Padding" Value="20,10"/>
+            <Setter Property="Padding" Value="18,9"/>
             <Setter Property="MinHeight" Value="38"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -52,6 +52,38 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="b" Property="Background" Value="{StaticResource LexBrandHoverGradient}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="LexClassSecondaryBtn" TargetType="Button">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelCardSubtleBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PanelTextStrong}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderSubtle}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="11.8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="13,8"/>
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="BorderBrush" Value="#FB923C"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -78,8 +110,8 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Image Source="pack://application:,,,/Assets/logo.png" Width="18" Height="18" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <TextBlock Text="Lex Junior Class · Adelanto Oficial" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" VerticalAlignment="Center"/>
+                        <Image Source="pack://application:,,,/Assets/lexclass.png" Width="20" Height="20" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="Lex Junior Class · Bienvenida al Prototipo" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" VerticalAlignment="Center"/>
                     </StackPanel>
                     <Button x:Name="BtnClose" Grid.Column="1" Content="✕" Click="BtnClose_Click" Width="34" Height="30"
                             WindowChrome.IsHitTestVisibleInChrome="True" Background="Transparent" BorderThickness="0"
@@ -101,9 +133,9 @@
                 </Grid>
             </Border>
 
-            <!-- Ilustración Hero inspirada en el logo oficial de Lex Junior -->
+            <!-- Ilustración Hero con ondas naranja y violeta y Logo_Lex_Class -->
             <Border Grid.Row="1" Margin="22,18,22,14" CornerRadius="16" ClipToBounds="True"
-                    BorderBrush="#35FF6B00" BorderThickness="1.2" Height="225">
+                    BorderBrush="#35FF6B00" BorderThickness="1.2" Height="232">
                 <Border.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                         <GradientStop Color="#07070D" Offset="0.0"/>
@@ -115,7 +147,6 @@
                 <Grid>
                     <!-- Lienzo artístico vectorial con las ondas naranja y violeta del logo -->
                     <Canvas IsHitTestVisible="False">
-                        <!-- Halo naranja izquierdo (color oficial del logo #FF6B00) -->
                         <Ellipse Width="290" Height="220" Canvas.Left="-65" Canvas.Top="-45" Opacity="0.28">
                             <Ellipse.Fill>
                                 <RadialGradientBrush>
@@ -125,8 +156,7 @@
                             </Ellipse.Fill>
                         </Ellipse>
 
-                        <!-- Halo púrpura derecho (color oficial del logo #7C3AED) -->
-                        <Ellipse Width="320" Height="240" Canvas.Left="390" Canvas.Top="-30" Opacity="0.32">
+                        <Ellipse Width="340" Height="250" Canvas.Left="430" Canvas.Top="-30" Opacity="0.32">
                             <Ellipse.Fill>
                                 <RadialGradientBrush>
                                     <GradientStop Color="#8B5CF6" Offset="0"/>
@@ -135,8 +165,7 @@
                             </Ellipse.Fill>
                         </Ellipse>
 
-                        <!-- Onda dinámica naranja del logo Lex -->
-                        <Path Data="M -20,185 C 120,115 220,215 360,130 C 460,70 560,120 680,55"
+                        <Path Data="M -20,188 C 130,115 245,218 400,130 C 510,70 610,120 740,55"
                               StrokeThickness="3.5" Opacity="0.45">
                             <Path.Stroke>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -147,8 +176,7 @@
                             </Path.Stroke>
                         </Path>
 
-                        <!-- Onda dinámica violeta secundaria -->
-                        <Path Data="M -10,210 C 160,155 270,225 430,155 C 520,115 590,145 670,95"
+                        <Path Data="M -10,214 C 175,155 300,228 475,155 C 565,115 640,145 730,95"
                               StrokeThickness="2" Opacity="0.30">
                             <Path.Stroke>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -159,23 +187,20 @@
                             </Path.Stroke>
                         </Path>
 
-                        <!-- Constelación / destellos académicos -->
                         <Ellipse Width="6" Height="6" Fill="#FB923C" Canvas.Left="76" Canvas.Top="44" Opacity="0.8"/>
-                        <Ellipse Width="4" Height="4" Fill="#C084FC" Canvas.Left="548" Canvas.Top="48" Opacity="0.85"/>
-                        <Ellipse Width="5" Height="5" Fill="#38BDF8" Canvas.Left="515" Canvas.Top="168" Opacity="0.75"/>
-                        <Ellipse Width="4" Height="4" Fill="#FDBA74" Canvas.Left="118" Canvas.Top="162" Opacity="0.7"/>
+                        <Ellipse Width="4" Height="4" Fill="#C084FC" Canvas.Left="610" Canvas.Top="46" Opacity="0.85"/>
+                        <Ellipse Width="5" Height="5" Fill="#38BDF8" Canvas.Left="575" Canvas.Top="174" Opacity="0.75"/>
+                        <Ellipse Width="4" Height="4" Fill="#FDBA74" Canvas.Left="118" Canvas.Top="168" Opacity="0.7"/>
                     </Canvas>
 
-                    <!-- Composición central: Emblema del Logo + Iconografía Educativa + Texto Hero -->
                     <Grid Margin="26,18,26,18">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Emblema Artístico del Logo Lex Class -->
+                        <!-- Emblema Artístico del Logo Oficial Lex Class -->
                         <Grid Grid.Column="0" Width="170" Height="170" VerticalAlignment="Center" Margin="0,0,22,0">
-                            <!-- Anillo exterior brillante -->
                             <Ellipse Width="156" Height="156" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.35" StrokeThickness="2">
                                 <Ellipse.Stroke>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
@@ -185,67 +210,59 @@
                                 </Ellipse.Stroke>
                             </Ellipse>
 
-                            <!-- Tarjeta cristal central con el Logo Oficial -->
-                            <Border Width="116" Height="116" CornerRadius="28" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    Background="#18FFFFFF" BorderThickness="1.5">
+                            <Border Width="118" Height="118" CornerRadius="28" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    Background="#18FFFFFF" BorderThickness="1.5" ClipToBounds="True">
                                 <Border.BorderBrush>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
                                         <GradientStop Color="#90FF6B00" Offset="0"/>
                                         <GradientStop Color="#90A855F7" Offset="1"/>
                                     </LinearGradientBrush>
                                 </Border.BorderBrush>
-                                <Grid>
-                                    <Image Source="pack://application:,,,/Assets/logo.png" Width="82" Height="82"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           RenderOptions.BitmapScalingMode="HighQuality"/>
-                                </Grid>
+                                <Image Source="pack://application:,,,/Assets/lexclass.png" Width="110" Height="110"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Border>
 
-                            <!-- Insignia flotante superior: Birrete Graduación -->
-                            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,6,0"
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,4,0"
                                     CornerRadius="12" Padding="9,5" Background="#E61A102A" BorderBrush="#80FF6B00" BorderThickness="1">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="🎓" FontSize="14" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBlock Text="CLASS" FontSize="10" FontWeight="ExtraBold" Foreground="#FDBA74" VerticalAlignment="Center"/>
+                                    <TextBlock Text="🎓" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="PROTOTIPO" FontSize="9.5" FontWeight="ExtraBold" Foreground="#FDBA74" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
 
-                            <!-- Insignia flotante inferior izquierda: Libro Interactivo -->
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4,0,0,8"
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4,0,0,6"
                                     CornerRadius="12" Padding="9,5" Background="#E6121324" BorderBrush="#80A855F7" BorderThickness="1">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📘" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                    <TextBlock Text="1.° P → Pre" FontSize="10" FontWeight="Bold" Foreground="#DDD6FE" VerticalAlignment="Center"/>
+                                    <TextBlock Text="💾" FontSize="12" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="Offline Local" FontSize="9.8" FontWeight="Bold" Foreground="#DDD6FE" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
 
-                        <!-- Columna Derecha: Mensaje Principal "DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN" -->
+                        <!-- Columna Derecha: Mensaje honesto de lanzamiento como prototipo -->
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <Border HorizontalAlignment="Left" CornerRadius="99" Padding="12,5" Margin="0,0,0,10"
+                            <Border HorizontalAlignment="Left" CornerRadius="99" Padding="12,5" Margin="0,0,0,9"
                                     Background="#28FF6B00" BorderBrush="#88FF6B00" BorderThickness="1">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="✨ DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN"
-                                               FontSize="10.8" FontWeight="ExtraBold" Foreground="#FDBA74"/>
-                                </StackPanel>
+                                <TextBlock Text="🚀 PROTOTIPO ACTIVO · YA PUEDES PROBARLO"
+                                           FontSize="10.5" FontWeight="ExtraBold" Foreground="#FDBA74"/>
                             </Border>
 
                             <TextBlock Text="Lex Junior Class"
                                        FontSize="24" FontWeight="ExtraBold" Foreground="#FFFFFF" Margin="0,0,0,4"/>
 
-                            <TextBlock Text="Estamos puliendo cada lección paso a paso para entregarte la academia interactiva más clara, completa y privada integrada directamente en tu navegador."
-                                       FontSize="12.4" Foreground="#D1D5DB" TextWrapping="Wrap" LineHeight="18.5" Margin="0,0,0,12"/>
+                            <TextBlock Text="Lanzamos Lex Junior Class como prototipo vivo (no terminado). Sigue en desarrollo activo y se irá puliendo poco a poco con nuevos mundos y mejoras."
+                                       FontSize="12.2" Foreground="#D1D5DB" TextWrapping="Wrap" LineHeight="18" Margin="0,0,0,12"/>
 
-                            <!-- Píldoras de adelanto -->
                             <WrapPanel Orientation="Horizontal">
                                 <Border CornerRadius="7" Padding="9,4" Margin="0,0,7,5" Background="#22FFFFFF" BorderBrush="#35FFFFFF" BorderThickness="1">
-                                    <TextBlock Text="⚡ Desde cero absoluto" FontSize="10.8" FontWeight="SemiBold" Foreground="#F3F4F6"/>
+                                    <TextBlock Text="⚡ Funciona local sin internet" FontSize="10.8" FontWeight="SemiBold" Foreground="#F3F4F6"/>
                                 </Border>
                                 <Border CornerRadius="7" Padding="9,4" Margin="0,0,7,5" Background="#22FFFFFF" BorderBrush="#35FFFFFF" BorderThickness="1">
-                                    <TextBlock Text="🛡️ 100% Local · Sin telemetría propia" FontSize="10.8" FontWeight="SemiBold" Foreground="#F3F4F6"/>
+                                    <TextBlock Text="🌐 Red solo para actualizaciones" FontSize="10.8" FontWeight="SemiBold" Foreground="#F3F4F6"/>
                                 </Border>
                                 <Border CornerRadius="7" Padding="9,4" Margin="0,0,0,5" Background="#22FFFFFF" BorderBrush="#35FFFFFF" BorderThickness="1">
-                                    <TextBlock Text="🎯 Estudio · Práctica · Examen" FontSize="10.8" FontWeight="SemiBold" Foreground="#F3F4F6"/>
+                                    <TextBlock Text="🖥️ Ventana limpia + F11" FontSize="10.8" FontWeight="SemiBold" Foreground="#F3F4F6"/>
                                 </Border>
                             </WrapPanel>
                         </StackPanel>
@@ -253,7 +270,7 @@
                 </Grid>
             </Border>
 
-            <!-- Tarjetas de adelanto de lo que incluirá Lex Junior Class -->
+            <!-- 3 Tarjetas con transparencia total sobre estado actual, próximos mundos y actualizaciones laterales -->
             <Grid Grid.Row="2" Margin="22,0,22,16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -266,27 +283,27 @@
                 <Border Grid.Column="0" Background="{DynamicResource PanelCardSubtleBg}" BorderBrush="{DynamicResource PanelBorderSubtle}"
                         BorderThickness="1" CornerRadius="11" Padding="13,11">
                     <StackPanel>
-                        <TextBlock Text="📚 Primaria a Pre" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Micro-lecciones graduadas desde 1.° de Primaria hasta Preuniversitario con analogías claras y ejemplos reales."
-                                   FontSize="11.3" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" LineHeight="16.5"/>
+                        <TextBlock Text="✅ Disponible hoy" FontSize="12.3" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,4"/>
+                        <TextBlock Text="Matemáticas (5 niveles y 51 misiones hasta Cálculo), Inglés paso a paso + LexBook (24 misiones) y Brújula Humana listos offline."
+                                   FontSize="11.1" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" LineHeight="16.2"/>
                     </StackPanel>
                 </Border>
 
                 <Border Grid.Column="2" Background="{DynamicResource PanelCardSubtleBg}" BorderBrush="{DynamicResource PanelBorderSubtle}"
                         BorderThickness="1" CornerRadius="11" Padding="13,11">
                     <StackPanel>
-                        <TextBlock Text="🧠 Práctica y Simulacros" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Ejercicios interactivos con pistas pedagógicas, explicación de errores frecuentes y exámenes con nota vigesimal."
-                                   FontSize="11.3" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" LineHeight="16.5"/>
+                        <TextBlock Text="🪐 Próximos mundos" FontSize="12.3" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,4"/>
+                        <TextBlock Text="Mandarín, Quechua, Ciencias, Comunicación, Sociales, Programación y Universo II irán saliendo por partes. Los mundos activos también pueden recibir cambios."
+                                   FontSize="11.1" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" LineHeight="16.2"/>
                     </StackPanel>
                 </Border>
 
                 <Border Grid.Column="4" Background="{DynamicResource PanelCardSubtleBg}" BorderBrush="{DynamicResource PanelBorderSubtle}"
                         BorderThickness="1" CornerRadius="11" Padding="13,11">
                     <StackPanel>
-                        <TextBlock Text="🎮 Arcade y Brújula" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Laboratorio de pronunciación en inglés, minijuegos de agilidad mental y orientación vocacional sin anuncios."
-                                   FontSize="11.3" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" LineHeight="16.5"/>
+                        <TextBlock Text="🔄 Botón al costado" FontSize="12.3" FontWeight="Bold" Foreground="{DynamicResource PanelTextStrong}" Margin="0,0,0,4"/>
+                        <TextBlock Text="Una vez descargado no necesita internet. Si sale una mejora para un planeta activo, su botón Actualizar aparece al costado (no encima) por si prefieres entrar directo."
+                                   FontSize="11.1" Foreground="{DynamicResource PanelTextBody}" TextWrapping="Wrap" LineHeight="16.2"/>
                     </StackPanel>
                 </Border>
             </Grid>
@@ -298,13 +315,19 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="💡 Se activará automáticamente al actualizar a la próxima versión desde el navegador."
-                               FontSize="11.5" Foreground="{DynamicResource PanelTextMuted}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
+                    <TextBlock Grid.Column="0"
+                               Text="🛡️ Se abre en ventana limpia propia (sin barra de URL, sin historial ni sesiones del navegador)."
+                               FontSize="11.1" Foreground="{DynamicResource PanelTextMuted}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
 
-                    <Button x:Name="BtnUnderstood" Grid.Column="1" Content="✨ Entendido, esperaré la actualización"
-                            Click="BtnClose_Click" Style="{StaticResource LexClassPrimaryBtn}" IsDefault="True" IsCancel="True"/>
+                    <Button x:Name="BtnInstallDesktopShortcut" Grid.Column="1" Content="🖥️ Acceso en Escritorio"
+                            Click="BtnInstallDesktopShortcut_Click" Style="{StaticResource LexClassSecondaryBtn}" Margin="0,0,8,0"
+                            ToolTip="Crear icono de acceso directo en el Escritorio para abrir Lex Junior Class directo"/>
+
+                    <Button x:Name="BtnOpenLexClass" Grid.Column="2" Content="🚀 Abrir Lex Junior Class"
+                            Click="BtnOpenLexClass_Click" Style="{StaticResource LexClassPrimaryBtn}" IsDefault="True"/>
                 </Grid>
             </Border>
         </Grid>

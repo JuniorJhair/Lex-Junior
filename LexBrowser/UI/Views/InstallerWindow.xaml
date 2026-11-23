@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Instalador de Lex Junior Browser"
         Icon="pack://application:,,,/Assets/logo.png"
-        Width="520" Height="400"
+        Width="545" Height="475"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -13,7 +13,7 @@
         SnapsToDevicePixels="True"
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
-    <Border Background="#0F0F15" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Margin="10">
+    <Border x:Name="OuterFrame" Background="#0F0F15" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="16" Margin="10">
         <Border.Effect>
             <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.75" Color="#000000"/>
         </Border.Effect>
@@ -28,22 +28,22 @@
 
             <!-- Cabecera con Logo y Título -->
             <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,42,16">
-                <Border CornerRadius="14" Width="56" Height="56" Margin="0,0,16,0" ClipToBounds="True" BorderBrush="#4F46E5" BorderThickness="1">
-                    <Image Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <Border x:Name="LogoBorder" CornerRadius="14" Width="56" Height="56" Margin="0,0,16,0" ClipToBounds="True" BorderBrush="#4F46E5" BorderThickness="1.2">
+                    <Image x:Name="ImgHeaderLogo" Source="pack://application:,,,/Assets/logo.png" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
                 </Border>
                 <StackPanel VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock x:Name="TxtHeaderTitle" Text="LEX JUNIOR BROWSER" Foreground="#F4F4F5" FontSize="19" FontWeight="Black" Margin="0,0,10,0"/>
-                        <Border Background="#1E1B4B" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6" Padding="7,2" VerticalAlignment="Center">
+                        <Border x:Name="VersionBadgeBorder" Background="#1E1B4B" BorderBrush="#6366F1" BorderThickness="1" CornerRadius="6" Padding="7,2" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtVersionBadge" Text="v1.0.0" Foreground="#818CF8" FontSize="11" FontWeight="Bold"/>
                         </Border>
                     </StackPanel>
                     <TextBlock x:Name="TxtSubtitle" Text="Instalador Oficial · Privado · Menos anuncios · Sin telemetría propia"
-                               Foreground="#9CA3AF" FontSize="12" Margin="0,4,0,0"/>
+                               Foreground="#9CA3AF" FontSize="12" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
             </StackPanel>
 
-            <!-- Botón Cerrar superior derecho (template propio sin Padding="12,6" del estilo global) -->
+            <!-- Botón Cerrar superior derecho -->
             <Button x:Name="BtnClose" Grid.Row="0" Panel.ZIndex="10" Content="✕" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="32" Height="32" Padding="0" Background="Transparent" Foreground="#A1A1AA"
                     BorderThickness="0" FontSize="14" FontWeight="SemiBold" Cursor="Hand" Click="BtnClose_Click" ToolTip="Cerrar">
@@ -62,22 +62,42 @@
                 </Button.Template>
             </Button>
 
-            <Border Grid.Row="1" Height="1" Background="#232332" Margin="0,0,0,16"/>
+            <Border Grid.Row="1" Height="1" Background="#232332" Margin="0,0,0,14"/>
 
             <!-- Opciones de Instalación / Desinstalación -->
             <Grid Grid.Row="2">
-                <!-- Panel de Instalación -->
+                <!-- Panel de Instalación del Navegador (y opción de Lex Junior Class en Escritorio) -->
                 <StackPanel x:Name="PanelInstallOptions" VerticalAlignment="Top">
-                    <TextBlock Text="Configuración de instalación:" Foreground="#D4D4D8" FontSize="12.5" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                    <TextBlock Text="Configuración de instalación:" Foreground="#D4D4D8" FontSize="12.5" FontWeight="SemiBold" Margin="0,0,0,10"/>
 
-                    <CheckBox x:Name="ChkDesktopShortcut" IsChecked="True" Foreground="#E4E4E7" FontSize="12.5" Margin="0,0,0,10"
-                              Content="Crear icono de acceso directo en el Escritorio"/>
+                    <CheckBox x:Name="ChkDesktopShortcut" IsChecked="True" Foreground="#E4E4E7" FontSize="12.5" Margin="0,0,0,8"
+                              Content="Crear icono de Lex Junior Browser en el Escritorio"/>
 
-                    <CheckBox x:Name="ChkStartMenuShortcut" IsChecked="True" Foreground="#E4E4E7" FontSize="12.5" Margin="0,0,0,10"
+                    <CheckBox x:Name="ChkStartMenuShortcut" IsChecked="True" Foreground="#E4E4E7" FontSize="12.5" Margin="0,0,0,8"
                               Content="Agregar al Menú Inicio y Aplicaciones de Windows"/>
 
                     <CheckBox x:Name="ChkLaunchAfterInstall" IsChecked="True" Foreground="#E4E4E7" FontSize="12.5" Margin="0,0,0,12"
-                              Content="Iniciar Lex Junior Browser al terminar la instalación"/>
+                              Content="Iniciar al terminar la instalación"/>
+
+                    <!-- Tarjeta destacada: Acceso directo propio para Lex Junior Class -->
+                    <Border x:Name="CardLexClassShortcut" CornerRadius="10" Padding="12,10" Margin="0,0,0,10"
+                            Background="#161425" BorderBrush="#66FF6B00" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" CornerRadius="8" Width="34" Height="34" Margin="0,0,11,0" ClipToBounds="True" VerticalAlignment="Center">
+                                <Image Source="pack://application:,,,/Assets/lexclass.png" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <CheckBox x:Name="ChkLexClassDesktopShortcut" IsChecked="False" Foreground="#FDBA74" FontSize="12" FontWeight="SemiBold"
+                                          Content="Agregar acceso directo de Lex Junior Class en el Escritorio"/>
+                                <TextBlock Text="Abre Lex Junior Class como app limpia sin barra de URL, 100% local (Prototipo)."
+                                           Foreground="#9CA3AF" FontSize="10.5" Margin="22,2,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
 
                     <TextBlock x:Name="TxtInstallLocation" Text="" Foreground="#8B8B96" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
@@ -112,4 +132,3 @@
         </Grid>
     </Border>
 </Window>
-

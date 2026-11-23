@@ -21,6 +21,7 @@ public partial class MainWindow
 {
     private bool _isUpdatingOmniboxTextProgrammatically = false;
     private bool _suppressInlineAutocomplete = false;
+    private bool _userNavigatedOmniboxSelection = false;
     private int _omniboxTextChangedDepth = 0;
     private readonly ObservableCollection<OmniboxSuggestionItem> _omniboxSuggestions = new();
     private int _selectedOmniboxIndex = 0;
@@ -29,18 +30,170 @@ public partial class MainWindow
     private static readonly SolidColorBrush BrushHttpsSecure = CreateFrozenBrush(0x10, 0xB9, 0x81);
     private static readonly SolidColorBrush BrushHttpWarning = CreateFrozenBrush(0xF5, 0x9E, 0x0B);
 
+    private void InitializeOmniboxBehavior()
+    {
+        DataObject.AddPastingHandler(TxtUrl, TxtUrl_Pasting);
+
+        var ctx = new ContextMenu();
+        if (TryFindResource("TabContextMenu") is Style menuStyle)
+            ctx.Style = menuStyle;
+
+        var miUndo = new MenuItem { Command = ApplicationCommands.Undo, Header = "Deshacer" };
+        var miCut = new MenuItem { Command = ApplicationCommands.Cut, Header = "Cortar" };
+        var miCopy = new MenuItem { Command = ApplicationCommands.Copy, Header = "Copiar" };
+        var miPaste = new MenuItem { Command = ApplicationCommands.Paste, Header = "Pegar" };
+        var miPasteAndGo = new MenuItem { Header = "Pegar y buscar" };
+        var miSelectAll = new MenuItem { Command = ApplicationCommands.SelectAll, Header = "Seleccionar todo" };
+
+        if (TryFindResource("TabMenuItem") is Style itemStyle)
+        {
+            miUndo.Style = itemStyle;
+            miCut.Style = itemStyle;
+            miCopy.Style = itemStyle;
+            miPaste.Style = itemStyle;
+            miPasteAndGo.Style = itemStyle;
+            miSelectAll.Style = itemStyle;
+        }
+
+        miPasteAndGo.Click += (_, _) =>
+        {
+            string clip = GetNormalizedClipboardOmniboxText();
+            if (string.IsNullOrWhiteSpace(clip)) return;
+            _omniboxLiveSuggestCts?.Cancel();
+            PopupOmniboxSuggestions.IsOpen = false;
+            NavigateOmniboxInput(clip);
+        };
+
+        var sep1 = new Separator();
+        var sep2 = new Separator();
+        if (TryFindResource("TabMenuSeparator") is Style sepStyle)
+        {
+            sep1.Style = sepStyle;
+            sep2.Style = sepStyle;
+        }
+
+        ctx.Items.Add(miUndo);
+        ctx.Items.Add(sep1);
+        ctx.Items.Add(miCut);
+        ctx.Items.Add(miCopy);
+        ctx.Items.Add(miPaste);
+        ctx.Items.Add(miPasteAndGo);
+        ctx.Items.Add(sep2);
+        ctx.Items.Add(miSelectAll);
+
+        ctx.Opened += (_, _) =>
+        {
+            string clip = GetNormalizedClipboardOmniboxText();
+            bool hasText = !string.IsNullOrEmpty(clip);
+            miPasteAndGo.IsEnabled = hasText;
+            if (!hasText)
+            {
+                miPasteAndGo.Header = "Pegar y buscar";
+            }
+            else if (OmniboxSuggestionService.LooksLikeUrlOrDomain(clip))
+            {
+                miPasteAndGo.Header = "Pegar e ir a la dirección";
+            }
+            else
+            {
+                string preview = clip.Length > 28 ? clip.Substring(0, 28) + "…" : clip;
+                miPasteAndGo.Header = $"Pegar y buscar «{preview}»";
+            }
+        };
+
+        TxtUrl.ContextMenu = ctx;
+    }
+
+    private static string GetNormalizedClipboardOmniboxText()
+    {
+        try
+        {
+            if (Clipboard.ContainsText())
+            {
+                return OmniboxInputResolver.NormalizePastedAddressBarText(Clipboard.GetText());
+            }
+        }
+        catch { }
+        return string.Empty;
+    }
+
+    private void TxtUrl_Pasting(object sender, DataObjectPastingEventArgs e)
+    {
+        string? raw = null;
+        if (e.SourceDataObject.GetDataPresent(DataFormats.UnicodeText, true))
+            raw = e.SourceDataObject.GetData(DataFormats.UnicodeText, true) as string;
+        else if (e.SourceDataObject.GetDataPresent(DataFormats.Text, true))
+            raw = e.SourceDataObject.GetData(DataFormats.Text, true) as string;
+
+        if (raw == null) return;
+
+        // Evitar que TextBox de una sola línea recorte al primer salto de línea (\r/\n)
+        string normalized = OmniboxInputResolver.NormalizePastedAddressBarText(raw);
+        e.CancelCommand();
+        e.Handled = true;
+
+        _suppressInlineAutocomplete = true;
+        _userNavigatedOmniboxSelection = false;
+
+        string current = TxtUrl.Text ?? string.Empty;
+        int start = Math.Clamp(TxtUrl.SelectionStart, 0, current.Length);
+        int len = Math.Clamp(TxtUrl.SelectionLength, 0, current.Length - start);
+
+        string updated = string.Concat(current.AsSpan(0, start), normalized, current.AsSpan(start + len));
+        int newCaret = start + normalized.Length;
+
+        _isUpdatingOmniboxTextProgrammatically = true;
+        try
+        {
+            TxtUrl.Text = updated;
+            TxtUrl.SelectionStart = Math.Min(newCaret, TxtUrl.Text.Length);
+            TxtUrl.SelectionLength = 0;
+        }
+        finally
+        {
+            _isUpdatingOmniboxTextProgrammatically = false;
+        }
+
+        string query = updated.Trim();
+        if (string.IsNullOrEmpty(query))
+        {
+            _omniboxLiveSuggestCts?.Cancel();
+            PopupOmniboxSuggestions.IsOpen = false;
+            return;
+        }
+
+        if (TxtUrl.IsKeyboardFocusWithin)
+        {
+            bool isPrivate = _isGuestSession || (_activeTab?.IsIncognito == true);
+            var localHistory = isPrivate ? Array.Empty<HistoryEntry>() : HistoryManager.GetRecentSnapshot(2500);
+            var localBookmarks = isPrivate ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>() : BookmarkManager.Bookmarks.ToArray();
+            _ = RefreshOmniboxSuggestionsAsync(query, localHistory, localBookmarks, skipInitialDebounce: true);
+        }
+    }
+
+    private void BadgeGoogleOmnibox_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        TxtUrl.Focus();
+        TxtUrl.SelectAll();
+    }
+
     private void TxtUrl_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (!TxtUrl.IsKeyboardFocusWithin)
         {
             TxtUrl.Focus();
             TxtUrl.SelectAll();
-            e.Handled = true;
+            if (e.ChangedButton == MouseButton.Left)
+            {
+                e.Handled = true;
+            }
         }
     }
 
     private void TxtUrl_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
+        _userNavigatedOmniboxSelection = false;
         UpdateSecurityIndicatorUI();
         string current = TxtUrl.Text.Trim();
         if (!string.IsNullOrEmpty(current) &&
@@ -69,7 +222,25 @@ public partial class MainWindow
         _omniboxTextChangedDepth++;
         try
         {
+            _userNavigatedOmniboxSelection = false;
             string rawText = TxtUrl.Text;
+            if (rawText.IndexOfAny(new[] { '\r', '\n', '\t' }) >= 0)
+            {
+                string collapsed = OmniboxInputResolver.NormalizePastedAddressBarText(rawText);
+                _isUpdatingOmniboxTextProgrammatically = true;
+                try
+                {
+                    TxtUrl.Text = collapsed;
+                    TxtUrl.SelectionStart = collapsed.Length;
+                    TxtUrl.SelectionLength = 0;
+                }
+                finally
+                {
+                    _isUpdatingOmniboxTextProgrammatically = false;
+                }
+                rawText = collapsed;
+            }
+
             string query = rawText.Trim();
             if (string.IsNullOrEmpty(query))
             {
@@ -86,13 +257,12 @@ public partial class MainWindow
                 ? (IReadOnlyList<BookmarkItem>)Array.Empty<BookmarkItem>()
                 : BookmarkManager.Bookmarks.ToArray();
 
-            // Verificar que el cambio sea estrictamente una inserción al final del texto antes de autocompletar en línea.
-            // Esto evita inversiones o transposiciones de caracteres al editar en medio o escribir de forma continua.
+            // Verificar que el cambio sea estrictamente una sola tecla al final del texto antes de autocompletar en línea.
             bool isForwardAppendAtEnd = false;
             if (e.Changes.Count == 1)
             {
                 var change = e.Changes.First();
-                isForwardAppendAtEnd = change.AddedLength > 0 &&
+                isForwardAppendAtEnd = change.AddedLength == 1 &&
                                        change.RemovedLength == 0 &&
                                        (change.Offset + change.AddedLength == rawText.Length);
             }
@@ -171,7 +341,7 @@ public partial class MainWindow
                 searchEngineName: engineName,
                 cancellationToken: token), token);
 
-            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
+            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin || _userNavigatedOmniboxSelection) return;
             ApplyOmniboxSuggestionsToPopup(initialList);
 
             // 2. Debounce de 100 ms y consulta al motor de búsqueda configurado (respetando privacidad e incógnito)
@@ -179,10 +349,10 @@ public partial class MainWindow
                 return;
 
             await Task.Delay(100, token);
-            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
+            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin || _userNavigatedOmniboxSelection) return;
 
             var liveSuggestions = await OmniboxSuggestionService.FetchSearchSuggestionsAsync(query, engineName, token);
-            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin || liveSuggestions.Count == 0)
+            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin || liveSuggestions.Count == 0 || _userNavigatedOmniboxSelection)
                 return;
 
             var combinedList = await Task.Run(() => OmniboxSuggestionService.BuildSuggestions(
@@ -193,7 +363,7 @@ public partial class MainWindow
                 searchEngineName: engineName,
                 cancellationToken: token), token);
 
-            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin) return;
+            if (token.IsCancellationRequested || !TxtUrl.IsKeyboardFocusWithin || _userNavigatedOmniboxSelection) return;
             ApplyOmniboxSuggestionsToPopup(combinedList);
         }
         catch (OperationCanceledException) { }
@@ -309,6 +479,7 @@ public partial class MainWindow
     {
         if (_omniboxSuggestions.Count == 0) return;
 
+        _userNavigatedOmniboxSelection = true;
         _selectedOmniboxIndex = (_selectedOmniboxIndex + delta + _omniboxSuggestions.Count) % _omniboxSuggestions.Count;
         for (int i = 0; i < _omniboxSuggestions.Count; i++)
         {

@@ -65,4 +65,14 @@ public class UpdateAndLexClassDialogTests
         string target = OmniboxInputResolver.ResolveNavigationTarget("lex://class");
         Assert.Equal(LexClassComingSoonDialog.VirtualUrl, target);
     }
+
+    [Theory]
+    [InlineData("matematicas", "Matemáticas")]
+    [InlineData("idiomas", "Idiomas (Inglés + LexBook)")]
+    [InlineData("programacion", "Programación")]
+    [InlineData("astronomia", "Astronomia")]
+    public void LexClassUpdateDialog_FormatsWorldNamesCleanly(string worldId, string expected)
+    {
+        Assert.Equal(expected, LexClassUpdateDialog.FormatWorldDisplayName(worldId));
+    }
 }

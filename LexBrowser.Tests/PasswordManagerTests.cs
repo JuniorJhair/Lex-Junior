@@ -430,5 +430,17 @@ public class PasswordManagerTests : IDisposable
         Assert.Contains("isElementActuallyVisible", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
         Assert.Contains("visibility === 'hidden'", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
         Assert.Contains("formScope.contains(activeEl)", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
+        Assert.Contains("forceReplace", PasswordManager.InjectedPasswordScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildSafeAutofillScript_SupportsForceReplaceForPickerWithoutPostMessage()
+    {
+        string autoScript = PasswordManager.BuildSafeAutofillScript("user1@example.com", "pw1");
+        string pickedScript = PasswordManager.BuildSafeAutofillScript("user2@example.com", "pw2", forceReplace: true);
+
+        Assert.Contains("window.__lexApplyAutofill(u, p, false)", autoScript, StringComparison.Ordinal);
+        Assert.Contains("window.__lexApplyAutofill(u, p, true)", pickedScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("postMessage", pickedScript, StringComparison.Ordinal);
     }
 }

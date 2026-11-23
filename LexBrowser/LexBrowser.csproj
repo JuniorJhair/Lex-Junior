@@ -8,9 +8,9 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.7.0</Version>
-    <AssemblyVersion>2.7.0.0</AssemblyVersion>
-    <FileVersion>2.7.0.0</FileVersion>
+    <Version>2.8.1</Version>
+    <AssemblyVersion>2.8.1.0</AssemblyVersion>
+    <FileVersion>2.8.1.0</FileVersion>
     <Product>Lex Junior Browser</Product>
     <Authors>Junior Pacherrez</Authors>
     <Company>Junior Pacherrez</Company>
@@ -25,6 +25,12 @@
     <Resource Include="Assets\logo.png" />
     <Resource Include="Assets\logo_web.png" />
     <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\lexclass.png" />
+    <Resource Include="Assets\lexclass.ico" />
+    <EmbeddedResource Include="Assets\lexclass\**\*">
+      <LogicalName>LexClassEmbed/$([System.String]::Copy('%(RecursiveDir)%(Filename)%(Extension)').Replace('\', '/'))</LogicalName>
+    </EmbeddedResource>
+    <None Update="Assets\lexclass\**" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\pdf\**" />
     <None Update="Assets\pdf\**" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\tv\**" />

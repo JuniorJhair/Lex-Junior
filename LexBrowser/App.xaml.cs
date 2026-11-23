@@ -34,14 +34,46 @@ public partial class App : Application
             }
             e.Handled = true; // Previene cierres inesperados por excepciones de UI
         };
+
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[APPDOMAIN_UNHANDLED] terminating={e.IsTerminating} ex={e.ExceptionObject}");
+                if (e.ExceptionObject is Exception ex)
+                {
+                    ShieldLogger.Log("APPDOMAIN_UNHANDLED", "app", "", e.IsTerminating ? "Terminating" : "NonTerminating", $"{ex.GetType().Name}: {ex.Message}");
+                }
+            }
+            catch { }
+        };
+
+        TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[UNOBSERVED_TASK] {e.Exception}");
+                if (ShieldLogger.DiagnosticMode)
+                {
+                    ShieldLogger.Log("UNOBSERVED_TASK_ERROR", "app", "", "TaskScheduler", $"{e.Exception.GetType().Name}: {e.Exception.Message}");
+                }
+            }
+            catch { }
+            e.SetObserved();
+        };
     }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        bool isLexClassLauncher = InstallerService.ShouldRunAsLexClassLauncher(e.Args);
+        bool isLexClassInstaller = InstallerService.ShouldRunAsLexClassInstaller(e.Args);
         try
         {
-            // Registrar AppID de Windows para que el icono anclado en la barra de tareas sea siempre el oficial
-            SetCurrentProcessExplicitAppUserModelID("LexJunior.Browser");
+            // Registrar AppID de Windows para que cada app tenga su propio icono en la barra de tareas
+            SetCurrentProcessExplicitAppUserModelID(
+                (isLexClassLauncher || isLexClassInstaller)
+                    ? InstallerService.LexClassAppUserModelId
+                    : InstallerService.BrowserAppUserModelId);
         }
         catch { }
 
@@ -66,11 +98,27 @@ public partial class App : Application
             return;
         }
 
+        if (isLexClassInstaller)
+        {
+            var classInstaller = new LexBrowser.UI.Views.InstallerWindow(isUninstallMode: false, isLexClassMode: true);
+            MainWindow = classInstaller;
+            classInstaller.Show();
+            return;
+        }
+
         if (InstallerService.ShouldRunAsInstaller(e.Args))
         {
             var installer = new LexBrowser.UI.Views.InstallerWindow(isUninstallMode: false);
             MainWindow = installer;
             installer.Show();
+            return;
+        }
+
+        if (isLexClassLauncher)
+        {
+            var classWindow = new LexBrowser.UI.Views.LexClassWindow();
+            MainWindow = classWindow;
+            classWindow.Show();
             return;
         }
 

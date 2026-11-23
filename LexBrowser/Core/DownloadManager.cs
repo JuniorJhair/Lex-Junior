@@ -29,6 +29,7 @@ public class DownloadEntry : INotifyPropertyChanged
     private double _speedBytesPerSec;
     private double? _estimatedSecondsRemaining;
     private bool _canResume;
+    private bool _isFinalizationDelayed;
 
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public string FileName { get; set; } = string.Empty;
@@ -95,12 +96,36 @@ public class DownloadEntry : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    internal void ApplyProgressSnapshot(
+        long bytesReceived,
+        long totalBytes,
+        string state,
+        string? interruptReason,
+        bool canResume,
+        double speedBytesPerSec,
+        double? estimatedSecondsRemaining,
+        bool isFinalizationDelayed = false)
+    {
+        _totalBytes = totalBytes;
+        _bytesReceived = bytesReceived;
+        _state = state;
+        _interruptReason = interruptReason;
+        _canResume = canResume;
+        _speedBytesPerSec = speedBytesPerSec;
+        _estimatedSecondsRemaining = estimatedSecondsRemaining;
+        _isFinalizationDelayed = isFinalizationDelayed;
+    }
+
     public void NotifyProgressUpdated()
     {
         OnPropertyChanged(nameof(BytesReceived));
         OnPropertyChanged(nameof(TotalBytes));
         OnPropertyChanged(nameof(State));
         OnPropertyChanged(nameof(InterruptReason));
+        OnPropertyChanged(nameof(SpeedBytesPerSec));
+        OnPropertyChanged(nameof(EstimatedSecondsRemaining));
+        OnPropertyChanged(nameof(CanResume));
+        OnPropertyChanged(nameof(IsFinalizationDelayed));
         NotifyDerivedProperties();
     }
 
@@ -123,7 +148,21 @@ public class DownloadEntry : INotifyPropertyChanged
     }
 
     protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    {
+        var handler = PropertyChanged;
+        if (handler == null) return;
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            _ = dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.DataBind,
+                () => handler(this, new PropertyChangedEventArgs(propertyName)));
+            return;
+        }
+
+        handler(this, new PropertyChangedEventArgs(propertyName));
+    }
 
     [JsonIgnore]
     public bool IsIncognito { get; set; }
@@ -169,6 +208,21 @@ public class DownloadEntry : INotifyPropertyChanged
                 _canResume = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(CanResumeAction));
+            }
+        }
+    }
+
+    [JsonIgnore]
+    public bool IsFinalizationDelayed
+    {
+        get => _isFinalizationDelayed;
+        set
+        {
+            if (_isFinalizationDelayed != value)
+            {
+                _isFinalizationDelayed = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(StatusDisplay));
             }
         }
     }
@@ -261,7 +315,9 @@ public class DownloadEntry : INotifyPropertyChanged
                 {
                     if (BytesReceived >= TotalBytes)
                     {
-                        return $"⏳ 100% · Finalizando y verificando... ({FormatSize(TotalBytes)})";
+                        return IsFinalizationDelayed
+                            ? $"⏳ 100% · Esperando análisis de Windows ({FormatSize(TotalBytes)})"
+                            : $"⏳ 100% · Finalizando y verificando ({FormatSize(TotalBytes)})";
                     }
 
                     string etaPart = EstimatedSecondsRemaining.HasValue && EstimatedSecondsRemaining.Value >= 1
@@ -588,11 +644,13 @@ public class DownloadStore
         string? interruptReason = null,
         bool canResume = false,
         double? estimatedSecondsRemaining = null,
-        DateTime? nowUtc = null)
+        DateTime? nowUtc = null,
+        bool isFinalizationDelayed = false)
     {
         Load();
         bool shouldFlush = false;
         DateTime utcNow = nowUtc ?? DateTime.UtcNow;
+        DownloadEntry? entryToNotify = null;
 
         lock (_lock)
         {
@@ -600,19 +658,25 @@ public class DownloadStore
             if (entry == null) return;
 
             long clampedReceived = Math.Max(0, bytesReceived);
+            long nextTotal = entry.TotalBytes;
             if (totalBytes > 0)
-                entry.TotalBytes = totalBytes;
-            else if (state == "Completado" && clampedReceived > entry.TotalBytes)
-                entry.TotalBytes = clampedReceived;
+                nextTotal = totalBytes;
+            else if (state == "Completado" && clampedReceived > nextTotal)
+                nextTotal = clampedReceived;
 
-            entry.BytesReceived = clampedReceived;
+            string? nextReason = entry.InterruptReason;
             if (!string.IsNullOrWhiteSpace(interruptReason) || state == "En progreso" || state == "Completado")
             {
-                entry.InterruptReason = state == "Interrumpido" || state == "Error" ? interruptReason : null;
+                nextReason = (state == "Interrumpido" || state == "Error") ? interruptReason : null;
             }
+
+            double nextSpeed;
+            double? nextEta;
+            bool nextCanResume;
 
             if (state == "En progreso")
             {
+                bool justResetDueToStall = false;
                 if (!_speedTrackers.TryGetValue(id, out var tracker))
                 {
                     tracker = new SpeedTracker { LastUtc = utcNow, LastBytes = clampedReceived };
@@ -624,35 +688,50 @@ public class DownloadStore
                     if (dt >= 0.15)
                     {
                         long dBytes = Math.Max(0, clampedReceived - tracker.LastBytes);
-                        double instSpeed = dBytes / dt;
-                        tracker.EmaBytesPerSec = tracker.EmaBytesPerSec <= 0
-                            ? instSpeed
-                            : (tracker.EmaBytesPerSec * 0.65) + (instSpeed * 0.35);
-                        tracker.LastUtc = utcNow;
-                        tracker.LastBytes = clampedReceived;
+                        if (dBytes > 0)
+                        {
+                            double instSpeed = dBytes / dt;
+                            tracker.EmaBytesPerSec = tracker.EmaBytesPerSec <= 0
+                                ? instSpeed
+                                : (tracker.EmaBytesPerSec * 0.65) + (instSpeed * 0.35);
+                            tracker.LastUtc = utcNow;
+                            tracker.LastBytes = clampedReceived;
+                        }
+                        else if (dt >= 1.2)
+                        {
+                            if (tracker.EmaBytesPerSec > 0)
+                                justResetDueToStall = true;
+                            tracker.EmaBytesPerSec = 0;
+                            tracker.LastUtc = utcNow;
+                            tracker.LastBytes = clampedReceived;
+                        }
                     }
                 }
 
-                entry.SpeedBytesPerSec = tracker.EmaBytesPerSec;
-                if (estimatedSecondsRemaining.HasValue)
+                nextSpeed = tracker.EmaBytesPerSec;
+                if (justResetDueToStall)
                 {
-                    entry.EstimatedSecondsRemaining = estimatedSecondsRemaining.Value;
+                    nextEta = null;
                 }
-                else if (entry.TotalBytes > entry.BytesReceived && tracker.EmaBytesPerSec > 64)
+                else if (estimatedSecondsRemaining.HasValue)
                 {
-                    entry.EstimatedSecondsRemaining = (entry.TotalBytes - entry.BytesReceived) / tracker.EmaBytesPerSec;
+                    nextEta = estimatedSecondsRemaining.Value;
+                }
+                else if (nextTotal > clampedReceived && tracker.EmaBytesPerSec > 64)
+                {
+                    nextEta = (nextTotal - clampedReceived) / tracker.EmaBytesPerSec;
                 }
                 else
                 {
-                    entry.EstimatedSecondsRemaining = null;
+                    nextEta = null;
                 }
-                entry.CanResume = false;
+                nextCanResume = false;
             }
             else
             {
-                entry.SpeedBytesPerSec = 0;
-                entry.EstimatedSecondsRemaining = null;
-                entry.CanResume = canResume;
+                nextSpeed = 0;
+                nextEta = null;
+                nextCanResume = canResume;
                 if (state != "Pausado")
                 {
                     _speedTrackers.Remove(id);
@@ -660,13 +739,19 @@ public class DownloadStore
             }
 
             bool stateChanged = entry.State != state;
-            entry.State = state;
-            entry.NotifyProgressUpdated();
+            bool effectiveDelayed = state == "En progreso" && nextTotal > 0 && clampedReceived >= nextTotal && isFinalizationDelayed;
+            entry.ApplyProgressSnapshot(clampedReceived, nextTotal, state, nextReason, nextCanResume, nextSpeed, nextEta, effectiveDelayed);
+            entryToNotify = entry;
 
             if (stateChanged && state != "En progreso" && state != "Pausado" && !entry.IsIncognito)
             {
                 shouldFlush = true;
             }
+        }
+
+        if (entryToNotify != null)
+        {
+            DispatchEntryProgressNotification(entryToNotify);
         }
 
         if (shouldFlush)
@@ -675,6 +760,20 @@ public class DownloadStore
         }
 
         DownloadsChanged?.Invoke();
+    }
+
+    private static void DispatchEntryProgressNotification(DownloadEntry entry)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            _ = dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.DataBind,
+                entry.NotifyProgressUpdated);
+            return;
+        }
+
+        entry.NotifyProgressUpdated();
     }
 
     public List<DownloadEntry> GetEntries(string? searchFilter = null)
@@ -769,6 +868,64 @@ public class DownloadStore
         }
     }
 
+    public void ReconcileOrphanedActiveEntries(IReadOnlySet<string> liveActiveIds)
+    {
+        Load();
+        List<DownloadEntry> staleEntries;
+        lock (_lock)
+        {
+            staleEntries = _entries
+                .Where(e => e.IsActive && !liveActiveIds.Contains(e.Id))
+                .ToList();
+        }
+
+        foreach (var entry in staleEntries)
+        {
+            ReconcileSingleOrphanEntry(entry.Id);
+        }
+    }
+
+    public void ReconcileSingleOrphanEntry(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return;
+        Load();
+        string targetState = "Interrumpido";
+        long received;
+        long total;
+        string? filePath;
+
+        lock (_lock)
+        {
+            var entry = _entries.FirstOrDefault(e => e.Id == id);
+            if (entry == null || !entry.IsActive) return;
+            received = entry.BytesReceived;
+            total = entry.TotalBytes;
+            filePath = entry.FilePath;
+        }
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+            {
+                long diskLen = new FileInfo(filePath).Length;
+                if (diskLen > 0 && (total <= 0 || diskLen >= total))
+                {
+                    targetState = "Completado";
+                    received = diskLen;
+                    total = total > 0 ? total : diskLen;
+                }
+            }
+        }
+        catch { }
+
+        UpdateDownloadProgress(
+            id,
+            received,
+            total,
+            targetState,
+            targetState == "Completado" ? null : "Finalizada");
+    }
+
     public void DeleteEntry(string id)
     {
         Load();
@@ -836,6 +993,9 @@ public static class DownloadManager
     public static long SafeBytesFromUlong(ulong? raw)
         => DownloadStore.SafeBytesFromUlong(raw);
 
+    public static string SanitizeFileName(string? suggestedFileName, string? fallbackUrl = null)
+        => DownloadStore.SanitizeFileName(suggestedFileName, fallbackUrl);
+
     public static string SanitizeAndMakeUniquePath(
         string targetDirectory,
         string? suggestedFileName,
@@ -857,8 +1017,9 @@ public static class DownloadManager
         string state,
         string? interruptReason = null,
         bool canResume = false,
-        double? estimatedSecondsRemaining = null)
-        => _store.UpdateDownloadProgress(id, bytesReceived, totalBytes, state, interruptReason, canResume, estimatedSecondsRemaining);
+        double? estimatedSecondsRemaining = null,
+        bool isFinalizationDelayed = false)
+        => _store.UpdateDownloadProgress(id, bytesReceived, totalBytes, state, interruptReason, canResume, estimatedSecondsRemaining, isFinalizationDelayed: isFinalizationDelayed);
 
     public static List<DownloadEntry> GetEntries(string? searchFilter = null)
         => _store.GetEntries(searchFilter);
@@ -871,6 +1032,12 @@ public static class DownloadManager
 
     public static void CancelAllActive()
         => _store.CancelAllActive();
+
+    public static void ReconcileOrphanedActiveEntries(IReadOnlySet<string> liveActiveIds)
+        => _store.ReconcileOrphanedActiveEntries(liveActiveIds);
+
+    public static void ReconcileSingleOrphanEntry(string id)
+        => _store.ReconcileSingleOrphanEntry(id);
 
     public static void DeleteEntry(string id)
         => _store.DeleteEntry(id);

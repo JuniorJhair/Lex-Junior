@@ -96,5 +96,29 @@ public class OmniboxSuggestionTests
         string? matchSpace = OmniboxSuggestionService.GetInlineAutocompleteMatch("you ", history, bookmarks);
         Assert.Null(matchSpace);
     }
+
+    [Fact]
+    public void NormalizePastedAddressBarText_PreservesAllLinesAndStripsZeroWidth()
+    {
+        string pasted = "  primera linea\r\n\tsegunda\u200B linea\n\ntercera\u00A0linea  ";
+        string normalized = OmniboxInputResolver.NormalizePastedAddressBarText(pasted);
+        Assert.Equal("primera linea segunda linea tercera linea", normalized);
+
+        string resolved = OmniboxInputResolver.ResolveNavigationTarget(pasted, q => $"https://www.google.com/search?q={System.Uri.EscapeDataString(q)}");
+        Assert.Equal("https://www.google.com/search?q=primera%20linea%20segunda%20linea%20tercera%20linea", resolved);
+    }
+
+    [Theory]
+    [InlineData("3.14", false)]
+    [InlineData("v2.0", false)]
+    [InlineData("1.2.3", false)]
+    [InlineData("github.com/dotnet/runtime", true)]
+    [InlineData("localhost:3000", true)]
+    [InlineData("192.168.1.1:8080", true)]
+    [InlineData("intranet:9000", true)]
+    public void LooksLikeUrlOrDomain_DistinguishesNumbersFromRealHosts(string input, bool expectedIsUrl)
+    {
+        Assert.Equal(expectedIsUrl, OmniboxSuggestionService.LooksLikeUrlOrDomain(input));
+    }
 }
 

@@ -211,5 +211,114 @@ public class DownloadStoreTests : IDisposable
         Assert.DoesNotContain("Finalizando", entry.StatusDisplay);
         Assert.False(store.GetActiveSummary().HasActive);
     }
+
+    [Fact]
+    public void StalledDownload_ResetsSpeedAndEtaInsteadOfFreezing()
+    {
+        var store = new DownloadStore(_downloadsFilePath);
+        var entry = store.RegisterDownload("iso.zip", @"C:\Downloads\iso.zip", "https://example.com/iso.zip", 10_000_000);
+        DateTime t0 = DateTime.UtcNow.AddSeconds(1);
+
+        store.UpdateDownloadProgress(entry.Id, 500_000, 10_000_000, "En progreso", estimatedSecondsRemaining: 19, nowUtc: t0);
+        store.UpdateDownloadProgress(entry.Id, 1_000_000, 10_000_000, "En progreso", estimatedSecondsRemaining: 18, nowUtc: t0.AddSeconds(1));
+        Assert.True(entry.SpeedBytesPerSec > 0);
+        Assert.NotNull(entry.EstimatedSecondsRemaining);
+
+        // Sin progreso durante >= 1.2s: no debe quedarse congelado en la última velocidad/ETA
+        store.UpdateDownloadProgress(entry.Id, 1_000_000, 10_000_000, "En progreso", estimatedSecondsRemaining: null, nowUtc: t0.AddSeconds(2.5));
+        Assert.Equal(0, entry.SpeedBytesPerSec);
+        Assert.Null(entry.EstimatedSecondsRemaining);
+    }
+
+    [Fact]
+    public void BrowserSettings_AskWhereToSaveDownloads_DefaultsTrue()
+    {
+        var defaults = new BrowserSettings();
+        Assert.True(defaults.AskWhereToSaveDownloads);
+        Assert.Equal(string.Empty, defaults.DefaultDownloadDirectory);
+        string effective = SettingsManager.GetEffectiveDownloadDirectory("");
+        Assert.False(string.IsNullOrWhiteSpace(effective));
+    }
+
+    [Fact]
+    public void ReconcileOrphanedActiveEntries_ClearsStaleActiveAndMarksCompleteFilesOnDisk()
+    {
+        var store = new DownloadStore(_downloadsFilePath);
+        string doneFile = Path.Combine(_tempDir, "done_ok.bin");
+        File.WriteAllBytes(doneFile, new byte[512]);
+        string goneFile = Path.Combine(_tempDir, "vanished.bin");
+
+        var orphanDone = store.RegisterDownload("done_ok.bin", doneFile, "https://example.com/done.bin", 512, "En progreso");
+        var orphanGone = store.RegisterDownload("vanished.bin", goneFile, "https://example.com/vanished.bin", 1024, "En progreso");
+        var trulyLive = store.RegisterDownload("live.bin", Path.Combine(_tempDir, "live.bin"), "https://example.com/live.bin", 2048, "En progreso");
+
+        Assert.Equal(3, store.GetActiveSummary().ActiveCount);
+
+        store.ReconcileOrphanedActiveEntries(new System.Collections.Generic.HashSet<string> { trulyLive.Id });
+
+        Assert.Equal("Completado", orphanDone.State);
+        Assert.Equal("Interrumpido", orphanGone.State);
+        Assert.Equal("En progreso", trulyLive.State);
+        Assert.Equal(1, store.GetActiveSummary().ActiveCount);
+
+        store.ReconcileOrphanedActiveEntries(new System.Collections.Generic.HashSet<string>());
+        Assert.False(store.GetActiveSummary().HasActive);
+    }
+
+    [Fact]
+    public void ShouldPromptActiveDownloadsOnClose_OnlyPromptsOnLastMainWindowWhenNotRestarting()
+    {
+        Assert.False(LexBrowser.MainWindow.ShouldPromptActiveDownloadsOnClose(isRestartingProcess: true, hasActiveDownloads: true, remainingOtherMainWindows: 0));
+        Assert.False(LexBrowser.MainWindow.ShouldPromptActiveDownloadsOnClose(isRestartingProcess: false, hasActiveDownloads: false, remainingOtherMainWindows: 0));
+        Assert.False(LexBrowser.MainWindow.ShouldPromptActiveDownloadsOnClose(isRestartingProcess: false, hasActiveDownloads: true, remainingOtherMainWindows: 1));
+        Assert.True(LexBrowser.MainWindow.ShouldPromptActiveDownloadsOnClose(isRestartingProcess: false, hasActiveDownloads: true, remainingOtherMainWindows: 0));
+    }
+
+    [Fact]
+    public void EvaluateStalledAt100Download_CompletesWhenFileIsReadyOnDisk_AndFlagsSecurityWaitAfter15s()
+    {
+        string readyPath = Path.Combine(_tempDir, "AnyDesk.exe");
+        File.WriteAllBytes(readyPath, new byte[4096]);
+
+        // Antes de 2s espera normalmente a WebView2 sin precipitarse
+        Assert.Equal(
+            LexBrowser.MainWindow.StalledAt100Action.KeepWaiting,
+            LexBrowser.MainWindow.EvaluateStalledAt100Download(readyPath, 4096, elapsedAt100Ms: 1200));
+
+        // Tras >= 2s al 100%, si el archivo definitivo ya existe íntegro y legible en disco, completa sin quedarse congelado
+        Assert.Equal(
+            LexBrowser.MainWindow.StalledAt100Action.CompleteFromDisk,
+            LexBrowser.MainWindow.EvaluateStalledAt100Download(readyPath, 4096, elapsedAt100Ms: 2200));
+
+        // Si el archivo aún está bloqueado en escritura, sigue esperando y tras 15s muestra aviso claro de Windows
+        Assert.Equal(
+            LexBrowser.MainWindow.StalledAt100Action.KeepWaiting,
+            LexBrowser.MainWindow.EvaluateStalledAt100Download(
+                readyPath, 4096, elapsedAt100Ms: 5000,
+                fileExists: _ => true, getFileLength: _ => 4096, canOpenForSharedRead: _ => false));
+
+        Assert.Equal(
+            LexBrowser.MainWindow.StalledAt100Action.ShowSecurityVerificationHint,
+            LexBrowser.MainWindow.EvaluateStalledAt100Download(
+                Path.Combine(_tempDir, "missing.exe"), 4096, elapsedAt100Ms: 16000));
+    }
+
+    [Fact]
+    public void DownloadEntry_FinalizationDelayFlag_UpdatesStatusAndClearsOnCompletion()
+    {
+        var store = new DownloadStore(_downloadsFilePath);
+        var entry = store.RegisterDownload("AnyDesk.exe", @"C:\Downloads\AnyDesk.exe", "https://anydesk.com/AnyDesk.exe", 4096);
+
+        store.UpdateDownloadProgress(entry.Id, 4096, 4096, "En progreso", isFinalizationDelayed: false);
+        Assert.Contains("Finalizando y verificando", entry.StatusDisplay);
+
+        store.UpdateDownloadProgress(entry.Id, 4096, 4096, "En progreso", isFinalizationDelayed: true);
+        Assert.True(entry.IsFinalizationDelayed);
+        Assert.Contains("Esperando análisis de Windows", entry.StatusDisplay);
+
+        store.UpdateDownloadProgress(entry.Id, 4096, 4096, "Completado");
+        Assert.False(entry.IsFinalizationDelayed);
+        Assert.DoesNotContain("Esperando análisis", entry.StatusDisplay);
+    }
 }
 

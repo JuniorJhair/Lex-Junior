@@ -7,7 +7,9 @@ namespace LexBrowser.UI.Views;
 
 public partial class LexClassComingSoonDialog : Window
 {
-    public const string VirtualUrl = "https://class.lex.local/index.html";
+    public const string VirtualUrl = LexClassStudioService.HomeUrl;
+
+    public bool LaunchLexClassRequested { get; private set; }
 
     public LexClassComingSoonDialog()
     {
@@ -19,44 +21,14 @@ public partial class LexClassComingSoonDialog : Window
             if (e.Key == Key.Escape)
             {
                 e.Handled = true;
-                DialogResult = true;
+                DialogResult = false;
                 Close();
             }
         };
     }
 
-    public static bool IsLexClassUrl(string? rawInput)
-    {
-        if (string.IsNullOrWhiteSpace(rawInput))
-            return false;
-
-        string trimmed = rawInput.Trim();
-        if (trimmed.Equals("lex://class", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals("lex://class/", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Equals("lex:class", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
-        {
-            if (uri.Scheme.Equals("lex", StringComparison.OrdinalIgnoreCase) &&
-                (uri.Host.Equals("class", StringComparison.OrdinalIgnoreCase) ||
-                 uri.AbsolutePath.Trim('/').Equals("class", StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-
-            if ((uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) ||
-                 uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)) &&
-                uri.Host.Equals("class.lex.local", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    public static bool IsLexClassUrl(string? rawInput) =>
+        LexClassStudioService.IsClassUrl(rawInput);
 
     public void UpdateThemeStyles(string? theme = null)
     {
@@ -64,9 +36,30 @@ public partial class LexClassComingSoonDialog : Window
         BrowserThemeManager.ApplyThemePalette(Resources, target);
     }
 
+    private void BtnOpenLexClass_Click(object sender, RoutedEventArgs e)
+    {
+        LaunchLexClassRequested = true;
+        DialogResult = true;
+        Close();
+    }
+
+    private void BtnInstallDesktopShortcut_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var installer = new InstallerWindow(isUninstallMode: false, isLexClassMode: true, shutdownOnComplete: false)
+            {
+                Owner = this
+            };
+            installer.ShowDialog();
+        }
+        catch { }
+    }
+
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
-        DialogResult = true;
+        LaunchLexClassRequested = false;
+        DialogResult = false;
         Close();
     }
 

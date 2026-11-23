@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lex Class · Universo de Mundos</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div id="app-root"></div>
+  <div id="aria-live" class="sr" aria-live="polite"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <dialog id="modal-pasos" aria-labelledby="pasos-titulo"></dialog>
+  <script src="assets/app.js" defer></script>
+  <script>
+    if (location.hostname === 'class.lex.local') {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          regs.forEach(function (r) { r.unregister().catch(function () {}); });
+        }).catch(function () {});
+      }
+      if ('caches' in window && caches.keys) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (k) { caches.delete(k).catch(function () {}); });
+        }).catch(function () {});
+      }
+    } else if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').catch(function () {});
+      });
+    }
+  </script>
+</body>
+</html>

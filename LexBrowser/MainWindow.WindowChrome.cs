@@ -24,7 +24,10 @@ namespace LexBrowser;
 public partial class MainWindow
 {
     private bool _isApplyingNormalBounds = false;
+    private bool _pendingManualRestoreBounds = false;
     private bool _shieldBadgeUpdatePending = false;
+    private DispatcherTimer? _snapLayoutsOpenTimer;
+    private DispatcherTimer? _snapLayoutsCloseTimer;
 
     private static readonly FieldInfo? WebView2BaseField =
         typeof(WebView2).GetField("m_webview2Base", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -36,7 +39,13 @@ public partial class MainWindow
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        int style = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_STYLE);
+        if ((style & NativeMethods.WS_MAXIMIZEBOX) == 0)
+        {
+            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_STYLE, style | NativeMethods.WS_MAXIMIZEBOX);
+        }
+        var source = HwndSource.FromHwnd(hwnd);
         source?.AddHook(WorkAreaHook);
     }
 
@@ -44,7 +53,6 @@ public partial class MainWindow
     {
         const int WM_GETMINMAXINFO = 0x0024;
         if (msg != WM_GETMINMAXINFO) return IntPtr.Zero;
-        if (WindowChrome.GetWindowChrome(this) == null) return IntPtr.Zero; // pantalla completa real
 
         var monitor = NativeMethods.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
         if (monitor == IntPtr.Zero) return IntPtr.Zero;
@@ -52,11 +60,14 @@ public partial class MainWindow
         var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
         if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return IntPtr.Zero;
 
+        bool useFullMonitorBounds = _fullScreenChromeActive || _isBrowserF11FullScreen || WindowChrome.GetWindowChrome(this) == null;
+        var targetRect = useFullMonitorBounds ? info.rcMonitor : info.rcWork;
+
         var mmi = Marshal.PtrToStructure<NativeMethods.MINMAXINFO>(lParam);
-        mmi.ptMaxPosition.x = info.rcWork.left - info.rcMonitor.left;
-        mmi.ptMaxPosition.y = info.rcWork.top - info.rcMonitor.top;
-        mmi.ptMaxSize.x = info.rcWork.right - info.rcWork.left;
-        mmi.ptMaxSize.y = info.rcWork.bottom - info.rcWork.top;
+        mmi.ptMaxPosition.x = targetRect.left - info.rcMonitor.left;
+        mmi.ptMaxPosition.y = targetRect.top - info.rcMonitor.top;
+        mmi.ptMaxSize.x = targetRect.right - targetRect.left;
+        mmi.ptMaxSize.y = targetRect.bottom - targetRect.top;
 
         uint dpi = NativeMethods.GetDpiForWindow(hwnd);
         double scale = dpi > 0 ? dpi / 96.0 : 1.0;
@@ -123,8 +134,10 @@ public partial class MainWindow
 
     private void BtnMaximize_Click(object sender, RoutedEventArgs e)
     {
+        CloseSnapLayoutsPopupImmediate();
         if (WindowState == WindowState.Maximized)
         {
+            _pendingManualRestoreBounds = true;
             WindowState = WindowState.Normal;
             BtnMaxRestore.Content = "□";
         }
@@ -143,15 +156,21 @@ public partial class MainWindow
 
     private void MainWindow_StateChanged(object? sender, EventArgs e)
     {
+        CloseSnapLayoutsPopupImmediate();
         UpdateWindowMargin();
         if (WindowState == WindowState.Maximized)
         {
+            _pendingManualRestoreBounds = false;
             BtnMaxRestore.Content = "❐";
         }
         else if (WindowState == WindowState.Normal)
         {
             BtnMaxRestore.Content = "□";
-            ApplyRestoredWindowBounds();
+            if (_pendingManualRestoreBounds)
+            {
+                _pendingManualRestoreBounds = false;
+                ApplyRestoredWindowBounds();
+            }
         }
         UpdateResponsiveToolbarLayout();
 
@@ -166,6 +185,223 @@ public partial class MainWindow
                 catch { }
             }
         }
+    }
+
+    private bool IsCursorOverSnapElement(FrameworkElement? element, int expandTopPx = 0, int expandBottomPx = 0, int expandSidePx = 4)
+    {
+        if (element == null || !element.IsVisible) return false;
+        if (!NativeMethods.GetCursorPos(out var pt)) return false;
+
+        try
+        {
+            var topLeft = element.PointToScreen(new Point(0, 0));
+            var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
+            double minX = Math.Min(topLeft.X, bottomRight.X) - expandSidePx;
+            double maxX = Math.Max(topLeft.X, bottomRight.X) + expandSidePx;
+            double minY = Math.Min(topLeft.Y, bottomRight.Y) - expandTopPx;
+            double maxY = Math.Max(topLeft.Y, bottomRight.Y) + expandBottomPx;
+            return pt.x >= minX && pt.x <= maxX && pt.y >= minY && pt.y <= maxY;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void BtnMaxRestore_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (IsLocked || WindowState == WindowState.Minimized || _fullScreenChromeActive || _isBrowserF11FullScreen)
+            return;
+
+        if (PopupSnapLayouts != null && PopupSnapLayouts.IsOpen)
+            return;
+
+        if (_snapLayoutsOpenTimer == null)
+        {
+            _snapLayoutsOpenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(360) };
+            _snapLayoutsOpenTimer.Tick += (_, _) =>
+            {
+                _snapLayoutsOpenTimer?.Stop();
+                if (!IsLocked && PopupSnapLayouts != null && !PopupSnapLayouts.IsOpen &&
+                    !_fullScreenChromeActive && !_isBrowserF11FullScreen && WindowState != WindowState.Minimized &&
+                    IsCursorOverSnapElement(BtnMaxRestore, expandTopPx: 8, expandBottomPx: 6, expandSidePx: 2))
+                {
+                    PopupSnapLayouts.IsOpen = true;
+                    EnsureSnapLayoutsCloseMonitorStarted();
+                }
+            };
+        }
+
+        if (!_snapLayoutsOpenTimer.IsEnabled)
+        {
+            _snapLayoutsOpenTimer.Start();
+        }
+    }
+
+    private void BtnMaxRestore_MouseLeave(object sender, MouseEventArgs e)
+    {
+        // Si el mouse apenas tocó el borde superior de WindowChrome (HTTOP) o el puente al popup, no cancelar ni parpadear
+        if (!IsCursorOverSnapElement(BtnMaxRestore, expandTopPx: 8, expandBottomPx: 6, expandSidePx: 2))
+        {
+            _snapLayoutsOpenTimer?.Stop();
+        }
+        ScheduleSnapLayoutsClose();
+    }
+
+    private void PopupSnapLayouts_MouseEnter(object sender, MouseEventArgs e)
+    {
+        // El monitor verifica coordenadas reales en pantalla al salir de ambos elementos
+    }
+
+    private void PopupSnapLayouts_MouseLeave(object sender, MouseEventArgs e)
+    {
+        ScheduleSnapLayoutsClose();
+    }
+
+    private void EnsureSnapLayoutsCloseMonitorStarted()
+    {
+        if (PopupSnapLayouts == null || !PopupSnapLayouts.IsOpen) return;
+
+        if (_snapLayoutsCloseTimer == null)
+        {
+            _snapLayoutsCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
+            _snapLayoutsCloseTimer.Tick += (_, _) =>
+            {
+                if (PopupSnapLayouts == null || !PopupSnapLayouts.IsOpen)
+                {
+                    _snapLayoutsCloseTimer?.Stop();
+                    return;
+                }
+
+                bool overBtn = IsCursorOverSnapElement(BtnMaxRestore, expandTopPx: 8, expandBottomPx: 10, expandSidePx: 4);
+                bool overPopup = IsCursorOverSnapElement(SnapLayoutsCard, expandTopPx: 10, expandBottomPx: 6, expandSidePx: 6);
+                if (!overBtn && !overPopup)
+                {
+                    _snapLayoutsCloseTimer?.Stop();
+                    PopupSnapLayouts.IsOpen = false;
+                }
+            };
+        }
+
+        if (!_snapLayoutsCloseTimer.IsEnabled)
+        {
+            _snapLayoutsCloseTimer.Start();
+        }
+    }
+
+    private void ScheduleSnapLayoutsClose()
+    {
+        EnsureSnapLayoutsCloseMonitorStarted();
+    }
+
+    internal void CloseSnapLayoutsPopupImmediate()
+    {
+        _snapLayoutsOpenTimer?.Stop();
+        _snapLayoutsCloseTimer?.Stop();
+        if (PopupSnapLayouts != null && PopupSnapLayouts.IsOpen)
+        {
+            PopupSnapLayouts.IsOpen = false;
+        }
+    }
+
+    internal static (int X, int Y, int Width, int Height) ComputeSnapZonePixels(
+        int workLeft,
+        int workTop,
+        int workWidth,
+        int workHeight,
+        double fracX,
+        double fracY,
+        double fracW,
+        double fracH,
+        int minWidthPx,
+        int minHeightPx)
+    {
+        if (workWidth <= 0 || workHeight <= 0)
+            return (workLeft, workTop, Math.Max(1, minWidthPx), Math.Max(1, minHeightPx));
+
+        int left = workLeft + (int)Math.Round(workWidth * Math.Clamp(fracX, 0.0, 1.0));
+        int top = workTop + (int)Math.Round(workHeight * Math.Clamp(fracY, 0.0, 1.0));
+        int right = workLeft + (int)Math.Round(workWidth * Math.Clamp(fracX + fracW, 0.0, 1.0));
+        int bottom = workTop + (int)Math.Round(workHeight * Math.Clamp(fracY + fracH, 0.0, 1.0));
+
+        int width = Math.Max(minWidthPx, right - left);
+        int height = Math.Max(minHeightPx, bottom - top);
+
+        if (left + width > workLeft + workWidth)
+            left = Math.Max(workLeft, (workLeft + workWidth) - width);
+        if (top + height > workTop + workHeight)
+            top = Math.Max(workTop, (workTop + workHeight) - height);
+
+        return (left, top, width, height);
+    }
+
+    private void BtnSnapZone_Click(object sender, RoutedEventArgs e)
+    {
+        CloseSnapLayoutsPopupImmediate();
+        if (sender is not Button btn || btn.Tag is not string rawTag) return;
+
+        string[] parts = rawTag.Split(',');
+        if (parts.Length != 4 ||
+            !double.TryParse(parts[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double fx) ||
+            !double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double fy) ||
+            !double.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double fw) ||
+            !double.TryParse(parts[3], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double fh))
+        {
+            return;
+        }
+
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        var monitor = NativeMethods.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        if (monitor == IntPtr.Zero) return;
+
+        var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+        if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return;
+
+        uint dpi = NativeMethods.GetDpiForWindow(hwnd);
+        double scale = dpi > 0 ? dpi / 96.0 : 1.0;
+        int minWPx = (int)Math.Ceiling(MinWidth * scale);
+        int minHPx = (int)Math.Ceiling(MinHeight * scale);
+
+        var (snapX, snapY, snapW, snapH) = ComputeSnapZonePixels(
+            info.rcWork.left,
+            info.rcWork.top,
+            info.rcWork.Width,
+            info.rcWork.Height,
+            fx, fy, fw, fh,
+            minWPx, minHPx);
+
+        _pendingManualRestoreBounds = false;
+        _isApplyingNormalBounds = true;
+        try
+        {
+            if (WindowState == WindowState.Maximized)
+            {
+                WindowState = WindowState.Normal;
+            }
+
+            NativeMethods.SetWindowPos(
+                hwnd,
+                IntPtr.Zero,
+                snapX,
+                snapY,
+                snapW,
+                snapH,
+                NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+
+            UpdateWindowMargin();
+            UpdateResponsiveToolbarLayout();
+
+            if (_activeTab?.WebView != null && !_activeTab.IsDisposed)
+            {
+                try { GetController(_activeTab.WebView)?.NotifyParentWindowPositionChanged(); } catch { }
+            }
+        }
+        finally
+        {
+            _isApplyingNormalBounds = false;
+        }
+
+        RecordCurrentNormalBounds(saveToDisk: true);
     }
 
     private void MainWindow_SizeOrLocationChanged(object? sender, EventArgs e)
@@ -245,6 +481,9 @@ public partial class MainWindow
         // para garantizar que el Omnibox disponga siempre de amplio espacio (> 380px).
         bool isCompact = w < 1280;
         bool isUltraCompact = w < 760;
+
+        if (TxtLexClassBtnLabel != null)
+            TxtLexClassBtnLabel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
 
         if (TxtPipBtnLabel != null)
             TxtPipBtnLabel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
@@ -629,27 +868,19 @@ public partial class MainWindow
 
     private void UpdateWindowMargin()
     {
-        bool isFullscreen = _activeTab?.WebView?.CoreWebView2?.ContainsFullScreenElement ?? false;
-        if (WindowState == WindowState.Maximized && !isFullscreen && WindowChrome.GetWindowChrome(this) != null)
+        bool isFullscreen = _fullScreenChromeActive || _isBrowserF11FullScreen || IsTabInDomFullScreen(_activeTab);
+        RootWindowGrid.Margin = new Thickness(0);
+        if (AppWindowChrome != null)
         {
-            RootWindowGrid.Margin = new Thickness(0);
-            if (AppWindowChrome != null)
-            {
-                AppWindowChrome.ResizeBorderThickness = new Thickness(0);
-            }
-        }
-        else
-        {
-            RootWindowGrid.Margin = new Thickness(0);
-            if (AppWindowChrome != null)
-            {
-                AppWindowChrome.ResizeBorderThickness = new Thickness(6);
-            }
+            AppWindowChrome.CaptionHeight = isFullscreen ? 0 : 42;
+            AppWindowChrome.ResizeBorderThickness = (isFullscreen || WindowState == WindowState.Maximized)
+                ? new Thickness(0)
+                : new Thickness(6);
         }
 
         if (BrowserContainer != null)
         {
-            BrowserContainer.Margin = WindowState == WindowState.Normal
+            BrowserContainer.Margin = (!isFullscreen && WindowState == WindowState.Normal)
                 ? new Thickness(6, 0, 6, 6)
                 : new Thickness(0);
         }
@@ -878,11 +1109,42 @@ public partial class MainWindow
             {
                 Owner = this
             };
-            dlg.ShowDialog();
+            bool? accepted = dlg.ShowDialog();
+            if (accepted == true && dlg.LaunchLexClassRequested)
+            {
+                OpenOrFocusLexClassWindow();
+            }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[LexClass] Error al abrir adelanto de Lex Class: {ex}");
+            System.Diagnostics.Debug.WriteLine($"[LexClass] Error al abrir Lex Junior Class: {ex}");
+        }
+    }
+
+    internal void OpenOrFocusLexClassWindow()
+    {
+        if (IsLocked) return;
+
+        try
+        {
+            var existing = Application.Current.Windows.OfType<UI.Views.LexClassWindow>().FirstOrDefault();
+            if (existing != null)
+            {
+                if (existing.WindowState == WindowState.Minimized)
+                {
+                    existing.WindowState = WindowState.Normal;
+                }
+                existing.Activate();
+                existing.Focus();
+                return;
+            }
+
+            var classWindow = new UI.Views.LexClassWindow();
+            classWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LexClass] Error al lanzar ventana independiente: {ex}");
         }
     }
 

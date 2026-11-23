@@ -177,7 +177,27 @@ public static class OmniboxSuggestionService
             return true;
         }
 
-        return q.Contains('.') && !q.Contains(' ');
+        if (q.Contains(' '))
+            return false;
+
+        int slashIdx = q.IndexOf('/');
+        string authority = slashIdx >= 0 ? q.Substring(0, slashIdx) : q;
+        string hostPart = authority;
+        int colonIdx = authority.LastIndexOf(':');
+        bool hasPort = false;
+        if (colonIdx > 0 && colonIdx < authority.Length - 1 && !authority.Contains('['))
+        {
+            if (int.TryParse(authority.Substring(colonIdx + 1), out int parsedPort) && parsedPort is >= 1 and <= 65535)
+            {
+                hostPart = authority.Substring(0, colonIdx);
+                hasPort = true;
+            }
+        }
+
+        if (hasPort)
+            return OmniboxInputResolver.IsLikelyHostName(hostPart);
+
+        return hostPart.Contains('.') && OmniboxInputResolver.IsLikelyHostName(hostPart);
     }
 
     private static void AttachFaviconInBackground(OmniboxSuggestionItem item, string url, CancellationToken cancellationToken = default)
@@ -498,9 +518,11 @@ public static class OmniboxSuggestionService
         if (!SettingsManager.Current.EnableSearchSuggestions)
             return Array.Empty<string>();
 
-        string clean = (query ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(clean) || clean.Length < 1 || clean.Length > 100)
+        string clean = OmniboxInputResolver.NormalizePastedAddressBarText(query);
+        if (string.IsNullOrWhiteSpace(clean) || clean.Length < 1)
             return Array.Empty<string>();
+        if (clean.Length > 256)
+            clean = clean.Substring(0, 256).TrimEnd();
 
         // D3: Si el usuario está escribiendo una dirección web o dominio, no enviar la consulta al buscador
         if (LooksLikeUrlOrDomain(clean))

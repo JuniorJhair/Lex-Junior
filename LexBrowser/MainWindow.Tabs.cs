@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shell;
@@ -259,12 +260,254 @@ public partial class MainWindow
         }
     }
 
+    private bool _isBrowserF11FullScreen = false;
+    private bool _savedFullScreenBoundsCaptured = false;
+    private DispatcherTimer? _fullScreenExitHoverTimer;
+    private DateTime _fullScreenExitLastHoverUtc = DateTime.MinValue;
+
+    internal static bool IsYouTubeHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        string h = host.Trim().TrimEnd('.').ToLowerInvariant();
+        return h == "youtube.com" || h.EndsWith(".youtube.com", StringComparison.Ordinal) ||
+               h == "youtu.be" ||
+               h == "youtube-nocookie.com" || h.EndsWith(".youtube-nocookie.com", StringComparison.Ordinal);
+    }
+
+    internal static bool IsYouTubeTab(BrowserTab? tab)
+    {
+        if (tab == null || tab.IsDisposed) return false;
+        Uri? uri = tab.CurrentUri;
+        if (uri == null && !string.IsNullOrWhiteSpace(tab.Url))
+        {
+            Uri.TryCreate(tab.Url, UriKind.Absolute, out uri);
+        }
+        return uri != null && IsYouTubeHost(uri.Host);
+    }
+
+    internal static bool IsTabInDomFullScreen(BrowserTab? tab)
+    {
+        if (tab == null || tab.IsDisposed) return false;
+        try
+        {
+            return tab.WebView?.CoreWebView2?.ContainsFullScreenElement == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void RequestExitTabDomFullScreen(BrowserTab? tab)
+    {
+        if (tab == null || tab.IsDisposed) return;
+        var core = tab.WebView?.CoreWebView2;
+        if (core == null) return;
+        try
+        {
+            if (!core.ContainsFullScreenElement) return;
+            _ = core.ExecuteScriptAsync(
+                "try{if(document.fullscreenElement)document.exitFullscreen();else if(document.webkitFullscreenElement)document.webkitExitFullscreen();}catch{}");
+        }
+        catch { }
+    }
+
+    internal bool ShouldFullScreenChromeBeActive()
+        => _isBrowserF11FullScreen || IsTabInDomFullScreen(_activeTab);
+
+    private void UpdateFullScreenChromeState()
+        => ApplyFullScreenChrome(ShouldFullScreenChromeBeActive());
+
+    private void SchedulePostFullScreenExitChromeVerify()
+    {
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            await Task.Delay(180);
+            if (_isWindowClosing) return;
+            UpdateFullScreenChromeState();
+            if (_activeTab?.WebView != null && !_activeTab.IsDisposed)
+            {
+                try
+                {
+                    GetController(_activeTab.WebView)?.NotifyParentWindowPositionChanged();
+                }
+                catch { }
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    internal void ExitAllFullScreen()
+    {
+        _isBrowserF11FullScreen = false;
+        HideFullScreenExitPopupImmediate();
+        if (IsTabInDomFullScreen(_activeTab))
+        {
+            RequestExitTabDomFullScreen(_activeTab);
+        }
+        UpdateFullScreenChromeState();
+        SchedulePostFullScreenExitChromeVerify();
+    }
+
+    private void BtnExitFullScreen_Click(object sender, RoutedEventArgs e)
+        => ExitAllFullScreen();
+
+    private void SyncFullScreenExitHoverMonitor()
+    {
+        if (_fullScreenChromeActive && !_isWindowClosing)
+        {
+            if (_fullScreenExitHoverTimer == null)
+            {
+                _fullScreenExitHoverTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+                {
+                    Interval = TimeSpan.FromMilliseconds(90)
+                };
+                _fullScreenExitHoverTimer.Tick += FullScreenExitHoverTimer_Tick;
+            }
+            if (!_fullScreenExitHoverTimer.IsEnabled)
+            {
+                _fullScreenExitHoverTimer.Start();
+            }
+        }
+        else
+        {
+            HideFullScreenExitPopupImmediate();
+        }
+    }
+
+    internal void HideFullScreenExitPopupImmediate()
+    {
+        _fullScreenExitHoverTimer?.Stop();
+        if (PopupFullScreenExit != null && PopupFullScreenExit.IsOpen)
+        {
+            PopupFullScreenExit.IsOpen = false;
+        }
+    }
+
+    private void FullScreenExitHoverTimer_Tick(object? sender, EventArgs e)
+    {
+        if (!_fullScreenChromeActive || _isWindowClosing || !IsVisible || !IsActive || WindowState == WindowState.Minimized)
+        {
+            if (PopupFullScreenExit != null && PopupFullScreenExit.IsOpen)
+            {
+                PopupFullScreenExit.IsOpen = false;
+            }
+            if (!_fullScreenChromeActive)
+            {
+                _fullScreenExitHoverTimer?.Stop();
+            }
+            return;
+        }
+
+        if (PopupFullScreenExit == null || RootWindowGrid == null || !RootWindowGrid.IsVisible || RootWindowGrid.ActualWidth <= 0)
+            return;
+
+        if (!NativeMethods.GetCursorPos(out var pt))
+            return;
+
+        try
+        {
+            var topLeft = RootWindowGrid.PointToScreen(new Point(0, 0));
+            var topRight = RootWindowGrid.PointToScreen(new Point(RootWindowGrid.ActualWidth, 0));
+            double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
+            if (scale <= 0) scale = 1.0;
+
+            double centerX = (topLeft.X + topRight.X) * 0.5;
+            double topY = Math.Min(topLeft.Y, topRight.Y);
+
+            double dx = Math.Abs(pt.x - centerX);
+            double dy = pt.y - topY;
+
+            bool inTopTrigger = dy >= -2 && dy <= 14 * scale && dx <= 140 * scale;
+            bool inKeepStrip = dy >= -2 && dy <= 76 * scale && dx <= 165 * scale;
+            bool overCard = PopupFullScreenExit.IsOpen &&
+                            IsCursorOverSnapElement(FullScreenExitCard, expandTopPx: 14, expandBottomPx: 12, expandSidePx: 18);
+
+            if (inTopTrigger || (PopupFullScreenExit.IsOpen && (inKeepStrip || overCard)))
+            {
+                _fullScreenExitLastHoverUtc = DateTime.UtcNow;
+                if (!PopupFullScreenExit.IsOpen)
+                {
+                    PopupFullScreenExit.IsOpen = true;
+                }
+            }
+            else if (PopupFullScreenExit.IsOpen && (DateTime.UtcNow - _fullScreenExitLastHoverUtc).TotalMilliseconds >= 320)
+            {
+                PopupFullScreenExit.IsOpen = false;
+            }
+        }
+        catch { }
+    }
+
+    internal void ToggleBrowserFullScreen()
+    {
+        CloseOpenToolbarPopups();
+        bool domFullScreen = IsTabInDomFullScreen(_activeTab);
+
+        if (_isBrowserF11FullScreen)
+        {
+            // F11 siempre debe poder salir de pantalla completa sin quedar atrapado
+            _isBrowserF11FullScreen = false;
+            if (domFullScreen)
+            {
+                RequestExitTabDomFullScreen(_activeTab);
+            }
+            UpdateFullScreenChromeState();
+            SchedulePostFullScreenExitChromeVerify();
+            return;
+        }
+
+        if (domFullScreen)
+        {
+            // En sitios como YouTube: si el reproductor estaba en fullscreen DOM y el usuario pulsa F11,
+            // salir limpiamente del fullscreen del video sin invertir ni trabar el estado F11 global.
+            _isBrowserF11FullScreen = false;
+            RequestExitTabDomFullScreen(_activeTab);
+            UpdateFullScreenChromeState();
+            SchedulePostFullScreenExitChromeVerify();
+            return;
+        }
+
+        _isBrowserF11FullScreen = true;
+        UpdateFullScreenChromeState();
+    }
+
+    private void RestoreTabZoomAfterDomFullScreenExit(BrowserTab tab)
+    {
+        if (tab == null || tab.IsDisposed || tab.WebView == null) return;
+        if (!_preFullScreenZoomByTab.Remove(tab, out double preZoom)) return;
+        try { tab.WebView.ZoomFactor = preZoom; } catch { }
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            await Task.Delay(150);
+            var core = tab.WebView?.CoreWebView2;
+            if (!tab.IsDisposed && tab.WebView != null && core != null && !core.ContainsFullScreenElement)
+            {
+                try
+                {
+                    if (Math.Abs(tab.WebView.ZoomFactor - preZoom) > 0.01)
+                        tab.WebView.ZoomFactor = preZoom;
+                    GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
+                    UpdateZoomIndicatorUI(showFloating: false);
+                }
+                catch { }
+            }
+        });
+    }
+
     private void ApplyFullScreenChrome(bool enter)
     {
-        if (enter == _fullScreenChromeActive) return;
+        if (_isWindowClosing) return;
+
+        if (enter == _fullScreenChromeActive)
+        {
+            SyncFullScreenExitHoverMonitor();
+            return;
+        }
+
         _fullScreenChromeActive = enter;
 
         var targetTab = _activeTab;
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
 
         if (enter)
         {
@@ -274,26 +517,56 @@ public partial class MainWindow
                 catch { _preFullScreenZoomByTab[targetTab] = 1.0; }
             }
 
-            _savedWindowState = WindowState;
-            _savedResizeMode = ResizeMode;
+            if (!_savedFullScreenBoundsCaptured)
+            {
+                _savedWindowState = WindowState == WindowState.Minimized ? WindowState.Normal : WindowState;
+                _savedFullScreenBoundsCaptured = true;
+            }
 
             // Colapsar barras superiores completamente
             RowHeader.Height = new GridLength(0);
             RowNavBar.Height = new GridLength(0);
             RowBookmarksBar.Height = new GridLength(0);
+            RowBookmarksGrid.Visibility = Visibility.Collapsed;
             RowInfoBar.Height = new GridLength(0);
             RowProgressBar.Height = new GridLength(0);
 
-            // Eliminar WindowChrome durante fullscreen para evitar bordes negros o franjas de taskbar
-            WindowChrome.SetWindowChrome(this, null);
+            // Mantener AppWindowChrome adjunto (CaptionHeight=0, ResizeBorderThickness=0) en vez de
+            // SetWindowChrome(null) + ResizeMode.NoResize para evitar desmontar WindowChromeWorker en F11/Esc rápidos.
+            if (AppWindowChrome != null)
+            {
+                AppWindowChrome.CaptionHeight = 0;
+                AppWindowChrome.ResizeBorderThickness = new Thickness(0);
+            }
 
-            ResizeMode = ResizeMode.NoResize;
-            WindowState = WindowState.Normal;
-            WindowState = WindowState.Maximized;
+            if (WindowState != WindowState.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
+            else if (hwnd != IntPtr.Zero)
+            {
+                var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
+                var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+                if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
+                {
+                    NativeMethods.SetWindowPos(
+                        hwnd,
+                        IntPtr.Zero,
+                        info.rcMonitor.left,
+                        info.rcMonitor.top,
+                        info.rcMonitor.Width,
+                        info.rcMonitor.Height,
+                        NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
+                }
+            }
+
             UpdateWindowMargin();
+            SyncFullScreenExitHoverMonitor();
         }
         else
         {
+            SyncFullScreenExitHoverMonitor();
+
             // Restaurar barras del navegador (Auditoría E7: mantener barra en modo invitado)
             RowHeader.Height = new GridLength(42);
             RowNavBar.Height = new GridLength(50);
@@ -303,64 +576,131 @@ public partial class MainWindow
             RowInfoBar.Height = GridLength.Auto;
             RowProgressBar.Height = new GridLength(2);
 
-            // Restaurar WindowChrome normal
-            WindowChrome.SetWindowChrome(this, AppWindowChrome);
-
-            ResizeMode = _savedResizeMode;
+            if (AppWindowChrome != null)
+            {
+                AppWindowChrome.CaptionHeight = 42;
+            }
 
             if (_savedWindowState == WindowState.Maximized)
             {
-                WindowState = WindowState.Normal;
-                WindowState = WindowState.Maximized;
+                if (WindowState != WindowState.Maximized)
+                {
+                    WindowState = WindowState.Maximized;
+                }
+                else if (hwnd != IntPtr.Zero)
+                {
+                    var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
+                    var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+                    if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
+                    {
+                        NativeMethods.SetWindowPos(
+                            hwnd,
+                            IntPtr.Zero,
+                            info.rcWork.left,
+                            info.rcWork.top,
+                            info.rcWork.Width,
+                            info.rcWork.Height,
+                            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
+                    }
+                }
             }
             else
             {
                 WindowState = _savedWindowState;
             }
 
+            _savedFullScreenBoundsCaptured = false;
             UpdateWindowMargin();
-
-            if (targetTab != null && !targetTab.IsDisposed && targetTab.WebView != null)
-            {
-                bool hasPreZoom = false;
-                double preFullScreenZoom = 1.0;
-                bool isStillFs = targetTab.WebView.CoreWebView2?.ContainsFullScreenElement == true;
-                if (!isStillFs && _preFullScreenZoomByTab.Remove(targetTab, out preFullScreenZoom))
-                {
-                    hasPreZoom = true;
-                }
-
-                try
-                {
-                    if (hasPreZoom)
-                    {
-                        targetTab.WebView.ZoomFactor = preFullScreenZoom;
-                    }
-                    GetController(targetTab.WebView)?.NotifyParentWindowPositionChanged();
-                    UpdateZoomIndicatorUI(showFloating: false);
-                }
-                catch { }
-
-                _ = Dispatcher.InvokeAsync(async () =>
-                {
-                    await Task.Delay(150);
-                    var core = targetTab.WebView?.CoreWebView2;
-                    if (!targetTab.IsDisposed && targetTab.WebView != null && core != null && !core.ContainsFullScreenElement)
-                    {
-                        try
-                        {
-                            if (hasPreZoom && Math.Abs(targetTab.WebView.ZoomFactor - preFullScreenZoom) > 0.01)
-                            {
-                                targetTab.WebView.ZoomFactor = preFullScreenZoom;
-                            }
-                            GetController(targetTab.WebView)?.NotifyParentWindowPositionChanged();
-                            UpdateZoomIndicatorUI(showFloating: false);
-                        }
-                        catch { }
-                    }
-                });
-            }
         }
+
+        if (targetTab != null && !targetTab.IsDisposed && targetTab.WebView != null)
+        {
+            bool hasPreZoom = false;
+            double preFullScreenZoom = 1.0;
+            bool isStillFs = IsTabInDomFullScreen(targetTab);
+            if (!enter && !isStillFs && _preFullScreenZoomByTab.Remove(targetTab, out preFullScreenZoom))
+            {
+                hasPreZoom = true;
+            }
+
+            try
+            {
+                if (hasPreZoom)
+                {
+                    targetTab.WebView.ZoomFactor = preFullScreenZoom;
+                }
+                var ctrl = GetController(targetTab.WebView);
+                if (ctrl != null)
+                {
+                    if (!ctrl.IsVisible && targetTab == _activeTab) ctrl.IsVisible = true;
+                    ctrl.NotifyParentWindowPositionChanged();
+                }
+                if (!enter) UpdateZoomIndicatorUI(showFloating: false);
+            }
+            catch { }
+
+            _ = Dispatcher.InvokeAsync(() =>
+            {
+                if (!_isWindowClosing && !targetTab.IsDisposed && targetTab.WebView != null && _activeTab == targetTab)
+                {
+                    try
+                    {
+                        var core = targetTab.WebView.CoreWebView2;
+                        if (hasPreZoom && core != null && !core.ContainsFullScreenElement &&
+                            Math.Abs(targetTab.WebView.ZoomFactor - preFullScreenZoom) > 0.01)
+                        {
+                            targetTab.WebView.ZoomFactor = preFullScreenZoom;
+                        }
+                        var ctrl = GetController(targetTab.WebView);
+                        if (ctrl != null)
+                        {
+                            if (!ctrl.IsVisible) ctrl.IsVisible = true;
+                            ctrl.NotifyParentWindowPositionChanged();
+                        }
+                        targetTab.WebView.InvalidateVisual();
+                        if (!enter) UpdateZoomIndicatorUI(showFloating: false);
+                    }
+                    catch { }
+                }
+            }, DispatcherPriority.Loaded);
+        }
+    }
+
+    internal static bool ShouldOpenNewWindowAsPopup(bool hasPopupSize, bool isOAuthUrl, string? url, bool hasChromelessFeatures)
+    {
+        if (hasPopupSize || isOAuthUrl)
+            return true;
+
+        if (hasChromelessFeatures &&
+            (string.IsNullOrWhiteSpace(url) ||
+             string.Equals(url.Trim(), "about:blank", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    internal static bool ShouldTriggerAutoPiPOnTabSwitch(bool enableAutoVideoPip, BrowserTab? previousTab, BrowserTab? targetTab)
+    {
+        if (!enableAutoVideoPip ||
+            previousTab == null ||
+            targetTab == null ||
+            ReferenceEquals(previousTab, targetTab) ||
+            previousTab.IsDisposed ||
+            targetTab.IsDisposed)
+        {
+            return false;
+        }
+
+        if (!targetTab.IsNewTab &&
+            (string.IsNullOrWhiteSpace(targetTab.Url) ||
+             string.Equals(targetTab.Url.Trim(), "about:blank", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static bool IsSafeHttpUrl(string? url)
@@ -601,7 +941,7 @@ public partial class MainWindow
                     }
 
                     Key key = KeyInterop.KeyFromVirtualKey((int)args.VirtualKey);
-                    if (win.HandleBrowserShortcutKey(key, Keyboard.Modifiers, core))
+                    if (win.HandleBrowserShortcutKey(key, Keyboard.Modifiers, core, args.PhysicalKeyStatus.WasKeyDown != 0, deferWindowMutations: true))
                     {
                         args.Handled = true;
                     }
@@ -613,6 +953,7 @@ public partial class MainWindow
         try
         {
             core.Settings.AreDevToolsEnabled = true;
+            core.Settings.IsReputationCheckingRequired = SettingsManager.Current.EnableSmartScreen;
         }
         catch { }
 
@@ -632,7 +973,7 @@ public partial class MainWindow
             }
 
             Key actualKey = e.Key == Key.System ? e.SystemKey : e.Key;
-            if (win.HandleBrowserShortcutKey(actualKey, Keyboard.Modifiers, core))
+            if (win.HandleBrowserShortcutKey(actualKey, Keyboard.Modifiers, core, e.IsRepeat))
             {
                 e.Handled = true;
             }
@@ -689,16 +1030,29 @@ public partial class MainWindow
         core.ContainsFullScreenElementChanged += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
-            win.Dispatcher.Invoke(() =>
+            if (win._isWindowClosing || tab.IsDisposed) return;
+            _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
             {
-                bool enterFs = core.ContainsFullScreenElement;
+                if (win._isWindowClosing || tab.IsDisposed) return;
+                bool enterFs = false;
+                try { enterFs = core.ContainsFullScreenElement; } catch { }
+                if (enterFs && tab.WebView != null && !win._preFullScreenZoomByTab.ContainsKey(tab))
+                {
+                    try { win._preFullScreenZoomByTab[tab] = tab.WebView.ZoomFactor; }
+                    catch { win._preFullScreenZoomByTab[tab] = 1.0; }
+                }
+
                 if (win._activeTab == tab)
                 {
-                    win.ApplyFullScreenChrome(enterFs);
+                    win.UpdateFullScreenChromeState();
+                    if (!enterFs && win._isBrowserF11FullScreen)
+                    {
+                        win.RestoreTabZoomAfterDomFullScreenExit(tab);
+                    }
                 }
-                else if (!enterFs && win._preFullScreenZoomByTab.Remove(tab, out double bgZoom))
+                else if (!enterFs)
                 {
-                    try { tab.WebView.ZoomFactor = bgZoom; } catch { }
+                    win.RestoreTabZoomAfterDomFullScreenExit(tab);
                 }
             });
         };
@@ -707,9 +1061,10 @@ public partial class MainWindow
         core.WindowCloseRequested += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
-            win.Dispatcher.Invoke(() =>
+            if (win._isWindowClosing || tab.IsDisposed) return;
+            _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
             {
-                if (!tab.IsDisposed && win.Tabs.Count > 1)
+                if (!win._isWindowClosing && !tab.IsDisposed && win.Tabs.Count > 1 && !HasActiveDownloadForCore(core))
                 {
                     win.CloseTab(tab);
                 }
@@ -812,8 +1167,9 @@ public partial class MainWindow
                     {
                         ShieldLogger.LogForTab(tab, "NEW_WINDOW_CANCELLED", currentUri?.Host ?? "unknown", uri.AbsoluteUri, isFromSubframe ? "Subframe" : "MainFrame", blockReason, tabDesc);
                         e.Handled = true;
-                        win.Dispatcher.Invoke(() =>
+                        _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                         {
+                            if (win._isWindowClosing || tab.IsDisposed) return;
                             tab.RecordShieldBlock(ShieldBlockCategory.Popup);
                             if (win._activeTab == tab)
                                 win.UpdateShieldBadgeText();
@@ -824,27 +1180,36 @@ public partial class MainWindow
             }
 
             bool hasPopupSize = false;
+            bool hasChromelessFeatures = false;
             double? reqW = null;
             double? reqH = null;
             try
             {
-                if (e.WindowFeatures != null && e.WindowFeatures.HasSize)
+                if (e.WindowFeatures != null)
                 {
-                    hasPopupSize = true;
-                    reqW = e.WindowFeatures.Width;
-                    reqH = e.WindowFeatures.Height;
+                    if (e.WindowFeatures.HasSize)
+                    {
+                        hasPopupSize = true;
+                        reqW = e.WindowFeatures.Width;
+                        reqH = e.WindowFeatures.Height;
+                    }
+
+                    hasChromelessFeatures = !e.WindowFeatures.ShouldDisplayToolbar ||
+                                            !e.WindowFeatures.ShouldDisplayMenuBar ||
+                                            !e.WindowFeatures.ShouldDisplayStatus;
                 }
             }
             catch { }
 
-            ShieldLogger.LogForTab(tab, "NEW_WINDOW_ALLOWED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", isOAuthUrl ? "OAuth login window" : (hasPopupSize ? "Popup window with dimensions" : "User initiated new window"), tabDesc);
+            bool openAsPopup = ShouldOpenNewWindowAsPopup(hasPopupSize, isOAuthUrl, url, hasChromelessFeatures);
+            ShieldLogger.LogForTab(tab, "NEW_WINDOW_ALLOWED", currentUri?.Host ?? "unknown", url, isFromSubframe ? "Subframe" : "MainFrame", isOAuthUrl ? "OAuth login window" : (openAsPopup ? "Popup window" : "User initiated new window"), tabDesc);
 
             var deferral = e.GetDeferral();
             _ = win.Dispatcher.InvokeAsync(async () =>
             {
                 try
                 {
-                    if (hasPopupSize || isOAuthUrl)
+                    if (openAsPopup)
                     {
                         var popupWin = new OAuthPopupWindow(tab.IsIncognito, url, reqW, reqH)
                         {
@@ -1227,16 +1592,28 @@ public partial class MainWindow
             }
         };
 
-        // 3.2 Recuperación automática acotada si el proceso de renderizado de la pestaña falla inesperadamente
+        // 3.2 Recuperación automática acotada si el proceso de renderizado o navegador falla inesperadamente
         core.ProcessFailed += (s, e) =>
         {
             if (tab.IsDisposed) return;
-            if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited)
+            var win = tab.OwnerWindow ?? this;
+            if (win._isWindowClosing) return;
+
+            var kind = e.ProcessFailedKind;
+            ShieldLogger.LogForTab(
+                tab,
+                "WEBVIEW_PROCESS_FAILED",
+                tab.CurrentUri?.Host ?? "unknown",
+                tab.CurrentUri?.AbsoluteUri ?? string.Empty,
+                kind.ToString(),
+                $"Reason={e.Reason}");
+
+            if (kind == CoreWebView2ProcessFailedKind.RenderProcessExited ||
+                kind == CoreWebView2ProcessFailedKind.FrameRenderProcessExited)
             {
-                var win = tab.OwnerWindow ?? this;
                 _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                 {
-                    if (tab.IsDisposed) return;
+                    if (win._isWindowClosing || tab.IsDisposed) return;
 
                     var now = DateTime.UtcNow;
                     win.ResumeTab(tab);
@@ -1259,6 +1636,14 @@ public partial class MainWindow
                         win.OfferCompatibilityModeToast(tab, "La pestaña falló varias veces seguidas. Se detuvo la recarga automática.");
                     }
                     win.RescheduleSuspensionTimer();
+                });
+            }
+            else if (kind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
+            {
+                _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+                {
+                    if (win._isWindowClosing || win._activeTab != tab) return;
+                    win.ShowToast("El motor web se reinició inesperadamente. Recarga la pestaña para continuar.", durationSeconds: 5);
                 });
             }
         };
@@ -1606,9 +1991,9 @@ public partial class MainWindow
 
                     if (!isPaused && !clickedMinimize)
                     {
-                        win.Dispatcher.Invoke(() =>
+                        _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
                         {
-                            if (tab.IsDisposed || (win._nativePipSourceTab != null && win._nativePipSourceTab != tab && win._activeTab != tab)) return;
+                            if (win._isWindowClosing || tab.IsDisposed || (win._nativePipSourceTab != null && win._nativePipSourceTab != tab && win._activeTab != tab)) return;
                             if (win.WindowState == WindowState.Minimized)
                             {
                                 win.WindowState = WindowState.Normal;
@@ -1622,7 +2007,7 @@ public partial class MainWindow
                             if (root.TryGetProperty("isFullScreen", out var fsProp) && fsProp.GetBoolean())
                             {
                                 string restoreJson = JsonSerializer.Serialize(new { action = "restore_fullscreen" });
-                                core.PostWebMessageAsJson(restoreJson);
+                                try { core.PostWebMessageAsJson(restoreJson); } catch { }
                             }
                         });
                     }
@@ -1635,9 +2020,9 @@ public partial class MainWindow
                 {
                     if (win._nativePipSourceTab != tab && win._activeTab != tab) return;
                     LogPipEvent(e.WebMessageAsJson);
-                    win.Dispatcher.Invoke(() =>
+                    _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
                     {
-                        if (tab.IsDisposed) return;
+                        if (win._isWindowClosing || tab.IsDisposed) return;
                         if (win.WindowState == WindowState.Minimized)
                         {
                             win.WindowState = WindowState.Normal;
@@ -1651,7 +2036,7 @@ public partial class MainWindow
                         if (root.TryGetProperty("isFullScreen", out var fsProp) && fsProp.GetBoolean())
                         {
                             string restoreJson = JsonSerializer.Serialize(new { action = "restore_fullscreen" });
-                            core.PostWebMessageAsJson(restoreJson);
+                            try { core.PostWebMessageAsJson(restoreJson); } catch { }
                         }
                     });
                 }
@@ -1714,6 +2099,48 @@ public partial class MainWindow
                         });
                     }
                 }
+                else if (type == "newtab_suggest_req")
+                {
+                    if (!tab.IsNewTab || tab.IsIncognito || win._isGuestSession || win.IsLocked || !SettingsManager.Current.EnableSearchSuggestions)
+                        return;
+
+                    string src = e.Source ?? string.Empty;
+                    if (!src.Equals("about:blank", StringComparison.OrdinalIgnoreCase) &&
+                        !src.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    string query = root.TryGetProperty("query", out var qProp) ? (qProp.GetString() ?? "") : "";
+                    int seq = root.TryGetProperty("seq", out var seqProp) && seqProp.TryGetInt32(out int sv) ? sv : 0;
+                    string cleanQuery = OmniboxInputResolver.NormalizePastedAddressBarText(query);
+                    if (string.IsNullOrEmpty(cleanQuery)) return;
+
+                    string engineName = SettingsManager.Current.DefaultSearchEngine;
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var suggestions = await OmniboxSuggestionService.FetchSearchSuggestionsAsync(
+                                cleanQuery, engineName, System.Threading.CancellationToken.None);
+                            string payload = JsonSerializer.Serialize(new
+                            {
+                                seq,
+                                query = cleanQuery,
+                                items = suggestions
+                            });
+                            _ = win.Dispatcher.BeginInvoke(async () =>
+                            {
+                                if (tab.IsDisposed || !tab.IsNewTab || tab.WebView?.CoreWebView2 == null) return;
+                                try
+                                {
+                                    await tab.WebView.CoreWebView2.ExecuteScriptAsync(
+                                        $"window.__lexSetNewTabSuggestions && window.__lexSetNewTabSuggestions({payload});");
+                                }
+                                catch { }
+                            });
+                        }
+                        catch { }
+                    });
+                }
                 else if (type == "autofill_requested")
                 {
                     // Auditoría E5: Validar origen real (e.Source) y pestaña activa antes de autocompletar
@@ -1721,12 +2148,25 @@ public partial class MainWindow
                         return;
 
                     string actualSource = e.Source ?? string.Empty;
+                    Rect? inputRect = null;
+                    if (root.TryGetProperty("rect", out var rectProp) && rectProp.ValueKind == JsonValueKind.Object)
+                    {
+                        double l = rectProp.TryGetProperty("left", out var lp) && lp.TryGetDouble(out var lv) ? lv : 0;
+                        double t = rectProp.TryGetProperty("top", out var tp) && tp.TryGetDouble(out var tv) ? tv : 0;
+                        double r = rectProp.TryGetProperty("right", out var rp) && rp.TryGetDouble(out var rv) ? rv : l + 240;
+                        double b = rectProp.TryGetProperty("bottom", out var bp) && bp.TryGetDouble(out var bv) ? bv : t + 36;
+                        if (r > l && b > t)
+                        {
+                            inputRect = new Rect(l, t, r - l, b - t);
+                        }
+                    }
+
                     _ = win.Dispatcher.BeginInvoke(async () =>
                     {
                         if (tab.IsDisposed || win._activeTab != tab || win.IsLocked) return;
                         Uri? expectedUri = tab.CurrentUri ?? (Uri.TryCreate(core.Source, UriKind.Absolute, out var cu) ? cu : null);
                         if (!IsSecureOriginForPasswordMessage(actualSource, expectedUri)) return;
-                        await win.HandleAutofillRequestAsync(tab, actualSource);
+                        await win.HandleAutofillRequestAsync(tab, actualSource, inputRect);
                     });
                 }
                 else if (type == "password_submitted")
@@ -1793,110 +2233,191 @@ public partial class MainWindow
         {
             try
             {
-                var op = e.DownloadOperation;
-                string downloadsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-                if (!Directory.Exists(downloadsDir))
-                {
-                    try { Directory.CreateDirectory(downloadsDir); }
-                    catch { downloadsDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory); }
-                }
-
-                string suggestedName = !string.IsNullOrWhiteSpace(e.ResultFilePath)
-                    ? Path.GetFileName(e.ResultFilePath)
-                    : Path.GetFileName(op.ResultFilePath);
-                string resultPath = DownloadManager.SanitizeAndMakeUniquePath(downloadsDir, suggestedName, op.Uri);
-                e.ResultFilePath = resultPath;
-                e.Handled = true;
                 try { if (core.IsDefaultDownloadDialogOpen) core.CloseDefaultDownloadDialog(); } catch { }
 
-                string fileName = Path.GetFileName(resultPath);
-                long total = DownloadManager.SafeBytesFromUlong(op.TotalBytesToReceive);
-                bool isPrivate = tab.IsIncognito || tab.IsGuest;
-                var entry = DownloadManager.RegisterDownload(fileName, resultPath, op.Uri, total, "En progreso", isPrivate);
+                var op = e.DownloadOperation;
                 var win = tab.OwnerWindow ?? this;
-
-                entry.PauseAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() => { try { op.Pause(); } catch { } });
-                entry.ResumeAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() =>
-                {
-                    try
-                    {
-                        op.Resume();
-                        NotifyTrackedDownloadResumed();
-                    }
-                    catch { }
-                });
-                entry.CancelAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() => { try { op.Cancel(); } catch { } });
-                entry.RetryAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() =>
-                {
-                    try
-                    {
-                        if (!tab.IsDisposed && tab.WebView?.CoreWebView2 != null && !string.IsNullOrWhiteSpace(entry.Url))
-                        {
-                            tab.WebView.CoreWebView2.Navigate(entry.Url);
-                            return;
-                        }
-
-                        var host = Application.Current?.Windows.OfType<MainWindow>()
-                            .FirstOrDefault(w => !w._isWindowClosing && !w._isGuestSession);
-                        if (host != null && !string.IsNullOrWhiteSpace(entry.Url))
-                        {
-                            _ = host.AddNewTabAsync(entry.Url, isIncognito: entry.IsIncognito);
-                        }
-                    }
-                    catch { }
-                });
+                string rawSuggested = !string.IsNullOrWhiteSpace(e.ResultFilePath)
+                    ? Path.GetFileName(e.ResultFilePath)
+                    : Path.GetFileName(op.ResultFilePath);
+                string suggestedName = DownloadManager.SanitizeFileName(rawSuggested, op.Uri);
+                var deferral = e.GetDeferral();
 
                 _ = win.Dispatcher.BeginInvoke(() =>
                 {
-                    win.UpdateDownloadsToolbarIndicator();
-                    if (win.PopupDownloads != null && win.PopupDownloads.IsOpen)
-                        win.RefreshDownloadsPopupUI();
-
-                    win.ShowToast($"⬇️ Descargando: {fileName}", "Ver descargas", () =>
-                    {
-                        win.RefreshDownloadsPopupUI();
-                        if (win.PopupDownloads != null) win.PopupDownloads.IsOpen = true;
-                    }, durationSeconds: 4);
-                });
-
-                int handlersDetached = 0;
-                TrackedWebViewDownload tracked = null!;
-
-                void DetachHandlers()
-                {
-                    if (System.Threading.Interlocked.Exchange(ref handlersDetached, 1) != 0)
-                        return;
                     try
                     {
-                        op.BytesReceivedChanged -= OnBytesReceived;
-                        op.StateChanged -= OnStateChanged;
+                        if (win._isWindowClosing || tab.IsDisposed)
+                        {
+                            e.Cancel = true;
+                            e.Handled = true;
+                            return;
+                        }
+
+                        string baseDir = !string.IsNullOrWhiteSpace(win._lastChosenDownloadDir) && Directory.Exists(win._lastChosenDownloadDir)
+                            ? win._lastChosenDownloadDir
+                            : SettingsManager.GetEffectiveDownloadDirectory();
+                        try { Directory.CreateDirectory(baseDir); } catch { }
+
+                        string resultPath;
+                        if (SettingsManager.Current.AskWhereToSaveDownloads)
+                        {
+                            string ext = Path.GetExtension(suggestedName);
+                            string filter = !string.IsNullOrWhiteSpace(ext) && ext.Length <= 12
+                                ? $"Archivo {ext.TrimStart('.').ToUpperInvariant()} (*{ext})|*{ext}|Todos los archivos (*.*)|*.*"
+                                : "Todos los archivos (*.*)|*.*";
+
+                            var sfd = new Microsoft.Win32.SaveFileDialog
+                            {
+                                Title = "Guardar archivo como — Lex Junior",
+                                FileName = suggestedName,
+                                InitialDirectory = baseDir,
+                                Filter = filter,
+                                OverwritePrompt = true,
+                                AddExtension = !string.IsNullOrWhiteSpace(ext)
+                            };
+
+                            if (sfd.ShowDialog(win) != true || string.IsNullOrWhiteSpace(sfd.FileName))
+                            {
+                                e.Cancel = true;
+                                e.Handled = true;
+                                return;
+                            }
+
+                            resultPath = sfd.FileName;
+                            string? chosenDir = Path.GetDirectoryName(resultPath);
+                            if (!string.IsNullOrWhiteSpace(chosenDir) && Directory.Exists(chosenDir))
+                            {
+                                win._lastChosenDownloadDir = chosenDir;
+                            }
+                        }
+                        else
+                        {
+                            resultPath = DownloadManager.SanitizeAndMakeUniquePath(
+                                baseDir,
+                                suggestedName,
+                                op.Uri,
+                                DownloadManager.GetActiveDestinationPaths());
+                        }
+
+                        e.ResultFilePath = resultPath;
+                        e.Handled = true;
+                        try { if (core.IsDefaultDownloadDialogOpen) core.CloseDefaultDownloadDialog(); } catch { }
+
+                        string fileName = Path.GetFileName(resultPath);
+                        long total = DownloadManager.SafeBytesFromUlong(op.TotalBytesToReceive);
+                        bool isPrivate = tab.IsIncognito || tab.IsGuest;
+                        var entry = DownloadManager.RegisterDownload(fileName, resultPath, op.Uri, total, "En progreso", isPrivate);
+
+                        int handlersAttached = 0;
+                        TrackedWebViewDownload tracked = null!;
+
+                        void AttachHandlers()
+                        {
+                            if (System.Threading.Interlocked.Exchange(ref handlersAttached, 1) != 0)
+                                return;
+                            try
+                            {
+                                op.BytesReceivedChanged += OnBytesReceived;
+                                op.StateChanged += OnStateChanged;
+                            }
+                            catch
+                            {
+                                System.Threading.Interlocked.Exchange(ref handlersAttached, 0);
+                            }
+                        }
+
+                        void DetachHandlers()
+                        {
+                            if (System.Threading.Interlocked.Exchange(ref handlersAttached, 0) != 1)
+                                return;
+                            try
+                            {
+                                op.BytesReceivedChanged -= OnBytesReceived;
+                                op.StateChanged -= OnStateChanged;
+                            }
+                            catch { }
+                        }
+
+                        void OnBytesReceived(object? sender2, object args2)
+                        {
+                            SyncTrackedDownloadOperation(tracked, forceProgressUpdate: false);
+                        }
+
+                        void OnStateChanged(object? sender2, object args2)
+                        {
+                            SyncTrackedDownloadOperation(tracked, forceProgressUpdate: true);
+                        }
+
+                        tracked = new TrackedWebViewDownload
+                        {
+                            EntryId = entry.Id,
+                            OwnerCore = core,
+                            Operation = op,
+                            FileName = fileName,
+                            ResultPath = resultPath,
+                            AttachHandlersAction = AttachHandlers,
+                            DetachHandlersAction = DetachHandlers
+                        };
+
+                        entry.PauseAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() => { try { op.Pause(); } catch { } });
+                        entry.ResumeAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() =>
+                        {
+                            try
+                            {
+                                tracked.IsTerminal = false;
+                                AttachHandlers();
+                                RegisterTrackedDownloadOperation(tracked);
+                                op.Resume();
+                                NotifyTrackedDownloadResumed();
+                            }
+                            catch { }
+                        });
+                        entry.CancelAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() => { try { op.Cancel(); } catch { } });
+                        entry.RetryAction = () => _ = Application.Current?.Dispatcher.BeginInvoke(() =>
+                        {
+                            try
+                            {
+                                if (!tab.IsDisposed && tab.WebView?.CoreWebView2 != null && !string.IsNullOrWhiteSpace(entry.Url))
+                                {
+                                    tab.WebView.CoreWebView2.Navigate(entry.Url);
+                                    return;
+                                }
+
+                                var host = Application.Current?.Windows.OfType<MainWindow>()
+                                    .FirstOrDefault(w => !w._isWindowClosing && !w._isGuestSession);
+                                if (host != null && !string.IsNullOrWhiteSpace(entry.Url))
+                                {
+                                    _ = host.AddNewTabAsync(entry.Url, isIncognito: entry.IsIncognito);
+                                }
+                            }
+                            catch { }
+                        });
+
+                        AttachHandlers();
+                        RegisterTrackedDownloadOperation(tracked);
+
+                        win.UpdateDownloadsToolbarIndicator();
+                        if (win.PopupDownloads != null && win.PopupDownloads.IsOpen)
+                            win.RefreshDownloadsPopupUI();
+
+                        win.ShowToast($"⬇️ Descargando: {fileName}", "Ver descargas", () =>
+                        {
+                            win.RefreshDownloadsPopupUI();
+                            if (win.PopupDownloads != null) win.PopupDownloads.IsOpen = true;
+                        }, durationSeconds: 4);
+
+                        SyncTrackedDownloadOperation(tracked, forceProgressUpdate: true);
                     }
-                    catch { }
-                }
-
-                void OnBytesReceived(object? sender, object args)
-                {
-                    SyncTrackedDownloadOperation(tracked, forceProgressUpdate: false);
-                }
-
-                void OnStateChanged(object? sender, object args)
-                {
-                    SyncTrackedDownloadOperation(tracked, forceProgressUpdate: true);
-                }
-
-                tracked = new TrackedWebViewDownload
-                {
-                    EntryId = entry.Id,
-                    Operation = op,
-                    FileName = fileName,
-                    ResultPath = resultPath,
-                    DetachHandlersAction = DetachHandlers
-                };
-
-                op.BytesReceivedChanged += OnBytesReceived;
-                op.StateChanged += OnStateChanged;
-                RegisterTrackedDownloadOperation(tracked);
-                _ = win.Dispatcher.BeginInvoke(() => SyncTrackedDownloadOperation(tracked, forceProgressUpdate: true));
+                    catch
+                    {
+                        try { e.Cancel = true; e.Handled = true; } catch { }
+                    }
+                    finally
+                    {
+                        try { deferral.Complete(); } catch { }
+                    }
+                });
             }
             catch { }
         };
@@ -2052,10 +2573,11 @@ public partial class MainWindow
             }
 
             var win = tab.OwnerWindow ?? this;
+            if (win._isWindowClosing || tab.IsDisposed) return;
 
-            win.Dispatcher.Invoke(() =>
+            _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
             {
-                if (tab.IsDisposed) return;
+                if (win._isWindowClosing || tab.IsDisposed) return;
                 tab.IsLoading = true;
                 if (win._activeTab == tab)
                 {
@@ -2097,9 +2619,10 @@ public partial class MainWindow
         core.NavigationCompleted += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
-            win.Dispatcher.Invoke(() =>
+            if (win._isWindowClosing || tab.IsDisposed) return;
+            _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
             {
-                if (tab.IsDisposed) return;
+                if (win._isWindowClosing || tab.IsDisposed) return;
                 tab.IsLoading = false;
                 tab.PendingMainNavigationUri = null;
                 if (win._activeTab != tab)
@@ -2137,7 +2660,9 @@ public partial class MainWindow
                 }
 
                 if (e.IsSuccess && !tab.IsIncognito && !tab.IsGuest && !tab.IsNewTab &&
-                    !string.IsNullOrWhiteSpace(core.Source) && !TvStudioService.IsTvUrl(core.Source))
+                    !string.IsNullOrWhiteSpace(core.Source) &&
+                    !TvStudioService.IsTvUrl(core.Source) &&
+                    !LexClassStudioService.IsClassUrl(core.Source))
                 {
                     HistoryManager.AddEntry(core.Source, core.DocumentTitle);
                 }
@@ -2153,9 +2678,10 @@ public partial class MainWindow
         core.SourceChanged += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
-            win.Dispatcher.Invoke(() =>
+            if (win._isWindowClosing || tab.IsDisposed) return;
+            _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
             {
-                if (tab.IsDisposed) return;
+                if (win._isWindowClosing || tab.IsDisposed) return;
                 tab.PendingMainNavigationUri = null;
                 string prevUrl = tab.Url;
                 if (core.Source.StartsWith("data:text/html") || core.Source == "about:blank")
@@ -2234,9 +2760,10 @@ public partial class MainWindow
         core.DocumentTitleChanged += (s, e) =>
         {
             var win = tab.OwnerWindow ?? this;
-            win.Dispatcher.Invoke(() =>
+            if (win._isWindowClosing || tab.IsDisposed) return;
+            _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
             {
-                if (tab.IsDisposed) return;
+                if (win._isWindowClosing || tab.IsDisposed) return;
                 if (tab.IsNewTab)
                 {
                     tab.Title = tab.IsGuest ? "Modo Invitado" : (tab.IsIncognito ? "Incógnito" : "Nueva pestaña");
@@ -2245,7 +2772,9 @@ public partial class MainWindow
                 {
                     tab.Title = string.IsNullOrWhiteSpace(core.DocumentTitle) ? "Nueva pestaña" : core.DocumentTitle;
                     if (!tab.IsIncognito && !tab.IsGuest &&
-                        !string.IsNullOrWhiteSpace(core.Source) && !TvStudioService.IsTvUrl(core.Source))
+                        !string.IsNullOrWhiteSpace(core.Source) &&
+                        !TvStudioService.IsTvUrl(core.Source) &&
+                        !LexClassStudioService.IsClassUrl(core.Source))
                     {
                         HistoryManager.UpdateTitle(core.Source, tab.Title);
                     }
@@ -2323,13 +2852,18 @@ public partial class MainWindow
             if (previousTab != null && previousTab != tab && !previousTab.IsDisposed)
             {
                 previousTab.LastDeactivatedUtc = DateTime.UtcNow;
+                // Aislar fullscreen DOM/HTML5 de pestaña anterior (especialmente YouTube) antes de ocultarla con Ctrl+Tab
+                if (IsTabInDomFullScreen(previousTab))
+                {
+                    RequestExitTabDomFullScreen(previousTab);
+                }
             }
 
-            if (SettingsManager.Current.EnableAutoVideoPip && previousTab != null && previousTab != tab && !previousTab.IsDisposed)
+            if (ShouldTriggerAutoPiPOnTabSwitch(SettingsManager.Current.EnableAutoVideoPip, previousTab, tab))
             {
                 try
                 {
-                    if (previousTab.WebView?.CoreWebView2 != null)
+                    if (previousTab!.WebView?.CoreWebView2 != null)
                     {
                         _ = TriggerAutoPiPAsync(previousTab);
                     }
@@ -2383,7 +2917,7 @@ public partial class MainWindow
             }
 
             _activeTab = tab;
-            ApplyFullScreenChrome(tab.WebView?.CoreWebView2?.ContainsFullScreenElement == true);
+            if (PopupAutofillPicker != null) PopupAutofillPicker.IsOpen = false;
 
             if (tab?.WebView != null)
             {
@@ -2398,11 +2932,41 @@ public partial class MainWindow
 
                 tab.WebView.Visibility = Visibility.Visible;
                 ResumeTab(tab);
+            }
+
+            UpdateFullScreenChromeState();
+
+            if (tab?.WebView != null)
+            {
                 try
                 {
-                    GetController(tab.WebView)?.NotifyParentWindowPositionChanged();
+                    BrowserContainer.UpdateLayout();
+                    var ctrl = GetController(tab.WebView);
+                    if (ctrl != null)
+                    {
+                        if (!ctrl.IsVisible) ctrl.IsVisible = true;
+                        ctrl.NotifyParentWindowPositionChanged();
+                    }
+                    tab.WebView.InvalidateVisual();
                 }
                 catch { }
+
+                var activeTabRef = tab;
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+                {
+                    if (_activeTab != activeTabRef || activeTabRef.IsDisposed || activeTabRef.WebView == null) return;
+                    try
+                    {
+                        var ctrl = GetController(activeTabRef.WebView);
+                        if (ctrl != null)
+                        {
+                            if (!ctrl.IsVisible) ctrl.IsVisible = true;
+                            ctrl.NotifyParentWindowPositionChanged();
+                        }
+                        activeTabRef.WebView.InvalidateVisual();
+                    }
+                    catch { }
+                });
             }
 
             if (tab != null && tab.IsLazyLoaded && !string.IsNullOrWhiteSpace(tab.Url))
@@ -2441,7 +3005,22 @@ public partial class MainWindow
             UpdateMediaSnifferUI();
             UpdateNotificationPermissionUI();
             _ = UpdateTranslateIndicatorUIAsync(tab);
-            FocusOmniboxIfNewTab(tab);
+            if (tab != null && tab.IsNewTab)
+            {
+                FocusOmniboxIfNewTab(tab);
+            }
+            else if (tab?.WebView != null && IsActive)
+            {
+                var tabFocusRef = tab;
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+                {
+                    if (_activeTab == tabFocusRef && !tabFocusRef.IsDisposed && tabFocusRef.WebView != null &&
+                        tabFocusRef.WebView.IsVisible && !TxtUrl.IsKeyboardFocusWithin)
+                    {
+                        try { tabFocusRef.WebView.Focus(); } catch { }
+                    }
+                });
+            }
             RescheduleSuspensionTimer();
         }
         catch (Exception ex)

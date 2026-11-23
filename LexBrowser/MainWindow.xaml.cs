@@ -40,7 +40,7 @@ public partial class MainWindow : Window
 
     // Estado previo antes de entrar a pantalla completa real
     private WindowState _savedWindowState = WindowState.Normal;
-    private ResizeMode _savedResizeMode = ResizeMode.CanResizeWithGrip;
+    private bool _pendingBrowserFullScreenEnter = false;
 
     // Variables para arrastre visual suave de pestañas y desprendimiento a nueva ventana (Tab Tear-Off)
     private Point _tabDragStartPoint;
@@ -93,6 +93,7 @@ public partial class MainWindow : Window
 
         InitializeComponent();
         InitializeTranslateLanguageList();
+        InitializeOmniboxBehavior();
         TabsItemsControl.ItemsSource = Tabs;
         ItemsOmniboxSuggestions.ItemsSource = _omniboxSuggestions;
         Tabs.CollectionChanged += (s, e) =>
@@ -142,11 +143,36 @@ public partial class MainWindow : Window
         ApplySettings();
         UpdateDownloadsToolbarIndicator();
         UpdateNotificationBadge();
-        Deactivated += (_, _) => HideToast();
+        if (PopupFullScreenExit != null)
+        {
+            PopupFullScreenExit.CustomPopupPlacementCallback = (popupSize, targetSize, _) =>
+            {
+                double x = Math.Max(0, (targetSize.Width - popupSize.Width) * 0.5);
+                return new[] { new System.Windows.Controls.Primitives.CustomPopupPlacement(new Point(x, 0), System.Windows.Controls.Primitives.PopupPrimaryAxis.Horizontal) };
+            };
+        }
+
+        Deactivated += (_, _) =>
+        {
+            HideToast();
+            HideFullScreenExitPopupImmediate();
+            CloseSnapLayoutsPopupImmediate();
+            if (PopupOmniboxSuggestions != null && PopupOmniboxSuggestions.IsOpen)
+                PopupOmniboxSuggestions.IsOpen = false;
+        };
+        LocationChanged += (_, _) =>
+        {
+            CloseSnapLayoutsPopupImmediate();
+            if (PopupOmniboxSuggestions != null && PopupOmniboxSuggestions.IsOpen)
+                PopupOmniboxSuggestions.IsOpen = false;
+        };
         StateChanged += (_, _) =>
         {
             if (WindowState == WindowState.Minimized)
+            {
                 HideToast();
+                HideFullScreenExitPopupImmediate();
+            }
         };
 
         // Callback cuando el usuario pulsa "⇱ Volver" en la Página Flotante manual
@@ -179,6 +205,15 @@ public partial class MainWindow : Window
 
         Loaded += MainWindow_Loaded;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        PreviewMouseDown += (_, _) =>
+        {
+            if (PopupSnapLayouts != null && PopupSnapLayouts.IsOpen &&
+                !IsCursorOverSnapElement(BtnMaxRestore, expandTopPx: 8, expandBottomPx: 10, expandSidePx: 4) &&
+                !IsCursorOverSnapElement(SnapLayoutsCard, expandTopPx: 10, expandBottomPx: 6, expandSidePx: 6))
+            {
+                CloseSnapLayoutsPopupImmediate();
+            }
+        };
         StateChanged += MainWindow_StateChanged;
         SizeChanged += MainWindow_SizeOrLocationChanged;
         LocationChanged += MainWindow_SizeOrLocationChanged;
@@ -470,15 +505,20 @@ public partial class MainWindow : Window
         }
     }
 
-    internal static bool ShouldPromptActiveDownloadsOnClose(bool isRestartingProcess, bool hasActiveDownloads)
-        => !isRestartingProcess && hasActiveDownloads;
+    internal static bool ShouldPromptActiveDownloadsOnClose(bool isRestartingProcess, bool hasActiveDownloads, int remainingOtherMainWindows = 0)
+        => !isRestartingProcess && hasActiveDownloads && remainingOtherMainWindows == 0;
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         try
         {
+            SyncAndReconcileAllActiveDownloadsOnUi();
+            int remainingOtherWindows = Application.Current?.Windows
+                .OfType<MainWindow>()
+                .Count(w => w != this && !w._isWindowClosing && w.IsLoaded) ?? 0;
+
             bool hasActiveDownloads = DownloadManager.GetActiveSummary().HasActive;
-            if (ShouldPromptActiveDownloadsOnClose(App.IsRestartingProcess, hasActiveDownloads))
+            if (ShouldPromptActiveDownloadsOnClose(App.IsRestartingProcess, hasActiveDownloads, remainingOtherWindows))
             {
                 var confirm = MessageBox.Show(
                     "Hay descargas activas en progreso.\n\n¿Deseas cerrar el navegador de todos modos y cancelar las descargas en curso?",
@@ -494,7 +534,7 @@ public partial class MainWindow : Window
 
                 DownloadManager.CancelAllActive();
             }
-            else if (hasActiveDownloads)
+            else if (hasActiveDownloads && remainingOtherWindows == 0)
             {
                 DownloadManager.CancelAllActive();
             }
@@ -604,6 +644,7 @@ public partial class MainWindow : Window
             DownloadManager.Flush();
             ReadAloudService.Stop();
             _isWindowClosing = true;
+            HideFullScreenExitPopupImmediate();
             _sessionSaveTimer?.Stop();
             _suspensionTimer?.Stop();
             _nativePipTimer?.Stop();
@@ -784,6 +825,12 @@ public partial class MainWindow : Window
         if (string.Equals(commandOrUrl, "CMD:NEW_TAB", StringComparison.OrdinalIgnoreCase))
         {
             await AddNewTabAsync(null, isIncognito: _isGuestSession);
+            return;
+        }
+
+        if (string.Equals(commandOrUrl, "CMD:LEXCLASS", StringComparison.OrdinalIgnoreCase))
+        {
+            OpenOrFocusLexClassWindow();
             return;
         }
 
@@ -1075,10 +1122,35 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     // GESTOR DE ATAJOS DE TECLADO GLOBALES (UNIVERSALES)
     // ─────────────────────────────────────────────────────────────────────
+    private System.Collections.Generic.IEnumerable<System.Windows.Controls.Primitives.Popup?> EnumerateToolbarPopups()
+    {
+        yield return PopupShieldPanel;
+        yield return PopupDownloads;
+        yield return PopupSitePermissions;
+        yield return PopupVolumeBooster;
+        yield return PopupMediaSniffer;
+        yield return PopupNotifications;
+        yield return PopupTranslate;
+        yield return PopupOmniboxSuggestions;
+        yield return PopupZoomWidget;
+        yield return PopupAutofillPicker;
+        yield return PopupSnapLayouts;
+    }
+
+    internal bool HasOpenToolbarPopups()
+    {
+        foreach (var popup in EnumerateToolbarPopups())
+        {
+            if (popup != null && popup.IsOpen)
+                return true;
+        }
+        return false;
+    }
+
     internal bool CloseOpenToolbarPopups()
     {
         bool closedAny = false;
-        void ClosePopup(System.Windows.Controls.Primitives.Popup? popup)
+        foreach (var popup in EnumerateToolbarPopups())
         {
             if (popup != null && popup.IsOpen)
             {
@@ -1086,17 +1158,26 @@ public partial class MainWindow : Window
                 closedAny = true;
             }
         }
-
-        ClosePopup(PopupShieldPanel);
-        ClosePopup(PopupDownloads);
-        ClosePopup(PopupSitePermissions);
-        ClosePopup(PopupVolumeBooster);
-        ClosePopup(PopupMediaSniffer);
-        ClosePopup(PopupNotifications);
-        ClosePopup(PopupTranslate);
-        ClosePopup(PopupOmniboxSuggestions);
-        ClosePopup(PopupZoomWidget);
         return closedAny;
+    }
+
+    internal static bool ShouldExitFullScreenOnEscape(bool fullScreenChromeActive, bool isTabInDomFullScreen)
+        => fullScreenChromeActive && !isTabInDomFullScreen;
+
+    private void RunShortcutAction(bool deferWindowMutations, Action action)
+    {
+        if (!deferWindowMutations)
+        {
+            action();
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            if (_isWindowClosing || IsLocked || IsBrowserLockOverlayActive())
+                return;
+            action();
+        });
     }
 
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1107,143 +1188,271 @@ public partial class MainWindow : Window
         }
 
         Key actualKey = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (HandleBrowserShortcutKey(actualKey, Keyboard.Modifiers, _activeTab?.WebView?.CoreWebView2))
+        if (HandleBrowserShortcutKey(actualKey, Keyboard.Modifiers, _activeTab?.WebView?.CoreWebView2, e.IsRepeat))
         {
             e.Handled = true;
         }
     }
 
-    internal bool HandleBrowserShortcutKey(Key key, ModifierKeys modifiers, Microsoft.Web.WebView2.Core.CoreWebView2? activeWebViewCore = null)
+    private Key _lastNonRepeatShortcutKey = Key.None;
+    private ModifierKeys _lastNonRepeatShortcutModifiers = ModifierKeys.None;
+    private long _lastNonRepeatShortcutTickMs = 0;
+    private long _lastF11ToggleTickMs = 0;
+
+    internal static bool ShouldAcceptShortcutInvocation(
+        Key key,
+        ModifierKeys modifiers,
+        bool isRepeat,
+        long nowTickMs,
+        ref Key lastKey,
+        ref ModifierKeys lastModifiers,
+        ref long lastTickMs,
+        ref long lastF11TickMs)
+    {
+        if (modifiers == ModifierKeys.None && key == Key.F11)
+        {
+            if (isRepeat) return false;
+            if (lastF11TickMs != 0 && unchecked(nowTickMs - lastF11TickMs) < 250)
+                return false;
+            lastF11TickMs = nowTickMs;
+            return true;
+        }
+
+        if (!isRepeat)
+        {
+            if (key == lastKey && modifiers == lastModifiers && lastTickMs != 0 && unchecked(nowTickMs - lastTickMs) < 40)
+                return false;
+
+            lastKey = key;
+            lastModifiers = modifiers;
+            lastTickMs = nowTickMs;
+        }
+
+        return true;
+    }
+
+    private bool AcceptShortcutOnce(Key key, ModifierKeys modifiers, bool isRepeat) =>
+        ShouldAcceptShortcutInvocation(
+            key,
+            modifiers,
+            isRepeat,
+            Environment.TickCount64,
+            ref _lastNonRepeatShortcutKey,
+            ref _lastNonRepeatShortcutModifiers,
+            ref _lastNonRepeatShortcutTickMs,
+            ref _lastF11ToggleTickMs);
+
+    internal bool HandleBrowserShortcutKey(
+        Key key,
+        ModifierKeys modifiers,
+        Microsoft.Web.WebView2.Core.CoreWebView2? activeWebViewCore = null,
+        bool isRepeat = false,
+        bool deferWindowMutations = false)
     {
         if (IsLocked || IsBrowserLockOverlayActive())
         {
             return false;
         }
 
-        if (key == Key.Escape && CloseOpenToolbarPopups())
+        if (key == Key.Escape && modifiers == ModifierKeys.None)
         {
+            bool hasPopups = HasOpenToolbarPopups();
+            bool shouldExitFs = ShouldExitFullScreenOnEscape(
+                _fullScreenChromeActive || _pendingBrowserFullScreenEnter,
+                IsTabInDomFullScreen(_activeTab));
+
+            if (hasPopups || shouldExitFs)
+            {
+                if (AcceptShortcutOnce(key, modifiers, isRepeat))
+                {
+                    RunShortcutAction(deferWindowMutations, () =>
+                    {
+                        if (CloseOpenToolbarPopups())
+                            return;
+
+                        if (ShouldExitFullScreenOnEscape(_fullScreenChromeActive, IsTabInDomFullScreen(_activeTab)))
+                        {
+                            ExitAllFullScreen();
+                        }
+                    });
+                }
+                return true;
+            }
+        }
+
+        // 0.0 F11: Pantalla completa global del navegador (desduplicado entre AcceleratorKeyPressed y PreviewKeyDown)
+        if (modifiers == ModifierKeys.None && key == Key.F11)
+        {
+            if (AcceptShortcutOnce(key, modifiers, isRepeat))
+            {
+                _pendingBrowserFullScreenEnter = !_isBrowserF11FullScreen && !IsTabInDomFullScreen(_activeTab);
+                RunShortcutAction(deferWindowMutations, () =>
+                {
+                    _pendingBrowserFullScreenEnter = false;
+                    ToggleBrowserFullScreen();
+                });
+            }
             return true;
         }
 
         // 0. F12 o Ctrl + Shift + I: Abrir Herramientas de Desarrollo (DevTools) en la pestaña activa
         if (key == Key.F12 || (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.I))
         {
-            if (activeWebViewCore != null)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                try { activeWebViewCore.OpenDevToolsWindow(); } catch { }
-            }
-            else
-            {
-                OpenDevToolsForActiveTab();
-            }
+                if (activeWebViewCore != null)
+                {
+                    try { activeWebViewCore.OpenDevToolsWindow(); } catch { }
+                }
+                else
+                {
+                    OpenDevToolsForActiveTab();
+                }
+            });
             return true;
         }
 
         // 0.05 Ctrl + Shift + L: Exportar Shield Logger a carpeta Logs\
         if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.L)
         {
-            CopyOrExportShieldLog();
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () => CopyOrExportShieldLog());
             return true;
         }
 
         // 0.08 Atajo configurable para No Molestar (por defecto Ctrl + Shift + D)
         if (IsNotificationDndShortcut(key, modifiers))
         {
-            if (!_isGuestSession)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                ToggleNotificationDoNotDisturb();
-            }
+                if (!_isGuestSession)
+                {
+                    ToggleNotificationDoNotDisturb();
+                }
+            });
             return true;
         }
 
         // 0.1 Ctrl + Shift + K: Abrir Bóveda de Contraseñas
         if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.K)
         {
-            OpenPasswordVault();
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () => OpenPasswordVault());
             return true;
         }
 
-        // 1. Ctrl + Tab: Siguiente pestaña
+        // 1. Ctrl + Tab: Siguiente pestaña (desduplicado contra eco doble WPF + WebView2)
         if (modifiers == ModifierKeys.Control && key == Key.Tab)
         {
-            if (Tabs.Count > 1 && _activeTab != null)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                int currentIdx = Tabs.IndexOf(_activeTab);
-                int nextIdx = (currentIdx + 1) % Tabs.Count;
-                SelectTab(Tabs[nextIdx]);
-            }
+                if (Tabs.Count > 1 && _activeTab != null)
+                {
+                    int currentIdx = Tabs.IndexOf(_activeTab);
+                    int nextIdx = (currentIdx + 1) % Tabs.Count;
+                    SelectTab(Tabs[nextIdx]);
+                }
+            });
             return true;
         }
 
-        // 2. Ctrl + Shift + Tab: Pestaña anterior
+        // 2. Ctrl + Shift + Tab: Pestaña anterior (desduplicado contra eco doble WPF + WebView2)
         if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.Tab)
         {
-            if (Tabs.Count > 1 && _activeTab != null)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                int currentIdx = Tabs.IndexOf(_activeTab);
-                int prevIdx = (currentIdx - 1 + Tabs.Count) % Tabs.Count;
-                SelectTab(Tabs[prevIdx]);
-            }
+                if (Tabs.Count > 1 && _activeTab != null)
+                {
+                    int currentIdx = Tabs.IndexOf(_activeTab);
+                    int prevIdx = (currentIdx - 1 + Tabs.Count) % Tabs.Count;
+                    SelectTab(Tabs[prevIdx]);
+                }
+            });
             return true;
         }
 
         // 3. Ctrl + Shift + B: Barra de Accesos Directos
         if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.B)
         {
-            if (_isGuestSession) return true;
-            SettingsManager.Current.ShowBookmarksBar = !SettingsManager.Current.ShowBookmarksBar;
-            SettingsManager.Save();
-            if (!SettingsManager.Current.ShowBookmarksBar)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                ShowToast("Barra de accesos directos oculta. Para volver a activarla ve a Configuración (o presiona Ctrl+Shift+B)");
-            }
+                if (_isGuestSession) return;
+                SettingsManager.Current.ShowBookmarksBar = !SettingsManager.Current.ShowBookmarksBar;
+                SettingsManager.Save();
+                if (!SettingsManager.Current.ShowBookmarksBar)
+                {
+                    ShowToast("Barra de accesos directos oculta. Para volver a activarla ve a Configuración (o presiona Ctrl+Shift+B)");
+                }
+            });
             return true;
         }
 
         // 4. Ctrl + T o Ctrl + N: Abrir nueva pestaña
         if (modifiers == ModifierKeys.Control && (key == Key.T || key == Key.N))
         {
-            _ = AddNewTabAsync(null, isIncognito: _isGuestSession);
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () => _ = AddNewTabAsync(null, isIncognito: _isGuestSession));
             return true;
         }
 
         // 5. Ctrl + Shift + N: Modo Incógnito
         if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.N)
         {
-            if (_isGuestSession)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
-                    return true;
-            }
-            _ = AddNewTabAsync(null, isIncognito: true);
+                if (_isGuestSession)
+                {
+                    if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
+                        return;
+                }
+                _ = AddNewTabAsync(null, isIncognito: true);
+            });
             return true;
         }
 
         // 6. Ctrl + Shift + T: Reabrir última pestaña cerrada
         if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.T)
         {
-            if (!_isGuestSession)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                ReopenLastClosedTab();
-            }
+                if (!_isGuestSession)
+                {
+                    ReopenLastClosedTab();
+                }
+            });
             return true;
         }
 
         // 7. Ctrl + W: Cerrar pestaña actual
         if (modifiers == ModifierKeys.Control && key == Key.W)
         {
-            if (_activeTab != null) CloseTab(_activeTab);
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
+            {
+                if (_activeTab != null) CloseTab(_activeTab);
+            });
             return true;
         }
 
         // 8. Ctrl + R o F5: Recargar
         if ((modifiers == ModifierKeys.Control && key == Key.R) || (modifiers == ModifierKeys.None && key == Key.F5))
         {
-            if (_activeTab != null)
+            if (!AcceptShortcutOnce(key, modifiers, isRepeat)) return true;
+            RunShortcutAction(deferWindowMutations, () =>
             {
-                RecordUserReloadAndCheckCompat(_activeTab);
-                _activeTab.WebView?.CoreWebView2?.Reload();
-            }
+                if (_activeTab != null)
+                {
+                    RecordUserReloadAndCheckCompat(_activeTab);
+                    _activeTab.WebView?.CoreWebView2?.Reload();
+                }
+            });
             return true;
         }
 
@@ -1251,53 +1460,59 @@ public partial class MainWindow : Window
         if ((modifiers == ModifierKeys.Control && key == Key.L) ||
             (modifiers == ModifierKeys.Alt && key == Key.D))
         {
-            TxtUrl.Focus();
-            TxtUrl.SelectAll();
+            RunShortcutAction(deferWindowMutations, () =>
+            {
+                TxtUrl.Focus();
+                TxtUrl.SelectAll();
+            });
             return true;
         }
 
         // 10. Ctrl + ,: Abrir Configuración
         if (modifiers == ModifierKeys.Control && key == Key.OemComma)
         {
-            OpenSettings("General");
+            RunShortcutAction(deferWindowMutations, () => OpenSettings("General"));
             return true;
         }
 
         // 10.1 Ctrl + H: Abrir Historial de Navegación y Limpieza
         if (modifiers == ModifierKeys.Control && key == Key.H)
         {
-            OpenHistory();
+            RunShortcutAction(deferWindowMutations, OpenHistory);
             return true;
         }
 
         // 10.1b Ctrl + J: Abrir Historial de Descargas
         if (modifiers == ModifierKeys.Control && key == Key.J)
         {
-            if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial de Descargas"))
-                return true;
-            RefreshDownloadsPopupUI();
-            PopupDownloads.IsOpen = !PopupDownloads.IsOpen;
+            RunShortcutAction(deferWindowMutations, () =>
+            {
+                if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial de Descargas"))
+                    return;
+                RefreshDownloadsPopupUI();
+                PopupDownloads.IsOpen = !PopupDownloads.IsOpen;
+            });
             return true;
         }
 
         // 10.2 Ctrl + 0: Restablecer zoom a 100%
         if (modifiers == ModifierKeys.Control && (key == Key.D0 || key == Key.NumPad0))
         {
-            ResetZoom();
+            RunShortcutAction(deferWindowMutations, ResetZoom);
             return true;
         }
 
         // 10.3 Ctrl + +: Aumentar zoom
         if (modifiers == ModifierKeys.Control && (key == Key.OemPlus || key == Key.Add || key == Key.Oem1 || key == Key.Oem6))
         {
-            ZoomIn();
+            RunShortcutAction(deferWindowMutations, ZoomIn);
             return true;
         }
 
         // 10.4 Ctrl + -: Reducir zoom
         if (modifiers == ModifierKeys.Control && (key == Key.OemMinus || key == Key.Subtract || key == Key.OemQuestion || key == Key.OemPeriod))
         {
-            ZoomOut();
+            RunShortcutAction(deferWindowMutations, ZoomOut);
             return true;
         }
 
@@ -1307,7 +1522,10 @@ public partial class MainWindow : Window
             int index = key - Key.D1;
             if (index < Tabs.Count)
             {
-                SelectTab(Tabs[index]);
+                RunShortcutAction(deferWindowMutations, () =>
+                {
+                    if (index < Tabs.Count) SelectTab(Tabs[index]);
+                });
                 return true;
             }
         }
@@ -1317,7 +1535,10 @@ public partial class MainWindow : Window
         {
             if (Tabs.Count > 0)
             {
-                SelectTab(Tabs.Last());
+                RunShortcutAction(deferWindowMutations, () =>
+                {
+                    if (Tabs.Count > 0) SelectTab(Tabs.Last());
+                });
                 return true;
             }
         }

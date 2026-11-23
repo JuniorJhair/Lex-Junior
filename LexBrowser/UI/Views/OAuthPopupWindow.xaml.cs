@@ -17,6 +17,8 @@ namespace LexBrowser.UI.Views;
 public partial class OAuthPopupWindow : Window
 {
     private readonly bool _isIncognito;
+    private CoreWebView2? _popupCore;
+    private string? _oauthAutofillSourceUrl;
     public event Action<string, string, string>? PasswordSubmittedInPopup;
 
     public OAuthPopupWindow(bool isIncognito, string? initialUrl = null, double? requestedWidth = null, double? requestedHeight = null)
@@ -54,6 +56,7 @@ public partial class OAuthPopupWindow : Window
         }
 
         var core = PopupWebView.CoreWebView2;
+        _popupCore = core;
 
         // Inyectar captura pasiva de contraseñas por si el usuario escribe su cuenta en la ventana emergente
         try
@@ -113,7 +116,7 @@ public partial class OAuthPopupWindow : Window
                 if (msgType == "autofill_requested")
                 {
                     var matches = PasswordManager.Store.GetAutofillCredentialsForUrl(actualSource);
-                    if (matches.Count > 0)
+                    if (matches.Count == 1)
                     {
                         var primary = matches[0];
                         string script = PasswordManager.BuildSafeAutofillScript(primary.Username, primary.Password);
@@ -121,6 +124,19 @@ public partial class OAuthPopupWindow : Window
                         {
                             try { await core.ExecuteScriptAsync(script); } catch { }
                         });
+                    }
+                    else if (matches.Count > 1)
+                    {
+                        Rect? inputRect = null;
+                        if (root.TryGetProperty("rect", out var rectProp) && rectProp.ValueKind == System.Text.Json.JsonValueKind.Object)
+                        {
+                            double l = rectProp.TryGetProperty("left", out var lp) && lp.TryGetDouble(out var lv) ? lv : 0;
+                            double t = rectProp.TryGetProperty("top", out var tp) && tp.TryGetDouble(out var tv) ? tv : 0;
+                            double r = rectProp.TryGetProperty("right", out var rp) && rp.TryGetDouble(out var rv) ? rv : l + 220;
+                            double b = rectProp.TryGetProperty("bottom", out var bp) && bp.TryGetDouble(out var bv) ? bv : t + 36;
+                            if (r > l && b > t) inputRect = new Rect(l, t, r - l, b - t);
+                        }
+                        Dispatcher.BeginInvoke(() => ShowOAuthAutofillPicker(actualSource, matches, inputRect));
                     }
                 }
                 else if (msgType == "password_submitted")
@@ -178,5 +194,47 @@ public partial class OAuthPopupWindow : Window
     }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void ShowOAuthAutofillPicker(
+        string sourceUrl,
+        System.Collections.Generic.IReadOnlyList<SavedCredential> matches,
+        Rect? inputRect)
+    {
+        if (PopupOAuthAutofillPicker == null || ItemsOAuthAutofillAccounts == null || PopupWebViewHost == null) return;
+        _oauthAutofillSourceUrl = sourceUrl;
+        ItemsOAuthAutofillAccounts.ItemsSource = matches;
+
+        double hostW = PopupWebViewHost.ActualWidth > 0 ? PopupWebViewHost.ActualWidth : 480;
+        double hostH = PopupWebViewHost.ActualHeight > 0 ? PopupWebViewHost.ActualHeight : 520;
+        double x = inputRect.HasValue ? Math.Clamp(inputRect.Value.Left, 8, Math.Max(8, hostW - 292)) : Math.Max(10, hostW - 292);
+        double y = inputRect.HasValue ? Math.Clamp(inputRect.Value.Bottom + 4, 8, Math.Max(8, hostH - 200)) : 12;
+
+        PopupOAuthAutofillPicker.HorizontalOffset = x;
+        PopupOAuthAutofillPicker.VerticalOffset = y;
+        PopupOAuthAutofillPicker.IsOpen = true;
+    }
+
+    private async void BtnPickOAuthAutofillAccount_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (PopupOAuthAutofillPicker != null) PopupOAuthAutofillPicker.IsOpen = false;
+            if (sender is not System.Windows.Controls.Button btn || btn.Tag is not SavedCredential picked) return;
+            var core = _popupCore;
+            if (core == null) return;
+
+            Uri? currentUri = Uri.TryCreate(core.Source, UriKind.Absolute, out var cu) ? cu : null;
+            string sourceUrl = !string.IsNullOrWhiteSpace(_oauthAutofillSourceUrl) ? _oauthAutofillSourceUrl : (core.Source ?? "");
+            if (!MainWindow.IsSecureOriginForPasswordMessage(sourceUrl, currentUri)) return;
+
+            string pwd = PasswordManager.Store.GetPasswordById(picked.Id) ?? picked.Password;
+            if (string.IsNullOrEmpty(pwd)) return;
+
+            try { PopupWebView.Focus(); } catch { }
+            string script = PasswordManager.BuildSafeAutofillScript(picked.Username, pwd, forceReplace: true);
+            await core.ExecuteScriptAsync(script);
+        }
+        catch { }
+    }
 }
 

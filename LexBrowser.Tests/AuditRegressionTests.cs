@@ -701,4 +701,198 @@ public class AuditRegressionTests
         Assert.DoesNotContain("RefreshWindowsIconCache", uiStartupSlice, StringComparison.Ordinal);
         Assert.Contains("RefreshIconCacheOnceIfVersionChanged", appCs, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void SnapLayouts_ComputeSnapZonePixels_CalculatesExactHalvesThirdsAndQuadrants()
+    {
+        // Monitor Full HD con barra de tareas abajo (rcWork = 0, 0, 1920, 1032)
+        var leftHalf = LexBrowser.MainWindow.ComputeSnapZonePixels(0, 0, 1920, 1032, 0.0, 0.0, 0.5, 1.0, 640, 480);
+        Assert.Equal((0, 0, 960, 1032), leftHalf);
+
+        var rightTopQuarter = LexBrowser.MainWindow.ComputeSnapZonePixels(0, 0, 1920, 1032, 0.5, 0.0, 0.5, 0.5, 640, 480);
+        Assert.Equal((960, 0, 960, 516), rightTopQuarter);
+
+        var twoThirdsLeft = LexBrowser.MainWindow.ComputeSnapZonePixels(0, 0, 1920, 1032, 0.0, 0.0, 0.6667, 1.0, 640, 480);
+        Assert.Equal(0, twoThirdsLeft.X);
+        Assert.Equal(1280, twoThirdsLeft.Width);
+        Assert.Equal(1032, twoThirdsLeft.Height);
+
+        // Respeta MinWidth/MinHeight en monitores pequeños sin salirse del área de trabajo
+        var clampedRight = LexBrowser.MainWindow.ComputeSnapZonePixels(100, 50, 800, 600, 0.6667, 0.0, 0.3333, 1.0, 500, 400);
+        Assert.Equal(500, clampedRight.Width);
+        Assert.True(clampedRight.X + clampedRight.Width <= 900);
+    }
+
+    [Fact]
+    public void NewTabPage_IncludesMultiLinePasteNormalizationAndLiveSuggestions()
+    {
+        string html = NewTabPage.GetHtml(incognito: false, isGuest: false);
+        Assert.Contains("normalizeBarText", html, StringComparison.Ordinal);
+        Assert.Contains("addEventListener('paste'", html, StringComparison.Ordinal);
+        Assert.Contains("newtab_suggest_req", html, StringComparison.Ordinal);
+        Assert.Contains("__lexSetNewTabSuggestions", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BrowserFixes_SourceInvariantsPresent()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string tabsCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Tabs.cs"));
+        string xamlCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml.cs"));
+        string securityCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Security.cs"));
+        string downloadsXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml"));
+        string chromeCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.WindowChrome.cs"));
+
+        // F11 global fullscreen sin romper YouTube HTML5 fullscreen + botón flotante X arriba + Ctrl+Tab sin blanco ni choque PiP
+        Assert.Contains("Key.F11", xamlCs, StringComparison.Ordinal);
+        Assert.Contains("_isBrowserF11FullScreen", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("ShouldFullScreenChromeBeActive", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("RequestExitTabDomFullScreen", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("PopupFullScreenExit", downloadsXaml, StringComparison.Ordinal);
+        Assert.Contains("BtnExitFullScreen_Click", downloadsXaml, StringComparison.Ordinal);
+        Assert.Contains("SWP_FRAMECHANGED", tabsCs, StringComparison.Ordinal);
+
+        // Guardar como con Deferral + PopupDownloads con botón de descarga directa y sin marquee bloqueante
+        Assert.Contains("e.GetDeferral()", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("SaveFileDialog", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("BtnToggleDirectDownload", downloadsXaml, StringComparison.Ordinal);
+
+        // Selector multi-cuenta sin revelar todas por postMessage
+        Assert.Contains("PopupAutofillPicker", securityCs, StringComparison.Ordinal);
+        Assert.Contains("matches.Count == 1", securityCs, StringComparison.Ordinal);
+
+        // Snap Layouts preserva bounds al hacer snap (solo restaura al desmaximizar manualmente)
+        Assert.Contains("_pendingManualRestoreBounds", chromeCs, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ShortcutDeduplication_BlocksSameMillisecondDoubleF11AndCtrlTabEchoes()
+    {
+        var lastKey = System.Windows.Input.Key.None;
+        var lastMods = System.Windows.Input.ModifierKeys.None;
+        long lastTick = 0;
+        long lastF11Tick = 0;
+
+        // F11 físico: primer evento entra, eco inmediato (0-180ms) de otro pipeline se bloquea, nueva pulsación >=250ms entra
+        Assert.True(MainWindow.ShouldAcceptShortcutInvocation(
+            System.Windows.Input.Key.F11, System.Windows.Input.ModifierKeys.None, false,
+            1000, ref lastKey, ref lastMods, ref lastTick, ref lastF11Tick));
+        Assert.False(MainWindow.ShouldAcceptShortcutInvocation(
+            System.Windows.Input.Key.F11, System.Windows.Input.ModifierKeys.None, false,
+            1001, ref lastKey, ref lastMods, ref lastTick, ref lastF11Tick));
+        Assert.False(MainWindow.ShouldAcceptShortcutInvocation(
+            System.Windows.Input.Key.F11, System.Windows.Input.ModifierKeys.None, false,
+            1240, ref lastKey, ref lastMods, ref lastTick, ref lastF11Tick));
+        Assert.True(MainWindow.ShouldAcceptShortcutInvocation(
+            System.Windows.Input.Key.F11, System.Windows.Input.ModifierKeys.None, false,
+            1260, ref lastKey, ref lastMods, ref lastTick, ref lastF11Tick));
+
+        // Ctrl+Tab: eco simultáneo en <40ms se descarta; nueva pulsación real (>=50ms) avanza pestaña
+        Assert.True(MainWindow.ShouldAcceptShortcutInvocation(
+            System.Windows.Input.Key.Tab, System.Windows.Input.ModifierKeys.Control, false,
+            2000, ref lastKey, ref lastMods, ref lastTick, ref lastF11Tick));
+        Assert.False(MainWindow.ShouldAcceptShortcutInvocation(
+            System.Windows.Input.Key.Tab, System.Windows.Input.ModifierKeys.Control, false,
+            2002, ref lastKey, ref lastMods, ref lastTick, ref lastF11Tick));
+        Assert.True(MainWindow.ShouldAcceptShortcutInvocation(
+            System.Windows.Input.Key.Tab, System.Windows.Input.ModifierKeys.Control, false,
+            2060, ref lastKey, ref lastMods, ref lastTick, ref lastF11Tick));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 1536, 816)]  // 1080p @ 125% (barra abajo)
+    [InlineData(0, 0, 1366, 720)]  // Laptop HD 1366x768 @ 100%
+    [InlineData(0, 0, 1280, 672)]  // Laptop 1080p @ 150%
+    [InlineData(0, 0, 1093, 574)]  // Laptop HD 1366x768 @ 125%
+    [InlineData(0, 0, 853, 448)]   // Laptop 720p @ 150% (muy chica)
+    [InlineData(1920, 0, 2560, 1392)] // Segundo monitor grande a la derecha
+    [InlineData(64, 0, 1302, 768)] // Barra de tareas movida a la izquierda
+    public void LexClassWindow_ComputeSafeCenteredBounds_NeverOverflowsWorkAreaOrHidesTopControls(
+        double workLeft, double workTop, double workWidth, double workHeight)
+    {
+        var b = LexBrowser.UI.Views.LexClassWindow.ComputeSafeCenteredBounds(
+            workLeft, workTop, workWidth, workHeight);
+
+        Assert.True(b.Width > 0 && b.Width <= workWidth, $"Width {b.Width} fuera de WorkArea {workWidth}");
+        Assert.True(b.Height > 0 && b.Height <= workHeight, $"Height {b.Height} fuera de WorkArea {workHeight}");
+        Assert.True(b.Left >= workLeft, $"Left {b.Left} < workLeft {workLeft}");
+        Assert.True(b.Top >= workTop, $"Top {b.Top} < workTop {workTop} (ocultaría ─ □ ✕)");
+        Assert.True(b.Left + b.Width <= workLeft + workWidth + 0.01);
+        Assert.True(b.Top + b.Height <= workTop + workHeight + 0.01);
+
+        // Además debe estar centrado dentro del área útil cuando hay margen
+        double expectedCenterLeft = workLeft + Math.Floor((workWidth - b.Width) * 0.5);
+        double expectedCenterTop = workTop + Math.Floor((workHeight - b.Height) * 0.5);
+        Assert.Equal(expectedCenterLeft, b.Left);
+        Assert.Equal(expectedCenterTop, b.Top);
+    }
+
+    [Fact]
+    public void LexClassWindow_UsesManualWorkAreaBoundsAndReputationSync()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string classXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "LexClassWindow.xaml"));
+        string classCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "LexClassWindow.xaml.cs"));
+        string tabsCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Tabs.cs"));
+
+        Assert.Contains("WindowStartupLocation=\"Manual\"", classXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Height=\"820\"", classXaml, StringComparison.Ordinal);
+        Assert.Contains("ComputeSafeCenteredBounds", classCs, StringComparison.Ordinal);
+        Assert.Contains("IsReputationCheckingRequired", tabsCs, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DocumentPipAndNewWindow_Stability_DisablesExperimentalDocPipAndGuardsCollisions()
+    {
+        string flagsSafe = LexBrowser.Core.Engine.BrowserEngine.BuildEngineFlags(new BrowserSettings { EnableSmartScreen = true });
+        string flagsPrivacy = LexBrowser.Core.Engine.BrowserEngine.BuildEngineFlags(new BrowserSettings { EnableSmartScreen = false });
+        Assert.Contains("DocumentPictureInPictureAPI", flagsSafe, StringComparison.Ordinal);
+        Assert.Contains("DocumentPictureInPictureAPI", flagsPrivacy, StringComparison.Ordinal);
+        Assert.Contains("HardwareMediaKeyHandling", flagsPrivacy, StringComparison.Ordinal);
+
+        Assert.Contains("window.documentPictureInPicture && window.documentPictureInPicture.window", MediaRuntime.InjectedScript, StringComparison.Ordinal);
+
+        Assert.True(LexBrowser.MainWindow.ShouldOpenNewWindowAsPopup(hasPopupSize: true, isOAuthUrl: false, url: "https://example.com", hasChromelessFeatures: false));
+        Assert.True(LexBrowser.MainWindow.ShouldOpenNewWindowAsPopup(hasPopupSize: false, isOAuthUrl: true, url: "https://accounts.google.com", hasChromelessFeatures: false));
+        Assert.True(LexBrowser.MainWindow.ShouldOpenNewWindowAsPopup(hasPopupSize: false, isOAuthUrl: false, url: "about:blank", hasChromelessFeatures: true));
+        Assert.True(LexBrowser.MainWindow.ShouldOpenNewWindowAsPopup(hasPopupSize: false, isOAuthUrl: false, url: "", hasChromelessFeatures: true));
+        Assert.False(LexBrowser.MainWindow.ShouldOpenNewWindowAsPopup(hasPopupSize: false, isOAuthUrl: false, url: "about:blank", hasChromelessFeatures: false));
+        Assert.False(LexBrowser.MainWindow.ShouldOpenNewWindowAsPopup(hasPopupSize: false, isOAuthUrl: false, url: "https://www.tiktok.com/@user/video/1", hasChromelessFeatures: false));
+
+        var tiktokTab = new LexBrowser.UI.Models.BrowserTab { Url = "https://www.tiktok.com", IsNewTab = false };
+        var blankTransientTab = new LexBrowser.UI.Models.BrowserTab { Url = "about:blank", IsNewTab = false };
+        var normalNewTab = new LexBrowser.UI.Models.BrowserTab { Url = "", IsNewTab = true };
+        var normalPageTab = new LexBrowser.UI.Models.BrowserTab { Url = "https://example.com", IsNewTab = false };
+
+        Assert.False(LexBrowser.MainWindow.ShouldTriggerAutoPiPOnTabSwitch(true, tiktokTab, blankTransientTab));
+        Assert.False(LexBrowser.MainWindow.ShouldTriggerAutoPiPOnTabSwitch(false, tiktokTab, normalPageTab));
+        Assert.False(LexBrowser.MainWindow.ShouldTriggerAutoPiPOnTabSwitch(true, tiktokTab, tiktokTab));
+        Assert.True(LexBrowser.MainWindow.ShouldTriggerAutoPiPOnTabSwitch(true, tiktokTab, normalNewTab));
+        Assert.True(LexBrowser.MainWindow.ShouldTriggerAutoPiPOnTabSwitch(true, tiktokTab, normalPageTab));
+    }
+
+    [Fact]
+    public void FullScreen_F11AndEscape_KeepWindowChromeAttachedAndDeferComMutations()
+    {
+        Assert.True(LexBrowser.MainWindow.ShouldExitFullScreenOnEscape(fullScreenChromeActive: true, isTabInDomFullScreen: false));
+        Assert.False(LexBrowser.MainWindow.ShouldExitFullScreenOnEscape(fullScreenChromeActive: true, isTabInDomFullScreen: true));
+        Assert.False(LexBrowser.MainWindow.ShouldExitFullScreenOnEscape(fullScreenChromeActive: false, isTabInDomFullScreen: false));
+
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string tabsCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Tabs.cs"));
+        string xamlCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml.cs"));
+        string chromeCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.WindowChrome.cs"));
+        string appCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "App.xaml.cs"));
+        string engineCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "Core", "Engine", "BrowserEngine.cs"));
+
+        Assert.DoesNotContain("WindowChrome.SetWindowChrome(this, null)", tabsCs, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResizeMode = ResizeMode.NoResize", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("deferWindowMutations: true", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("ShouldExitFullScreenOnEscape", xamlCs, StringComparison.Ordinal);
+        Assert.Contains("AppWindowChrome.CaptionHeight = isFullscreen ? 0 : 42", chromeCs, StringComparison.Ordinal);
+        Assert.Contains("AppDomain.CurrentDomain.UnhandledException", appCs, StringComparison.Ordinal);
+        Assert.Contains("TaskScheduler.UnobservedTaskException", appCs, StringComparison.Ordinal);
+        Assert.Contains("BrowserProcessExited", engineCs, StringComparison.Ordinal);
+        Assert.Contains("BrowserProcessExited", tabsCs, StringComparison.Ordinal);
+    }
 }

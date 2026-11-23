@@ -730,6 +730,7 @@ public partial class MainWindow
         string displayName = Path.GetFileName(targetPath);
         bool isIncog = _activeTab?.IsIncognito == true;
         var dlEntry = DownloadManager.RegisterDownload(displayName, targetPath, item.Url, item.SizeBytes, "En progreso", isIncog);
+        RegisterActiveMediaDownload(dlEntry.Id);
         UpdateDownloadsToolbarIndicator();
         if (PopupDownloads != null && PopupDownloads.IsOpen)
             RefreshDownloadsPopupUI();
@@ -785,6 +786,10 @@ public partial class MainWindow
                 RefreshDownloadsPopupUI();
                 if (PopupDownloads != null) PopupDownloads.IsOpen = true;
             });
+        }
+        finally
+        {
+            UnregisterActiveMediaDownload(dlEntry.Id);
         }
     }
 }

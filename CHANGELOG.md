@@ -2,6 +2,37 @@
 
 Todos los cambios notables de **Lex Junior Browser** se documentan en este archivo usando [Semantic Versioning](https://semver.org/).
 
+## [2.8.1] - 2026-11-22
+
+### Novedades y mejoras
+- **Matemáticas interactivas mejoradas (Niveles 1 a 5 en Lex Junior Class)**:
+  - **Cuadrículas interactivas `DM | UM | C | D | U`** para sumas, restas y multiplicaciones de varias cifras con fila superior para **llevadas** (`+1`) y **tachados de préstamo** (`2 | 14 | 9 | 10`), productos parciales en multiplicación por 2 cifras, botón conmutativo `⇄ Cambiar orden` en sumas, indicador de orden fijo en restas y explicaciones columna por columna (incluida estrategia `-1 / -1` en ceros).
+  - **Ubicación adaptativa más clara**: comparación de números `K1..K3` con tarjetas clicables en lugar de escritura manual y cuadrículas de columna en `S2..S5`, `R2..R5` y `M3..M5`.
+  - **Mejoras por nivel sin subir dificultad**: tira posicional `antes/después/entre`, `valor_posicional` sin filtrar la respuesta en `lugar`, esquema de división con casita (`d2..d4`), fracciones con entrada apilada y MCM real (`f3`) + diagramas SVG, decimales/porcentajes con paso guiado (`p3`) y coma decimal unificada, ecuaciones de 2 pasos guiados (`a2/a3`), estadísticas con media/mediana distintas y ordenación en vivo (`da2`), y mini-tablas en Cálculo (`ca1/ca2`).
+- **Nuevo actualizador visual tematizado en Lex Junior Class (`LexClassUpdateDialog`)**:
+  - Reemplaza los avisos blancos del sistema por un diálogo cósmico oscuro con listado de mundos, notas, verificación SHA-256, barra de progreso en vivo (`0% → 100%`) y botón directo **`🔄 Actualizar ahora`** sin tener que salir a buscar el botón del planeta.
+- **Ventana de Lex Junior Class segura para cualquier laptop y escala DPI (`125%` / `150%`)**:
+  - Tamaño inicial proporcional al `86 %` del área útil (`WorkArea`), centrado estricto dentro del monitor activo (`Top >= WorkArea.Top`) para que los botones **`─ □ ✕`** y la barra superior jamás se corten o suban fuera de pantalla en laptops `768p` o con escalado alto.
+- **Desbloqueo inteligente de descargas `.exe` atascadas al `100%`**:
+  - Watchdog seguro en disco para finalizar descargas cuando el archivo ya existe íntegro y libre en `ResultPath`, sincronización de `IsReputationCheckingRequired` con el ajuste SmartScreen del perfil y estado claro en espera de análisis externo.
+- **Estabilidad de pantalla completa (`F11` / `Esc`) y reproductor flotante (PiP)**:
+  - Deshabilitado `DocumentPictureInPictureAPI` en WebView2 para evitar que «Reproductor flotante» (p. ej. TikTok) abra pestañas vacías (`about:blank`), choque con Auto-PiP o cierre el navegador al desactivar el reproductor, manteniendo intacto el PiP nativo `<video>` y **Flotar web**.
+  - Mantiene adjunto `AppWindowChrome` (`CaptionHeight=0`, `ResizeBorderThickness=0`) al entrar en `F11` sin desmontar el frame nativo ni mutar `ResizeMode=NoResize`, difiere atajos desde `AcceleratorKeyPressed` fuera del callback COM síncrono, permite salir de `F11` con `Esc` y captura `BrowserProcessExited` / excepciones no observadas.
+
+## [2.8.0] - 2026-11-22
+
+### Novedades y mejoras
+- **Lanzamiento oficial de Lex Junior Class (Prototipo en desarrollo) en ventana independiente**:
+  - Nueva ventana dedicada (`LexClassWindow`) sin barra de direcciones ni historial del navegador, con modo de pantalla completa propio (`F11` / `Esc` / botón `✕` flotante superior), icono oficial propio (`lexclass.ico`), instalador propio opcional en Escritorio (`--install-lexclass`) y barra de actualizaciones modulares (`🔄 Buscar actualizaciones` → `lexclass-worlds.json` con verificación SHA-256 sin reinstalar el navegador).
+  - Motor 100 % puro de **Universo de Mundos (`universo-engine`)**, eliminando por completo el portal antiguo: **Universo I · Fundamentos**, adelanto de **Universo II (+1000 años)**, **Matemáticas (5 niveles · 12 etapas · 51 misiones hasta Cálculo)**, **Inglés paso a paso + LexBook (5 niveles · 12 etapas · 24 misiones)** y **Brújula Humana**.
+  - **Nuevo paisaje sonoro musical (`🎵 Ambiente`)**: música generativa 100 % offline en Web Audio API para **Matemáticas** (piano cálido / celesta estilo aventura anime calmada + brisa natural) y para **Inglés** (kalimba / arpa chill + brisa marina).
+- **Depuración visual de barra superior y accesos honestos**:
+  - Botones compactos (**Flotar web**, **Media**, **Lex Class**, **Telemetría?**) con estado claro de privacidad y telemetría honesta.
+- **Correcciones clave de estabilidad en Lex Junior Browser**:
+  - **Snap Layouts sin parpadeo**: el selector de distribución bajo el botón maximizar ya no titila al pasar el cursor por el borde superior.
+  - **Descargas limpias**: corregida la advertencia falsa de cancelación al completar descargas (`DownloadManager` vs estado final de WebView2).
+  - **Pantalla completa `F11`, `Ctrl+Tab` y aislamiento de YouTube**: desduplicación antirebote entre `WebView2` y WPF para evitar doble activación en 1 ms, transición sin salto `Normal → Maximized` para eliminar pantallas en blanco al cambiar de pestaña con `Ctrl+Tab`, aislamiento de fullscreen HTML5 de YouTube y botón flotante `✕` arriba al centro al acercar el mouse.
+
 ## [2.7.0] - 2026-11-18
 
 ### Novedades y mejoras

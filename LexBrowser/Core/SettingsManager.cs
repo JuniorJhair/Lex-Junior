@@ -39,6 +39,8 @@ public class BrowserSettings
     public string DefaultSearchEngine { get; set; } = "Google";
     public string CustomSearchUrl { get; set; } = "https://www.google.com/search?q=";
     public bool EnableSearchSuggestions { get; set; } = true;
+    public bool AskWhereToSaveDownloads { get; set; } = true;
+    public string DefaultDownloadDirectory { get; set; } = "";
     public bool EnableExternalFaviconService { get; set; } = true;
     public bool EnableSmartScreen { get; set; } = false;
     public bool EnableClientSidePhishingDetection { get; set; } = false;
@@ -1215,6 +1217,49 @@ public static class SettingsManager
                     : Current.CustomSearchUrl + encoded),
             _ => $"https://www.google.com/search?q={encoded}"
         };
+    }
+
+    public static string GetEffectiveDownloadDirectory(string? configuredDir = null)
+    {
+        string? candidate = configuredDir ?? Current.DefaultDownloadDirectory;
+        if (!string.IsNullOrWhiteSpace(candidate))
+        {
+            try
+            {
+                string full = Path.GetFullPath(candidate.Trim());
+                if (Directory.Exists(full))
+                {
+                    return full;
+                }
+            }
+            catch { }
+        }
+
+        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(userProfile))
+        {
+            string defaultDownloads = Path.Combine(userProfile, "Downloads");
+            try
+            {
+                if (!Directory.Exists(defaultDownloads))
+                {
+                    Directory.CreateDirectory(defaultDownloads);
+                }
+                if (Directory.Exists(defaultDownloads))
+                {
+                    return defaultDownloads;
+                }
+            }
+            catch { }
+        }
+
+        string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (!string.IsNullOrWhiteSpace(desktop) && Directory.Exists(desktop))
+        {
+            return desktop;
+        }
+
+        return Path.GetTempPath();
     }
 }
 

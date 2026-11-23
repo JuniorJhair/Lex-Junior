@@ -96,6 +96,8 @@ public partial class SettingsWindow : Window
         UpdateAdBlockerSubTogglesEnabledState();
         ChkRestoreSession.IsChecked = s.RestorePreviousSession;
         ChkEnableHistory.IsChecked = s.EnableHistory;
+        if (ChkAskWhereToSaveDownloads != null) ChkAskWhereToSaveDownloads.IsChecked = s.AskWhereToSaveDownloads;
+        UpdateDownloadDirectoryLabel();
         if (ChkEnableSearchSuggestions != null) ChkEnableSearchSuggestions.IsChecked = s.EnableSearchSuggestions;
         UpdateRecoverySaveWarningBanner();
         UpdatePrivacyProfileUI();
@@ -381,6 +383,7 @@ public partial class SettingsWindow : Window
         s.Shield.Modules.Subframes = s.EnableWebShieldInSubframes;
 
         s.RestorePreviousSession = ChkRestoreSession.IsChecked == true;
+        if (ChkAskWhereToSaveDownloads != null) s.AskWhereToSaveDownloads = ChkAskWhereToSaveDownloads.IsChecked == true;
         s.NotificationDiscardOlderThan24Hours = ChkDiscardOlder24h.IsChecked == true;
         s.NotificationDndOnFullscreen = ChkDndFullscreen.IsChecked == true;
         if (ChkEnableSearchSuggestions != null) s.EnableSearchSuggestions = ChkEnableSearchSuggestions.IsChecked == true;
@@ -437,6 +440,36 @@ public partial class SettingsWindow : Window
         {
             _isInitializing = false;
         }
+    }
+
+    private void UpdateDownloadDirectoryLabel()
+    {
+        if (TxtDefaultDownloadFolder == null) return;
+        string dir = SettingsManager.GetEffectiveDownloadDirectory();
+        TxtDefaultDownloadFolder.Text = dir;
+        TxtDefaultDownloadFolder.ToolTip = dir;
+    }
+
+    private void BtnPickDownloadFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Seleccionar carpeta de descargas",
+            InitialDirectory = SettingsManager.GetEffectiveDownloadDirectory()
+        };
+        if (dialog.ShowDialog(this) == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
+        {
+            SettingsManager.Current.DefaultDownloadDirectory = dialog.FolderName;
+            UpdateDownloadDirectoryLabel();
+            SaveSettingsExplicitly();
+        }
+    }
+
+    private void BtnResetDownloadFolder_Click(object sender, RoutedEventArgs e)
+    {
+        SettingsManager.Current.DefaultDownloadDirectory = "";
+        UpdateDownloadDirectoryLabel();
+        SaveSettingsExplicitly();
     }
 
     private void UpdateRecoverySaveWarningBanner()

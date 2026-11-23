@@ -35,15 +35,16 @@ public static class BrowserEngine
 
     /// <summary>
     /// Construye dinámicamente los flags de Chromium según los ajustes del perfil.
-    /// Conserva intactos los demás flags (incluidos HardwareMediaKeyHandling y --autoplay-policy).
+    /// Conserva intactos los demás flags (incluidos HardwareMediaKeyHandling y --autoplay-policy)
+    /// y deshabilita DocumentPictureInPictureAPI (no soportado nativamente en WebView2; evita pestañas en blanco/crashes).
     /// </summary>
     internal static string BuildEngineFlags(BrowserSettings? settings)
     {
         settings ??= new BrowserSettings();
 
         string disabledFeatures = settings.EnableSmartScreen
-            ? "OptimizationHints,Translate,InterestCohort,MediaRouter,HardwareMediaKeyHandling"
-            : "OptimizationHints,Translate,InterestCohort,msSmartScreenProtection,MediaRouter,HardwareMediaKeyHandling";
+            ? "OptimizationHints,Translate,InterestCohort,MediaRouter,HardwareMediaKeyHandling,DocumentPictureInPictureAPI"
+            : "OptimizationHints,Translate,InterestCohort,msSmartScreenProtection,MediaRouter,HardwareMediaKeyHandling,DocumentPictureInPictureAPI";
 
         string phishingFlag = settings.EnableClientSidePhishingDetection
             ? string.Empty
@@ -145,6 +146,20 @@ public static class BrowserEngine
                     browserExecutableFolder: null,
                     userDataFolder: userDataFolder,
                     options: options)).ConfigureAwait(false);
+
+            created.BrowserProcessExited += (_, args) =>
+            {
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine($"[BrowserEngine] BrowserProcessExited kind={args.BrowserProcessExitKind} pid={args.BrowserProcessId}");
+                    if (LexBrowser.Core.AdBlock.ShieldLogger.DiagnosticMode)
+                    {
+                        LexBrowser.Core.AdBlock.ShieldLogger.Log("WEBVIEW_BROWSER_PROCESS_EXITED", "engine", "", "Environment", $"Kind={args.BrowserProcessExitKind}, Pid={args.BrowserProcessId}");
+                    }
+                }
+                catch { }
+                Interlocked.CompareExchange(ref _sharedEnvironment, null, created);
+            };
 
             _appliedSmartScreenAtCreation = smartScreen;
             _appliedClientSidePhishingAtCreation = phishingDetection;

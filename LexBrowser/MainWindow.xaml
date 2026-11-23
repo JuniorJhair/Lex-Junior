@@ -418,7 +418,9 @@
             <!-- Controles de Ventana (Minimizar, Maximizar, Cerrar) -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
                 <Button x:Name="BtnMinimize" Content="─" Style="{StaticResource WindowCtrlBtn}" Click="BtnMinimize_Click" ToolTip="Minimizar" AutomationProperties.Name="Minimizar"/>
-                <Button x:Name="BtnMaxRestore" Content="□" Style="{StaticResource WindowCtrlBtn}" Click="BtnMaximize_Click" ToolTip="Maximizar" AutomationProperties.Name="Maximizar"/>
+                <Button x:Name="BtnMaxRestore" Content="□" Style="{StaticResource WindowCtrlBtn}" Click="BtnMaximize_Click"
+                        MouseEnter="BtnMaxRestore_MouseEnter" MouseLeave="BtnMaxRestore_MouseLeave"
+                        AutomationProperties.Name="Maximizar / Diseños de ventana"/>
                 <Button x:Name="BtnClose" Content="✕" Style="{StaticResource WindowCloseBtn}" Click="BtnClose_Click" ToolTip="Cerrar" AutomationProperties.Name="Cerrar"/>
             </StackPanel>
         </Grid>
@@ -460,7 +462,8 @@
 
                     <!-- Logo G multicolor de Google (visible al buscar o en Nueva Pestaña) + Icono de Seguridad HTTPS -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
-                        <Border x:Name="BadgeGoogleOmnibox" Width="18" Height="18" CornerRadius="9" Background="#1F2432" VerticalAlignment="Center" ToolTip="Buscar con Google">
+                        <Border x:Name="BadgeGoogleOmnibox" Width="18" Height="18" CornerRadius="9" Background="#1F2432" VerticalAlignment="Center"
+                                Cursor="Hand" MouseLeftButtonDown="BadgeGoogleOmnibox_Click" ToolTip="Buscar en la barra de direcciones">
                             <Viewbox Width="13" Height="13">
                                 <Canvas Width="24" Height="24">
                                     <Path Fill="#4285F4" Data="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>
@@ -1090,27 +1093,24 @@
                     </Border>
                 </Button>
 
-                <!-- Botón Lex Junior Class (Academia interactiva integrada — Próxima actualización) -->
+                <!-- Botón Lex Junior Class (Academia interactiva integrada — Prototipo) -->
                 <Button x:Name="BtnLexClass" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
-                        ToolTip="Lex Junior Class: Academia interactiva paso a paso (Disponible en la próxima actualización)" Click="BtnLexClass_Click">
-                    <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="10,4,12,4">
+                        ToolTip="Lex Junior Class: Academia interactiva paso a paso (Prototipo offline)" Click="BtnLexClass_Click">
+                    <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="10,4,10,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="🎓" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBlock Text="Lex Class" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <Border CornerRadius="4" Padding="4,1" Background="#28FF6B00" BorderBrush="#66FF6B00" BorderThickness="1" VerticalAlignment="Center">
-                                <TextBlock Text="PRONTO" FontSize="8.5" FontWeight="ExtraBold" Foreground="#FB923C"/>
-                            </Border>
+                            <TextBlock x:Name="TxtLexClassBtnLabel" Text="Lex Class" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>
 
-                <!-- Botón Página Flotante (Controlable desde configuración) -->
+                <!-- Botón Flotar web (Controlable desde configuración) -->
                 <Button x:Name="BtnTogglePip" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0" 
-                        ToolTip="Página Flotante: ver la página web completa en una mini ventana flotante" Click="BtnTogglePip_Click">
+                        ToolTip="Flotar web: ver la página web completa en una mini ventana flotante" Click="BtnTogglePip_Click">
                     <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="8,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="🗖" FontSize="12" Foreground="{DynamicResource AccentHover}" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtPipBtnLabel" Text="Página Flotante" Margin="5,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtPipBtnLabel" Text="Flotar web" Margin="5,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -1179,7 +1179,7 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Ellipse x:Name="DotMediaSnifferStatus" Width="6" Height="6" Fill="#8B8B96" Margin="0,0,5,0" VerticalAlignment="Center"/>
                             <TextBlock Text="📥" FontSize="11" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="TxtMediaSnifferLabel" Text="Multimedia" Margin="4,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtMediaSnifferLabel" Text="Media" Margin="4,0,0,0" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </Button>
@@ -1360,12 +1360,12 @@
                 </Popup>
 
 
-                <!-- Pill Sin Telemetría (Clic abre la pestaña explicativa en Configuración) -->
+                <!-- Pill ¿Telemetría? (Clic abre la pestaña explicativa en Configuración) -->
                 <Border x:Name="BorderTelemetryBadge" Background="{DynamicResource TelemetryBadgeBg}" CornerRadius="8" Padding="8,4" VerticalAlignment="Center" Margin="2,0"
-                        Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="Sin telemetría propia de Lex Junior: haz clic para abrir Privacidad y seguridad">
+                        Cursor="Hand" MouseLeftButtonDown="BadgeTelemetry_Click" ToolTip="Transparencia sobre privacidad y conexiones externas: haz clic para ver el detalle completo">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <Ellipse Width="7" Height="7" Fill="{DynamicResource TelemetryDotFg}" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtTelemetryLabel" Text="Sin telemetría propia" Margin="6,0,0,0" FontSize="11" Foreground="{DynamicResource TelemetryBadgeFg}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtTelemetryLabel" Text="Telemetría?" Margin="6,0,0,0" FontSize="11" Foreground="{DynamicResource TelemetryBadgeFg}" FontWeight="SemiBold" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -1410,13 +1410,14 @@
 
                 <!-- Popup del Historial de Descargas -->
                 <Popup x:Name="PopupDownloads" PlacementTarget="{Binding ElementName=BtnDownloads}" Placement="Bottom"
-                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" VerticalOffset="6" HorizontalOffset="-330">
-                    <Border Background="#181822" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="12" Padding="14,12" Width="400">
+                       StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" VerticalOffset="6" HorizontalOffset="-350"
+                       Opened="PopupDownloads_Opened">
+                    <Border Background="#181822" BorderBrush="#312E81" BorderThickness="1.5" CornerRadius="12" Padding="14,12" Width="430">
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.65" Color="#000000"/>
                         </Border.Effect>
                         <StackPanel>
-                            <Grid Margin="0,0,0,10">
+                            <Grid Margin="0,0,0,8">
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="⬇ Historial de Descargas" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
                                     <TextBlock x:Name="TxtDownloadsCountSubtitle" Text="Solo en esta sesión · Inactivo" Foreground="#9CA3AF" FontSize="10.5" Margin="0,2,0,0" TextWrapping="Wrap"/>
@@ -1424,12 +1425,30 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                                     <Button Style="{StaticResource LexSecondaryButton}" Content="📂 Carpeta" Click="BtnOpenDownloadsFolder_Click"
                                             FontSize="10.5" Padding="8,4" MinHeight="26" Margin="0,0,5,0"
-                                            ToolTip="Abrir la carpeta de Descargas de Windows"/>
+                                            ToolTip="Abrir la carpeta de Descargas"/>
                                     <Button Style="{StaticResource LexSecondaryButton}" Content="🗑️ Limpiar" Click="BtnClearDownloadsHistory_Click"
                                             FontSize="10.5" Padding="8,4" MinHeight="26" Foreground="#A1A1AA"
                                             ToolTip="Limpiar la lista del historial de descargas (no borra tus archivos del disco)"/>
                                 </StackPanel>
                             </Grid>
+
+                            <!-- Modo de guardado: Guardar como (predeterminado) o Descarga directa 1 clic -->
+                            <Border Background="#12121A" BorderBrush="#272736" BorderThickness="1" CornerRadius="8" Padding="10,6" Margin="0,0,0,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="TxtDownloadSaveModeLabel" Grid.Column="0"
+                                               Text="📁 Guardar como: elige dónde guardar cada archivo"
+                                               Foreground="#A1A1AA" FontSize="10.5" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
+                                    <Button x:Name="BtnToggleDirectDownload" Grid.Column="1"
+                                            Style="{StaticResource LexSecondaryButton}" Content="⚡ Descarga directa: OFF"
+                                            Click="BtnToggleDirectDownload_Click" FontSize="10" Padding="8,3" MinHeight="24"
+                                            ToolTip="Alternar entre elegir carpeta en cada descarga o descarga directa automática"/>
+                                </Grid>
+                            </Border>
 
                             <Border Background="#12121A" BorderBrush="#272736" BorderThickness="1" CornerRadius="8" Padding="6" Height="250">
                                 <Grid>
@@ -1462,7 +1481,6 @@
                                                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding FilePath}"/>
                                                                 <TextBlock Text="{Binding StatusDisplay}" Foreground="#9CA3AF" FontSize="10.5" Margin="0,1,0,0" TextTrimming="CharacterEllipsis"/>
                                                                 <ProgressBar Value="{Binding ProgressPercent, Mode=OneWay}" Maximum="100" Height="3.5"
-                                                                             IsIndeterminate="{Binding IsIndeterminateProgress, Mode=OneWay}"
                                                                              Foreground="#10B981" Background="#27273A" BorderThickness="0" Margin="0,3,0,0"
                                                                              Visibility="{Binding IsActive, Converter={StaticResource BoolToVis}}"/>
                                                             </StackPanel>
@@ -1949,6 +1967,78 @@
             </Border>
         </Popup>
 
+        <!-- Selector Multi-Cuenta para Autocompletar Contraseñas (Airspace-Safe Popup) -->
+        <Popup x:Name="PopupAutofillPicker" PlacementTarget="{Binding ElementName=BrowserContainer}" Placement="Relative"
+               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Background="#161622" BorderBrush="#4F46E5" BorderThickness="1.5" CornerRadius="12" Padding="12,10" Width="310">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.75" Color="#000000"/>
+                </Border.Effect>
+                <StackPanel>
+                    <Grid Margin="0,0,0,8">
+                        <StackPanel>
+                            <TextBlock Text="🔑 Elegir cuenta guardada" FontSize="12.5" FontWeight="Bold" Foreground="#F4F4F5"/>
+                            <TextBlock x:Name="TxtAutofillPickerDomain" Text="sitio.com" FontSize="10.5" Foreground="#818CF8"/>
+                        </StackPanel>
+                        <Button Style="{StaticResource LexGhostButton}" Content="✕" Width="24" Height="24" Padding="0"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" FontSize="10.5"
+                                Click="BtnCloseAutofillPicker_Click" ToolTip="Cerrar"/>
+                    </Grid>
+
+                    <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="ItemsAutofillAccounts">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Tag="{Binding}" Click="BtnPickAutofillAccount_Click" Margin="0,0,0,5"
+                                            HorizontalContentAlignment="Stretch" Cursor="Hand" BorderThickness="0" Padding="0" Background="Transparent"
+                                            FocusVisualStyle="{StaticResource LexFocusVisual}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="Card" Background="#1F1F2E" BorderBrush="#2D2D42" BorderThickness="1" CornerRadius="8" Padding="9,7">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <Border Grid.Column="0" Width="28" Height="28" CornerRadius="7" Background="#2E2A5E" Margin="0,0,9,0" VerticalAlignment="Center">
+                                                            <Grid>
+                                                                <TextBlock Text="{Binding DomainInitial}" Foreground="#A5B4FC" FontWeight="Bold" FontSize="12"
+                                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                           Visibility="{Binding HasNoFaviconImage, Converter={StaticResource BoolToVis}}"/>
+                                                                <Image Source="{Binding FaviconImage}" Width="16" Height="16"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                                       Visibility="{Binding HasFaviconImage, Converter={StaticResource BoolToVis}}"/>
+                                                            </Grid>
+                                                        </Border>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0">
+                                                            <TextBlock Text="{Binding DisplayUsername}" Foreground="#F4F4F5" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Text="{Binding OriginHost}" Foreground="#9CA3AF" FontSize="10" TextTrimming="CharacterEllipsis"/>
+                                                        </StackPanel>
+                                                        <TextBlock Grid.Column="2" Text="Usar →" Foreground="#818CF8" FontSize="10.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Card" Property="Background" Value="#2A2A40"/>
+                                                        <Setter TargetName="Card" Property="BorderBrush" Value="#6366F1"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <Border Height="1" Background="#272738" Margin="0,4,0,6"/>
+                    <Button Style="{StaticResource LexGhostButton}" Content="⚙️ Administrar contraseñas en Bóveda"
+                            Click="BtnOpenVaultFromAutofillPicker_Click" FontSize="11" Foreground="#A1A1AA" HorizontalAlignment="Left" Padding="4,2"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+
         <!-- Pantalla de Bloqueo al Iniciar / Reanudar Windows (Con Configuración Inicial, Modo Invitado y Recuperación) -->
         <Border x:Name="BrowserLockOverlay" Grid.Row="1" Grid.RowSpan="5" Background="#0C0C12" Visibility="Collapsed" Panel.ZIndex="2500">
             <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="Auto" MaxWidth="500" Margin="16">
@@ -2106,6 +2196,125 @@
             </Grid>
         </Border>
 
+        <!-- Diseños de ventana al pasar sobre Maximizar/Restaurar (Estilo Windows 11 Snap Layouts) -->
+        <Popup x:Name="PopupSnapLayouts" PlacementTarget="{Binding ElementName=BtnMaxRestore}" Placement="Bottom"
+               HorizontalOffset="-96" VerticalOffset="0" AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade">
+            <Border Background="Transparent" Padding="0,4,0,0"
+                    MouseEnter="PopupSnapLayouts_MouseEnter" MouseLeave="PopupSnapLayouts_MouseLeave">
+                <Border x:Name="SnapLayoutsCard" Background="#202028" BorderBrush="#3A3A4C" BorderThickness="1.2" CornerRadius="10" Padding="9">
+                <Border.Resources>
+                    <Style x:Key="SnapZoneBtn" TargetType="Button">
+                        <Setter Property="Background" Value="#32323F"/>
+                        <Setter Property="BorderBrush" Value="#545466"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Margin" Value="1.5"/>
+                        <Setter Property="FocusVisualStyle" Value="{StaticResource LexFocusVisual}"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="z" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="3"/>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="z" Property="Background" Value="#4F46E5"/>
+                                            <Setter TargetName="z" Property="BorderBrush" Value="#A5B4FC"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="z" Property="Background" Value="#4338CA"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Border.Resources>
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="22" ShadowDepth="6" Opacity="0.78" Color="#000000"/>
+                </Border.Effect>
+                <UniformGrid Columns="2" Rows="3">
+                    <!-- 1. Dos mitades iguales (50 / 50) -->
+                    <Grid Width="92" Height="52" Margin="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Style="{StaticResource SnapZoneBtn}" Tag="0,0,0.5,1" Click="BtnSnapZone_Click" ToolTip="Mitad izquierda (50%)"/>
+                        <Button Grid.Column="1" Style="{StaticResource SnapZoneBtn}" Tag="0.5,0,0.5,1" Click="BtnSnapZone_Click" ToolTip="Mitad derecha (50%)"/>
+                    </Grid>
+
+                    <!-- 2. Mitad izquierda + 2 cuadrantes derechos -->
+                    <Grid Width="92" Height="52" Margin="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Button Grid.Column="0" Grid.RowSpan="2" Style="{StaticResource SnapZoneBtn}" Tag="0,0,0.5,1" Click="BtnSnapZone_Click" ToolTip="Mitad izquierda (50%)"/>
+                        <Button Grid.Column="1" Grid.Row="0" Style="{StaticResource SnapZoneBtn}" Tag="0.5,0,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Superior derecha"/>
+                        <Button Grid.Column="1" Grid.Row="1" Style="{StaticResource SnapZoneBtn}" Tag="0.5,0.5,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Inferior derecha"/>
+                    </Grid>
+
+                    <!-- 3. Tres columnas (1/3 + 1/3 + 1/3) -->
+                    <Grid Width="92" Height="52" Margin="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Style="{StaticResource SnapZoneBtn}" Tag="0,0,0.3333,1" Click="BtnSnapZone_Click" ToolTip="Tercio izquierdo"/>
+                        <Button Grid.Column="1" Style="{StaticResource SnapZoneBtn}" Tag="0.3333,0,0.3334,1" Click="BtnSnapZone_Click" ToolTip="Tercio central"/>
+                        <Button Grid.Column="2" Style="{StaticResource SnapZoneBtn}" Tag="0.6667,0,0.3333,1" Click="BtnSnapZone_Click" ToolTip="Tercio derecho"/>
+                    </Grid>
+
+                    <!-- 4. Grande izquierda + estrecha derecha (2/3 + 1/3) -->
+                    <Grid Width="92" Height="52" Margin="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Style="{StaticResource SnapZoneBtn}" Tag="0,0,0.6667,1" Click="BtnSnapZone_Click" ToolTip="Dos tercios izquierda (66%)"/>
+                        <Button Grid.Column="1" Style="{StaticResource SnapZoneBtn}" Tag="0.6667,0,0.3333,1" Click="BtnSnapZone_Click" ToolTip="Tercio derecho (33%)"/>
+                    </Grid>
+
+                    <!-- 5. 2 cuadrantes izquierdos + mitad derecha -->
+                    <Grid Width="92" Height="52" Margin="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Button Grid.Column="0" Grid.Row="0" Style="{StaticResource SnapZoneBtn}" Tag="0,0,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Superior izquierda"/>
+                        <Button Grid.Column="0" Grid.Row="1" Style="{StaticResource SnapZoneBtn}" Tag="0,0.5,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Inferior izquierda"/>
+                        <Button Grid.Column="1" Grid.RowSpan="2" Style="{StaticResource SnapZoneBtn}" Tag="0.5,0,0.5,1" Click="BtnSnapZone_Click" ToolTip="Mitad derecha (50%)"/>
+                    </Grid>
+
+                    <!-- 6. Cuatro cuadrantes -->
+                    <Grid Width="92" Height="52" Margin="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Button Grid.Column="0" Grid.Row="0" Style="{StaticResource SnapZoneBtn}" Tag="0,0,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Cuadrante superior izquierdo"/>
+                        <Button Grid.Column="1" Grid.Row="0" Style="{StaticResource SnapZoneBtn}" Tag="0.5,0,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Cuadrante superior derecho"/>
+                        <Button Grid.Column="0" Grid.Row="1" Style="{StaticResource SnapZoneBtn}" Tag="0,0.5,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Cuadrante inferior izquierdo"/>
+                        <Button Grid.Column="1" Grid.Row="1" Style="{StaticResource SnapZoneBtn}" Tag="0.5,0.5,0.5,0.5" Click="BtnSnapZone_Click" ToolTip="Cuadrante inferior derecho"/>
+                    </Grid>
+                </UniformGrid>
+                </Border>
+            </Border>
+        </Popup>
+
         <!-- Popup Flotante Airspace-Safe de Zoom sobre WebView2 -->
         <Popup x:Name="PopupZoomWidget" PlacementTarget="{Binding ElementName=PillZoomIndicator}" Placement="Bottom"
                VerticalOffset="6" HorizontalOffset="-80" AllowsTransparency="True" StaysOpen="False" PopupAnimation="Fade">
@@ -2125,6 +2334,37 @@
                             Padding="8,3" MinHeight="28" Margin="8,0,0,0" Click="BtnZoomReset_Click"
                             ToolTip="Restablecer zoom al 100% original (Ctrl+0)"/>
                 </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- Botón flotante X arriba al centro para salir de pantalla completa (Airspace-safe sobre WebView2) -->
+        <Popup x:Name="PopupFullScreenExit"
+               PlacementTarget="{Binding ElementName=RootWindowGrid}"
+               Placement="Custom"
+               AllowsTransparency="True"
+               StaysOpen="True"
+               PopupAnimation="Fade">
+            <Border x:Name="FullScreenExitCard"
+                    Margin="16,12,16,16"
+                    Width="44" Height="44"
+                    CornerRadius="22"
+                    Background="#E6141724"
+                    BorderBrush="#77818CF8"
+                    BorderThickness="1.2">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="16" ShadowDepth="4" Color="#000000" Opacity="0.72"/>
+                </Border.Effect>
+                <Button x:Name="BtnExitFullScreen"
+                        Style="{StaticResource LexGhostButton}"
+                        Content="✕"
+                        Width="42" Height="42"
+                        Padding="0"
+                        FontSize="16"
+                        FontWeight="Bold"
+                        Foreground="#F8FAFC"
+                        Click="BtnExitFullScreen_Click"
+                        ToolTip="Salir de pantalla completa (F11)"
+                        AutomationProperties.Name="Salir de pantalla completa"/>
             </Border>
         </Popup>
 

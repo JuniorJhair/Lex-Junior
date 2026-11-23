@@ -38,6 +38,7 @@ public static class SessionManager
             var validTabs = tabs
                 .Where(t => !t.IsIncognito && !t.IsDisposed && !string.IsNullOrWhiteSpace(t.Url) &&
                             !t.Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase) &&
+                            !LexClassStudioService.IsClassUrl(t.Url) &&
                             t.Url != "about:blank" && !t.IsNewTab)
                 .ToList();
 

@@ -32,7 +32,47 @@ public static class InstallerService
     public static string StartMenuShortcutPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Lex Junior Browser.lnk");
 
+    public static string LexClassDesktopShortcutPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Lex Junior Class.lnk");
+
+    public static string LexClassStartMenuShortcutPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Lex Junior Class.lnk");
+
+    public const string BrowserAppUserModelId = "LexJunior.Browser";
+    public const string LexClassAppUserModelId = "LexJunior.Class";
+
+    public static string InstalledLexClassIconPath =>
+        Path.Combine(InstallDir, "lexclass.ico");
+
     public static bool IsAlreadyInstalled() => File.Exists(InstalledExePath);
+
+    public static bool ShouldRunAsLexClassLauncher(string[]? args)
+    {
+        if (args == null) return false;
+        foreach (var a in args)
+        {
+            if (string.Equals(a, "--lexclass", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a, "/lexclass", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static bool ShouldRunAsLexClassInstaller(string[]? args)
+    {
+        if (args == null) return false;
+        foreach (var a in args)
+        {
+            if (string.Equals(a, "--install-lexclass", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(a, "/install-lexclass", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /// <summary>
     /// Determina si el ejecutable actual fue abierto como instalador (ej. LexJuniorSetup.exe o con --install).
@@ -85,7 +125,8 @@ public static class InstallerService
     public static async Task InstallAsync(
         bool createDesktopShortcut,
         bool createStartMenuShortcut,
-        IProgress<(int Percent, string Status)>? progress = null)
+        IProgress<(int Percent, string Status)>? progress = null,
+        bool createLexClassDesktopShortcut = false)
     {
         progress?.Report((10, "Cerrando instancias previas de Lex Junior..."));
         await Task.Run(() => StopOtherLexProcesses());
@@ -120,6 +161,8 @@ public static class InstallerService
         progress?.Report((60, "Extrayendo recursos e iconos oficiales..."));
         string iconPath = Path.Combine(InstallDir, "app.ico");
         ExtractEmbeddedIconToDisk(iconPath);
+        string lexClassIconPath = InstalledLexClassIconPath;
+        ExtractEmbeddedLexClassIconToDisk(lexClassIconPath);
 
         progress?.Report((80, "Creando accesos directos y registrando navegador en Windows..."));
         await Task.Run(() =>
@@ -131,6 +174,25 @@ public static class InstallerService
             if (createStartMenuShortcut)
             {
                 CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y sin telemetría propia");
+                CreateWindowsShortcut(
+                    LexClassStartMenuShortcutPath,
+                    InstalledExePath,
+                    InstallDir,
+                    lexClassIconPath,
+                    "Lex Junior Class — Academia interactiva local (Prototipo)",
+                    "--lexclass",
+                    LexClassAppUserModelId);
+            }
+            if (createLexClassDesktopShortcut)
+            {
+                CreateWindowsShortcut(
+                    LexClassDesktopShortcutPath,
+                    InstalledExePath,
+                    InstallDir,
+                    lexClassIconPath,
+                    "Lex Junior Class — Academia interactiva local (Prototipo)",
+                    "--lexclass",
+                    LexClassAppUserModelId);
             }
 
             RegisterInWindowsAddRemovePrograms(iconPath);
@@ -142,9 +204,110 @@ public static class InstallerService
         progress?.Report((100, "¡Instalación completada con éxito!"));
     }
 
+    public static async Task InstallLexClassShortcutsAsync(
+        bool createDesktopShortcut,
+        bool createStartMenuShortcut,
+        IProgress<(int Percent, string Status)>? progress = null)
+    {
+        progress?.Report((15, "Preparando carpeta de Lex Junior Class..."));
+        string targetExe = File.Exists(InstalledExePath)
+            ? InstalledExePath
+            : (Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "");
+
+        if (!File.Exists(InstalledExePath) && !string.IsNullOrEmpty(targetExe) && File.Exists(targetExe))
+        {
+            progress?.Report((35, "Instalando ejecutable base de Lex Junior para acceso independiente..."));
+            await Task.Run(() =>
+            {
+                Directory.CreateDirectory(InstallDir);
+                string currentDir = Path.GetDirectoryName(targetExe) ?? "";
+                File.Copy(targetExe, InstalledExePath, overwrite: true);
+                string sidecarDll = Path.Combine(currentDir, "LexBrowser.dll");
+                if (File.Exists(sidecarDll))
+                {
+                    CopyDirectoryRecursive(currentDir, InstallDir, excludeFileName: Path.GetFileName(targetExe));
+                }
+            });
+            targetExe = InstalledExePath;
+        }
+
+        if (string.IsNullOrEmpty(targetExe) || !File.Exists(targetExe))
+        {
+            throw new InvalidOperationException("No se pudo localizar el ejecutable de Lex Junior para crear el acceso directo.");
+        }
+
+        progress?.Report((65, "Extrayendo icono oficial de Lex Junior Class..."));
+        string workingDir = Path.GetDirectoryName(targetExe) ?? InstallDir;
+        Directory.CreateDirectory(InstallDir);
+        string appIcon = Path.Combine(InstallDir, "app.ico");
+        if (!File.Exists(appIcon)) ExtractEmbeddedIconToDisk(appIcon);
+        string lexClassIconPath = InstalledLexClassIconPath;
+        ExtractEmbeddedLexClassIconToDisk(lexClassIconPath);
+
+        progress?.Report((85, "Creando accesos directos de Lex Junior Class..."));
+        await Task.Run(() =>
+        {
+            if (createDesktopShortcut)
+            {
+                CreateWindowsShortcut(
+                    LexClassDesktopShortcutPath,
+                    targetExe,
+                    workingDir,
+                    lexClassIconPath,
+                    "Lex Junior Class — Academia interactiva local (Prototipo)",
+                    "--lexclass",
+                    LexClassAppUserModelId);
+            }
+            if (createStartMenuShortcut)
+            {
+                CreateWindowsShortcut(
+                    LexClassStartMenuShortcutPath,
+                    targetExe,
+                    workingDir,
+                    lexClassIconPath,
+                    "Lex Junior Class — Academia interactiva local (Prototipo)",
+                    "--lexclass",
+                    LexClassAppUserModelId);
+            }
+
+            if (File.Exists(InstalledExePath))
+            {
+                RegisterInWindowsAddRemovePrograms(appIcon);
+            }
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSH, IntPtr.Zero, IntPtr.Zero);
+        });
+
+        progress?.Report((100, "¡Lex Junior Class quedó listo en tu equipo!"));
+    }
+
+    public static void LaunchInstalledLexClass()
+    {
+        try
+        {
+            string exe = File.Exists(InstalledExePath)
+                ? InstalledExePath
+                : (Environment.ProcessPath ?? "");
+            if (!string.IsNullOrEmpty(exe) && File.Exists(exe))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = "--lexclass",
+                    WorkingDirectory = Path.GetDirectoryName(exe) ?? InstallDir,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch { }
+    }
+
     public static async Task PerformSilentUpdateAndRestartAsync()
     {
-        await InstallAsync(createDesktopShortcut: File.Exists(DesktopShortcutPath), createStartMenuShortcut: true);
+        await InstallAsync(
+            createDesktopShortcut: File.Exists(DesktopShortcutPath),
+            createStartMenuShortcut: true,
+            progress: null,
+            createLexClassDesktopShortcut: File.Exists(LexClassDesktopShortcutPath));
         LaunchInstalledBrowser();
     }
 
@@ -175,6 +338,8 @@ public static class InstallerService
         {
             try { if (File.Exists(DesktopShortcutPath)) File.Delete(DesktopShortcutPath); } catch { }
             try { if (File.Exists(StartMenuShortcutPath)) File.Delete(StartMenuShortcutPath); } catch { }
+            try { if (File.Exists(LexClassDesktopShortcutPath)) File.Delete(LexClassDesktopShortcutPath); } catch { }
+            try { if (File.Exists(LexClassStartMenuShortcutPath)) File.Delete(LexClassStartMenuShortcutPath); } catch { }
             try { Registry.CurrentUser.DeleteSubKeyTree(UninstallRegistrySubKey, throwOnMissingSubKey: false); } catch { }
             UnregisterAsDefaultBrowser();
         });
@@ -659,11 +824,44 @@ public static class InstallerService
         }
     }
 
-    private static void ExtractEmbeddedIconToDisk(string targetIconPath)
+    private static void ExtractEmbeddedIconToDisk(string targetIconPath) =>
+        ExtractEmbeddedPackIconToDisk("pack://application:,,,/Assets/app.ico", targetIconPath);
+
+    public static void ExtractEmbeddedLexClassIconToDisk(string targetIconPath) =>
+        ExtractEmbeddedPackIconToDisk("pack://application:,,,/Assets/lexclass.ico", targetIconPath);
+
+    public static string EnsureLexClassIconOnDisk()
+    {
+        string path = InstalledLexClassIconPath;
+        try
+        {
+            if (!File.Exists(path))
+            {
+                string? dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                ExtractEmbeddedLexClassIconToDisk(path);
+            }
+            if (File.Exists(path)) return path;
+
+            string fallback = Path.Combine(LexClassStudioService.LexClassDataDir, "lexclass.ico");
+            if (!File.Exists(fallback))
+            {
+                Directory.CreateDirectory(LexClassStudioService.LexClassDataDir);
+                ExtractEmbeddedLexClassIconToDisk(fallback);
+            }
+            return fallback;
+        }
+        catch
+        {
+            return path;
+        }
+    }
+
+    private static void ExtractEmbeddedPackIconToDisk(string packUri, string targetIconPath)
     {
         try
         {
-            var streamInfo = Application.GetResourceStream(new Uri("pack://application:,,,/Assets/app.ico"));
+            var streamInfo = Application.GetResourceStream(new Uri(packUri));
             if (streamInfo?.Stream != null)
             {
                 using var s = streamInfo.Stream;
@@ -743,6 +941,35 @@ public static class InstallerService
                     CreateWindowsShortcut(StartMenuShortcutPath, InstalledExePath, InstallDir, iconPath, "Navegador privado con bloqueo nativo y sin telemetría propia");
                 }
 
+                // 2.5 Recrear accesos directos de Lex Junior Class si existen
+                string lexClassIcon = InstalledLexClassIconPath;
+                if (!File.Exists(lexClassIcon))
+                {
+                    ExtractEmbeddedLexClassIconToDisk(lexClassIcon);
+                }
+                if (File.Exists(LexClassDesktopShortcutPath))
+                {
+                    CreateWindowsShortcut(
+                        LexClassDesktopShortcutPath,
+                        InstalledExePath,
+                        InstallDir,
+                        lexClassIcon,
+                        "Lex Junior Class — Academia interactiva local (Prototipo)",
+                        "--lexclass",
+                        LexClassAppUserModelId);
+                }
+                if (File.Exists(LexClassStartMenuShortcutPath))
+                {
+                    CreateWindowsShortcut(
+                        LexClassStartMenuShortcutPath,
+                        InstalledExePath,
+                        InstallDir,
+                        lexClassIcon,
+                        "Lex Junior Class — Academia interactiva local (Prototipo)",
+                        "--lexclass",
+                        LexClassAppUserModelId);
+                }
+
                 // 3. Actualizar accesos directos anclados en la barra de tareas de Windows
                 string taskbarDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -752,7 +979,12 @@ public static class InstallerService
                 {
                     foreach (var file in Directory.GetFiles(taskbarDir, "*.lnk"))
                     {
-                        if (Path.GetFileName(file).Contains("Lex", StringComparison.OrdinalIgnoreCase))
+                        string fileName = Path.GetFileName(file);
+                        if (fileName.Contains("Lex Junior Class", StringComparison.OrdinalIgnoreCase))
+                        {
+                            CreateWindowsShortcut(file, InstalledExePath, InstallDir, lexClassIcon, "Lex Junior Class", "--lexclass", LexClassAppUserModelId);
+                        }
+                        else if (fileName.Contains("Lex", StringComparison.OrdinalIgnoreCase))
                         {
                             CreateWindowsShortcut(file, InstalledExePath, InstallDir, iconPath, "Lex Junior Browser");
                         }
@@ -766,7 +998,14 @@ public static class InstallerService
         catch { }
     }
 
-    private static void CreateWindowsShortcut(string lnkPath, string targetExe, string workingDir, string iconPath, string description)
+    private static void CreateWindowsShortcut(
+        string lnkPath,
+        string targetExe,
+        string workingDir,
+        string iconPath,
+        string description,
+        string? arguments = null,
+        string appUserModelId = BrowserAppUserModelId)
     {
         try
         {
@@ -777,11 +1016,15 @@ public static class InstallerService
 
             // Crear mediante IShellLinkW e IPropertyStore para asignar System.AppUserModel.ID
             // Esto garantiza que el icono anclado en la barra de tareas y la ventana en ejecución
-            // tengan EXACTAMENTE el mismo ID ("LexJunior.Browser"), previniendo que se duplique al abrirse.
+            // tengan EXACTAMENTE el mismo ID, previniendo que se duplique al abrirse.
             var shellLink = (IShellLinkW)new CShellLink();
             shellLink.SetPath(targetExe);
             shellLink.SetWorkingDirectory(workingDir);
             shellLink.SetDescription(description);
+            if (!string.IsNullOrWhiteSpace(arguments))
+            {
+                shellLink.SetArguments(arguments);
+            }
 
             if (File.Exists(iconPath))
             {
@@ -800,7 +1043,7 @@ public static class InstallerService
                 var pv = new PROPVARIANT
                 {
                     vt = 31, // VT_LPWSTR
-                    pwszVal = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUni("LexJunior.Browser")
+                    pwszVal = System.Runtime.InteropServices.Marshal.StringToCoTaskMemUni(appUserModelId)
                 };
                 try
                 {
@@ -836,6 +1079,10 @@ public static class InstallerService
                 shortcut.TargetPath = targetExe;
                 shortcut.WorkingDirectory = workingDir;
                 shortcut.Description = description;
+                if (!string.IsNullOrWhiteSpace(arguments))
+                {
+                    shortcut.Arguments = arguments;
+                }
                 shortcut.IconLocation = File.Exists(iconPath) ? $"{iconPath},0" : $"{targetExe},0";
                 shortcut.Save();
             }

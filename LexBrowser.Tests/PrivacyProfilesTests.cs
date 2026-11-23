@@ -856,7 +856,7 @@ public sealed class PrivacyProfilesTests : IDisposable
         }
 
         string mainXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml"));
-        Assert.Contains("Text=\"Sin telemetría propia\"", mainXaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"Telemetría?\"", mainXaml, StringComparison.Ordinal);
 
         string settingsXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "SettingsWindow.xaml"));
         Assert.Contains("Sin telemetría propia · Menos anuncios · Privado", settingsXaml, StringComparison.Ordinal);

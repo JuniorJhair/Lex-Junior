@@ -1,5 +1,6 @@
 using System;
 using System.Net;
+using System.Text;
 using LexBrowser.Core.Pdf;
 using LexBrowser.Core.Tv;
 
@@ -12,12 +13,48 @@ namespace LexBrowser.Core;
 /// </summary>
 public static class OmniboxInputResolver
 {
-    public static string ResolveNavigationTarget(string? rawInput, Func<string, string>? searchUrlBuilder = null)
+    public static string NormalizePastedAddressBarText(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(rawInput))
+        if (string.IsNullOrEmpty(raw))
             return string.Empty;
 
-        string input = rawInput.Trim();
+        var sb = new StringBuilder(raw.Length);
+        bool prevWasSpace = true; // trims leading whitespace
+
+        foreach (char c in raw)
+        {
+            // Ignorar caracteres invisibles de formato (zero-width, BOM, soft hyphen)
+            if (c is '\u200B' or '\u200C' or '\u200D' or '\uFEFF' or '\u00AD')
+                continue;
+
+            if (c is '\r' or '\n' or '\t' or '\u00A0' or '\u2028' or '\u2029' || char.IsWhiteSpace(c))
+            {
+                if (!prevWasSpace)
+                {
+                    sb.Append(' ');
+                    prevWasSpace = true;
+                }
+                continue;
+            }
+
+            if (char.IsControl(c))
+                continue;
+
+            sb.Append(c);
+            prevWasSpace = false;
+        }
+
+        while (sb.Length > 0 && sb[sb.Length - 1] == ' ')
+            sb.Length--;
+
+        return sb.ToString();
+    }
+
+    public static string ResolveNavigationTarget(string? rawInput, Func<string, string>? searchUrlBuilder = null)
+    {
+        string input = NormalizePastedAddressBarText(rawInput);
+        if (string.IsNullOrWhiteSpace(input))
+            return string.Empty;
 
         // 1. Acceso directo a Lex TV (IPTV bajo demanda) o Lex Class
         if (TvStudioService.IsTvShortcut(input))
@@ -119,36 +156,51 @@ public static class OmniboxInputResolver
         if (h == "localhost" || h.EndsWith(".local", StringComparison.Ordinal) || h.EndsWith(".lan", StringComparison.Ordinal) || !h.Contains('.'))
             return true;
 
-        if (IPAddress.TryParse(h, out var ip))
+        if (IsStrictIpv4Address(h) || (h.StartsWith('[') && h.EndsWith(']') && IPAddress.TryParse(h, out _)))
         {
-            if (IPAddress.IsLoopback(ip))
-                return true;
-
-            byte[] bytes = ip.GetAddressBytes();
-            if (bytes.Length == 4)
+            if (IPAddress.TryParse(h, out var ip))
             {
-                // 10.0.0.0/8, 127.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12, 169.254.0.0/16
-                if (bytes[0] == 10 || bytes[0] == 127)
-                    return true;
-                if (bytes[0] == 192 && bytes[1] == 168)
-                    return true;
-                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
-                    return true;
-                if (bytes[0] == 169 && bytes[1] == 254)
+                if (IPAddress.IsLoopback(ip))
                     return true;
 
-                return false;
+                byte[] bytes = ip.GetAddressBytes();
+                if (bytes.Length == 4)
+                {
+                    // 10.0.0.0/8, 127.0.0.0/8, 192.168.0.0/16, 172.16.0.0/12, 169.254.0.0/16
+                    if (bytes[0] == 10 || bytes[0] == 127)
+                        return true;
+                    if (bytes[0] == 192 && bytes[1] == 168)
+                        return true;
+                    if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                        return true;
+                    if (bytes[0] == 169 && bytes[1] == 254)
+                        return true;
+
+                    return false;
+                }
+
+                return true;
             }
-
-            return true;
         }
 
         return false;
     }
 
-    private static bool IsLikelyHostName(string host)
+    internal static bool IsStrictIpv4Address(string host)
     {
-        if (string.IsNullOrWhiteSpace(host) || host.StartsWith('.') || host.EndsWith('.'))
+        string[] parts = host.Split('.');
+        if (parts.Length != 4) return false;
+        foreach (string p in parts)
+        {
+            if (p.Length == 0 || !byte.TryParse(p, out _))
+                return false;
+        }
+        return IPAddress.TryParse(host, out _);
+    }
+
+    internal static bool IsLikelyHostName(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host) || host.StartsWith('.') || host.EndsWith('.') || host.Contains("..", StringComparison.Ordinal))
             return false;
 
         foreach (char c in host)
@@ -157,7 +209,29 @@ public static class OmniboxInputResolver
                 return false;
         }
 
-        return true;
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || IsStrictIpv4Address(host))
+            return true;
+
+        int lastDot = host.LastIndexOf('.');
+        if (lastDot < 0)
+            return true; // Single-label host (solo usado cuando hay puerto explícito, ej. intranet:9000)
+
+        string tld = host.Substring(lastDot + 1);
+        if (tld.Length < 2)
+            return false;
+
+        // Evitar que números decimales o versiones (ej. 3.14, v2.0) se abran como https://3.14
+        bool allAsciiLetters = true;
+        foreach (char c in tld)
+        {
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')))
+            {
+                allAsciiLetters = false;
+                break;
+            }
+        }
+
+        return allAsciiLetters || tld.StartsWith("xn--", StringComparison.OrdinalIgnoreCase);
     }
 }
 

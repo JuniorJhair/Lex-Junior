@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using LexBrowser.Core;
 
 namespace LexBrowser.UI.Views;
@@ -10,12 +11,17 @@ namespace LexBrowser.UI.Views;
 public partial class InstallerWindow : Window
 {
     private readonly bool _isUninstallMode;
+    private readonly bool _isLexClassMode;
+    private readonly bool _shutdownOnComplete;
     private bool _isWorking = false;
 
-    public InstallerWindow(bool isUninstallMode = false)
+    public InstallerWindow(bool isUninstallMode = false, bool isLexClassMode = false, bool shutdownOnComplete = true)
     {
         InitializeComponent();
         _isUninstallMode = isUninstallMode;
+        _isLexClassMode = isLexClassMode;
+        _shutdownOnComplete = shutdownOnComplete;
+
         TxtVersionBadge.Text = $"v{UpdateManager.CurrentVersionString}";
         TxtInstallLocation.Text = $"Ruta de instalación: {InstallerService.InstallDir}";
 
@@ -29,10 +35,48 @@ public partial class InstallerWindow : Window
             BtnPrimaryAction.Content = "🗑️ Desinstalar ahora";
             BtnPrimaryAction.Background = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
         }
+        else if (_isLexClassMode)
+        {
+            ApplyLexClassInstallerTheme();
+        }
         else if (InstallerService.IsAlreadyInstalled())
         {
             BtnPrimaryAction.Content = "🔄 Actualizar / Reinstalar Lex Junior";
         }
+    }
+
+    private void ApplyLexClassInstallerTheme()
+    {
+        Title = "Instalador de Lex Junior Class";
+        try
+        {
+            Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Assets/lexclass.ico"));
+            ImgHeaderLogo.Source = new BitmapImage(new Uri("pack://application:,,,/Assets/lexclass.png"));
+        }
+        catch { }
+
+        OuterFrame.BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x00));
+        LogoBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0xFB, 0x92, 0x3C));
+        VersionBadgeBorder.Background = new SolidColorBrush(Color.FromRgb(0x2B, 0x16, 0x0A));
+        VersionBadgeBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x00));
+        TxtVersionBadge.Foreground = new SolidColorBrush(Color.FromRgb(0xFD, 0xBA, 0x74));
+        TxtVersionBadge.Text = "PROTOTIPO";
+
+        TxtHeaderTitle.Text = "LEX JUNIOR CLASS";
+        TxtSubtitle.Text = "Academia local interactiva · Ventana limpia sin URL · Funciona sin internet";
+
+        ChkDesktopShortcut.Content = "Agregar acceso directo de Lex Junior Class en el Escritorio (icono propio)";
+        ChkDesktopShortcut.IsChecked = true;
+        ChkStartMenuShortcut.Content = "Agregar Lex Junior Class al Menú Inicio de Windows";
+        ChkStartMenuShortcut.IsChecked = true;
+        ChkLaunchAfterInstall.Content = "Abrir Lex Junior Class al terminar";
+        ChkLaunchAfterInstall.IsChecked = false;
+        CardLexClassShortcut.Visibility = Visibility.Collapsed;
+        Height = 405;
+
+        ProgressInstall.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x00));
+        BtnPrimaryAction.Content = "🎓 Instalar acceso de Lex Junior Class";
+        BtnPrimaryAction.Background = new SolidColorBrush(Color.FromRgb(0xEA, 0x58, 0x0C));
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -73,15 +117,49 @@ public partial class InstallerWindow : Window
                     "Desinstalación completada",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
-                Application.Current.Shutdown();
+                if (_shutdownOnComplete) Application.Current.Shutdown();
+                else Close();
+            }
+            else if (_isLexClassMode)
+            {
+                bool desktop = ChkDesktopShortcut.IsChecked == true;
+                bool startMenu = ChkStartMenuShortcut.IsChecked == true;
+                bool launch = ChkLaunchAfterInstall.IsChecked == true;
+
+                await InstallerService.InstallLexClassShortcutsAsync(desktop, startMenu, progress);
+                await Task.Delay(250);
+
+                if (launch)
+                {
+                    if (_shutdownOnComplete)
+                    {
+                        InstallerService.LaunchInstalledLexClass();
+                    }
+                    else
+                    {
+                        var win = new LexClassWindow();
+                        win.Show();
+                    }
+                }
+
+                if (_shutdownOnComplete)
+                {
+                    Application.Current.Shutdown();
+                }
+                else
+                {
+                    DialogResult = true;
+                    Close();
+                }
             }
             else
             {
                 bool desktop = ChkDesktopShortcut.IsChecked == true;
                 bool startMenu = ChkStartMenuShortcut.IsChecked == true;
                 bool launch = ChkLaunchAfterInstall.IsChecked == true;
+                bool lexClassDesktop = ChkLexClassDesktopShortcut.IsChecked == true;
 
-                await InstallerService.InstallAsync(desktop, startMenu, progress);
+                await InstallerService.InstallAsync(desktop, startMenu, progress, lexClassDesktop);
                 await Task.Delay(350);
 
                 if (launch)

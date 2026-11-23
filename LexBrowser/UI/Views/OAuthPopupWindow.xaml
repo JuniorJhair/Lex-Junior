@@ -71,6 +71,48 @@
         <!-- WebView2 de la ventana emergente -->
         <Grid x:Name="PopupWebViewHost" Grid.Row="2" Background="#0A0A0E">
             <wv2:WebView2 x:Name="PopupWebView" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+            <Popup x:Name="PopupOAuthAutofillPicker" PlacementTarget="{Binding ElementName=PopupWebViewHost}" Placement="Relative"
+                   StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                <Border Background="#161622" BorderBrush="#4F46E5" BorderThickness="1.5" CornerRadius="10" Padding="10,8" Width="280">
+                    <StackPanel>
+                        <TextBlock Text="🔑 Elegir cuenta guardada" FontSize="12" FontWeight="Bold" Foreground="#F4F4F5" Margin="0,0,0,6"/>
+                        <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="ItemsOAuthAutofillAccounts">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding}" Click="BtnPickOAuthAutofillAccount_Click" Margin="0,0,0,4"
+                                                HorizontalContentAlignment="Stretch" Cursor="Hand" BorderThickness="0" Padding="0" Background="Transparent">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="Card" Background="#1F1F2E" BorderBrush="#2D2D42" BorderThickness="1" CornerRadius="7" Padding="8,6">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding DisplayUsername}" Foreground="#F4F4F5" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                                <TextBlock Text="{Binding OriginHost}" Foreground="#9CA3AF" FontSize="9.5" TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="1" Text="Usar →" Foreground="#818CF8" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="Card" Property="Background" Value="#2A2A40"/>
+                                                            <Setter TargetName="Card" Property="BorderBrush" Value="#6366F1"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+            </Popup>
         </Grid>
     </Grid>
 </Window>

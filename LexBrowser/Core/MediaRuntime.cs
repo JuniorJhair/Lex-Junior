@@ -536,6 +536,7 @@ public static class MediaRuntime
     window.__lexEnterPiP = async function() {
         try {
             armMediaPrototypes();
+            if (window.documentPictureInPicture && window.documentPictureInPicture.window) return false;
             const video = getActiveVideo();
             if (!video) return false;
             if (video.paused || video.ended) return false;
@@ -564,21 +565,10 @@ public static class MediaRuntime
 
     window.__lexExitPiP = async function() {
         try {
+            window.__lexWasFullscreen = false;
             if (document.pictureInPictureElement && typeof document.exitPictureInPicture === 'function') {
                 window.__lexProgrammaticPiPExit = true;
                 try { await document.exitPictureInPicture(); } catch(e) { window.__lexProgrammaticPiPExit = false; }
-            }
-
-            if (window.__lexWasFullscreen) {
-                window.__lexWasFullscreen = false;
-                const video = getActiveVideo();
-                const playerContainer = document.querySelector('.html5-video-player') || video;
-                if (playerContainer) {
-                    try {
-                        if (playerContainer.requestFullscreen) await playerContainer.requestFullscreen();
-                        else if (playerContainer.webkitRequestFullscreen) await playerContainer.webkitRequestFullscreen();
-                    } catch(e) {}
-                }
             }
         } catch(e) {}
     };

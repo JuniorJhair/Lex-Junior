@@ -325,11 +325,14 @@ public partial class MainWindow
         HideSavePasswordBanner();
     }
 
+    private BrowserTab? _autofillPickerTab;
+    private string? _autofillPickerSourceUrl;
+
     /// <summary>
     /// Autocompletado seguro bajo demanda: solo se ejecuta cuando el usuario enfoca un campo de login en una página HTTPS/localhost
     /// verificada contra el origen real de la pestaña, inyectando los valores mediante ExecuteScriptAsync (sin PostWebMessageAsJson).
     /// </summary>
-    private async Task HandleAutofillRequestAsync(BrowserTab tab, string messageSourceUrl)
+    private async Task HandleAutofillRequestAsync(BrowserTab tab, string messageSourceUrl, Rect? inputCssRect = null)
     {
         try
         {
@@ -348,13 +351,121 @@ public partial class MainWindow
                 return;
 
             var matches = PasswordManager.Store.GetAutofillCredentialsForUrl(messageSourceUrl);
-            if (matches.Count == 0) return;
+            if (matches.Count == 0)
+            {
+                if (PopupAutofillPicker != null) PopupAutofillPicker.IsOpen = false;
+                return;
+            }
 
-            var primary = matches[0];
-            string script = PasswordManager.BuildSafeAutofillScript(primary.Username, primary.Password);
+            if (matches.Count == 1)
+            {
+                if (PopupAutofillPicker != null) PopupAutofillPicker.IsOpen = false;
+                var primary = matches[0];
+                string script = PasswordManager.BuildSafeAutofillScript(primary.Username, primary.Password);
+                await tab.WebView.CoreWebView2.ExecuteScriptAsync(script);
+                return;
+            }
+
+            // 2 o más cuentas guardadas: mostrar selector interactivo para que el usuario elija cuál usar
+            ShowAutofillAccountPicker(tab, messageSourceUrl, matches, inputCssRect);
+        }
+        catch { }
+    }
+
+    private void ShowAutofillAccountPicker(
+        BrowserTab tab,
+        string sourceUrl,
+        IReadOnlyList<SavedCredential> matches,
+        Rect? inputCssRect)
+    {
+        if (PopupAutofillPicker == null || ItemsAutofillAccounts == null || BrowserContainer == null)
+            return;
+
+        _autofillPickerTab = tab;
+        _autofillPickerSourceUrl = sourceUrl;
+
+        string domain = PasswordVaultStore.ExtractBaseDomain(sourceUrl);
+        if (TxtAutofillPickerDomain != null)
+            TxtAutofillPickerDomain.Text = string.IsNullOrWhiteSpace(domain) ? sourceUrl : $"{domain} ({matches.Count} cuentas)";
+
+        ItemsAutofillAccounts.ItemsSource = matches;
+
+        double hostW = BrowserContainer.ActualWidth > 0 ? BrowserContainer.ActualWidth : 800;
+        double hostH = BrowserContainer.ActualHeight > 0 ? BrowserContainer.ActualHeight : 500;
+        double zoom = 1.0;
+        try
+        {
+            if (tab.WebView != null && tab.WebView.ZoomFactor > 0)
+                zoom = tab.WebView.ZoomFactor;
+        }
+        catch { }
+
+        double x;
+        double y;
+        if (inputCssRect.HasValue)
+        {
+            x = inputCssRect.Value.Left * zoom;
+            y = (inputCssRect.Value.Bottom * zoom) + 4;
+            x = Math.Clamp(x, 8, Math.Max(8, hostW - 322));
+            y = Math.Clamp(y, 8, Math.Max(8, hostH - 220));
+        }
+        else
+        {
+            x = Math.Max(12, hostW - 326);
+            y = 12;
+        }
+
+        PopupAutofillPicker.HorizontalOffset = x;
+        PopupAutofillPicker.VerticalOffset = y;
+        PopupAutofillPicker.IsOpen = true;
+    }
+
+    private async void BtnPickAutofillAccount_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (PopupAutofillPicker != null) PopupAutofillPicker.IsOpen = false;
+            if (sender is not Button btn || btn.Tag is not SavedCredential picked)
+                return;
+
+            var tab = _autofillPickerTab ?? _activeTab;
+            string? sourceUrl = _autofillPickerSourceUrl;
+            _autofillPickerTab = null;
+            _autofillPickerSourceUrl = null;
+
+            if (tab == null || tab.IsDisposed || tab.WebView?.CoreWebView2 == null || _activeTab != tab)
+                return;
+            if (tab.IsIncognito || _isGuestSession || IsLocked || PasswordManager.IsVaultLockedByRecovery)
+                return;
+
+            string mainUrl = tab.WebView.CoreWebView2.Source ?? tab.CurrentUri?.AbsoluteUri ?? tab.Url;
+            Uri? expectedUri = tab.CurrentUri ?? (Uri.TryCreate(mainUrl, UriKind.Absolute, out var cu) ? cu : null);
+            string effectiveSource = !string.IsNullOrWhiteSpace(sourceUrl) ? sourceUrl : mainUrl;
+            if (!IsSecureOriginForPasswordMessage(effectiveSource, expectedUri))
+                return;
+
+            string password = PasswordManager.Store.GetPasswordById(picked.Id) ?? picked.Password;
+            if (string.IsNullOrEmpty(password))
+                return;
+
+            try { tab.WebView.Focus(); } catch { }
+            string script = PasswordManager.BuildSafeAutofillScript(picked.Username, password, forceReplace: true);
             await tab.WebView.CoreWebView2.ExecuteScriptAsync(script);
         }
         catch { }
+    }
+
+    private void BtnCloseAutofillPicker_Click(object sender, RoutedEventArgs e)
+    {
+        if (PopupAutofillPicker != null) PopupAutofillPicker.IsOpen = false;
+        _autofillPickerTab = null;
+        _autofillPickerSourceUrl = null;
+    }
+
+    private void BtnOpenVaultFromAutofillPicker_Click(object sender, RoutedEventArgs e)
+    {
+        if (PopupAutofillPicker != null) PopupAutofillPicker.IsOpen = false;
+        OpenPasswordVault();
     }
 
     // ─────────────────────────────────────────────────────────────────────

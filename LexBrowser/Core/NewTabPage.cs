@@ -136,6 +136,8 @@ public static class NewTabPage
         string searchBarShadow = isLight ? "0 4px 20px rgba(15,23,42,0.06)" : "none";
         string searchTextColor = isLight ? "#0F172A" : "#F4F4F5";
         string placeholderColor = isLight ? "#94A3B8" : "#52525B";
+        string suggestHoverBg = isLight ? "#EFF6FF" : (isClassic ? "#1D1D1D" : "#232334");
+        string suggestSubColor = isLight ? "#64748B" : "#9CA3AF";
         string quickLinkBg = isLight ? "#FFFFFF" : (isClassic ? "#0F0F0F" : "#18181D");
         string quickLinkBorder = isLight ? "#E2E8F0" : (isClassic ? "#222222" : "#1E1E28");
         string quickLinkText = isLight ? "#334155" : "#71717A";
@@ -246,7 +248,30 @@ public static class NewTabPage
       text-transform: capitalize; font-weight: 400;
     }
 
-    .search-wrap { width: min(680px, 94vw); margin-bottom: clamp(16px, 3.4vh, 36px); }
+    .search-wrap { position: relative; width: min(680px, 94vw); margin-bottom: clamp(16px, 3.4vh, 36px); z-index: 20; }
+
+    .suggest-box {
+      position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+      background: " + searchBarBg + @";
+      border: 1.5px solid " + searchBarBorder + @";
+      border-radius: 18px;
+      padding: 6px;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.42);
+      display: none;
+      z-index: 30;
+      overflow: hidden;
+    }
+    .suggest-box.open { display: block; }
+    .suggest-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 14px; border-radius: 12px;
+      cursor: pointer; font-size: 14px;
+      color: " + searchTextColor + @";
+      transition: background 0.12s;
+    }
+    .suggest-item:hover, .suggest-item.active { background: " + suggestHoverBg + @"; }
+    .suggest-ico { font-size: 13px; color: " + suggestSubColor + @"; flex-shrink: 0; }
+    .suggest-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .search-bar {
       display: flex; align-items: center; gap: 6px;
@@ -442,6 +467,7 @@ public static class NewTabPage
         </button>
         <button class=""search-btn"" onclick=""go()"">Buscar</button>
       </div>
+      <div id=""suggest-box"" class=""suggest-box"" role=""listbox""></div>
       <div id=""voice-msg"" class=""voice-msg"" style=""display:none;""></div>
     </div>
 
@@ -522,7 +548,7 @@ public static class NewTabPage
           </svg>
         </div>TV en vivo
       </a>
-      <a class=""quick-link"" href=""https://class.lex.local/index.html"" title=""Lex Junior Class — Disponible en la próxima actualización"">
+      <a class=""quick-link"" href=""https://class.lex.local/index.html"" title=""Lex Junior Class — Academia interactiva local (Prototipo)"">
         <div class=""ico"">
           <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
             <defs>
@@ -554,9 +580,19 @@ public static class NewTabPage
     setInterval(() => { if (!document.hidden) tick(); }, 10000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 
+    function normalizeBarText(raw) {
+      return (raw || '')
+        .replace(/[\u200B-\u200D\uFEFF\u00AD]/g, '')
+        .replace(/[\r\n\t\u00A0\u2028\u2029]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     function go() {
-      const v = document.getElementById('si').value.trim();
+      const si = document.getElementById('si');
+      const v = normalizeBarText(si ? si.value : '');
       if (!v) return;
+      hideSuggestions();
       if (/^lex:(?:\/\/)?tv$/i.test(v)) {
         window.location.href = 'https://tv.lex.local/index.html';
         return;
@@ -577,8 +613,128 @@ public static class NewTabPage
       }
     }
 
-    document.getElementById('si').addEventListener('keydown', function(e) {
+    const searchInput = document.getElementById('si');
+    const suggestBox = document.getElementById('suggest-box');
+    let suggestTimer = null;
+    let suggestSeq = 0;
+    let currentSuggestions = [];
+    let activeSuggestIdx = -1;
+
+    function hideSuggestions() {
+      currentSuggestions = [];
+      activeSuggestIdx = -1;
+      if (suggestBox) {
+        suggestBox.classList.remove('open');
+        suggestBox.replaceChildren();
+      }
+    }
+
+    function renderSuggestions(items) {
+      if (!suggestBox || !items || items.length === 0) {
+        hideSuggestions();
+        return;
+      }
+      currentSuggestions = items;
+      activeSuggestIdx = -1;
+      const frag = document.createDocumentFragment();
+      items.forEach((text, idx) => {
+        const row = document.createElement('div');
+        row.className = 'suggest-item';
+        row.dataset.idx = String(idx);
+        const ico = document.createElement('span');
+        ico.className = 'suggest-ico';
+        ico.textContent = '🔍';
+        const lbl = document.createElement('span');
+        lbl.className = 'suggest-txt';
+        lbl.textContent = text;
+        row.appendChild(ico);
+        row.appendChild(lbl);
+        row.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          searchInput.value = text;
+          go();
+        });
+        frag.appendChild(row);
+      });
+      suggestBox.replaceChildren(frag);
+      suggestBox.classList.add('open');
+    }
+
+    window.__lexSetNewTabSuggestions = function(payload) {
+      if (!payload || !searchInput) return;
+      if (payload.seq !== suggestSeq) return;
+      if (document.activeElement !== searchInput) return;
+      if (normalizeBarText(searchInput.value) !== normalizeBarText(payload.query || '')) return;
+      renderSuggestions(Array.isArray(payload.items) ? payload.items : []);
+    };
+
+    function moveSuggestSelection(delta) {
+      if (!currentSuggestions || currentSuggestions.length === 0 || !suggestBox) return;
+      const len = currentSuggestions.length;
+      if (activeSuggestIdx === -1) {
+        activeSuggestIdx = delta > 0 ? 0 : len - 1;
+      } else {
+        activeSuggestIdx = (activeSuggestIdx + delta + len) % len;
+      }
+      const rows = suggestBox.querySelectorAll('.suggest-item');
+      rows.forEach((r, i) => r.classList.toggle('active', i === activeSuggestIdx));
+      searchInput.value = currentSuggestions[activeSuggestIdx];
+    }
+
+    searchInput.addEventListener('paste', function(e) {
+      if (!e.clipboardData) return;
+      const raw = e.clipboardData.getData('text/plain');
+      if (!raw) return;
+      e.preventDefault();
+      const cleaned = normalizeBarText(raw);
+      const start = typeof searchInput.selectionStart === 'number' ? searchInput.selectionStart : searchInput.value.length;
+      const end = typeof searchInput.selectionEnd === 'number' ? searchInput.selectionEnd : searchInput.value.length;
+      const prev = searchInput.value;
+      searchInput.value = prev.slice(0, start) + cleaned + prev.slice(end);
+      const pos = start + cleaned.length;
+      searchInput.setSelectionRange(pos, pos);
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    searchInput.addEventListener('input', function() {
+      if (suggestTimer) clearTimeout(suggestTimer);
+      const q = normalizeBarText(searchInput.value);
+      if (!q || !window.chrome || !window.chrome.webview) {
+        hideSuggestions();
+        return;
+      }
+      const seq = ++suggestSeq;
+      suggestTimer = setTimeout(() => {
+        try {
+          window.chrome.webview.postMessage({
+            type: 'newtab_suggest_req',
+            query: q,
+            seq: seq
+          });
+        } catch (_) {}
+      }, 130);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowDown' && currentSuggestions.length > 0) {
+        e.preventDefault();
+        moveSuggestSelection(1);
+        return;
+      }
+      if (e.key === 'ArrowUp' && currentSuggestions.length > 0) {
+        e.preventDefault();
+        moveSuggestSelection(-1);
+        return;
+      }
+      if (e.key === 'Escape') {
+        hideSuggestions();
+        return;
+      }
       if (e.key === 'Enter') go();
+    });
+
+    document.addEventListener('click', function(e) {
+      if (e.target && !e.target.closest('.search-wrap')) hideSuggestions();
     });
 
     function handleFileSelected(e) {
