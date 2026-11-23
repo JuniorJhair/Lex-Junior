@@ -938,4 +938,35 @@ public class AuditRegressionTests
         Assert.Contains("EnsureWebView2RuntimeAsync", instCs, StringComparison.Ordinal);
         Assert.Contains("allowSkipSameBinary", instCs, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void UpdateManager_SelectsBrowserSetupAssetOverAlphabeticallyEarlierPlayerSetup()
+    {
+        const string githubAssetsJson = """
+        [
+          {
+            "name": "LexJuniorPlayerSetup.exe",
+            "browser_download_url": "https://github.com/JuniorJhair/Lex-Junior/releases/download/v2.8.2/LexJuniorPlayerSetup.exe",
+            "digest": "sha256:dfe76b1b08babfcf1b17b37c5d6e6ffe7b4d4e361d4eeac309ef921f716ac5cd",
+            "size": 72382409
+          },
+          {
+            "name": "LexJuniorSetup.exe",
+            "browser_download_url": "https://github.com/JuniorJhair/Lex-Junior/releases/download/v2.8.3/LexJuniorSetup.exe",
+            "digest": "sha256:dfc10b737d3a8f6ddca34c2752bee979412a71b066e7b82202407aec63b64870",
+            "size": 82034011
+          }
+        ]
+        """;
+
+        using var doc = System.Text.Json.JsonDocument.Parse(githubAssetsJson);
+        var selected = UpdateManager.SelectBrowserInstallerAsset(doc.RootElement);
+        Assert.True(selected.HasValue);
+        Assert.EndsWith("/LexJuniorSetup.exe", selected.Value.DownloadUrl, StringComparison.Ordinal);
+        Assert.Equal("dfc10b737d3a8f6ddca34c2752bee979412a71b066e7b82202407aec63b64870", selected.Value.Sha256Hex);
+        Assert.Equal(82034011, selected.Value.SizeBytes);
+
+        Assert.False(UpdateManager.IsBrowserInstallerAssetName("LexJuniorPlayerSetup.exe"));
+        Assert.True(UpdateManager.IsBrowserInstallerAssetName("LexJuniorSetup.exe"));
+    }
 }

@@ -7,6 +7,8 @@ param(
 
     [switch]$PublishToGitHub,
 
+    [switch]$PublishPlayerToGitHub,
+
     [switch]$SkipLocalInstall
 )
 
@@ -168,8 +170,19 @@ if ($PublishToGitHub) {
     else {
         & $ghExe release create $tag $setupExePath --title "Lex Junior Browser $tag" --notes $Notes --repo JuniorJhair/Lex-Junior
     }
-    if (Test-Path $playerSetupExePath) {
-        & $ghExe release upload $tag $playerSetupExePath --clobber --repo JuniorJhair/Lex-Junior
+
+    if ($PublishPlayerToGitHub -and (Test-Path $playerSetupExePath)) {
+        $playerTag = "player-v1.1"
+        $ErrorActionPreference = "Continue"
+        & $ghExe release view $playerTag --repo JuniorJhair/Lex-Junior 2>$null | Out-Null
+        $playerExists = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = "Stop"
+        if ($playerExists) {
+            & $ghExe release upload $playerTag $playerSetupExePath --clobber --repo JuniorJhair/Lex-Junior
+        }
+        else {
+            & $ghExe release create $playerTag $playerSetupExePath --latest=false --title "Lex Junior Player v1.1 (Complemento Streaming)" --notes "Complemento opcional optimizado solo para APKs de streaming (.apk/.xapk/.apks)." --repo JuniorJhair/Lex-Junior
+        }
     }
     Write-Host "[OK] Release $tag publicado en GitHub!" -ForegroundColor Green
     Write-Host "Enlace directo permanente para tu web en Cloudflare:" -ForegroundColor Yellow

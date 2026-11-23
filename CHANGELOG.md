@@ -2,6 +2,15 @@
 
 Todos los cambios notables de **Lex Junior Browser** se documentan en este archivo usando [Semantic Versioning](https://semver.org/).
 
+## [2.8.3] - 2026-11-23
+
+### Correcciones
+- **Actualizador estricto por binario del navegador (`UpdateManager`)**:
+  - `SelectBrowserInstallerAsset` filtra explícitamente por `LexJuniorSetup.exe` (excluyendo cualquier ejecutable de complementos como `LexJuniorPlayerSetup.exe`), evitando que la ordenación alfabética de GitHub Releases descargue un complemento durante la actualización del navegador.
+  - La descarga opcional de **`Lex Junior Player`** se aloja en una etiqueta separada (`player-v1.1` con `--latest=false`) para mantener `/releases/latest` limpio con un único instalador del navegador.
+- **Instalación 100 % opcional desde `+Lex`**:
+  - Ni el actualizador ni el instalador principal obligan ni ejecutan la instalación de **Lex Class** ni de **Lex Player APK**; al seleccionarlos en **`+Lex`**, el usuario ve qué es cada herramienta y decide si quiere instalarla o abrirla.
+
 ## [2.8.2] - 2026-11-23
 
 ### Novedades y mejoras

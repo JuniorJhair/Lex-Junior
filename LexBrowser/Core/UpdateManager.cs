@@ -108,19 +108,12 @@ public static class UpdateManager
 
                     if (root.TryGetProperty("assets", out var assetsProp) && assetsProp.ValueKind == JsonValueKind.Array)
                     {
-                        foreach (var asset in assetsProp.EnumerateArray())
+                        var selected = SelectBrowserInstallerAsset(assetsProp);
+                        if (selected.HasValue)
                         {
-                            string assetName = asset.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? "") : "";
-                            string browserUrl = asset.TryGetProperty("browser_download_url", out var bProp) ? (bProp.GetString() ?? "") : "";
-                            if (assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(browserUrl))
-                            {
-                                downloadUrl = browserUrl;
-                                if (asset.TryGetProperty("digest", out var dProp))
-                                    expectedSha256 = ParseAssetSha256Digest(dProp.GetString());
-                                if (asset.TryGetProperty("size", out var sProp) && sProp.TryGetInt64(out long sz) && sz > 0)
-                                    expectedSize = sz;
-                                break;
-                            }
+                            downloadUrl = selected.Value.DownloadUrl;
+                            expectedSha256 = selected.Value.Sha256Hex;
+                            expectedSize = selected.Value.SizeBytes;
                         }
                     }
 
@@ -234,6 +227,41 @@ public static class UpdateManager
         }
     }
 
+    public static bool IsBrowserInstallerAssetName(string? assetName)
+    {
+        if (string.IsNullOrWhiteSpace(assetName)) return false;
+        string name = assetName.Trim();
+        if (string.Equals(name, "LexJuniorSetup.exe", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
+               !name.Contains("Player", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static (string DownloadUrl, string? Sha256Hex, long SizeBytes)? SelectBrowserInstallerAsset(JsonElement assetsArray)
+    {
+        if (assetsArray.ValueKind != JsonValueKind.Array) return null;
+
+        (string DownloadUrl, string? Sha256Hex, long SizeBytes)? fallback = null;
+        foreach (var asset in assetsArray.EnumerateArray())
+        {
+            string assetName = asset.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? "") : "";
+            string browserUrl = asset.TryGetProperty("browser_download_url", out var bProp) ? (bProp.GetString() ?? "") : "";
+            if (!IsBrowserInstallerAssetName(assetName) || string.IsNullOrWhiteSpace(browserUrl))
+                continue;
+
+            string? sha = asset.TryGetProperty("digest", out var dProp) ? ParseAssetSha256Digest(dProp.GetString()) : null;
+            long sz = (asset.TryGetProperty("size", out var sProp) && sProp.TryGetInt64(out long sVal) && sVal > 0) ? sVal : 0;
+
+            if (string.Equals(assetName.Trim(), "LexJuniorSetup.exe", StringComparison.OrdinalIgnoreCase))
+                return (browserUrl, sha, sz);
+
+            fallback ??= (browserUrl, sha, sz);
+        }
+
+        return fallback;
+    }
+
     private static async Task<(string? Sha256Hex, long SizeBytes, string? BrowserUrl)> TryFetchTagAssetIntegrityAsync(string tagName)
     {
         try
@@ -245,19 +273,11 @@ public static class UpdateManager
 
             string json = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
             using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+            if (doc.RootElement.TryGetProperty("assets", out var assets))
             {
-                foreach (var asset in assets.EnumerateArray())
-                {
-                    string assetName = asset.TryGetProperty("name", out var nProp) ? (nProp.GetString() ?? "") : "";
-                    string browserUrl = asset.TryGetProperty("browser_download_url", out var bProp) ? (bProp.GetString() ?? "") : "";
-                    if (assetName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(browserUrl))
-                    {
-                        string? sha = asset.TryGetProperty("digest", out var dProp) ? ParseAssetSha256Digest(dProp.GetString()) : null;
-                        long sz = (asset.TryGetProperty("size", out var sProp) && sProp.TryGetInt64(out long sVal) && sVal > 0) ? sVal : 0;
-                        return (sha, sz, browserUrl);
-                    }
-                }
+                var selected = SelectBrowserInstallerAsset(assets);
+                if (selected.HasValue)
+                    return (selected.Value.Sha256Hex, selected.Value.SizeBytes, selected.Value.DownloadUrl);
             }
         }
         catch { }

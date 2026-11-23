@@ -47,20 +47,20 @@
 
             <Border Grid.Row="1" Background="#131B2E" BorderBrush="#233354" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,0,14">
                 <StackPanel>
-                    <TextBlock Text="Antes de instalar Lex Junior Player:" FontSize="13" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,0,8"/>
-                    <TextBlock Text="• Diseñado exclusivamente para APKs de streaming (Magma, Streamflix, Kodi, etc.), sin Play Store ni anuncios."
+                    <TextBlock Text="¿Qué es Lex Player APK? ¿Deseas instalarlo?" FontSize="13.5" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,0,8"/>
+                    <TextBlock Text="• Es un complemento opcional aparte del navegador: un motor Android limpio optimizado exclusivamente para apps de streaming (Magma, Streamflix, Kodi, etc.), sin Play Store ni anuncios."
+                               FontSize="12" Foreground="#CBD5E1" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <TextBlock Text="• No se instala al actualizar el navegador; solo si tú decides descargarlo ahora."
                                FontSize="12" Foreground="#CBD5E1" TextWrapping="Wrap" Margin="0,0,0,6"/>
                     <TextBlock Text="• Su asistente revisará primero tu PC: si ya tienes Android SDK, Platform-Tools, Emulator o Build-Tools al día, NO los vuelve a instalar."
                                FontSize="12" Foreground="#CBD5E1" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                    <TextBlock Text="• Si algún componente falta o está desactualizado, te avisará y lo instalará automáticamente."
-                               FontSize="12" Foreground="#CBD5E1" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                    <TextBlock Text="• También podrás elegir si deseas crear el icono de Lex Junior Player en tu Escritorio."
+                    <TextBlock Text="• También te preguntará si deseas icono en el Escritorio."
                                FontSize="12" Foreground="#38BDF8" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 
             <StackPanel Grid.Row="2" Margin="0,0,0,14">
-                <TextBlock x:Name="TxtStatus" Text="Listo para descargar e iniciar el instalador de Lex Junior Player."
+                <TextBlock x:Name="TxtStatus" Text="Elige si deseas descargar e instalar Lex Junior Player ahora."
                            FontSize="11.5" Foreground="#94A3B8" Margin="0,0,0,6"/>
                 <ProgressBar x:Name="BarProgress" Height="6" Minimum="0" Maximum="100" Value="0"
                              Background="#1E293B" Foreground="#38BDF8" BorderThickness="0"/>
@@ -70,7 +70,7 @@
                 <Button x:Name="BtnCancel" Content="Ahora no" HorizontalAlignment="Left" Padding="16,9"
                         Background="#1E293B" Foreground="#CBD5E1" BorderThickness="0" FontSize="12" FontWeight="SemiBold"
                         Cursor="Hand" Click="BtnClose_Click"/>
-                <Button x:Name="BtnInstall" Content="⬇ Descargar e Instalar Lex Player" HorizontalAlignment="Right" Padding="20,9"
+                <Button x:Name="BtnInstall" Content="⬇ Sí, descargar e instalar" HorizontalAlignment="Right" Padding="20,9"
                         Background="#0284C7" Foreground="#FFFFFF" BorderThickness="0" FontSize="12.5" FontWeight="Bold"
                         Cursor="Hand" Click="BtnInstall_Click"/>
             </Grid>

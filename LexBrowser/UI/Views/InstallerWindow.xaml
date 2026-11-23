@@ -92,7 +92,7 @@
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <CheckBox x:Name="ChkLexClassDesktopShortcut" IsChecked="False" Foreground="#FDBA74" FontSize="12" FontWeight="SemiBold"
-                                          Content="Agregar acceso directo de Lex Junior Class en el Escritorio"/>
+                                          Content="Opcional: crear acceso directo de Lex Junior Class en el Escritorio"/>
                                 <TextBlock Text="Abre Lex Junior Class como app limpia sin barra de URL, 100% local (Prototipo)."
                                            Foreground="#9CA3AF" FontSize="10.5" Margin="22,2,0,0" TextWrapping="Wrap"/>
                             </StackPanel>

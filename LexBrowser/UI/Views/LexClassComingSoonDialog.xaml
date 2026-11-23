@@ -322,9 +322,9 @@
                                Text="🛡️ Se abre en ventana limpia propia (sin barra de URL, sin historial ni sesiones del navegador)."
                                FontSize="11.1" Foreground="{DynamicResource PanelTextMuted}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0"/>
 
-                    <Button x:Name="BtnInstallDesktopShortcut" Grid.Column="1" Content="🖥️ Acceso en Escritorio"
+                    <Button x:Name="BtnInstallDesktopShortcut" Grid.Column="1" Content="🖥️ Instalar acceso en Escritorio"
                             Click="BtnInstallDesktopShortcut_Click" Style="{StaticResource LexClassSecondaryBtn}" Margin="0,0,8,0"
-                            ToolTip="Crear icono de acceso directo en el Escritorio para abrir Lex Junior Class directo"/>
+                            ToolTip="Opcional: crea un icono independiente en el Escritorio para abrir Lex Junior Class"/>
 
                     <Button x:Name="BtnOpenLexClass" Grid.Column="2" Content="🚀 Abrir Lex Junior Class"
                             Click="BtnOpenLexClass_Click" Style="{StaticResource LexClassPrimaryBtn}" IsDefault="True"/>

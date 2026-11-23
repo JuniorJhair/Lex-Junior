@@ -1093,7 +1093,7 @@ public partial class MainWindow
             CloseOpenToolbarPopups();
             if (TxtLexPlayerMenuBadge != null)
             {
-                TxtLexPlayerMenuBadge.Text = LexPlayerLauncher.IsPlayerInstalled() ? "Abrir" : "Instalar";
+                TxtLexPlayerMenuBadge.Text = LexPlayerLauncher.IsPlayerInstalled() ? "Abrir" : "Ver / Instalar";
             }
         }
         PopupLexHub.IsOpen = willOpen;
@@ -1125,9 +1125,6 @@ public partial class MainWindow
         if (IsLocked) return;
 
         if (LexPlayerLauncher.TryLaunchInstalledPlayer(out _))
-            return;
-
-        if (LexPlayerLauncher.TryLaunchLocalSetup(out _))
             return;
 
         try

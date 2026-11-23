@@ -10,8 +10,10 @@ namespace LexBrowser.Core;
 
 public static class LexPlayerLauncher
 {
+    public const string PlayerReleaseTag = "player-v1.1";
+
     public const string PlayerSetupDownloadUrl =
-        $"https://github.com/{UpdateManager.GitHubOwner}/{UpdateManager.GitHubRepo}/releases/latest/download/LexJuniorPlayerSetup.exe";
+        $"https://github.com/{UpdateManager.GitHubOwner}/{UpdateManager.GitHubRepo}/releases/download/{PlayerReleaseTag}/LexJuniorPlayerSetup.exe";
 
     public static string InstalledPlayerDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "LexJuniorPlayer");

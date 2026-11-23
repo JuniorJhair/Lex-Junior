@@ -15,6 +15,11 @@ public partial class LexPlayerSetupDialog : Window
     public LexPlayerSetupDialog()
     {
         InitializeComponent();
+        if (LexPlayerLauncher.FindLocalPlayerSetupExe() != null)
+        {
+            BtnInstall.Content = "🚀 Sí, instalar Lex Player ahora";
+            TxtStatus.Text = "Instalador ya disponible localmente. ¿Deseas abrir el asistente de instalación?";
+        }
         Closing += (_, _) => _cts?.Cancel();
     }
 
