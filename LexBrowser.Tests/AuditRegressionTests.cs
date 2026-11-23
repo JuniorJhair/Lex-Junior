@@ -742,6 +742,7 @@ public class AuditRegressionTests
         string securityCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Security.cs"));
         string downloadsXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml"));
         string chromeCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.WindowChrome.cs"));
+        string fullscreenHelperCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "Core", "Interop", "WindowFullscreenHelper.cs"));
 
         // F11 global fullscreen sin romper YouTube HTML5 fullscreen + botón flotante X arriba + Ctrl+Tab sin blanco ni choque PiP
         Assert.Contains("Key.F11", xamlCs, StringComparison.Ordinal);
@@ -750,7 +751,8 @@ public class AuditRegressionTests
         Assert.Contains("RequestExitTabDomFullScreen", tabsCs, StringComparison.Ordinal);
         Assert.Contains("PopupFullScreenExit", downloadsXaml, StringComparison.Ordinal);
         Assert.Contains("BtnExitFullScreen_Click", downloadsXaml, StringComparison.Ordinal);
-        Assert.Contains("SWP_FRAMECHANGED", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("_fullScreenCoordinator", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("SWP_FRAMECHANGED", fullscreenHelperCs, StringComparison.Ordinal);
 
         // Guardar como con Deferral + PopupDownloads con botón de descarga directa y sin marquee bloqueante
         Assert.Contains("e.GetDeferral()", tabsCs, StringComparison.Ordinal);
@@ -901,17 +903,59 @@ public class AuditRegressionTests
     {
         string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
         string nativeCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "Core", "Interop", "NativeMethods.cs"));
+        string helperCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "Core", "Interop", "WindowFullscreenHelper.cs"));
         string tabsCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Tabs.cs"));
         string chromeCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.WindowChrome.cs"));
+        string classCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "UI", "Views", "LexClassWindow.xaml.cs"));
 
         Assert.Contains("ITaskbarList2", nativeCs, StringComparison.Ordinal);
         Assert.Contains("MarkFullscreenWindow", nativeCs, StringComparison.Ordinal);
         Assert.Contains("SetTaskbarFullscreenState", nativeCs, StringComparison.Ordinal);
-        Assert.Contains("SetTaskbarFullscreenState(hwnd, true)", tabsCs, StringComparison.Ordinal);
-        Assert.Contains("SetTaskbarFullscreenState(hwnd, false)", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("ClearWindowRegionIfSet", nativeCs, StringComparison.Ordinal);
+        Assert.Contains("SetTaskbarFullscreenState(hwnd, true)", helperCs, StringComparison.Ordinal);
+        Assert.Contains("SetTaskbarFullscreenState(hwnd, false)", helperCs, StringComparison.Ordinal);
+        Assert.Contains("ClearWindowRegionIfSet(hwnd", helperCs, StringComparison.Ordinal);
+        Assert.Contains("WM_WINDOWPOSCHANGING", helperCs, StringComparison.Ordinal);
+        Assert.Contains("WM_WINDOWPOSCHANGED", helperCs, StringComparison.Ordinal);
+        Assert.Contains("_fullScreenCoordinator", tabsCs, StringComparison.Ordinal);
         Assert.Contains("ReassertFullScreenTaskbarLayering", tabsCs, StringComparison.Ordinal);
-        Assert.Contains("_savedFullScreenStyleMask", tabsCs, StringComparison.Ordinal);
         Assert.Contains("ReassertFullScreenTaskbarLayering", chromeCs, StringComparison.Ordinal);
+        Assert.Contains("_fullScreenCoordinator", classCs, StringComparison.Ordinal);
+        Assert.DoesNotContain("WindowChrome.SetWindowChrome(this, null)", classCs, StringComparison.Ordinal);
+
+        // Unit tests para máscaras Win32 y guarda anti-parpadeo de pantalla completa
+        int maximizedStyle = 0x16CF0000; // WS_VISIBLE|WS_CLIPSIBLINGS|WS_CLIPCHILDREN|WS_MAXIMIZE|WS_CAPTION|WS_THICKFRAME|WS_MIN/MAXBOX
+        int captured = LexBrowser.Core.Interop.WindowFullscreenHelper.CaptureRestorableFrameStyleMask(maximizedStyle);
+        int fsStyle = LexBrowser.Core.Interop.WindowFullscreenHelper.ComputeBorderlessFullScreenStyle(maximizedStyle);
+        Assert.Equal(0, fsStyle & LexBrowser.Core.Interop.WindowFullscreenHelper.FullScreenStripStyleMask);
+        int restoredStyle = LexBrowser.Core.Interop.WindowFullscreenHelper.RestoreFrameStyle(fsStyle, captured);
+        Assert.Equal(captured, restoredStyle & captured);
+        Assert.Equal(0, restoredStyle & LexBrowser.Core.Interop.NativeMethods.WS_MAXIMIZE);
+
+        var monitorRect = new LexBrowser.Core.Interop.NativeMethods.RECT { left = 0, top = 0, right = 1920, bottom = 1080 };
+        Assert.True(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldSnapWindowPosToFullScreen(
+            100, 100, 1280, 800, 0, in monitorRect, isTransitioning: true, isMinimizedOrIconic: false));
+        Assert.True(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldSnapWindowPosToFullScreen(
+            0, 0, 1920, 1020, 0, in monitorRect, isTransitioning: false, isMinimizedOrIconic: false));
+        Assert.False(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldSnapWindowPosToFullScreen(
+            -32000, -32000, 160, 28, 0, in monitorRect, isTransitioning: false, isMinimizedOrIconic: true));
+        Assert.False(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldSnapWindowPosToFullScreen(
+            0, 0, 1920, 1080, 0, in monitorRect, isTransitioning: false, isMinimizedOrIconic: false));
+    }
+
+    [Fact]
+    public void LexHub_PopupCards_DoNotInheritFixedHeightNavBtnStyle()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string mainXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml"));
+
+        Assert.Contains("x:Key=\"LexHubCardBtn\"", mainXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"BtnLexMenuClass\" Style=\"{StaticResource LexHubCardBtn}\"", mainXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"BtnLexMenuMedia\" Style=\"{StaticResource LexHubCardBtn}\"", mainXaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"BtnLexMenuPlayer\" Style=\"{StaticResource LexHubCardBtn}\"", mainXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"BtnLexMenuClass\" Style=\"{StaticResource NavBtn}\"", mainXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"BtnLexMenuMedia\" Style=\"{StaticResource NavBtn}\"", mainXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("x:Name=\"BtnLexMenuPlayer\" Style=\"{StaticResource NavBtn}\"", mainXaml, StringComparison.Ordinal);
     }
 
     [Fact]

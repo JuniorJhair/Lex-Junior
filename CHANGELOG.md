@@ -2,6 +2,15 @@
 
 Todos los cambios notables de **Lex Junior Browser** se documentan en este archivo usando [Semantic Versioning](https://semver.org/).
 
+## [2.8.4] - 2026-11-23
+
+### Correcciones
+- **Pantalla completa real sobre la barra de tareas (`WindowFullscreenHelper`)**:
+  - Se detectó que al permanecer en `WindowState.Maximized` con `WindowChrome` adjunto, `.NET 8 WindowChromeWorker._SetRoundingRegion()` recortaba el HWND con `SetWindowRgn` al área de trabajo (`rcWork`), dejando expuesta la barra de tareas de Windows 11 debajo tanto en `F11` como en reproducción web a pantalla completa.
+  - La transición compartida (`FullScreenWindowCoordinator`) ahora limpia `WS_MAXIMIZE`, `WS_CAPTION` y `WS_THICKFRAME`, elimina cualquier `HRGN` (`ClearWindowRegionIfSet`) inmediatamente después de `WindowChromeWorker` en `WM_WINDOWPOSCHANGED`, intercepta `WM_WINDOWPOSCHANGING` para evitar parpadeos al restaurar desde maximizado, posiciona la ventana sin bordes sobre `rcMonitor` con `HWND_TOP`, notifica a Explorer vía `ITaskbarList2.MarkFullscreenWindow` y restaura `WINDOWPLACEMENT` exacto al salir (tanto en ventana principal como en **Lex Class**).
+- **Menú `+Lex` sin recortes verticales ni horizontales (`PopupLexHub`)**:
+  - Se reemplazó el estilo de barra `NavBtn` (`34×34 px`) por el estilo dedicado `LexHubCardBtn` sin altura fija y se amplió la tarjeta emergente a `408 px` con `TextWrapping="Wrap"` para mostrar completos los títulos y subtítulos de **Lex Class**, **Lex Media** y **Lex Player APK**.
+
 ## [2.8.3] - 2026-11-23
 
 ### Correcciones

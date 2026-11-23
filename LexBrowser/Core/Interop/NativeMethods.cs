@@ -14,10 +14,20 @@ internal static class NativeMethods
     public const int WS_MAXIMIZEBOX = 0x00010000;
     public const int WS_MAXIMIZE = 0x01000000;
     public const int WS_EX_TOPMOST = 0x00000008;
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_FRAMECHANGED = 0x0020;
     public const uint SWP_SHOWWINDOW = 0x0040;
+    public const uint SWP_HIDEWINDOW = 0x0080;
+    public const uint SWP_NOOWNERZORDER = 0x0200;
+    public const int SW_SHOWNORMAL = 1;
+    public const int SW_SHOWMAXIMIZED = 3;
+    public const int WM_GETMINMAXINFO = 0x0024;
+    public const int WM_WINDOWPOSCHANGING = 0x0046;
+    public const int WM_WINDOWPOSCHANGED = 0x0047;
+    public const int DWMWA_TRANSITIONS_FORCEDISABLED = 3;
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWCP_DEFAULT = 0;
@@ -38,6 +48,29 @@ internal static class NativeMethods
         public int left, top, right, bottom;
         public int Width => right - left;
         public int Height => bottom - top;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPOS
+    {
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x;
+        public int y;
+        public int cx;
+        public int cy;
+        public uint flags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPLACEMENT
+    {
+        public int length;
+        public int flags;
+        public int showCmd;
+        public POINT ptMinPosition;
+        public POINT ptMaxPosition;
+        public RECT rcNormalPosition;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -121,15 +154,23 @@ internal static class NativeMethods
     public static void SetTaskbarFullscreenState(IntPtr hwnd, bool isFullscreen)
     {
         if (hwnd == IntPtr.Zero) return;
+        ITaskbarList2? taskbar = null;
         try
         {
-            var taskbar = (ITaskbarList2)new CTaskbarList();
+            taskbar = (ITaskbarList2)new CTaskbarList();
             if (taskbar.HrInit() == 0)
             {
                 _ = taskbar.MarkFullscreenWindow(hwnd, isFullscreen);
             }
         }
         catch { }
+        finally
+        {
+            if (taskbar != null)
+            {
+                try { Marshal.ReleaseComObject(taskbar); } catch { }
+            }
+        }
     }
 
     public static void SetWindowCornerPreference(IntPtr hwnd, bool round)
@@ -143,8 +184,65 @@ internal static class NativeMethods
         catch { }
     }
 
+    public static void SetWindowTransitionsDisabled(IntPtr hwnd, bool disabled)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        try
+        {
+            int val = disabled ? 1 : 0;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_TRANSITIONS_FORCEDISABLED, ref val, sizeof(int));
+        }
+        catch { }
+    }
+
+    public static bool ClearWindowRegionIfSet(IntPtr hwnd, bool redraw = true)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+        IntPtr probeRgn = IntPtr.Zero;
+        try
+        {
+            probeRgn = CreateRectRgn(0, 0, 0, 0);
+            int rgnType = probeRgn != IntPtr.Zero ? GetWindowRgn(hwnd, probeRgn) : 0;
+            if (rgnType != 0)
+            {
+                _ = SetWindowRgn(hwnd, IntPtr.Zero, redraw);
+                return true;
+            }
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            if (probeRgn != IntPtr.Zero)
+            {
+                try { DeleteObject(probeRgn); } catch { }
+            }
+        }
+    }
+
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPlacement(IntPtr hWnd, [In] ref WINDOWPLACEMENT lpwndpl);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowRgn(IntPtr hWnd, IntPtr hRgn);
+
+    [DllImport("user32.dll")]
+    public static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
+
+    [DllImport("gdi32.dll")]
+    public static extern IntPtr CreateRectRgn(int x1, int y1, int x2, int y2);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteObject(IntPtr hObject);
 
     [DllImport("user32.dll")]
     public static extern bool GetCursorPos(out POINT lpPoint);

@@ -58,32 +58,18 @@ public partial class MainWindow
 
     private IntPtr WorkAreaHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        const int WM_GETMINMAXINFO = 0x0024;
-        if (msg != WM_GETMINMAXINFO) return IntPtr.Zero;
-
-        var monitor = NativeMethods.MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
-        if (monitor == IntPtr.Zero) return IntPtr.Zero;
-
-        var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-        if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return IntPtr.Zero;
-
-        bool useFullMonitorBounds = _fullScreenChromeActive || _isBrowserF11FullScreen || WindowChrome.GetWindowChrome(this) == null;
-        var targetRect = useFullMonitorBounds ? info.rcMonitor : info.rcWork;
-
-        var mmi = Marshal.PtrToStructure<NativeMethods.MINMAXINFO>(lParam);
-        mmi.ptMaxPosition.x = targetRect.left - info.rcMonitor.left;
-        mmi.ptMaxPosition.y = targetRect.top - info.rcMonitor.top;
-        mmi.ptMaxSize.x = targetRect.right - targetRect.left;
-        mmi.ptMaxSize.y = targetRect.bottom - targetRect.top;
-
-        uint dpi = NativeMethods.GetDpiForWindow(hwnd);
-        double scale = dpi > 0 ? dpi / 96.0 : 1.0;
-        mmi.ptMinTrackSize.x = (int)Math.Ceiling(MinWidth * scale);
-        mmi.ptMinTrackSize.y = (int)Math.Ceiling(MinHeight * scale);
-
-        Marshal.StructureToPtr(mmi, lParam, true);
-        handled = true;
-        return IntPtr.Zero;
+        bool isFullScreenActive = _fullScreenChromeActive || _isBrowserF11FullScreen;
+        return _fullScreenCoordinator.HandleWindowHook(
+            this,
+            hwnd,
+            msg,
+            wParam,
+            lParam,
+            isFullScreenActive,
+            MinWidth,
+            MinHeight,
+            clampMinTrackToWorkArea: false,
+            ref handled);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -423,7 +409,7 @@ public partial class MainWindow
             catch { }
         }
 
-        if (!IsLoaded || _isApplyingNormalBounds || WindowState != WindowState.Normal ||
+        if (!IsLoaded || _isApplyingNormalBounds || _fullScreenCoordinator.IsTransitioning || WindowState != WindowState.Normal ||
             _fullScreenChromeActive || _isBrowserF11FullScreen)
             return;
 
@@ -873,7 +859,7 @@ public partial class MainWindow
 
     private void UpdateWindowMargin()
     {
-        bool isFullscreen = _fullScreenChromeActive || _isBrowserF11FullScreen || IsTabInDomFullScreen(_activeTab);
+        bool isFullscreen = _fullScreenChromeActive || _isBrowserF11FullScreen || _fullScreenCoordinator.IsTransitioning || IsTabInDomFullScreen(_activeTab);
         RootWindowGrid.Margin = new Thickness(0);
         if (AppWindowChrome != null)
         {

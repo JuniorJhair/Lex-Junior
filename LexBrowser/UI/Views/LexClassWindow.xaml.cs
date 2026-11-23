@@ -41,10 +41,7 @@ public partial class LexClassWindow : Window
 
     private CoreWebView2? _core;
     private bool _isFullScreen = false;
-    private WindowState _savedWindowState = WindowState.Normal;
-    private ResizeMode _savedResizeMode = ResizeMode.CanResize;
-    private bool _savedBoundsCaptured = false;
-    private WindowChrome? _normalChrome;
+    private readonly FullScreenWindowCoordinator _fullScreenCoordinator = new();
     private bool _isClosing = false;
     private DispatcherTimer? _fullScreenExitHoverTimer;
     private DateTime _fullScreenExitLastHoverUtc = DateTime.MinValue;
@@ -166,7 +163,6 @@ public partial class LexClassWindow : Window
     {
         InitializeComponent();
         ApplySafeInitialWorkAreaBounds();
-        _normalChrome = ClassWindowChrome;
         Loaded += LexClassWindow_Loaded;
         if (PopupFullScreenExit != null)
         {
@@ -176,6 +172,13 @@ public partial class LexClassWindow : Window
                 return new[] { new CustomPopupPlacement(new Point(x, 0), PopupPrimaryAxis.Horizontal) };
             };
         }
+        Activated += (_, _) =>
+        {
+            if (_isFullScreen && !_isClosing)
+            {
+                _fullScreenCoordinator.Reassert(this);
+            }
+        };
         Deactivated += (_, _) => HideFullScreenExitPopupImmediate();
     }
 
@@ -205,34 +208,17 @@ public partial class LexClassWindow : Window
 
     private IntPtr WorkAreaHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        const int WM_GETMINMAXINFO = 0x0024;
-        if (msg != WM_GETMINMAXINFO) return IntPtr.Zero;
-
-        var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
-        if (monitor == IntPtr.Zero) return IntPtr.Zero;
-
-        var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-        if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return IntPtr.Zero;
-
-        bool useFullMonitor = _isFullScreen || WindowChrome.GetWindowChrome(this) == null;
-        var targetRect = useFullMonitor ? info.rcMonitor : info.rcWork;
-
-        var mmi = Marshal.PtrToStructure<NativeMethods.MINMAXINFO>(lParam);
-        mmi.ptMaxPosition.x = targetRect.left - info.rcMonitor.left;
-        mmi.ptMaxPosition.y = targetRect.top - info.rcMonitor.top;
-        mmi.ptMaxSize.x = targetRect.right - targetRect.left;
-        mmi.ptMaxSize.y = targetRect.bottom - targetRect.top;
-
-        uint dpi = NativeMethods.GetDpiForWindow(hwnd);
-        double scale = dpi > 0 ? dpi / 96.0 : 1.0;
-        int rawMinW = (int)Math.Ceiling(MinWidth * scale);
-        int rawMinH = (int)Math.Ceiling(MinHeight * scale);
-        mmi.ptMinTrackSize.x = Math.Min(rawMinW, Math.Max(1, info.rcWork.Width));
-        mmi.ptMinTrackSize.y = Math.Min(rawMinH, Math.Max(1, info.rcWork.Height));
-
-        Marshal.StructureToPtr(mmi, lParam, true);
-        handled = true;
-        return IntPtr.Zero;
+        return _fullScreenCoordinator.HandleWindowHook(
+            this,
+            hwnd,
+            msg,
+            wParam,
+            lParam,
+            _isFullScreen,
+            MinWidth,
+            MinHeight,
+            clampMinTrackToWorkArea: true,
+            ref handled);
     }
 
     private async void LexClassWindow_Loaded(object sender, RoutedEventArgs e)
@@ -616,93 +602,36 @@ public partial class LexClassWindow : Window
         }
         _isFullScreen = enter;
 
-        IntPtr hwnd = new WindowInteropHelper(this).Handle;
-
         if (enter)
         {
-            if (!_savedBoundsCaptured)
+            _fullScreenCoordinator.EnterFullScreen(this, () =>
             {
-                _savedWindowState = WindowState == WindowState.Minimized ? WindowState.Normal : WindowState;
-                _savedResizeMode = ResizeMode == ResizeMode.NoResize ? ResizeMode.CanResize : ResizeMode;
-                _savedBoundsCaptured = true;
-            }
-
-            RowHeader.Height = new GridLength(0);
-            RowAccentLine.Height = new GridLength(0);
-            WindowChrome.SetWindowChrome(this, null);
-            ResizeMode = ResizeMode.NoResize;
-
-            if (WindowState != WindowState.Maximized)
-            {
-                WindowState = WindowState.Maximized;
-            }
-            else if (hwnd != IntPtr.Zero)
-            {
-                var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
-                var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-                if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
-                {
-                    NativeMethods.SetWindowPos(
-                        hwnd,
-                        IntPtr.Zero,
-                        info.rcMonitor.left,
-                        info.rcMonitor.top,
-                        info.rcMonitor.Width,
-                        info.rcMonitor.Height,
-                        NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
-                }
-            }
-
-            if (hwnd != IntPtr.Zero)
-            {
-                NativeMethods.SetWindowCornerPreference(hwnd, round: false);
-                NativeMethods.SetTaskbarFullscreenState(hwnd, true);
-            }
+                RowHeader.Height = new GridLength(0);
+                RowAccentLine.Height = new GridLength(0);
+                ApplyMaximizedMargin();
+            });
             TxtFullScreenBtnLabel.Text = "✕ Salir";
             SyncFullScreenExitHoverMonitor();
+
+            _ = Dispatcher.InvokeAsync(() =>
+            {
+                if (!_isClosing && _isFullScreen)
+                {
+                    _fullScreenCoordinator.Reassert(this);
+                }
+            }, DispatcherPriority.Loaded);
         }
         else
         {
             SyncFullScreenExitHoverMonitor();
-            if (hwnd != IntPtr.Zero)
-            {
-                NativeMethods.SetTaskbarFullscreenState(hwnd, false);
-                NativeMethods.SetWindowCornerPreference(hwnd, round: true);
-            }
-            RowHeader.Height = new GridLength(42);
-            RowAccentLine.Height = new GridLength(1.5);
-            WindowChrome.SetWindowChrome(this, _normalChrome);
-            ResizeMode = _savedResizeMode == ResizeMode.NoResize ? ResizeMode.CanResize : _savedResizeMode;
-
-            if (_savedWindowState == WindowState.Maximized)
-            {
-                if (WindowState != WindowState.Maximized)
+            _fullScreenCoordinator.ExitFullScreen(
+                this,
+                restoreChromeAndRows: () =>
                 {
-                    WindowState = WindowState.Maximized;
-                }
-                else if (hwnd != IntPtr.Zero)
-                {
-                    var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
-                    var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-                    if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
-                    {
-                        NativeMethods.SetWindowPos(
-                            hwnd,
-                            IntPtr.Zero,
-                            info.rcWork.left,
-                            info.rcWork.top,
-                            info.rcWork.Width,
-                            info.rcWork.Height,
-                            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
-                    }
-                }
-            }
-            else
-            {
-                WindowState = _savedWindowState;
-            }
-
-            _savedBoundsCaptured = false;
+                    RowHeader.Height = new GridLength(42);
+                    RowAccentLine.Height = new GridLength(1.5);
+                },
+                applyFinalMargins: ApplyMaximizedMargin);
             TxtFullScreenBtnLabel.Text = "⛶ Pantalla completa";
         }
 
@@ -716,7 +645,9 @@ public partial class LexClassWindow : Window
 
         if (ClassWindowChrome != null)
         {
-            ClassWindowChrome.ResizeBorderThickness = (!_isFullScreen && WindowState == WindowState.Maximized)
+            bool isFs = _isFullScreen || _fullScreenCoordinator.IsTransitioning;
+            ClassWindowChrome.CaptionHeight = isFs ? 0 : 42;
+            ClassWindowChrome.ResizeBorderThickness = (isFs || WindowState == WindowState.Maximized)
                 ? new Thickness(0)
                 : new Thickness(6);
         }

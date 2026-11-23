@@ -261,8 +261,7 @@ public partial class MainWindow
     }
 
     private bool _isBrowserF11FullScreen = false;
-    private bool _savedFullScreenBoundsCaptured = false;
-    private int? _savedFullScreenStyleMask = null;
+    private readonly FullScreenWindowCoordinator _fullScreenCoordinator = new();
     private DispatcherTimer? _fullScreenExitHoverTimer;
     private DateTime _fullScreenExitLastHoverUtc = DateTime.MinValue;
 
@@ -508,108 +507,84 @@ public partial class MainWindow
         _fullScreenChromeActive = enter;
 
         var targetTab = _activeTab;
-        IntPtr hwnd = new WindowInteropHelper(this).Handle;
 
         if (enter)
         {
+            CloseOpenToolbarPopups();
+            CloseSnapLayoutsPopupImmediate();
+
             if (targetTab?.WebView != null && !_preFullScreenZoomByTab.ContainsKey(targetTab))
             {
                 try { _preFullScreenZoomByTab[targetTab] = targetTab.WebView.ZoomFactor; }
                 catch { _preFullScreenZoomByTab[targetTab] = 1.0; }
             }
 
-            if (!_savedFullScreenBoundsCaptured)
+            _isApplyingNormalBounds = true;
+            try
             {
-                _savedWindowState = WindowState == WindowState.Minimized ? WindowState.Normal : WindowState;
-                _savedFullScreenBoundsCaptured = true;
+                _fullScreenCoordinator.EnterFullScreen(this, () =>
+                {
+                    // Colapsar barras superiores completamente antes de limpiar estilos nativos y región HRGN
+                    RowHeader.Height = new GridLength(0);
+                    RowNavBar.Height = new GridLength(0);
+                    RowBookmarksBar.Height = new GridLength(0);
+                    RowBookmarksGrid.Visibility = Visibility.Collapsed;
+                    RowInfoBar.Height = new GridLength(0);
+                    RowProgressBar.Height = new GridLength(0);
+
+                    UpdateWindowMargin();
+                });
+            }
+            finally
+            {
+                _isApplyingNormalBounds = false;
             }
 
-            // Colapsar barras superiores completamente
-            RowHeader.Height = new GridLength(0);
-            RowNavBar.Height = new GridLength(0);
-            RowBookmarksBar.Height = new GridLength(0);
-            RowBookmarksGrid.Visibility = Visibility.Collapsed;
-            RowInfoBar.Height = new GridLength(0);
-            RowProgressBar.Height = new GridLength(0);
-
-            // Mantener AppWindowChrome adjunto (CaptionHeight=0, ResizeBorderThickness=0) en vez de
-            // SetWindowChrome(null) + ResizeMode.NoResize para evitar desmontar WindowChromeWorker en F11/Esc rápidos.
-            if (AppWindowChrome != null)
-            {
-                AppWindowChrome.CaptionHeight = 0;
-                AppWindowChrome.ResizeBorderThickness = new Thickness(0);
-            }
-
-            if (WindowState != WindowState.Maximized)
-            {
-                WindowState = WindowState.Maximized;
-            }
-
-            ReassertFullScreenTaskbarLayering();
-
-            UpdateWindowMargin();
             SyncFullScreenExitHoverMonitor();
+
+            _ = Dispatcher.InvokeAsync(() =>
+            {
+                if (!_isWindowClosing && _fullScreenChromeActive)
+                {
+                    ReassertFullScreenTaskbarLayering();
+                }
+            }, DispatcherPriority.Loaded);
         }
         else
         {
             SyncFullScreenExitHoverMonitor();
 
-            if (hwnd != IntPtr.Zero)
+            _isApplyingNormalBounds = true;
+            try
             {
-                NativeMethods.SetTaskbarFullscreenState(hwnd, false);
-                NativeMethods.SetWindowCornerPreference(hwnd, round: true);
-                if (_savedFullScreenStyleMask.HasValue)
-                {
-                    int curStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_STYLE);
-                    NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_STYLE, curStyle | _savedFullScreenStyleMask.Value);
-                    _savedFullScreenStyleMask = null;
-                }
-            }
-
-            // Restaurar barras del navegador (Auditoría E7: mantener barra en modo invitado)
-            RowHeader.Height = new GridLength(42);
-            RowNavBar.Height = new GridLength(50);
-            bool showBar = SettingsManager.Current.ShowBookmarksBar || _isGuestSession;
-            RowBookmarksBar.Height = showBar ? new GridLength(34) : new GridLength(0);
-            RowBookmarksGrid.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
-            RowInfoBar.Height = GridLength.Auto;
-            RowProgressBar.Height = new GridLength(2);
-
-            if (AppWindowChrome != null)
-            {
-                AppWindowChrome.CaptionHeight = 42;
-            }
-
-            if (_savedWindowState == WindowState.Maximized)
-            {
-                if (WindowState != WindowState.Maximized)
-                {
-                    WindowState = WindowState.Maximized;
-                }
-                if (hwnd != IntPtr.Zero)
-                {
-                    var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
-                    var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-                    if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
+                _fullScreenCoordinator.ExitFullScreen(
+                    this,
+                    restoreChromeAndRows: () =>
                     {
-                        NativeMethods.SetWindowPos(
-                            hwnd,
-                            IntPtr.Zero,
-                            info.rcWork.left,
-                            info.rcWork.top,
-                            info.rcWork.Width,
-                            info.rcWork.Height,
-                            NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
-                    }
-                }
-            }
-            else
-            {
-                WindowState = _savedWindowState;
-            }
+                        // Restaurar barras del navegador (Auditoría E7: mantener barra en modo invitado)
+                        RowHeader.Height = new GridLength(42);
+                        RowNavBar.Height = new GridLength(50);
+                        bool showBar = SettingsManager.Current.ShowBookmarksBar || _isGuestSession;
+                        RowBookmarksBar.Height = showBar ? new GridLength(34) : new GridLength(0);
+                        RowBookmarksGrid.Visibility = showBar ? Visibility.Visible : Visibility.Collapsed;
+                        RowInfoBar.Height = GridLength.Auto;
+                        RowProgressBar.Height = new GridLength(2);
 
-            _savedFullScreenBoundsCaptured = false;
-            UpdateWindowMargin();
+                        if (AppWindowChrome != null)
+                        {
+                            AppWindowChrome.CaptionHeight = 42;
+                        }
+                    },
+                    applyFinalMargins: () =>
+                    {
+                        _savedWindowState = WindowState == WindowState.Minimized ? WindowState.Normal : WindowState;
+                        UpdateWindowMargin();
+                    });
+            }
+            finally
+            {
+                _isApplyingNormalBounds = false;
+            }
         }
 
         if (targetTab != null && !targetTab.IsDisposed && targetTab.WebView != null)
@@ -640,11 +615,6 @@ public partial class MainWindow
 
             _ = Dispatcher.InvokeAsync(() =>
             {
-                if (!_isWindowClosing && enter && _fullScreenChromeActive)
-                {
-                    ReassertFullScreenTaskbarLayering();
-                }
-
                 if (!_isWindowClosing && !targetTab.IsDisposed && targetTab.WebView != null && _activeTab == targetTab)
                 {
                     try
@@ -674,41 +644,15 @@ public partial class MainWindow
     {
         if (_isWindowClosing || !_fullScreenChromeActive) return;
 
-        IntPtr hwnd = new WindowInteropHelper(this).Handle;
-        if (hwnd == IntPtr.Zero) return;
-
+        _isApplyingNormalBounds = true;
         try
         {
-            int curStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_STYLE);
-            int stripBits = curStyle & (NativeMethods.WS_CAPTION | NativeMethods.WS_THICKFRAME);
-            if (stripBits != 0)
-            {
-                _savedFullScreenStyleMask = (_savedFullScreenStyleMask ?? 0) | stripBits;
-                NativeMethods.SetWindowLong(
-                    hwnd,
-                    NativeMethods.GWL_STYLE,
-                    curStyle & ~(NativeMethods.WS_CAPTION | NativeMethods.WS_THICKFRAME));
-            }
-
-            NativeMethods.SetWindowCornerPreference(hwnd, round: false);
-
-            var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
-            var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-            if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
-            {
-                NativeMethods.SetWindowPos(
-                    hwnd,
-                    IntPtr.Zero,
-                    info.rcMonitor.left,
-                    info.rcMonitor.top,
-                    info.rcMonitor.Width,
-                    info.rcMonitor.Height,
-                    NativeMethods.SWP_FRAMECHANGED | NativeMethods.SWP_SHOWWINDOW);
-            }
-
-            NativeMethods.SetTaskbarFullscreenState(hwnd, true);
+            _fullScreenCoordinator.Reassert(this);
         }
-        catch { }
+        finally
+        {
+            _isApplyingNormalBounds = false;
+        }
     }
 
     internal static bool ShouldOpenNewWindowAsPopup(bool hasPopupSize, bool isOAuthUrl, string? url, bool hasChromelessFeatures)
