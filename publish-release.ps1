@@ -58,6 +58,33 @@ Remove-Item $publishTempDir -Recurse -Force
 $sizeMb = [Math]::Round((Get-Item $setupExePath).Length / 1MB, 2)
 Write-Host "[OK] Instalador generado exitosamente: $setupExePath ($sizeMb MB)" -ForegroundColor Green
 
+# 2.0 Compilar instalador autonomo de Lex Junior Player (opcional/complementario para +Lex -> Lex Player APK)
+$playerCsprojPath = Join-Path $PSScriptRoot "Lex Junior Player\LexJuniorPlayer\LexJuniorPlayer\LexJuniorPlayer.csproj"
+$playerPublishTempDir = Join-Path $distDir "publish_player_tmp"
+$playerSetupExePath = Join-Path $distDir "LexJuniorPlayerSetup.exe"
+if (Test-Path $playerCsprojPath) {
+    if (Test-Path $playerPublishTempDir) { Remove-Item $playerPublishTempDir -Recurse -Force }
+    Write-Host "2.0 Generando instalador autonomo de Lex Junior Player (LexJuniorPlayerSetup.exe)..." -ForegroundColor Cyan
+    dotnet publish $playerCsprojPath -c Release -r win-x64 --self-contained true `
+        -p:PublishSingleFile=true `
+        -p:IncludeNativeLibrariesForSelfExtract=true `
+        -p:EnableCompressionInSingleFile=true `
+        -p:DebugType=none `
+        -p:DebugSymbols=false `
+        -p:NuGetAudit=false `
+        -o $playerPublishTempDir
+    $builtPlayerExe = Join-Path $playerPublishTempDir "LexJuniorPlayer.exe"
+    if (Test-Path $builtPlayerExe) {
+        Copy-Item $builtPlayerExe $playerSetupExePath -Force
+        $playerAppDir = Join-Path $PSScriptRoot "Lex Junior Player\LexJuniorPlayer\App"
+        New-Item -ItemType Directory -Path $playerAppDir -Force | Out-Null
+        Copy-Item $builtPlayerExe (Join-Path $playerAppDir "LexJuniorPlayer.exe") -Force
+        $pSizeMb = [Math]::Round((Get-Item $playerSetupExePath).Length / 1MB, 2)
+        Write-Host "[OK] Instalador Lex Junior Player generado: $playerSetupExePath ($pSizeMb MB)" -ForegroundColor Green
+    }
+    if (Test-Path $playerPublishTempDir) { Remove-Item $playerPublishTempDir -Recurse -Force }
+}
+
 # 2.1 Actualizar accesos directos locales y notificar a Windows Shell
 if (-not $SkipLocalInstall) {
 try {
@@ -140,6 +167,9 @@ if ($PublishToGitHub) {
     }
     else {
         & $ghExe release create $tag $setupExePath --title "Lex Junior Browser $tag" --notes $Notes --repo JuniorJhair/Lex-Junior
+    }
+    if (Test-Path $playerSetupExePath) {
+        & $ghExe release upload $tag $playerSetupExePath --clobber --repo JuniorJhair/Lex-Junior
     }
     Write-Host "[OK] Release $tag publicado en GitHub!" -ForegroundColor Green
     Write-Host "Enlace directo permanente para tu web en Cloudflare:" -ForegroundColor Yellow

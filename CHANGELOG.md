@@ -2,6 +2,18 @@
 
 Todos los cambios notables de **Lex Junior Browser** se documentan en este archivo usando [Semantic Versioning](https://semver.org/).
 
+## [2.8.2] - 2026-11-23
+
+### Novedades y mejoras
+- **Nuevo menú unificado `+Lex` y renombramiento a `Lex Media`**:
+  - La barra superior agrupa el ecosistema bajo el botón **`+Lex`** con acceso ordenado a **`Lex Class`**, **`Lex Media`** *(antes `Lex TV`, conservando compatibilidad con `lex://tv` y añadiendo `lex://media`)* y **`Lex Player APK`**.
+  - **`Lex Player APK`** abre directamente `LexJuniorPlayer.exe` si ya está instalado en el equipo o muestra el asistente oficial para descargar/instalar **`LexJuniorPlayerSetup.exe`** optimizado solo para APKs de streaming.
+- **Pantalla completa real sobre la barra de tareas de Windows 11**:
+  - Integración nativa con `ITaskbarList2.MarkFullscreenWindow`, limpieza temporal de bordes nativos (`WS_CAPTION` / `WS_THICKFRAME`) en la ventana principal sin desmontar `AppWindowChrome` y desactivación de esquinas DWM redondeadas al entrar en `F11` o video en pantalla completa.
+- **Instaladores inteligentes sin descargas o copias duplicadas**:
+  - `LexJuniorSetup.exe` detecta la versión instalada de **WebView2 Runtime** y del propio navegador antes de copiar/instalar nada dos veces.
+  - Nuevo asistente de requisitos en **Lex Junior Player v1.1** (`LexJuniorPlayerSetup.exe` + botón **`🩺 Requisitos`**): comprueba SDK, `platform-tools`, `emulator`, `build-tools`, imágenes del sistema y aceleración WHPX/AEHD; conserva lo que ya está al día, avisa si algún componente quedó desactualizado e instala únicamente lo faltante desde el repositorio oficial de Google, con selector manual de SDK/imagen Android, Plan B automático de GPU (`host` → `angle_indirect` → `swiftshader_indirect`), compilación `speed` en segundo plano sin bloquear la interfaz y soporte para `.xapk`, `.apks` y `.apkm`.
+
 ## [2.8.1] - 2026-11-22
 
 ### Novedades y mejoras

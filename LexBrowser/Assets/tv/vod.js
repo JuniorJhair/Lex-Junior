@@ -686,7 +686,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     if (errCls === 'blocked') {
       return {
         title: 'Flujo bloqueado por seguridad',
-        desc: customMsg || 'La dirección solicitada no cumple con las políticas de seguridad de red de Lex TV.'
+        desc: customMsg || 'La dirección solicitada no cumple con las políticas de seguridad de red de Lex Media.'
       };
     }
     if (errCls === 'timeout' || status === 504) {

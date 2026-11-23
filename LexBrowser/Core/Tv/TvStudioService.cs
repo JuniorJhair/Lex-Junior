@@ -58,6 +58,9 @@ public static class TvStudioService
         string s = rawInput.Trim();
         return s.Equals("lex://tv", StringComparison.OrdinalIgnoreCase) ||
                s.Equals("lex:tv", StringComparison.OrdinalIgnoreCase) ||
+               s.Equals("lex://media", StringComparison.OrdinalIgnoreCase) ||
+               s.Equals("lex:media", StringComparison.OrdinalIgnoreCase) ||
+               s.Equals("media.lex.local", StringComparison.OrdinalIgnoreCase) ||
                s.Equals(HostName, StringComparison.OrdinalIgnoreCase) ||
                s.StartsWith(VirtualOrigin, StringComparison.OrdinalIgnoreCase) ||
                s.StartsWith("http://" + HostName, StringComparison.OrdinalIgnoreCase);

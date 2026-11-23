@@ -539,14 +539,14 @@ public static class NewTabPage
           </svg>
         </div>X
       </a>
-      <a class=""quick-link"" href=""https://tv.lex.local/index.html"">
+      <a class=""quick-link"" href=""https://tv.lex.local/index.html"" title=""Lex Media — TV en vivo, IPTV M3U/Xtream, Cine VOD y Addons"">
         <div class=""ico"">
           <svg viewBox=""0 0 24 24"" xmlns=""http://www.w3.org/2000/svg"">
             <rect x=""2"" y=""6"" width=""20"" height=""14"" rx=""3"" fill=""#6366F1""/>
             <path d=""M8 3l4 3 4-3"" stroke=""#38BDF8"" stroke-width=""2"" fill=""none"" stroke-linecap=""round""/>
             <polygon points=""10,10 16,13 10,16"" fill=""#FFFFFF""/>
           </svg>
-        </div>TV en vivo
+        </div>Lex Media
       </a>
       <a class=""quick-link"" href=""https://class.lex.local/index.html"" title=""Lex Junior Class — Academia interactiva local (Prototipo)"">
         <div class=""ico"">

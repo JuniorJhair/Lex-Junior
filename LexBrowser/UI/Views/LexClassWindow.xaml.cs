@@ -653,12 +653,22 @@ public partial class LexClassWindow : Window
                 }
             }
 
+            if (hwnd != IntPtr.Zero)
+            {
+                NativeMethods.SetWindowCornerPreference(hwnd, round: false);
+                NativeMethods.SetTaskbarFullscreenState(hwnd, true);
+            }
             TxtFullScreenBtnLabel.Text = "✕ Salir";
             SyncFullScreenExitHoverMonitor();
         }
         else
         {
             SyncFullScreenExitHoverMonitor();
+            if (hwnd != IntPtr.Zero)
+            {
+                NativeMethods.SetTaskbarFullscreenState(hwnd, false);
+                NativeMethods.SetWindowCornerPreference(hwnd, round: true);
+            }
             RowHeader.Height = new GridLength(42);
             RowAccentLine.Height = new GridLength(1.5);
             WindowChrome.SetWindowChrome(this, _normalChrome);

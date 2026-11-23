@@ -47,6 +47,13 @@ public partial class MainWindow
         }
         var source = HwndSource.FromHwnd(hwnd);
         source?.AddHook(WorkAreaHook);
+        Activated += (_, _) =>
+        {
+            if (_fullScreenChromeActive && !_isWindowClosing)
+            {
+                ReassertFullScreenTaskbarLayering();
+            }
+        };
     }
 
     private IntPtr WorkAreaHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -416,7 +423,8 @@ public partial class MainWindow
             catch { }
         }
 
-        if (!IsLoaded || _isApplyingNormalBounds || WindowState != WindowState.Normal)
+        if (!IsLoaded || _isApplyingNormalBounds || WindowState != WindowState.Normal ||
+            _fullScreenChromeActive || _isBrowserF11FullScreen)
             return;
 
         RecordCurrentNormalBounds(saveToDisk: false);
@@ -481,9 +489,6 @@ public partial class MainWindow
         // para garantizar que el Omnibox disponga siempre de amplio espacio (> 380px).
         bool isCompact = w < 1280;
         bool isUltraCompact = w < 760;
-
-        if (TxtLexClassBtnLabel != null)
-            TxtLexClassBtnLabel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
 
         if (TxtPipBtnLabel != null)
             TxtPipBtnLabel.Visibility = isCompact ? Visibility.Collapsed : Visibility.Visible;
@@ -1077,9 +1082,67 @@ public partial class MainWindow
         }
     }
 
-    private async void BtnLiveTv_Click(object sender, RoutedEventArgs e)
+    private void BtnLexHub_Click(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
+        if (IsLocked || PopupLexHub == null) return;
+
+        bool willOpen = !PopupLexHub.IsOpen;
+        if (willOpen)
+        {
+            CloseOpenToolbarPopups();
+            if (TxtLexPlayerMenuBadge != null)
+            {
+                TxtLexPlayerMenuBadge.Text = LexPlayerLauncher.IsPlayerInstalled() ? "Abrir" : "Instalar";
+            }
+        }
+        PopupLexHub.IsOpen = willOpen;
+    }
+
+    private void BtnLexMenuClass_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (PopupLexHub != null) PopupLexHub.IsOpen = false;
+        OpenLexClassComingSoon();
+    }
+
+    private async void BtnLexMenuMedia_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (PopupLexHub != null) PopupLexHub.IsOpen = false;
+        await OpenLexMediaAsync();
+    }
+
+    private void BtnLexMenuPlayer_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (PopupLexHub != null) PopupLexHub.IsOpen = false;
+        OpenOrInstallLexPlayer();
+    }
+
+    internal void OpenOrInstallLexPlayer()
+    {
+        if (IsLocked) return;
+
+        if (LexPlayerLauncher.TryLaunchInstalledPlayer(out _))
+            return;
+
+        if (LexPlayerLauncher.TryLaunchLocalSetup(out _))
+            return;
+
+        try
+        {
+            var dlg = new UI.Views.LexPlayerSetupDialog { Owner = this };
+            dlg.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[LexPlayer] Error al abrir asistente de Lex Junior Player: {ex}");
+        }
+    }
+
+    private async Task OpenLexMediaAsync()
+    {
         if (IsLocked) return;
 
         var existingTv = Tabs.FirstOrDefault(t => !t.IsDisposed && TvStudioService.IsTvUrl(t.Url));
@@ -1091,12 +1154,6 @@ public partial class MainWindow
 
         var tvTab = await AddNewTabAsync(TvStudioService.HomeUrl, isIncognito: _isGuestSession ? false : (_activeTab?.IsIncognito ?? false));
         SelectTab(tvTab, force: true);
-    }
-
-    private void BtnLexClass_Click(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        OpenLexClassComingSoon();
     }
 
     internal void OpenLexClassComingSoon()

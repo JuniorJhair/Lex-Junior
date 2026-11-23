@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>LexJuniorPlayer</AssemblyName>
+    <RootNamespace>LexJuniorPlayer</RootNamespace>
+    <ApplicationIcon>..\Assets\lex_junior_player.ico</ApplicationIcon>
+    <Product>Lex Junior Player</Product>
+    <Company>Lex Junior</Company>
+    <Version>1.1.0</Version>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+    <Description>Lanzador y motor Android limpio optimizado solo para APKs de streaming y video.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="..\Assets\lex_junior_player.png">
+      <Link>Assets\lex_junior_player.png</Link>
+    </Resource>
+    <Resource Include="..\Assets\lex_junior_player.ico">
+      <Link>Assets\lex_junior_player.ico</Link>
+    </Resource>
+  </ItemGroup>
+
+</Project>

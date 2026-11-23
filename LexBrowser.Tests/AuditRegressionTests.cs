@@ -895,4 +895,47 @@ public class AuditRegressionTests
         Assert.Contains("BrowserProcessExited", engineCs, StringComparison.Ordinal);
         Assert.Contains("BrowserProcessExited", tabsCs, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void FullScreen_TaskbarLayering_UsesITaskbarList2AndClearsNativeFrameWithoutDetachingChrome()
+    {
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string nativeCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "Core", "Interop", "NativeMethods.cs"));
+        string tabsCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.Tabs.cs"));
+        string chromeCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.WindowChrome.cs"));
+
+        Assert.Contains("ITaskbarList2", nativeCs, StringComparison.Ordinal);
+        Assert.Contains("MarkFullscreenWindow", nativeCs, StringComparison.Ordinal);
+        Assert.Contains("SetTaskbarFullscreenState", nativeCs, StringComparison.Ordinal);
+        Assert.Contains("SetTaskbarFullscreenState(hwnd, true)", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("SetTaskbarFullscreenState(hwnd, false)", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("ReassertFullScreenTaskbarLayering", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("_savedFullScreenStyleMask", tabsCs, StringComparison.Ordinal);
+        Assert.Contains("ReassertFullScreenTaskbarLayering", chromeCs, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LexHub_LexMediaAndPrereqInstaller_AreIntegratedCleanly()
+    {
+        Assert.Equal("Lex Media", LexBrowser.Core.Tv.LexTvLegalInfo.ApplicationName);
+        Assert.True(LexBrowser.Core.Tv.TvStudioService.IsTvShortcut("lex://media"));
+        Assert.True(LexBrowser.Core.Tv.TvStudioService.IsTvShortcut("lex://tv"));
+        Assert.Equal(LexBrowser.Core.Tv.TvStudioService.HomeUrl, LexBrowser.Core.OmniboxInputResolver.ResolveNavigationTarget("lex://media"));
+
+        var prereq = LexBrowser.Core.InstallerService.InspectBrowserPrerequisites();
+        Assert.NotNull(prereq.SummaryLine);
+        Assert.Contains("WebView2", prereq.SummaryLine, StringComparison.Ordinal);
+
+        Assert.Contains("LexJuniorPlayerSetup.exe", LexBrowser.Core.LexPlayerLauncher.PlayerSetupDownloadUrl, StringComparison.Ordinal);
+
+        string repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string mainXaml = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml"));
+        string mainXamlCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "MainWindow.xaml.cs"));
+        string instCs = File.ReadAllText(Path.Combine(repoRoot, "LexBrowser", "Core", "InstallerService.cs"));
+
+        Assert.Contains("PopupLexHub", mainXaml, StringComparison.Ordinal);
+        Assert.Contains("yield return PopupLexHub;", mainXamlCs, StringComparison.Ordinal);
+        Assert.Contains("EnsureWebView2RuntimeAsync", instCs, StringComparison.Ordinal);
+        Assert.Contains("allowSkipSameBinary", instCs, StringComparison.Ordinal);
+    }
 }

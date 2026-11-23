@@ -193,11 +193,14 @@ public class LexClassStudioServiceTests
         string sessionCs = File.ReadAllText(Path.Combine(root, "LexBrowser", "Core", "SessionManager.cs"));
         string tabsCs = File.ReadAllText(Path.Combine(root, "LexBrowser", "MainWindow.Tabs.cs"));
 
-        // Toolbar depurada y honesta
+        // Toolbar depurada y honesta (+Lex agrupa Lex Class, Lex Media y Lex Player APK)
         Assert.Contains("Text=\"Flotar web\"", mainXaml);
         Assert.Contains("Text=\"Media\"", mainXaml);
         Assert.Contains("Text=\"Telemetría?\"", mainXaml);
-        Assert.Contains("x:Name=\"TxtLexClassBtnLabel\" Text=\"Lex Class\"", mainXaml);
+        Assert.Contains("x:Name=\"TxtLexHubBtnLabel\" Text=\"+Lex\"", mainXaml);
+        Assert.Contains("Text=\"Lex Class\"", mainXaml);
+        Assert.Contains("Text=\"Lex Media\"", mainXaml);
+        Assert.Contains("Text=\"Lex Player APK\"", mainXaml);
         Assert.DoesNotContain("Text=\"PRONTO\"", mainXaml);
 
         // Ventana limpia de Lex Class: sin omnibox ni barra de direcciones, con pantalla completa y sin registro en historial/sesión

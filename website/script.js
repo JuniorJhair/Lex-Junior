@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// LEX JUNIOR BROWSER v2.7.0 — MULTI-ROUTE WEBSITE & INTERACTIVE SIMULATOR
+// LEX JUNIOR BROWSER v2.8.2 — MULTI-ROUTE WEBSITE & INTERACTIVE SIMULATOR
 // ═══════════════════════════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -9,12 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const navLinksContainer = document.getElementById('nav-links');
 
   const routeTitles = {
-    'inicio': 'Lex Junior Browser v2.7.0 — Navegador Privado, Rápido y Cero Telemetría',
-    'funciones': 'Funciones y Perfiles de Privacidad A/B/C — Lex Junior Browser v2.7.0',
-    'lex-class': 'Lex Junior Class (Muy Pronto) — Academia Interactiva en Lex Junior',
-    'documentacion': 'Documentación Oficial y Manual Técnico — Lex Junior Browser v2.7.0',
-    'faq': 'Preguntas y Respuestas (FAQ) — Lex Junior Browser v2.7.0',
-    'novedades': 'Novedades y Changelog v2.7.0 — Lex Junior Browser'
+    'inicio': 'Lex Junior Browser v2.8.2 — Navegador Privado, Rápido y Cero Telemetría',
+    'funciones': 'Funciones y Perfiles de Privacidad A/B/C — Lex Junior Browser v2.8.2',
+    'lex-class': 'Lex Junior Class — Academia Interactiva en Lex Junior',
+    'documentacion': 'Documentación Oficial y Manual Técnico — Lex Junior Browser v2.8.2',
+    'faq': 'Preguntas y Respuestas (FAQ) — Lex Junior Browser v2.8.2',
+    'novedades': 'Novedades y Changelog v2.8.2 — Lex Junior Browser'
   };
 
   const normalizeRoute = (rawHash) => {
@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     'view-tv': {
       icon: '📺',
-      title: 'Lex TV — Reproductor Multimedia Personal',
+      title: 'Lex Media — Reproductor Multimedia Personal',
       url: 'https://tv.lex.local/index.html',
       ads: '0 Telemetría · Bajo demanda'
     },

@@ -1,0 +1,124 @@
+<Window x:Class="LexJuniorPlayer.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ajustes · Lex Junior Player"
+        Width="580" Height="740"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanMinimize"
+        Background="#0B101B"
+        Foreground="#F8FAFC">
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Text="Ajustes del Motor Android Limpio" FontSize="19" FontWeight="Bold" Foreground="#F8FAFC"/>
+            <TextBlock Text="Optimizado para APKs de streaming · Ajusta SDK, imagen, GPU y pantalla" FontSize="12" Foreground="#94A3B8" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,6,0">
+                <!-- Android SDK Folder + Prerequisites -->
+                <TextBlock Text="Carpeta del Android SDK (adb / emulator / imágenes)" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="SdkPathBox" Grid.Column="0" Height="32" VerticalContentAlignment="Center" Padding="8,0"
+                             Background="#161F30" Foreground="#E2E8F0" BorderBrush="#2A3955" BorderThickness="1"
+                             IsReadOnly="True" Margin="0,0,6,0"/>
+                    <Button Grid.Column="1" Content="Examinar..." Style="{StaticResource SecondaryBtn}" Padding="10,5" Margin="0,0,6,0" Click="BrowseSdk_Click"/>
+                    <Button Grid.Column="2" Content="Auto" Style="{StaticResource SecondaryBtn}" Padding="10,5" Click="ResetSdk_Click" ToolTip="Detectar automáticamente ANDROID_HOME o LocalAppData\Android\Sdk"/>
+                </Grid>
+                <Button x:Name="CheckPrereqsBtn" Content="🔍 Verificar requisitos / Instalar componentes faltantes..."
+                        Style="{StaticResource SecondaryBtn}" Padding="10,5" FontSize="11.5" HorizontalAlignment="Left"
+                        Margin="0,0,0,14" Click="CheckPrereqsBtn_Click"/>
+
+                <!-- System Image selector -->
+                <TextBlock Text="Imagen del sistema Android" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,4"/>
+                <ComboBox x:Name="SystemImageCombo" Height="34" Margin="0,0,0,4" Foreground="#0F172A"
+                          SelectionChanged="SystemImageCombo_SelectionChanged"/>
+                <TextBlock x:Name="SystemImageNoteText" Text="Al cambiar de imagen Android se creará o reconfigurará el perfil del motor."
+                           FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                <!-- GPU Mode -->
+                <TextBlock Text="Modo de aceleración GPU del emulador" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,4"/>
+                <ComboBox x:Name="GpuModeCombo" Height="34" Margin="0,0,0,4" Foreground="#0F172A">
+                    <ComboBoxItem Content="Automático (Host OpenGL con Plan B a ANGLE / Software)" Tag="auto"/>
+                    <ComboBoxItem Content="Host GPU (Máxima fluidez en tarjetas modernas)" Tag="host"/>
+                    <ComboBoxItem Content="ANGLE Direct3D (Plan B estable para drivers Intel/Windows)" Tag="angle_indirect"/>
+                    <ComboBoxItem Content="SwiftShader Software (Compatibilidad por CPU sin GPU)" Tag="swiftshader_indirect"/>
+                </ComboBox>
+                <TextBlock Text="Si Host GPU falla en un PC, el motor cambia automáticamente a ANGLE o SwiftShader."
+                           FontSize="11" Foreground="#94A3B8" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Resolución de pantalla (horizontal sin marco de celular)" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                <ComboBox x:Name="ResolutionCombo" Height="34" Margin="0,0,0,12" Background="#161F30" Foreground="#0F172A">
+                    <ComboBoxItem Content="1280 × 720 (Ligero · Recomendado para fluidez)" Tag="1280x720"/>
+                    <ComboBoxItem Content="1600 × 900 (HD+ Equilibrado)" Tag="1600x900"/>
+                    <ComboBoxItem Content="1920 × 1080 (Full HD 1080p)" Tag="1920x1080"/>
+                </ComboBox>
+
+                <TextBlock Text="Relación de pantalla" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,4"/>
+                <ComboBox x:Name="AspectCombo" Height="34" Margin="0,0,0,4" Foreground="#0F172A">
+                    <ComboBoxItem Content="Automática (según monitor)" Tag="auto"/>
+                    <ComboBoxItem Content="16:9 (Panorámica estándar)" Tag="16:9"/>
+                    <ComboBoxItem Content="16:10 (Laptop / WUXGA)" Tag="16:10"/>
+                    <ComboBoxItem Content="21:9 (Ultrawide)" Tag="21:9"/>
+                    <ComboBoxItem Content="4:3 (Clásica)" Tag="4:3"/>
+                </ComboBox>
+                <TextBlock Text="Aplica al reiniciar el motor (un arranque completo)" FontSize="11" Foreground="#94A3B8" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Memoria RAM asignada al motor" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                <ComboBox x:Name="RamCombo" Height="34" Margin="0,0,0,12" Foreground="#0F172A">
+                    <ComboBoxItem Content="1536 MB (1.5 GB · Equipos con poca RAM)" Tag="1536"/>
+                    <ComboBoxItem Content="2048 MB (2 GB · Bajo consumo)" Tag="2048"/>
+                    <ComboBoxItem Content="3072 MB (3 GB · Recomendado)" Tag="3072"/>
+                    <ComboBoxItem Content="4096 MB (4 GB · Alto rendimiento)" Tag="4096"/>
+                </ComboBox>
+
+                <TextBlock Text="Núcleos de procesador" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                <ComboBox x:Name="CoresCombo" Height="34" Margin="0,0,0,12" Foreground="#0F172A">
+                    <ComboBoxItem Content="2 núcleos (Mínimo)" Tag="2"/>
+                    <ComboBoxItem Content="4 núcleos (Recomendado)" Tag="4"/>
+                    <ComboBoxItem Content="6 núcleos (Máxima fluidez)" Tag="6"/>
+                </ComboBox>
+
+                <TextBlock Text="Al abrir Lex Junior Player" FontSize="12.5" FontWeight="SemiBold" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+                <ComboBox x:Name="AutoLaunchCombo" Height="34" Margin="0,0,0,14" Foreground="#0F172A"/>
+
+                <CheckBox x:Name="PreferTvCheck" Content="Usar modo Android TV si la APK lo incluye (solo teclado Enter/flechas; desmarcado permite clic con mouse)"
+                          Foreground="#E2E8F0" Margin="0,0,0,10"/>
+                <CheckBox x:Name="ShutdownOnExitCheck" Content="Apagar motor Android automáticamente al cerrar este programa (libera 100% RAM)"
+                          Foreground="#E2E8F0" Margin="0,0,0,10"/>
+                <CheckBox x:Name="QuickBootCheck" Content="Quick Boot (iniciar en segundos guardando estado rápido)"
+                          Foreground="#E2E8F0" Margin="0,0,0,10"/>
+                <CheckBox x:Name="HideToolbarCheck" Content="Ocultar botones flotantes de la derecha en la ventana del emulador"
+                          Foreground="#E2E8F0" Margin="0,0,0,10"/>
+                <CheckBox x:Name="AutoFullscreenCheck" Content="Abrir aplicaciones directamente en Pantalla Completa (pulsa F11 para salir)"
+                          Foreground="#E2E8F0" Margin="0,0,0,14"/>
+
+                <Border Background="#111827" BorderBrush="#24314A" BorderThickness="1" CornerRadius="10" Padding="14">
+                    <StackPanel>
+                        <TextBlock Text="Acceso Directo e Icono" FontWeight="SemiBold" Foreground="#F8FAFC" FontSize="13"/>
+                        <TextBlock Text="Crea un acceso directo limpio en tu Escritorio con el icono de Lex Junior Player."
+                                   Foreground="#94A3B8" FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,10"/>
+                        <Button x:Name="ShortcutBtn" Content="Crear acceso directo en Escritorio"
+                                Style="{StaticResource SecondaryBtn}" Click="CreateShortcut_Click" HorizontalAlignment="Left"/>
+                        <TextBlock x:Name="ShortcutStatusText" FontSize="11.5" Foreground="#10B981" Margin="0,8,0,0" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+            <Button Content="Cancelar" Style="{StaticResource SecondaryBtn}" Click="Cancel_Click" Margin="0,0,10,0"/>
+            <Button Content="Guardar Ajustes" Style="{StaticResource PrimaryBtn}" Click="Save_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

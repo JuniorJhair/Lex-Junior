@@ -46,6 +46,138 @@ public static class InstallerService
 
     public static bool IsAlreadyInstalled() => File.Exists(InstalledExePath);
 
+    public sealed record BrowserPrereqState(
+        bool WebView2Ready,
+        bool WebView2Outdated,
+        string WebView2Version,
+        bool BrowserInstalled,
+        bool BrowserSameOrNewerVersion,
+        string InstalledBrowserVersion,
+        bool BrowserDesktopShortcutExists,
+        bool LexClassDesktopShortcutExists)
+    {
+        public string SummaryLine
+        {
+            get
+            {
+                string wvText = WebView2Ready
+                    ? $"✓ WebView2 v{WebView2Version} (listo, no se reinstala)"
+                    : (WebView2Outdated
+                        ? $"↻ WebView2 v{WebView2Version} desactualizado (se actualizará)"
+                        : "⬇ Falta WebView2 Runtime (se instalará automáticamente)");
+
+                string appText;
+                if (!BrowserInstalled)
+                {
+                    appText = $"⬇ Lex Junior Browser se instalará (v{UpdateManager.CurrentVersionString})";
+                }
+                else if (BrowserSameOrNewerVersion)
+                {
+                    appText = $"✓ Lex Junior Browser v{InstalledBrowserVersion} ya está al día (se conservan binarios y datos)";
+                }
+                else
+                {
+                    appText = $"↻ Lex Junior Browser se actualizará (v{InstalledBrowserVersion} → v{UpdateManager.CurrentVersionString})";
+                }
+
+                return $"{wvText}\n{appText}";
+            }
+        }
+    }
+
+    public static BrowserPrereqState InspectBrowserPrerequisites()
+    {
+        string wvRaw = string.Empty;
+        bool wvReady = false;
+        bool wvOutdated = false;
+        try
+        {
+            wvRaw = Microsoft.Web.WebView2.Core.CoreWebView2Environment.GetAvailableBrowserVersionString() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(wvRaw))
+            {
+                var cleanVer = wvRaw.Split(' ', '-')[0];
+                if (Version.TryParse(cleanVer, out var wvVer))
+                {
+                    if (wvVer.Major >= 110) wvReady = true;
+                    else wvOutdated = true;
+                }
+                else
+                {
+                    wvReady = true;
+                }
+            }
+        }
+        catch { }
+
+        bool installed = File.Exists(InstalledExePath);
+        string installedVerText = string.Empty;
+        bool sameOrNewer = false;
+        if (installed)
+        {
+            try
+            {
+                var fvi = FileVersionInfo.GetVersionInfo(InstalledExePath);
+                string raw = (fvi.FileVersion ?? fvi.ProductVersion ?? string.Empty).Split('+')[0];
+                if (Version.TryParse(raw, out var iv))
+                {
+                    installedVerText = $"{iv.Major}.{iv.Minor}.{Math.Max(0, iv.Build)}";
+                    var normInst = new Version(iv.Major, iv.Minor, Math.Max(0, iv.Build));
+                    sameOrNewer = normInst >= UpdateManager.CurrentVersion;
+                }
+            }
+            catch { }
+        }
+
+        return new BrowserPrereqState(
+            WebView2Ready: wvReady,
+            WebView2Outdated: wvOutdated,
+            WebView2Version: string.IsNullOrWhiteSpace(wvRaw) ? "No encontrado" : wvRaw.Split(' ')[0],
+            BrowserInstalled: installed,
+            BrowserSameOrNewerVersion: sameOrNewer,
+            InstalledBrowserVersion: installedVerText,
+            BrowserDesktopShortcutExists: File.Exists(DesktopShortcutPath),
+            LexClassDesktopShortcutExists: File.Exists(LexClassDesktopShortcutPath));
+    }
+
+    private static async Task EnsureWebView2RuntimeAsync(IProgress<(int Percent, string Status)>? progress)
+    {
+        var state = InspectBrowserPrerequisites();
+        if (state.WebView2Ready)
+            return;
+
+        progress?.Report((18, "Descargando e instalando Microsoft Edge WebView2 Runtime faltante..."));
+        string tempSetup = Path.Combine(Path.GetTempPath(), $"MicrosoftEdgeWebview2Setup_{Guid.NewGuid():N}.exe");
+        try
+        {
+            using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "LexJuniorBrowser-Installer/1.0");
+            using var resp = await client.GetAsync("https://go.microsoft.com/fwlink/p/?LinkId=2124703");
+            resp.EnsureSuccessStatusCode();
+            await using (var fs = File.Create(tempSetup))
+            {
+                await resp.Content.CopyToAsync(fs);
+            }
+
+            var psi = new ProcessStartInfo(tempSetup, "/silent /install")
+            {
+                UseShellExecute = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                await proc.WaitForExitAsync();
+            }
+        }
+        catch
+        {
+            // Non-fatal fallback if offline; WebView2 init still shows a clear prompt if absent
+        }
+        finally
+        {
+            try { if (File.Exists(tempSetup)) File.Delete(tempSetup); } catch { }
+        }
+    }
+
     public static bool ShouldRunAsLexClassLauncher(string[]? args)
     {
         if (args == null) return false;
@@ -126,37 +258,53 @@ public static class InstallerService
         bool createDesktopShortcut,
         bool createStartMenuShortcut,
         IProgress<(int Percent, string Status)>? progress = null,
-        bool createLexClassDesktopShortcut = false)
+        bool createLexClassDesktopShortcut = false,
+        bool allowSkipSameBinary = true)
     {
-        progress?.Report((10, "Cerrando instancias previas de Lex Junior..."));
-        await Task.Run(() => StopOtherLexProcesses());
-
-        progress?.Report((30, "Copiando archivos del navegador..."));
-        await Task.Run(() =>
+        var prereq = InspectBrowserPrerequisites();
+        if (!prereq.WebView2Ready)
         {
-            Directory.CreateDirectory(InstallDir);
+            await EnsureWebView2RuntimeAsync(progress);
+        }
 
-            string currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "";
-            if (string.IsNullOrEmpty(currentExe) || !File.Exists(currentExe))
+        bool needBinaryUpdate = !allowSkipSameBinary || !prereq.BrowserInstalled || !prereq.BrowserSameOrNewerVersion;
+
+        if (needBinaryUpdate)
+        {
+            progress?.Report((20, "Cerrando instancias previas de Lex Junior..."));
+            await Task.Run(() => StopOtherLexProcesses());
+
+            progress?.Report((38, "Copiando archivos del navegador..."));
+            await Task.Run(() =>
             {
-                throw new InvalidOperationException("No se pudo localizar el ejecutable origen para la instalación.");
-            }
+                Directory.CreateDirectory(InstallDir);
 
-            string currentDir = Path.GetDirectoryName(currentExe) ?? "";
-
-            // Si estamos ejecutando un paquete multi-archivo, copiar carpeta; si es Single-File (LexJuniorSetup.exe), copiar el ejecutable directamente
-            if (!string.Equals(Path.GetFullPath(currentExe), Path.GetFullPath(InstalledExePath), StringComparison.OrdinalIgnoreCase))
-            {
-                File.Copy(currentExe, InstalledExePath, overwrite: true);
-
-                // Si existen librerías junto al ejecutable (despliegue no single-file), copiarlas también
-                string sidecarDll = Path.Combine(currentDir, "LexBrowser.dll");
-                if (File.Exists(sidecarDll))
+                string currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule?.FileName ?? "";
+                if (string.IsNullOrEmpty(currentExe) || !File.Exists(currentExe))
                 {
-                    CopyDirectoryRecursive(currentDir, InstallDir, excludeFileName: Path.GetFileName(currentExe));
+                    throw new InvalidOperationException("No se pudo localizar el ejecutable origen para la instalación.");
                 }
-            }
-        });
+
+                string currentDir = Path.GetDirectoryName(currentExe) ?? "";
+
+                // Si estamos ejecutando un paquete multi-archivo, copiar carpeta; si es Single-File (LexJuniorSetup.exe), copiar el ejecutable directamente
+                if (!string.Equals(Path.GetFullPath(currentExe), Path.GetFullPath(InstalledExePath), StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Copy(currentExe, InstalledExePath, overwrite: true);
+
+                    // Si existen librerías junto al ejecutable (despliegue no single-file), copiarlas también
+                    string sidecarDll = Path.Combine(currentDir, "LexBrowser.dll");
+                    if (File.Exists(sidecarDll))
+                    {
+                        CopyDirectoryRecursive(currentDir, InstallDir, excludeFileName: Path.GetFileName(currentExe));
+                    }
+                }
+            });
+        }
+        else
+        {
+            progress?.Report((45, $"Lex Junior Browser v{prereq.InstalledBrowserVersion} ya está al día (no se reinstalan binarios)."));
+        }
 
         progress?.Report((60, "Extrayendo recursos e iconos oficiales..."));
         string iconPath = Path.Combine(InstallDir, "app.ico");
@@ -307,7 +455,8 @@ public static class InstallerService
             createDesktopShortcut: File.Exists(DesktopShortcutPath),
             createStartMenuShortcut: true,
             progress: null,
-            createLexClassDesktopShortcut: File.Exists(LexClassDesktopShortcutPath));
+            createLexClassDesktopShortcut: File.Exists(LexClassDesktopShortcutPath),
+            allowSkipSameBinary: false);
         LaunchInstalledBrowser();
     }
 

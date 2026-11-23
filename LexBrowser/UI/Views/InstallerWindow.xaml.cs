@@ -39,9 +39,18 @@ public partial class InstallerWindow : Window
         {
             ApplyLexClassInstallerTheme();
         }
-        else if (InstallerService.IsAlreadyInstalled())
+        else
         {
-            BtnPrimaryAction.Content = "🔄 Actualizar / Reinstalar Lex Junior";
+            var prereq = InstallerService.InspectBrowserPrerequisites();
+            TxtPrereqSummary.Text = prereq.SummaryLine;
+            if (prereq.BrowserInstalled && !prereq.BrowserSameOrNewerVersion)
+            {
+                BtnPrimaryAction.Content = $"🔄 Actualizar a v{UpdateManager.CurrentVersionString}";
+            }
+            else if (prereq.BrowserInstalled && prereq.BrowserSameOrNewerVersion)
+            {
+                BtnPrimaryAction.Content = "✓ Ya instalado — Actualizar accesos";
+            }
         }
     }
 
@@ -72,7 +81,11 @@ public partial class InstallerWindow : Window
         ChkLaunchAfterInstall.Content = "Abrir Lex Junior Class al terminar";
         ChkLaunchAfterInstall.IsChecked = false;
         CardLexClassShortcut.Visibility = Visibility.Collapsed;
-        Height = 405;
+        var prereq = InstallerService.InspectBrowserPrerequisites();
+        TxtPrereqSummary.Text = prereq.BrowserInstalled
+            ? $"✓ Lex Junior base v{prereq.InstalledBrowserVersion} ya instalado (no se reinstala; solo se crean los accesos de Lex Class)."
+            : "⬇ Se instalará el ejecutable base de Lex Junior para abrir Lex Class de forma independiente.";
+        Height = 455;
 
         ProgressInstall.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x6B, 0x00));
         BtnPrimaryAction.Content = "🎓 Instalar acceso de Lex Junior Class";

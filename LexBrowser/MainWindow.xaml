@@ -1080,29 +1080,94 @@
                 </Border>
             </Popup>
 
-            <!-- Botones a la derecha: Lex TV, Lex Class, Página Flotante, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
+            <!-- Botones a la derecha: +Lex (Lex Class, Lex Media, Lex Player APK), Flotar web, Amplificador de Volumen (300%), Detector Multimedia, 0 Telemetría y Configuración -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,8,0">
-                <!-- Botón Lex TV (Reproductor bajo demanda: IPTV y VOD) -->
-                <Button x:Name="BtnLiveTv" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
-                        ToolTip="Lex TV: Reproductor bajo demanda (IPTV y VOD, se detiene al cerrar)" Click="BtnLiveTv_Click">
-                    <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="10,4,16,4">
+                <!-- Botón Agrupado +Lex -->
+                <Button x:Name="BtnLexHub" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
+                        ToolTip="Ecosistema +Lex: Lex Class, Lex Media y Lex Player APK" Click="BtnLexHub_Click">
+                    <Border Background="{DynamicResource UtilityBtnBg}" BorderBrush="#4F46E5" BorderThickness="1" CornerRadius="8" Padding="10,4,10,4">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Path Data="M 3 2 L 11 7 L 3 12 Z" Fill="#6366F1" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Lex TV" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Path Data="M 5 1 L 6.3 4.7 L 10 6 L 6.3 7.3 L 5 11 L 3.7 7.3 L 0 6 L 3.7 4.7 Z"
+                                  Fill="#818CF8" Width="10" Height="10" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock x:Name="TxtLexHubBtnLabel" Text="+Lex" FontSize="11.5" FontWeight="Bold"
+                                       Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
+                            <TextBlock Text="▾" FontSize="10" Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center" Margin="5,0,0,0"/>
                         </StackPanel>
                     </Border>
                 </Button>
 
-                <!-- Botón Lex Junior Class (Academia interactiva integrada — Prototipo) -->
-                <Button x:Name="BtnLexClass" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0"
-                        ToolTip="Lex Junior Class: Academia interactiva paso a paso (Prototipo offline)" Click="BtnLexClass_Click">
-                    <Border Background="{DynamicResource UtilityBtnBg}" CornerRadius="8" Padding="10,4,10,4">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="🎓" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                            <TextBlock x:Name="TxtLexClassBtnLabel" Text="Lex Class" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextLight}" VerticalAlignment="Center"/>
+                <!-- Popup Ecosistema +Lex -->
+                <Popup x:Name="PopupLexHub" PlacementTarget="{Binding ElementName=BtnLexHub}" Placement="Bottom"
+                       VerticalOffset="6" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Background="#181822" BorderBrush="#3B3B52" BorderThickness="1.5" CornerRadius="12" Padding="10" Width="325">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="20" ShadowDepth="6" Opacity="0.75" Color="#000000"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <TextBlock Text="ECOSISTEMA +LEX" Foreground="#818CF8" FontSize="10" FontWeight="Bold" Margin="6,2,6,8"/>
+
+                            <!-- 1. Lex Class -->
+                            <Button x:Name="BtnLexMenuClass" Style="{StaticResource NavBtn}" Width="Auto" HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch" Padding="0" Margin="0,0,0,6" Click="BtnLexMenuClass_Click">
+                                <Border Background="#202030" BorderBrush="#33334A" BorderThickness="1" CornerRadius="9" Padding="10,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="🎓" FontSize="17" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Lex Class" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
+                                            <TextBlock Text="Academia interactiva local · Paso a paso sin internet" Foreground="#A1A1AA" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Button>
+
+                            <!-- 2. Lex Media (antes Lex TV) -->
+                            <Button x:Name="BtnLexMenuMedia" Style="{StaticResource NavBtn}" Width="Auto" HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch" Padding="0" Margin="0,0,0,6" Click="BtnLexMenuMedia_Click">
+                                <Border Background="#202030" BorderBrush="#33334A" BorderThickness="1" CornerRadius="9" Padding="10,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Path Grid.Column="0" Data="M 3 2 L 13 8 L 3 14 Z" Fill="#6366F1" Width="13" Height="13" Stretch="Uniform"
+                                              VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Lex Media" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
+                                            <TextBlock Text="TV en vivo, IPTV M3U/Xtream, Cine VOD y Addons" Foreground="#A1A1AA" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Button>
+
+                            <!-- 3. Lex Player APK (App de escritorio externa) -->
+                            <Button x:Name="BtnLexMenuPlayer" Style="{StaticResource NavBtn}" Width="Auto" HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch" Padding="0" Click="BtnLexMenuPlayer_Click">
+                                <Border Background="#172234" BorderBrush="#2A446B" BorderThickness="1" CornerRadius="9" Padding="10,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="📱" FontSize="17" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" Margin="8,0,6,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Lex Player APK" Foreground="#F4F4F5" FontSize="12.5" FontWeight="Bold"/>
+                                            <TextBlock Text="Optimizado solo para apps de streaming (.apk / .xapk)" Foreground="#93C5FD" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Background="#0F2C4C" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="6"
+                                                Padding="7,2" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtLexPlayerMenuBadge" Text="Abrir" Foreground="#38BDF8" FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </Button>
                         </StackPanel>
                     </Border>
-                </Button>
+                </Popup>
 
                 <!-- Botón Flotar web (Controlable desde configuración) -->
                 <Button x:Name="BtnTogglePip" Style="{StaticResource NavBtn}" Width="Auto" Margin="2,0" 

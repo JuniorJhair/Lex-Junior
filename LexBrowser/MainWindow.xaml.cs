@@ -1124,6 +1124,7 @@ public partial class MainWindow : Window
     // ─────────────────────────────────────────────────────────────────────
     private System.Collections.Generic.IEnumerable<System.Windows.Controls.Primitives.Popup?> EnumerateToolbarPopups()
     {
+        yield return PopupLexHub;
         yield return PopupShieldPanel;
         yield return PopupDownloads;
         yield return PopupSitePermissions;

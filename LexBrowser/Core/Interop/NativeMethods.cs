@@ -8,12 +8,20 @@ internal static class NativeMethods
 {
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
+    public const int WS_CAPTION = 0x00C00000;
+    public const int WS_THICKFRAME = 0x00040000;
+    public const int WS_MINIMIZEBOX = 0x00020000;
     public const int WS_MAXIMIZEBOX = 0x00010000;
+    public const int WS_MAXIMIZE = 0x01000000;
     public const int WS_EX_TOPMOST = 0x00000008;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
     public const uint SWP_FRAMECHANGED = 0x0020;
+    public const uint SWP_SHOWWINDOW = 0x0040;
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    public const int DWMWCP_DEFAULT = 0;
+    public const int DWMWCP_DONOTROUND = 1;
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
@@ -89,6 +97,51 @@ internal static class NativeMethods
 
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmSetWindowAttribute(IntPtr hwnd, int dwAttribute, ref int pvAttribute, int cbAttribute);
+
+    [ComImport]
+    [Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
+    private class CTaskbarList { }
+
+    [ComImport]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    [Guid("602D4995-B13A-429b-A66E-1935E44F4317")]
+    private interface ITaskbarList2
+    {
+        [PreserveSig] int HrInit();
+        [PreserveSig] int AddTab(IntPtr hwnd);
+        [PreserveSig] int DeleteTab(IntPtr hwnd);
+        [PreserveSig] int ActivateTab(IntPtr hwnd);
+        [PreserveSig] int SetActiveAlt(IntPtr hwnd);
+        [PreserveSig] int MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
+    }
+
+    public static void SetTaskbarFullscreenState(IntPtr hwnd, bool isFullscreen)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        try
+        {
+            var taskbar = (ITaskbarList2)new CTaskbarList();
+            if (taskbar.HrInit() == 0)
+            {
+                _ = taskbar.MarkFullscreenWindow(hwnd, isFullscreen);
+            }
+        }
+        catch { }
+    }
+
+    public static void SetWindowCornerPreference(IntPtr hwnd, bool round)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        try
+        {
+            int pref = round ? DWMWCP_DEFAULT : DWMWCP_DONOTROUND;
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref pref, sizeof(int));
+        }
+        catch { }
+    }
 
     [DllImport("user32.dll")]
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);

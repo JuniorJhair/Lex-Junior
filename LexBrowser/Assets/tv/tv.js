@@ -36,7 +36,7 @@ function classifyFailure(ctx) {
       title: 'Flujo cifrado no soportado',
       detail: 'Este método de reproducción (flujo cifrado) no está soportado.',
       persistKind: 'restricted',
-      hint: 'Lex TV reproduce contenido público no cifrado provisto por el usuario.'
+      hint: 'Lex Media reproduce contenido público no cifrado provisto por el usuario.'
     };
   }
 

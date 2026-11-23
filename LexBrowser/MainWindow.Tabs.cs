@@ -262,6 +262,7 @@ public partial class MainWindow
 
     private bool _isBrowserF11FullScreen = false;
     private bool _savedFullScreenBoundsCaptured = false;
+    private int? _savedFullScreenStyleMask = null;
     private DispatcherTimer? _fullScreenExitHoverTimer;
     private DateTime _fullScreenExitLastHoverUtc = DateTime.MinValue;
 
@@ -543,22 +544,8 @@ public partial class MainWindow
             {
                 WindowState = WindowState.Maximized;
             }
-            else if (hwnd != IntPtr.Zero)
-            {
-                var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
-                var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-                if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
-                {
-                    NativeMethods.SetWindowPos(
-                        hwnd,
-                        IntPtr.Zero,
-                        info.rcMonitor.left,
-                        info.rcMonitor.top,
-                        info.rcMonitor.Width,
-                        info.rcMonitor.Height,
-                        NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
-                }
-            }
+
+            ReassertFullScreenTaskbarLayering();
 
             UpdateWindowMargin();
             SyncFullScreenExitHoverMonitor();
@@ -566,6 +553,18 @@ public partial class MainWindow
         else
         {
             SyncFullScreenExitHoverMonitor();
+
+            if (hwnd != IntPtr.Zero)
+            {
+                NativeMethods.SetTaskbarFullscreenState(hwnd, false);
+                NativeMethods.SetWindowCornerPreference(hwnd, round: true);
+                if (_savedFullScreenStyleMask.HasValue)
+                {
+                    int curStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_STYLE);
+                    NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_STYLE, curStyle | _savedFullScreenStyleMask.Value);
+                    _savedFullScreenStyleMask = null;
+                }
+            }
 
             // Restaurar barras del navegador (Auditoría E7: mantener barra en modo invitado)
             RowHeader.Height = new GridLength(42);
@@ -587,7 +586,7 @@ public partial class MainWindow
                 {
                     WindowState = WindowState.Maximized;
                 }
-                else if (hwnd != IntPtr.Zero)
+                if (hwnd != IntPtr.Zero)
                 {
                     var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
                     var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
@@ -641,6 +640,11 @@ public partial class MainWindow
 
             _ = Dispatcher.InvokeAsync(() =>
             {
+                if (!_isWindowClosing && enter && _fullScreenChromeActive)
+                {
+                    ReassertFullScreenTaskbarLayering();
+                }
+
                 if (!_isWindowClosing && !targetTab.IsDisposed && targetTab.WebView != null && _activeTab == targetTab)
                 {
                     try
@@ -664,6 +668,47 @@ public partial class MainWindow
                 }
             }, DispatcherPriority.Loaded);
         }
+    }
+
+    private void ReassertFullScreenTaskbarLayering()
+    {
+        if (_isWindowClosing || !_fullScreenChromeActive) return;
+
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+
+        try
+        {
+            int curStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_STYLE);
+            int stripBits = curStyle & (NativeMethods.WS_CAPTION | NativeMethods.WS_THICKFRAME);
+            if (stripBits != 0)
+            {
+                _savedFullScreenStyleMask = (_savedFullScreenStyleMask ?? 0) | stripBits;
+                NativeMethods.SetWindowLong(
+                    hwnd,
+                    NativeMethods.GWL_STYLE,
+                    curStyle & ~(NativeMethods.WS_CAPTION | NativeMethods.WS_THICKFRAME));
+            }
+
+            NativeMethods.SetWindowCornerPreference(hwnd, round: false);
+
+            var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
+            var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            if (monitor != IntPtr.Zero && NativeMethods.GetMonitorInfo(monitor, ref info))
+            {
+                NativeMethods.SetWindowPos(
+                    hwnd,
+                    IntPtr.Zero,
+                    info.rcMonitor.left,
+                    info.rcMonitor.top,
+                    info.rcMonitor.Width,
+                    info.rcMonitor.Height,
+                    NativeMethods.SWP_FRAMECHANGED | NativeMethods.SWP_SHOWWINDOW);
+            }
+
+            NativeMethods.SetTaskbarFullscreenState(hwnd, true);
+        }
+        catch { }
     }
 
     internal static bool ShouldOpenNewWindowAsPopup(bool hasPopupSize, bool isOAuthUrl, string? url, bool hasChromelessFeatures)

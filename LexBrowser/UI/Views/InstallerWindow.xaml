@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Instalador de Lex Junior Browser"
         Icon="pack://application:,,,/Assets/logo.png"
-        Width="545" Height="475"
+        Width="560" Height="530"
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -100,6 +100,13 @@
                     </Border>
 
                     <TextBlock x:Name="TxtInstallLocation" Text="" Foreground="#8B8B96" FontSize="10.5" TextTrimming="CharacterEllipsis"/>
+
+                    <!-- Detección de requisitos existentes -->
+                    <Border x:Name="CardPrereqCheck" CornerRadius="8" Padding="10,7" Margin="0,8,0,0"
+                            Background="#111622" BorderBrush="#26314A" BorderThickness="1">
+                        <TextBlock x:Name="TxtPrereqSummary" Text="Analizando componentes instalados..." Foreground="#CBD5E1"
+                                   FontSize="10.8" TextWrapping="Wrap" LineHeight="16"/>
+                    </Border>
                 </StackPanel>
 
                 <!-- Panel de Desinstalación -->

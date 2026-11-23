@@ -1,0 +1,136 @@
+<Window x:Class="LexJuniorPlayer.SetupWizardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Instalador y Requisitos · Lex Junior Player"
+        Width="700" Height="640"
+        MinWidth="640" MinHeight="560"
+        WindowStartupLocation="CenterScreen"
+        Background="#090D16"
+        Foreground="#F8FAFC">
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Image Grid.Column="0" Source="pack://application:,,,/Assets/lex_junior_player.png" Width="46" Height="46"
+                   Margin="0,0,14,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="HeaderTitleText" Text="Lex Junior Player · Asistente de Requisitos e Instalación"
+                           FontSize="17" FontWeight="Bold" Foreground="#F8FAFC"/>
+                <TextBlock Text="Detecta componentes ya instalados en tu PC y descarga únicamente lo faltante o desactualizado."
+                           FontSize="12" Foreground="#94A3B8" Margin="0,3,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+            <Border Grid.Column="2" Background="#132238" BorderBrush="#264068" BorderThickness="1" CornerRadius="8"
+                    Padding="10,4" VerticalAlignment="Top">
+                <TextBlock Text="SOLO STREAMING" FontSize="10.5" FontWeight="Bold" Foreground="#38BDF8"/>
+            </Border>
+        </Grid>
+
+        <!-- Streaming-only explanation banner -->
+        <Border Grid.Row="1" Background="#101A2E" BorderBrush="#223557" BorderThickness="1" CornerRadius="10"
+                Padding="14,10" Margin="0,0,0,12">
+            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#CBD5E1" LineHeight="18">
+                <Run FontWeight="SemiBold" Foreground="#38BDF8" Text="Optimizado solo para APKs de streaming: "/>
+                <Run Text="Lex Junior Player configura un entorno Android limpio para apps de video (Magma, Streamflix, Kodi, etc.), sin tienda de aplicaciones ni servicios pesados en segundo plano."/>
+            </TextBlock>
+        </Border>
+
+        <!-- SDK Path Selector -->
+        <Border Grid.Row="2" Background="#0E1524" BorderBrush="#1E2C45" BorderThickness="1" CornerRadius="10"
+                Padding="12,10" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="Carpeta del Android SDK detectada / destino:" FontSize="11.5" FontWeight="SemiBold" Foreground="#CBD5E1"/>
+                    <TextBlock x:Name="SdkPathText" Text="..." FontSize="11.5" Foreground="#38BDF8" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                </StackPanel>
+                <Button x:Name="BrowseSdkBtn" Grid.Column="1" Content="📁 Cambiar ruta..." Style="{StaticResource SecondaryBtn}"
+                        Padding="10,6" FontSize="11.5" Margin="0,0,6,0" Click="BrowseSdkBtn_Click"/>
+                <Button x:Name="RescanBtn" Grid.Column="2" Content="↻ Reanalizar" Style="{StaticResource SecondaryBtn}"
+                        Padding="10,6" FontSize="11.5" Click="RescanBtn_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- Prerequisites Diagnostic List -->
+        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
+            <ItemsControl x:Name="PrereqItemsControl">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#111827" BorderBrush="#222E46" BorderThickness="1" CornerRadius="10"
+                                Padding="12,10" Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="SemiBold" Foreground="#F8FAFC"/>
+                                        <TextBlock Text="{Binding VersionLine}" FontSize="11.5" Foreground="#94A3B8" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Summary}" FontSize="11.5" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Border Background="{Binding BadgeBg}" BorderBrush="{Binding BadgeBorder}" BorderThickness="1"
+                                            CornerRadius="6" Padding="8,3" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding BadgeText}" FontSize="10.5" FontWeight="Bold" Foreground="{Binding BadgeFg}"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding SizeHint}" FontSize="10.5" Foreground="#64748B" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Shortcut & Uninstall Options -->
+        <Border Grid.Row="4" Background="#0E1524" BorderBrush="#1F2C45" BorderThickness="1" CornerRadius="10"
+                Padding="12,10" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel x:Name="InstallOptionsPanel">
+                    <CheckBox x:Name="DesktopShortcutCheck" IsChecked="True" Foreground="#E2E8F0" FontSize="12" Margin="0,0,0,6"
+                              Content="Crear icono de Lex Junior Player en el Escritorio"/>
+                    <CheckBox x:Name="StartMenuShortcutCheck" IsChecked="True" Foreground="#E2E8F0" FontSize="12" Margin="0,0,0,6"
+                              Content="Agregar al Menú Inicio de Windows"/>
+                    <CheckBox x:Name="LaunchAfterCheck" IsChecked="True" Foreground="#E2E8F0" FontSize="12"
+                              Content="Abrir Lex Junior Player al finalizar"/>
+                </StackPanel>
+                <StackPanel x:Name="UninstallOptionsPanel" Visibility="Collapsed">
+                    <CheckBox x:Name="DeleteDataCheck" IsChecked="False" Foreground="#FCA5A5" FontSize="12"
+                              Content="Eliminar también biblioteca de APKs y configuración guardada (los archivos del Android SDK no se borran)"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Progress -->
+        <StackPanel Grid.Row="5" Margin="0,0,0,12">
+            <TextBlock x:Name="StatusText" Text="Analizando componentes instalados..." FontSize="11.5" Foreground="#CBD5E1" Margin="0,0,0,6"/>
+            <ProgressBar x:Name="InstallProgress" Height="7" Minimum="0" Maximum="100" Value="0"
+                         Background="#1E293B" Foreground="#00D4FF" BorderThickness="0"/>
+        </StackPanel>
+
+        <!-- Actions -->
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="CloseBtn" Content="Cerrar" Style="{StaticResource SecondaryBtn}" Margin="0,0,10,0" Click="CloseBtn_Click"/>
+            <Button x:Name="PrimaryActionBtn" Content="Instalar / Continuar" Style="{StaticResource PrimaryBtn}" Click="PrimaryActionBtn_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
