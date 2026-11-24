@@ -42,10 +42,18 @@ public partial class LexClassWindow : Window
     private CoreWebView2? _core;
     private bool _isFullScreen = false;
     private readonly FullScreenWindowCoordinator _fullScreenCoordinator = new();
+    private FullScreenExitHoverController? _fullScreenExitHoverController;
     private bool _isClosing = false;
-    private DispatcherTimer? _fullScreenExitHoverTimer;
-    private DateTime _fullScreenExitLastHoverUtc = DateTime.MinValue;
     private long _lastF11ToggleTickMs = 0;
+
+    private FullScreenExitHoverController GetFullScreenExitHoverController()
+        => _fullScreenExitHoverController ??= new FullScreenExitHoverController(
+            this,
+            () => RootLayoutGrid,
+            () => PopupFullScreenExit,
+            () => FullScreenExitCard,
+            () => _isFullScreen,
+            () => _isClosing);
 
     private void ToggleFullScreenFromShortcut()
     {
@@ -510,88 +518,10 @@ public partial class LexClassWindow : Window
     }
 
     private void HideFullScreenExitPopupImmediate()
-    {
-        _fullScreenExitHoverTimer?.Stop();
-        if (PopupFullScreenExit != null && PopupFullScreenExit.IsOpen)
-        {
-            PopupFullScreenExit.IsOpen = false;
-        }
-    }
+        => _fullScreenExitHoverController?.HideImmediate();
 
     private void SyncFullScreenExitHoverMonitor()
-    {
-        if (_isFullScreen && !_isClosing)
-        {
-            if (_fullScreenExitHoverTimer == null)
-            {
-                _fullScreenExitHoverTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-                {
-                    Interval = TimeSpan.FromMilliseconds(90)
-                };
-                _fullScreenExitHoverTimer.Tick += FullScreenExitHoverTimer_Tick;
-            }
-            if (!_fullScreenExitHoverTimer.IsEnabled)
-            {
-                _fullScreenExitHoverTimer.Start();
-            }
-        }
-        else
-        {
-            HideFullScreenExitPopupImmediate();
-        }
-    }
-
-    private void FullScreenExitHoverTimer_Tick(object? sender, EventArgs e)
-    {
-        if (!_isFullScreen || _isClosing || !IsVisible || !IsActive || WindowState == WindowState.Minimized)
-        {
-            if (PopupFullScreenExit != null && PopupFullScreenExit.IsOpen)
-                PopupFullScreenExit.IsOpen = false;
-            if (!_isFullScreen) _fullScreenExitHoverTimer?.Stop();
-            return;
-        }
-
-        if (PopupFullScreenExit == null || RootLayoutGrid == null || !RootLayoutGrid.IsVisible || RootLayoutGrid.ActualWidth <= 0)
-            return;
-
-        if (!NativeMethods.GetCursorPos(out var pt))
-            return;
-
-        try
-        {
-            var topLeft = RootLayoutGrid.PointToScreen(new Point(0, 0));
-            var topRight = RootLayoutGrid.PointToScreen(new Point(RootLayoutGrid.ActualWidth, 0));
-            double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-            if (scale <= 0) scale = 1.0;
-
-            double centerX = (topLeft.X + topRight.X) * 0.5;
-            double topY = Math.Min(topLeft.Y, topRight.Y);
-            double dx = Math.Abs(pt.x - centerX);
-            double dy = pt.y - topY;
-
-            bool inTopTrigger = dy >= -2 && dy <= 14 * scale && dx <= 140 * scale;
-            bool inKeepStrip = dy >= -2 && dy <= 76 * scale && dx <= 165 * scale;
-            bool overCard = false;
-            if (PopupFullScreenExit.IsOpen && FullScreenExitCard != null && FullScreenExitCard.IsVisible)
-            {
-                var cTl = FullScreenExitCard.PointToScreen(new Point(0, 0));
-                var cBr = FullScreenExitCard.PointToScreen(new Point(FullScreenExitCard.ActualWidth, FullScreenExitCard.ActualHeight));
-                overCard = pt.x >= Math.Min(cTl.X, cBr.X) - 18 && pt.x <= Math.Max(cTl.X, cBr.X) + 18 &&
-                           pt.y >= Math.Min(cTl.Y, cBr.Y) - 14 && pt.y <= Math.Max(cTl.Y, cBr.Y) + 12;
-            }
-
-            if (inTopTrigger || (PopupFullScreenExit.IsOpen && (inKeepStrip || overCard)))
-            {
-                _fullScreenExitLastHoverUtc = DateTime.UtcNow;
-                if (!PopupFullScreenExit.IsOpen) PopupFullScreenExit.IsOpen = true;
-            }
-            else if (PopupFullScreenExit.IsOpen && (DateTime.UtcNow - _fullScreenExitLastHoverUtc).TotalMilliseconds >= 320)
-            {
-                PopupFullScreenExit.IsOpen = false;
-            }
-        }
-        catch { }
-    }
+        => GetFullScreenExitHoverController().Sync();
 
     public void SetFullScreen(bool enter)
     {
@@ -645,7 +575,7 @@ public partial class LexClassWindow : Window
 
         if (ClassWindowChrome != null)
         {
-            bool isFs = _isFullScreen || _fullScreenCoordinator.IsTransitioning;
+            bool isFs = _isFullScreen || _fullScreenCoordinator.IsEnteringFullScreen;
             ClassWindowChrome.CaptionHeight = isFs ? 0 : 42;
             ClassWindowChrome.ResizeBorderThickness = (isFs || WindowState == WindowState.Maximized)
                 ? new Thickness(0)

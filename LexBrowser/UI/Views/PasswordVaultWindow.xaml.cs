@@ -15,15 +15,8 @@ namespace LexBrowser.UI.Views;
 
 public sealed class CredentialViewModel : INotifyPropertyChanged
 {
-    private static readonly SolidColorBrush BrushPasswordRevealed = CreateFrozenBrush(0x34, 0xD3, 0x99);
-    private static readonly SolidColorBrush BrushPasswordHidden = CreateFrozenBrush(0xA1, 0xA1, 0xAA);
-
-    private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
-    }
+    private static readonly SolidColorBrush BrushPasswordRevealed = BrowserThemeManager.CreateFrozenBrush(0x34, 0xD3, 0x99);
+    private static readonly SolidColorBrush BrushPasswordHidden = BrowserThemeManager.CreateFrozenBrush(0xA1, 0xA1, 0xAA);
 
     public SavedCredential Model { get; }
     private bool _isRevealed;

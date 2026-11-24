@@ -10,10 +10,21 @@ namespace LexBrowser.Core;
 /// </summary>
 public static class MediaRuntime
 {
+    public static string BuildInjectedScript(string? hostToken)
+    {
+        string tokenLiteral = System.Text.Json.JsonSerializer.Serialize(hostToken ?? string.Empty);
+        return InjectedScript.Replace(
+            "const __LEX_HOST_TOKEN = '';",
+            $"const __LEX_HOST_TOKEN = {tokenLiteral};",
+            StringComparison.Ordinal);
+    }
+
     public const string InjectedScript = @"
 (function() {
     if (window.__lex_media_runtime_injected) return;
     window.__lex_media_runtime_injected = true;
+
+    const __LEX_HOST_TOKEN = '';
 
     const hostname = (window.location.hostname || '').toLowerCase();
     const isYouTube = hostname === 'youtube.com' ||
@@ -38,6 +49,7 @@ public static class MediaRuntime
                 if (window.chrome && window.chrome.webview) {
                     window.chrome.webview.postMessage({
                         type: 'pip_entered',
+                        token: __LEX_HOST_TOKEN,
                         videoWidth: video.videoWidth || 16,
                         videoHeight: video.videoHeight || 9,
                         url: window.location.href
@@ -52,6 +64,7 @@ public static class MediaRuntime
 
                 window.chrome.webview.postMessage({
                     type: 'pip_leaving_now',
+                    token: __LEX_HOST_TOKEN,
                     url: window.location.href
                 });
 
@@ -59,7 +72,8 @@ public static class MediaRuntime
                     const isPaused = video.paused;
                     window.chrome.webview.postMessage({
                         type: 'pip_left',
-                        currentTime: video.currentTime,
+                        token: __LEX_HOST_TOKEN,
+                        currentTime: Number.isFinite(video.currentTime) ? video.currentTime : 0,
                         isPaused: isPaused,
                         url: window.location.href,
                         isFullScreen: !!window.__lexWasFullscreen
@@ -83,9 +97,9 @@ public static class MediaRuntime
     const toHost = (type, payload) => {
         try {
             if (window === window.top) {
-                if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(Object.assign({}, payload, { type: type }));
+                if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage(Object.assign({}, payload, { type: type, token: __LEX_HOST_TOKEN }));
             } else {
-                window.top.postMessage({ __lex_cmd: 'to_host', type: type, payload: payload }, '*');
+                window.top.postMessage({ __lex_cmd: 'to_host', type: type, payload: payload, token: __LEX_HOST_TOKEN }, '*');
             }
         } catch(_) {}
     };
@@ -484,6 +498,7 @@ public static class MediaRuntime
             if (items.length > 0 && window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
                     type: 'media_detected_batch',
+                    token: __LEX_HOST_TOKEN,
                     items: items.slice(0, 30)
                 });
             }
@@ -513,8 +528,9 @@ public static class MediaRuntime
                 scanPageMediaOnDemand();
             } else if (e.data.__lex_cmd === 'to_host' && window === window.top) {
                 const d = e.data;
+                if (__LEX_HOST_TOKEN && d.token !== __LEX_HOST_TOKEN) return;
                 if ((d.type === 'audio_status' || d.type === 'cors_unlock_req') && window.chrome && window.chrome.webview) {
-                    window.chrome.webview.postMessage(Object.assign({}, d.payload, { type: d.type }));
+                    window.chrome.webview.postMessage(Object.assign({}, d.payload, { type: d.type, token: __LEX_HOST_TOKEN }));
                 }
             }
         } catch (_) {}
@@ -588,19 +604,21 @@ public static class MediaRuntime
         }
 
         const isPlaying = !video.paused && !video.ended && video.readyState > 1;
+        const safeCurrentTime = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+        const safeDuration = Number.isFinite(video.duration) ? video.duration : 0;
 
         const stateChanged = (
             lastMediaState.isPlaying !== isPlaying ||
             lastMediaState.title !== title ||
-            (isPlaying && Math.abs(lastMediaState.currentTime - video.currentTime) > 1)
+            (isPlaying && Math.abs(lastMediaState.currentTime - safeCurrentTime) > 1)
         );
 
         if (stateChanged && window.chrome && window.chrome.webview) {
             lastMediaState = {
                 isPlaying,
                 title,
-                currentTime: video.currentTime,
-                duration: video.duration || 0,
+                currentTime: safeCurrentTime,
+                duration: safeDuration,
                 muted: video.muted,
                 volume: video.volume,
                 isFullScreen: !!(document.fullscreenElement || document.webkitFullscreenElement)
@@ -608,6 +626,7 @@ public static class MediaRuntime
 
             window.chrome.webview.postMessage({
                 type: 'media_state',
+                token: __LEX_HOST_TOKEN,
                 data: lastMediaState
             });
         }

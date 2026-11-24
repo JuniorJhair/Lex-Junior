@@ -183,7 +183,7 @@ public sealed class TvUserStateStore
             prefs.AcceptedTermsVersion = version;
             prefs.AcceptedTermsUtc = DateTime.UtcNow;
             _prefsDirty = false;
-            SaveJsonAtomic(_prefsPath, prefs);
+            AtomicFile.TryWriteJsonAtomic(_prefsPath, prefs, JsonOptions);
         }
     }
 
@@ -224,7 +224,7 @@ public sealed class TvUserStateStore
             if (idx >= 0) prefs.Favorites.RemoveAt(idx);
             else prefs.Favorites.Add(clean);
             _prefsDirty = false;
-            SaveJsonAtomic(_prefsPath, prefs);
+            AtomicFile.TryWriteJsonAtomic(_prefsPath, prefs, JsonOptions);
             return prefs.Favorites.ToList();
         }
     }
@@ -277,7 +277,7 @@ public sealed class TvUserStateStore
                 data.Playlists.Add(existing);
             }
 
-            SaveJsonAtomic(_playlistsPath, data);
+            AtomicFile.TryWriteJsonAtomic(_playlistsPath, data, JsonOptions);
             return existing;
         }
     }
@@ -289,7 +289,7 @@ public sealed class TvUserStateStore
         {
             var data = EnsurePlaylistsLoaded();
             int removed = data.Playlists.RemoveAll(p => string.Equals(p.Id, playlistId, StringComparison.OrdinalIgnoreCase));
-            if (removed > 0) SaveJsonAtomic(_playlistsPath, data);
+            if (removed > 0) AtomicFile.TryWriteJsonAtomic(_playlistsPath, data, JsonOptions);
             return removed > 0;
         }
     }
@@ -357,7 +357,7 @@ public sealed class TvUserStateStore
             if (prefs.DeadStreams.Remove(url.Trim()))
             {
                 _prefsDirty = false;
-                SaveJsonAtomic(_prefsPath, prefs);
+                AtomicFile.TryWriteJsonAtomic(_prefsPath, prefs, JsonOptions);
             }
         }
     }
@@ -370,7 +370,7 @@ public sealed class TvUserStateStore
             if (prefs.DeadStreams.Count == 0) return;
             prefs.DeadStreams.Clear();
             _prefsDirty = false;
-            SaveJsonAtomic(_prefsPath, prefs);
+            AtomicFile.TryWriteJsonAtomic(_prefsPath, prefs, JsonOptions);
         }
     }
 
@@ -389,7 +389,7 @@ public sealed class TvUserStateStore
             foreach (var k in keysToRemove)
                 prefs.DeadStreams.Remove(k);
             _prefsDirty = false;
-            SaveJsonAtomic(_prefsPath, prefs);
+            AtomicFile.TryWriteJsonAtomic(_prefsPath, prefs, JsonOptions);
             return keysToRemove.Count;
         }
     }
@@ -403,7 +403,7 @@ public sealed class TvUserStateStore
 
             if (_prefsDirty && _prefsCache != null)
             {
-                SaveJsonAtomic(_prefsPath, _prefsCache);
+                AtomicFile.TryWriteJsonAtomic(_prefsPath, _prefsCache, JsonOptions);
                 _prefsDirty = false;
             }
         }
@@ -504,7 +504,7 @@ public sealed class TvUserStateStore
                         : new Dictionary<string, TvDeadMark>(StringComparer.OrdinalIgnoreCase);
 
                     if (PurgeExpiredInternal(parsed, now) > 0)
-                        SaveJsonAtomic(_prefsPath, parsed);
+                        AtomicFile.TryWriteJsonAtomic(_prefsPath, parsed, JsonOptions);
 
                     _prefsCache = parsed;
                     return _prefsCache;
@@ -596,8 +596,8 @@ public sealed class TvUserStateStore
                     Playlists = legacy.Playlists ?? new()
                 };
 
-                if (!File.Exists(_prefsPath)) SaveJsonAtomic(_prefsPath, prefs);
-                if (!File.Exists(_playlistsPath)) SaveJsonAtomic(_playlistsPath, playlists);
+                if (!File.Exists(_prefsPath)) AtomicFile.TryWriteJsonAtomic(_prefsPath, prefs, JsonOptions);
+                if (!File.Exists(_playlistsPath)) AtomicFile.TryWriteJsonAtomic(_playlistsPath, playlists, JsonOptions);
             }
 
             File.Move(_legacyPath, _legacyPath + ".bak", overwrite: true);
@@ -638,19 +638,5 @@ public sealed class TvUserStateStore
             _debounceTimer = new Timer(_ => Flush(), null, DebounceMs, Timeout.Infinite);
         else
             _debounceTimer.Change(DebounceMs, Timeout.Infinite);
-    }
-
-    private static void SaveJsonAtomic<T>(string path, T payload)
-    {
-        try
-        {
-            string? dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-            string tmp = path + ".tmp";
-            using (var fs = File.Create(tmp))
-                JsonSerializer.Serialize(fs, payload, JsonOptions);
-            File.Move(tmp, path, overwrite: true);
-        }
-        catch { }
     }
 }

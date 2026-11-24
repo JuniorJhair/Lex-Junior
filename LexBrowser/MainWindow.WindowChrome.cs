@@ -859,7 +859,7 @@ public partial class MainWindow
 
     private void UpdateWindowMargin()
     {
-        bool isFullscreen = _fullScreenChromeActive || _isBrowserF11FullScreen || _fullScreenCoordinator.IsTransitioning || IsTabInDomFullScreen(_activeTab);
+        bool isFullscreen = _fullScreenChromeActive || _isBrowserF11FullScreen || _fullScreenCoordinator.IsEnteringFullScreen || IsTabInDomFullScreen(_activeTab);
         RootWindowGrid.Margin = new Thickness(0);
         if (AppWindowChrome != null)
         {
@@ -1024,8 +1024,15 @@ public partial class MainWindow
     public void OpenHistory()
     {
         if (IsLocked) return;
-        if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial personal"))
+        if (_isGuestSession)
         {
+            _ = ExecuteWithOwnerUnlockAsync(
+                "Desbloquea con tu PIN para ver el Historial personal",
+                owner =>
+                {
+                    owner.OpenHistory();
+                    return Task.CompletedTask;
+                });
             return;
         }
 
@@ -1197,8 +1204,15 @@ public partial class MainWindow
     private void OpenSettings(string defaultSection = "General")
     {
         if (IsLocked) return;
-        if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para abrir la Configuración personal"))
+        if (_isGuestSession)
         {
+            _ = ExecuteWithOwnerUnlockAsync(
+                "Desbloquea con tu PIN para abrir la Configuración personal",
+                owner =>
+                {
+                    owner.OpenSettings(defaultSection);
+                    return Task.CompletedTask;
+                });
             return;
         }
 

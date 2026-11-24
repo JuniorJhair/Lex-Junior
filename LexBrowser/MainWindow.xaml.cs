@@ -54,15 +54,11 @@ public partial class MainWindow : Window
     private bool _hasInitializedSession = false;
     private DispatcherTimer? _sessionSaveTimer;
 
-    private static readonly SolidColorBrush BrushBrandGuest = CreateFrozenBrush(0x38, 0xBD, 0xF8);
-    private static readonly SolidColorBrush BrushBrandOwner = CreateFrozenBrush(0x81, 0x8C, 0xF8);
+    private static readonly SolidColorBrush BrushBrandGuest = BrowserThemeManager.CreateFrozenBrush(0x38, 0xBD, 0xF8);
+    private static readonly SolidColorBrush BrushBrandOwner = BrowserThemeManager.CreateFrozenBrush(0x81, 0x8C, 0xF8);
 
     private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
-    }
+        => BrowserThemeManager.CreateFrozenBrush(r, g, b);
 
     public MainWindow() : this((string?)null, null)
     {
@@ -385,6 +381,8 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        try
+        {
         CleanLegacyDiagnosticLogs();
 
         // Si fue abierto explícitamente en Modo Invitado desde la barra de tareas
@@ -502,6 +500,11 @@ public partial class MainWindow : Window
 
                 StartPostOnboardingBackgroundTasks();
                 return;
+        }
+        }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("MainWindow_Loaded", ex);
         }
     }
 
@@ -815,8 +818,10 @@ public partial class MainWindow : Window
         {
             if (_isGuestSession)
             {
-                if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
-                    return;
+                await ExecuteWithOwnerUnlockAsync(
+                    "Ingresa tu PIN de propietario para abrir una pestaña de incógnito",
+                    owner => owner.AddNewTabAsync(null, isIncognito: true));
+                return;
             }
             await AddNewTabAsync(null, isIncognito: true);
             return;
@@ -1022,8 +1027,7 @@ public partial class MainWindow : Window
 
     public void UpdateThemeStyles(string? theme = null)
     {
-        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current.Theme);
-        BrowserThemeManager.ApplyThemePalette(Resources, target);
+        BrowserThemeManager.ApplyThemeToWindow(this, theme);
 
         if (Resources["BgDark"] is Brush bgBrush)
         {
@@ -1409,8 +1413,10 @@ public partial class MainWindow : Window
             {
                 if (_isGuestSession)
                 {
-                    if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
-                        return;
+                    _ = ExecuteWithOwnerUnlockAsync(
+                        "Ingresa tu PIN de propietario para abrir una pestaña de incógnito",
+                        owner => owner.AddNewTabAsync(null, isIncognito: true));
+                    return;
                 }
                 _ = AddNewTabAsync(null, isIncognito: true);
             });
@@ -1486,13 +1492,7 @@ public partial class MainWindow : Window
         // 10.1b Ctrl + J: Abrir Historial de Descargas
         if (modifiers == ModifierKeys.Control && key == Key.J)
         {
-            RunShortcutAction(deferWindowMutations, () =>
-            {
-                if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial de Descargas"))
-                    return;
-                RefreshDownloadsPopupUI();
-                PopupDownloads.IsOpen = !PopupDownloads.IsOpen;
-            });
+            RunShortcutAction(deferWindowMutations, OpenDownloadsPopup);
             return true;
         }
 

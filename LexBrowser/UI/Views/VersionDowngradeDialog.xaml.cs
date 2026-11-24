@@ -33,10 +33,7 @@ public partial class VersionDowngradeDialog : Window
     }
 
     public void UpdateThemeStyles(string? theme = null)
-    {
-        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
-        BrowserThemeManager.ApplyThemePalette(Resources, target);
-    }
+        => BrowserThemeManager.ApplyThemeToWindow(this, theme);
 
     private async void BtnUpdateNow_Click(object sender, RoutedEventArgs e)
     {

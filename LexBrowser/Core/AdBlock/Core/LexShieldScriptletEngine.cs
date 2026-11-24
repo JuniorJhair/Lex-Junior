@@ -693,7 +693,7 @@ function __reportShield(category,count,reason,allowSubframe,targetUrl){
   if((!__isTop&&!allowSubframe)||!(count>0))return;
   try{
     if(window.chrome&&window.chrome.webview&&typeof window.chrome.webview.postMessage==='function'){
-      window.chrome.webview.postMessage({type:'ad_blocked',category:category||'cosmetic',reason:reason||'lex_shield_cosmetic',url:targetUrl||location.href});
+      window.chrome.webview.postMessage({type:'ad_blocked',token:__lexTok,category:category||'cosmetic',reason:reason||'lex_shield_cosmetic',url:targetUrl||location.href});
     }
   }catch(_){}
 }
@@ -1177,6 +1177,7 @@ function __flushGeneric(){
     try{
       window.chrome.webview.postMessage({
         type:'lex_shield_cosmetic_query',
+        token:__lexTok,
         host:__effectiveHost,
         initial:isIni,
         classes:clsB,

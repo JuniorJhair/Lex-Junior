@@ -28,11 +28,13 @@ public static class YouTubeOptimizer
     /// </summary>
     public static string InjectedScript { get; } = BuildInjectedScript();
 
-    private static string BuildInjectedScript()
+    internal static string BuildInjectedScript(string? hostToken = null)
     {
         string cssLiteral = JsonSerializer.Serialize(MediaShieldRules.BuildCosmeticCss());
+        string tokenLiteral = JsonSerializer.Serialize(hostToken ?? string.Empty);
         return ScriptTemplate
             .Replace("__GUARD_TOKEN__", SessionGuardToken)
+            .Replace("__HOST_TOKEN__", tokenLiteral)
             .Replace("__YT_COSMETIC_CSS__", cssLiteral);
     }
 
@@ -117,6 +119,7 @@ public static class YouTubeOptimizer
 
     // 1. Guardia de sesión no enumerable (sin bandera global fija detectable)
     const GUARD_KEY = '__GUARD_TOKEN__';
+    const HOST_TOKEN = __HOST_TOKEN__;
     try {
         if (Object.prototype.hasOwnProperty.call(window, GUARD_KEY)) return;
         Object.defineProperty(window, GUARD_KEY, {
@@ -146,6 +149,7 @@ public static class YouTubeOptimizer
             if (window.chrome && window.chrome.webview && typeof window.chrome.webview.postMessage === 'function') {
                 window.chrome.webview.postMessage({
                     type: 'ad_blocked',
+                    token: HOST_TOKEN,
                     category: 'adapter',
                     url: (window.location && window.location.href) || '',
                     reason: reason

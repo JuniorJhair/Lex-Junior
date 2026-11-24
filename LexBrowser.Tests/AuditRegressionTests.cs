@@ -941,6 +941,39 @@ public class AuditRegressionTests
             -32000, -32000, 160, 28, 0, in monitorRect, isTransitioning: false, isMinimizedOrIconic: true));
         Assert.False(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldSnapWindowPosToFullScreen(
             0, 0, 1920, 1080, 0, in monitorRect, isTransitioning: false, isMinimizedOrIconic: false));
+
+        // Salida de pantalla completa: nunca forzar rcMonitor ni enganchar WM_WINDOWPOSCHANGING/CHANGED al salir
+        Assert.True(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldUseFullMonitorBoundsForMinMax(
+            isFullScreenActive: false, isEnteringFullScreen: true, hasWindowChrome: true));
+        Assert.True(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldUseFullMonitorBoundsForMinMax(
+            isFullScreenActive: true, isEnteringFullScreen: false, hasWindowChrome: true));
+        Assert.False(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldUseFullMonitorBoundsForMinMax(
+            isFullScreenActive: false, isEnteringFullScreen: false, hasWindowChrome: true));
+        Assert.True(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldEnforceFullScreenHook(
+            isFullScreenActive: false, isEnteringFullScreen: true));
+        Assert.False(LexBrowser.Core.Interop.WindowFullscreenHelper.ShouldEnforceFullScreenHook(
+            isFullScreenActive: false, isEnteringFullScreen: false));
+
+        var info = new LexBrowser.Core.Interop.NativeMethods.MONITORINFO
+        {
+            rcMonitor = monitorRect,
+            rcWork = new LexBrowser.Core.Interop.NativeMethods.RECT { left = 0, top = 0, right = 1920, bottom = 1032 }
+        };
+        var mmiExit = LexBrowser.Core.Interop.WindowFullscreenHelper.BuildMinMaxInfo(
+            new LexBrowser.Core.Interop.NativeMethods.MINMAXINFO(),
+            in info,
+            useFullMonitorBounds: false,
+            minWidthDip: 640,
+            minHeightDip: 480,
+            dpi: 96,
+            clampMinTrackToWorkArea: false);
+        Assert.Equal(1920, mmiExit.ptMaxSize.x);
+        Assert.Equal(1032, mmiExit.ptMaxSize.y);
+
+        var coordinator = new LexBrowser.Core.Interop.FullScreenWindowCoordinator();
+        Assert.False(coordinator.IsEnteringFullScreen);
+        Assert.False(coordinator.IsExitingFullScreen);
+        Assert.False(coordinator.IsTransitioning);
     }
 
     [Fact]

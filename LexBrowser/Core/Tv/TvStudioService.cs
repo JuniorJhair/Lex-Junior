@@ -920,23 +920,13 @@ public static class TvStudioService
         if (cleanPath.Contains("..", StringComparison.Ordinal) || cleanPath.Contains(':', StringComparison.Ordinal))
             return null;
 
-        try
-        {
-            string fullFolder = Path.GetFullPath(GetTvAssetsFolder())
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                + Path.DirectorySeparatorChar;
-            string diskFile = Path.GetFullPath(Path.Combine(fullFolder, cleanPath.Replace('/', Path.DirectorySeparatorChar)));
-            if (diskFile.StartsWith(fullFolder, StringComparison.OrdinalIgnoreCase) && File.Exists(diskFile))
-                return File.ReadAllBytes(diskFile);
-        }
-        catch { }
+        if (StudioResourceHelper.TryReadSafeFile(GetTvAssetsFolder(), cleanPath, out byte[]? diskBytes))
+            return diskBytes;
 
         string resName = $"LexBrowser.Assets.tv.{cleanPath.Replace('/', '.')}";
-        using var stream = typeof(TvStudioService).Assembly.GetManifestResourceStream(resName);
-        if (stream == null) return null;
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        return ms.ToArray();
+        return StudioResourceHelper.TryReadEmbeddedResource(typeof(TvStudioService).Assembly, resName, out byte[]? resBytes)
+            ? resBytes
+            : null;
     }
 
     private static bool TryLaunchVlc(Uri safeUri)
@@ -992,15 +982,5 @@ public static class TvStudioService
     }
 
     private static CoreWebView2WebResourceResponse CreateTextResponse(CoreWebView2Environment env, int code, string reason, string text)
-    {
-        byte[] bytes = Encoding.UTF8.GetBytes(text);
-        string headers =
-            $"Content-Type: text/plain; charset=utf-8\r\n" +
-            $"Access-Control-Allow-Origin: {AllowedCorsOrigin}\r\n" +
-            $"X-Content-Type-Options: nosniff\r\n" +
-            $"Referrer-Policy: same-origin\r\n" +
-            $"X-Frame-Options: DENY\r\n" +
-            $"Cache-Control: no-store";
-        return env.CreateWebResourceResponse(new MemoryStream(bytes, writable: false), code, reason, headers);
-    }
+        => StudioResourceHelper.CreateTextResponse(env, code, reason, text, AllowedCorsOrigin, denyFraming: true);
 }

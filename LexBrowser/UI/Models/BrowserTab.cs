@@ -174,8 +174,56 @@ public class BrowserTab : INotifyPropertyChanged
     public string? DailymotionScriptId { get; set; }
     public string? YouTubeScriptId { get; set; }
     public string? ShieldBootstrapScriptId { get; set; }
+    public string RuntimeMessageToken { get; } = Guid.NewGuid().ToString("N");
     public LexBrowser.Core.AdBlock.ShieldCore.LexShieldBridgeHostObject? ShieldBridge { get; set; }
     public Uri? PendingMainNavigationUri { get; set; }
+
+    private readonly object _navOriginLock = new();
+    private readonly List<(string Origin, DateTime RecordedUtc)> _recentTopNavigationOrigins = new();
+
+    public void RecordTopNavigationOrigin(Uri? uri)
+    {
+        if (uri == null || !uri.IsAbsoluteUri) return;
+        string origin;
+        try { origin = uri.GetLeftPart(UriPartial.Authority); }
+        catch { return; }
+        if (string.IsNullOrWhiteSpace(origin)) return;
+
+        DateTime now = DateTime.UtcNow;
+        lock (_navOriginLock)
+        {
+            _recentTopNavigationOrigins.RemoveAll(x => (now - x.RecordedUtc) > TimeSpan.FromSeconds(30));
+            _recentTopNavigationOrigins.Add((origin, now));
+            if (_recentTopNavigationOrigins.Count > 12)
+            {
+                _recentTopNavigationOrigins.RemoveAt(0);
+            }
+        }
+    }
+
+    public bool HasRecentTopNavigationOrigin(Uri? uri, TimeSpan maxAge)
+    {
+        if (uri == null || !uri.IsAbsoluteUri) return false;
+        string origin;
+        try { origin = uri.GetLeftPart(UriPartial.Authority); }
+        catch { return false; }
+        if (string.IsNullOrWhiteSpace(origin)) return false;
+
+        DateTime now = DateTime.UtcNow;
+        lock (_navOriginLock)
+        {
+            for (int i = _recentTopNavigationOrigins.Count - 1; i >= 0; i--)
+            {
+                var entry = _recentTopNavigationOrigins[i];
+                if ((now - entry.RecordedUtc) <= maxAge &&
+                    string.Equals(entry.Origin, origin, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
 
     private readonly List<(string HostKey, string ScriptId)> _shieldHostScripts = new();
 
@@ -378,6 +426,7 @@ public class BrowserTab : INotifyPropertyChanged
                 if (!string.IsNullOrEmpty(value) && Uri.TryCreate(value, UriKind.Absolute, out var u) && !string.IsNullOrEmpty(u.Host))
                 {
                     _originHost = u.Host;
+                    RecordTopNavigationOrigin(u);
                 }
                 else
                 {

@@ -234,23 +234,13 @@ public static class LexClassStudioService
 
     private static bool TryLoadFromDirectory(string baseDir, string cleanPath, out byte[] bytes)
     {
-        bytes = Array.Empty<byte>();
-        try
+        if (StudioResourceHelper.TryReadSafeFile(baseDir, cleanPath, out byte[]? loaded) && loaded != null)
         {
-            if (!Directory.Exists(baseDir)) return false;
-            string fullRoot = Path.GetFullPath(baseDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                              + Path.DirectorySeparatorChar;
-            string diskPath = Path.GetFullPath(Path.Combine(fullRoot, cleanPath.Replace('/', Path.DirectorySeparatorChar)));
-            if (!diskPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(diskPath))
-                return false;
-
-            bytes = File.ReadAllBytes(diskPath);
+            bytes = loaded;
             return true;
         }
-        catch
-        {
-            return false;
-        }
+        bytes = Array.Empty<byte>();
+        return false;
     }
 
     private static Dictionary<string, string> BuildEmbeddedResourceLookup()

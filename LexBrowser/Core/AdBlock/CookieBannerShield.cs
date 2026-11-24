@@ -17,6 +17,9 @@ public static class CookieBannerShield
         => GetInjectedScript(SettingsManager.Current?.Shield?.Sites);
 
     public static string GetInjectedScript(IDictionary<string, SiteShieldProfile>? sitePolicies)
+        => GetInjectedScript(sitePolicies, hostToken: null);
+
+    public static string GetInjectedScript(IDictionary<string, SiteShieldProfile>? sitePolicies, string? hostToken)
     {
         string sitesJson = "{}";
         try
@@ -35,9 +38,12 @@ public static class CookieBannerShield
         }
         catch { }
 
+        string tokenLiteral = JsonSerializer.Serialize(hostToken ?? string.Empty);
+
         return BaseScript
             .Replace("const __LEX_SITE_POLICIES = {};", $"const __LEX_SITE_POLICIES = {sitesJson};")
-            .Replace("const __LEX_PAYMENT_AUTH_HOSTS = [];", $"const __LEX_PAYMENT_AUTH_HOSTS = {paymentHostsJson};");
+            .Replace("const __LEX_PAYMENT_AUTH_HOSTS = [];", $"const __LEX_PAYMENT_AUTH_HOSTS = {paymentHostsJson};")
+            .Replace("const __LEX_HOST_TOKEN = '';", $"const __LEX_HOST_TOKEN = {tokenLiteral};");
     }
 
     public const string BaseScript = @"
@@ -48,6 +54,7 @@ public static class CookieBannerShield
 
     const __LEX_SITE_POLICIES = {};
     const __LEX_PAYMENT_AUTH_HOSTS = [];
+    const __LEX_HOST_TOKEN = '';
 
     const hostname = (window.location.hostname || '').toLowerCase();
     if (!hostname || hostname === 'pdf.lex.local' || hostname === 'tv.lex.local') return;
@@ -132,6 +139,7 @@ public static class CookieBannerShield
             if (window.chrome && window.chrome.webview) {
                 window.chrome.webview.postMessage({
                     type: 'ad_blocked',
+                    token: __LEX_HOST_TOKEN,
                     category: 'cosmetic',
                     url: window.location.href,
                     reason: 'cookie_banner_hidden'

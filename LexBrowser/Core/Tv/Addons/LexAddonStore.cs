@@ -246,7 +246,7 @@ public sealed class LexAddonStore
                 existing.LastCheckUtc = now;
                 existing.LastError = null;
                 _sessionManifestUrls[existing.Id] = canonicalManifestUrl.Trim();
-                SaveJsonAtomic(_registryPath, data);
+                AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
                 return (ToSummary(existing), true);
             }
 
@@ -268,7 +268,7 @@ public sealed class LexAddonStore
 
             data.Addons.Add(created);
             _sessionManifestUrls[created.Id] = canonicalManifestUrl.Trim();
-            SaveJsonAtomic(_registryPath, data);
+            AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
             return (ToSummary(created), false);
         }
     }
@@ -286,7 +286,7 @@ public sealed class LexAddonStore
 
             match.Enabled = enabled;
             match.UpdatedUtc = DateTime.UtcNow;
-            SaveJsonAtomic(_registryPath, data);
+            AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
             return ToSummary(match);
         }
     }
@@ -304,7 +304,7 @@ public sealed class LexAddonStore
 
             match.LastCheckUtc = DateTime.UtcNow;
             match.LastError = string.IsNullOrWhiteSpace(error) ? null : TvUrlGuard.SanitizeHeaderValue(error, 200);
-            SaveJsonAtomic(_registryPath, data);
+            AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
             return ToSummary(match);
         }
     }
@@ -321,7 +321,7 @@ public sealed class LexAddonStore
             int removed = data.Addons.RemoveAll(a => string.Equals(a.Id, cleanId, StringComparison.OrdinalIgnoreCase));
             if (removed > 0)
             {
-                SaveJsonAtomic(_registryPath, data);
+                AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
                 return true;
             }
             return false;
@@ -382,7 +382,7 @@ public sealed class LexAddonStore
                 existing.UpdatedUtc = now;
                 existing.LastError = null;
                 _sessionRepoUrls[existing.Id] = cleanUrl;
-                SaveJsonAtomic(_registryPath, data);
+                AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
                 return (ToRepoSummary(existing), true);
             }
 
@@ -404,7 +404,7 @@ public sealed class LexAddonStore
 
             data.Repositories.Add(created);
             _sessionRepoUrls[created.Id] = cleanUrl;
-            SaveJsonAtomic(_registryPath, data);
+            AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
             return (ToRepoSummary(created), false);
         }
     }
@@ -421,7 +421,7 @@ public sealed class LexAddonStore
             if (match == null) return null;
 
             match.LastError = string.IsNullOrWhiteSpace(error) ? null : TvUrlGuard.SanitizeHeaderValue(error, 200);
-            SaveJsonAtomic(_registryPath, data);
+            AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
             return ToRepoSummary(match);
         }
     }
@@ -438,7 +438,7 @@ public sealed class LexAddonStore
             int removed = data.Repositories.RemoveAll(r => string.Equals(r.Id, cleanId, StringComparison.OrdinalIgnoreCase));
             if (removed > 0)
             {
-                SaveJsonAtomic(_registryPath, data);
+                AtomicFile.TryWriteJsonAtomic(_registryPath, data, JsonOptions);
                 return true;
             }
             return false;
@@ -535,25 +535,6 @@ public sealed class LexAddonStore
 
         _cache = new LexAddonRegistryData();
         return _cache;
-    }
-
-    private static void SaveJsonAtomic(string path, object data)
-    {
-        string dir = Path.GetDirectoryName(path) ?? "";
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
-
-        string tmp = path + ".tmp." + Guid.NewGuid().ToString("N");
-        try
-        {
-            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(data, JsonOptions);
-            File.WriteAllBytes(tmp, bytes);
-            File.Move(tmp, path, overwrite: true);
-        }
-        finally
-        {
-            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
-        }
     }
 }
 

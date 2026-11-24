@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using System.Windows;
 using LexBrowser.Core.AdBlock;
 
 namespace LexBrowser.Core;
@@ -1094,11 +1095,13 @@ public static class SettingsManager
                     Directory.CreateDirectory(dir);
                 }
 
-                // Sincronizar archivo centinela de seguridad para respetar siempre la decisión del usuario
-                if (Current.HasCompletedInitialSecuritySetup)
+                // Sincronizar archivo centinela de seguridad solo si aún no existe en disco
+                if (Current.HasCompletedInitialSecuritySetup && !File.Exists(SecuritySetupMarkerPath))
                 {
                     try
                     {
+                        string? markerDir = Path.GetDirectoryName(SecuritySetupMarkerPath);
+                        if (!string.IsNullOrEmpty(markerDir)) Directory.CreateDirectory(markerDir);
                         File.WriteAllText(SecuritySetupMarkerPath, "1");
                     }
                     catch { }
@@ -1107,84 +1110,66 @@ public static class SettingsManager
                 Current.SettingsSchemaVersion = Math.Max(3, Current.SettingsSchemaVersion);
                 Version effectiveVersion = MaxVersion(TryParseNormalizedVersion(Current.LastAppVersion), _activeLoadedAppVersion)!;
                 Current.LastAppVersion = effectiveVersion.ToString(3);
-        if (Current.Shield != null)
-        {
-            Current.Shield.Version = Math.Max(3, Current.Shield.Version);
-        }
+                if (Current.Shield != null)
+                {
+                    Current.Shield.Version = Math.Max(3, Current.Shield.Version);
+                }
                 MigrateAndSyncShieldSettings(Current);
-        BumpSettingsRevision();
+                BumpSettingsRevision();
 
                 string json = JsonSerializer.Serialize(Current, JsonOptions);
 
-                // Escritura resistente a bloqueos en Windows: escribir primero en .tmp y copiar sobrescribiendo
+                // Escritura atómica centralizada con respaldo de reintentos ante bloqueos transitorios en Windows
                 bool saved = false;
-                Exception? lastEx = null;
-
                 try
                 {
-                    File.WriteAllText(tempPath, json);
+                    saved = AtomicFile.WriteAllTextAtomic(path, json);
                 }
                 catch (Exception ex)
                 {
-                    lastEx = ex;
-                }
-
-                for (int attempt = 0; attempt < 5; attempt++)
-                {
-                    try
-                    {
-                        if (File.Exists(tempPath))
-                        {
-                            File.Copy(tempPath, path, overwrite: true);
-                            saved = true;
-                            break;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        lastEx = ex;
-                        Thread.Sleep(25 * (attempt + 1));
-                    }
+                    LogSettingsEvent($"[SAVE_FAILED] No se pudo guardar {path}: {ex.Message}");
                 }
 
                 if (!saved)
                 {
-                    // Fallback directo por si File.Copy tuviera alguna restricción específica de permisos
-                    try
-                    {
-                        File.WriteAllText(path, json);
-                        saved = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        lastEx = ex;
-                    }
-                }
-
-                try
-                {
-                    if (File.Exists(tempPath))
-                    {
-                        File.Delete(tempPath);
-                    }
-                }
-                catch { }
-
-                if (!saved)
-                {
-                    LogSettingsEvent($"[SAVE_FAILED] No se pudo guardar {path}: {lastEx?.Message}");
+                    LogSettingsEvent($"[SAVE_FAILED] No se pudo guardar {path} tras reintentos atómicos.");
                 }
             }
 
             if (notify)
             {
-                SettingsChanged?.Invoke();
+                InvokeSettingsChangedOnUiThread();
             }
         }
         catch (Exception ex)
         {
             LogSettingsEvent($"[CRITICAL] Error inesperado en Save(): {ex}");
         }
+    }
+
+    private static void InvokeSettingsChangedOnUiThread()
+    {
+        var handlers = SettingsChanged;
+        if (handlers == null) return;
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            _ = dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    SettingsChanged?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    CrashLogger.Log("SettingsManager.SettingsChanged", ex);
+                }
+            });
+            return;
+        }
+
+        handlers.Invoke();
     }
 
     private static void LogSettingsEvent(string message)

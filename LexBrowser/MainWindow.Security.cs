@@ -66,8 +66,15 @@ public partial class MainWindow
     public void CopyOrExportShieldLog(bool onlyActiveTab = false)
     {
         if (IsLocked) return;
-        if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para exportar el registro de seguridad"))
+        if (_isGuestSession)
         {
+            _ = ExecuteWithOwnerUnlockAsync(
+                "Desbloquea con tu PIN para exportar el registro de seguridad",
+                owner =>
+                {
+                    owner.CopyOrExportShieldLog(onlyActiveTab);
+                    return Task.CompletedTask;
+                });
             return;
         }
 
@@ -79,11 +86,17 @@ public partial class MainWindow
             LexBrowser.Core.AdBlock.EffectiveSitePolicy? activePolicy = _activeTab != null
                 ? LexBrowser.Core.AdBlock.SitePolicy.Resolve(_activeTab.CurrentUri, _activeTab.TemporaryCompatMode)
                 : (LexBrowser.Core.AdBlock.EffectiveSitePolicy?)null;
+            bool isPrivateTab = _activeTab != null && (_activeTab.IsIncognito || _activeTab.IsGuest);
+            string activeTabMeta = _activeTab != null
+                ? (isPrivateTab
+                    ? $" | ActiveTab=Private | CompatMode={_activeTab.TemporaryCompatMode}"
+                    : $" | ActiveTabUrl={_activeTab.CurrentUri} | CompatMode={_activeTab.TemporaryCompatMode}")
+                : "";
             string header =
                 $"Engine={LexBrowser.Core.AdBlock.ShieldRouter.GetConfiguredEngineName()} | ShieldDataLoaded={shieldDataLoaded} | " +
                 $"AdBlocker={s.EnableAdBlocker} | Cosmetic={s.EnableCosmeticShield} | SubframesGlobal={s.EnableWebShieldInSubframes} | " +
                 $"DiagnosticMode={ShieldLogger.DiagnosticMode}" +
-                (_activeTab != null ? $" | ActiveTabUrl={_activeTab.CurrentUri} | CompatMode={_activeTab.TemporaryCompatMode}" : "") +
+                activeTabMeta +
                 LexBrowser.Core.AdBlock.ShieldModuleRegistry.BuildDiagnosticHeaderSummary(activePolicy, s) +
                 Environment.NewLine;
             string dump = header + ShieldLogger.DumpLog(tabFilter);
@@ -126,8 +139,14 @@ public partial class MainWindow
         if (IsLocked) return;
         if (_isGuestSession)
         {
-            if (!TryUnlockFromGuestMode("Desbloquea con tu PIN de propietario para acceder a la Bóveda de Contraseñas"))
-                return;
+            _ = ExecuteWithOwnerUnlockAsync(
+                "Desbloquea con tu PIN de propietario para acceder a la Bóveda de Contraseñas",
+                owner =>
+                {
+                    owner.OpenPasswordVault(initialSection);
+                    return Task.CompletedTask;
+                });
+            return;
         }
         else if (PasswordManager.IsVaultLockedByRecovery)
         {
@@ -166,18 +185,23 @@ public partial class MainWindow
         ApplySettings();
     }
 
+    internal static DataObject BuildProtectedClipboardDataObject(string secretPassword)
+    {
+        var dataObject = new DataObject();
+        dataObject.SetText(secretPassword);
+        // Formatos nativos Windows 10/11 (4-byte DWORD little-endian en IStream) para excluir de Win+V y nube
+        dataObject.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(BitConverter.GetBytes(1), writable: false));
+        dataObject.SetData("CanIncludeInClipboardHistory", new MemoryStream(BitConverter.GetBytes(0), writable: false));
+        dataObject.SetData("CanUploadToCloudClipboard", new MemoryStream(BitConverter.GetBytes(0), writable: false));
+        return dataObject;
+    }
+
     public void ActivateClipboardShield(string secretPassword)
     {
         if (string.IsNullOrEmpty(secretPassword)) return;
         try
         {
-            var dataObject = new DataObject();
-            dataObject.SetText(secretPassword);
-            // Excluir del historial del portapapeles de Windows (Win+V) y de sincronización en la nube
-            dataObject.SetData("ExcludeClipboardContentFromMonitorProcessing", true);
-            dataObject.SetData("CanIncludeInClipboardHistory", 0);
-            dataObject.SetData("CanUploadToCloudClipboard", 0);
-            Clipboard.SetDataObject(dataObject, false);
+            Clipboard.SetDataObject(BuildProtectedClipboardDataObject(secretPassword), false);
 
             _lastCopiedSecretPassword = secretPassword;
 
@@ -218,7 +242,7 @@ public partial class MainWindow
         if (string.IsNullOrEmpty(baseDomain) || PasswordManager.Store.IsDomainExcluded(baseDomain))
             return;
 
-        var existing = PasswordManager.Store.FindExistingCredential(baseDomain, username);
+        var existing = PasswordManager.Store.FindExistingCredential(url, username);
         if (existing != null && existing.Password == password)
         {
             return;
@@ -528,18 +552,11 @@ public partial class MainWindow
         ShowToast("🔓 Configurado sin contraseña al abrir. Puedes activarla cuando quieras desde el botón 🔑.");
     }
 
-    private static string FormatLockoutWait(TimeSpan wait)
-    {
-        if (wait.TotalSeconds >= 60)
-            return $"{(int)Math.Ceiling(wait.TotalMinutes)} min";
-        return $"{(int)Math.Ceiling(wait.TotalSeconds)} s";
-    }
-
     private void ShowOverlayPinFailure()
     {
         TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
         TxtOverlayPinError.Text = wait > TimeSpan.Zero
-            ? $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar."
+            ? $"⏳ Demasiados intentos. Espera {PasswordManager.FormatLockoutWait(wait)} para volver a intentar."
             : "❌ PIN o contraseña incorrecta. Inténtalo de nuevo o entra como Invitado.";
         TxtOverlayPinError.Visibility = Visibility.Visible;
         PwdOverlayPinInput.SelectAll();
@@ -732,7 +749,14 @@ public partial class MainWindow
 
     private async void BtnUnlockFromGuest_Click(object sender, RoutedEventArgs e)
     {
-        await UnlockFromGuestToOwnerAsync();
+        try
+        {
+            await UnlockFromGuestToOwnerAsync();
+        }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("BtnUnlockFromGuest_Click", ex);
+        }
     }
 
     private void DisposeGuestTabsAndRestoreStashedOwnerTabs()
@@ -777,9 +801,13 @@ public partial class MainWindow
         }
     }
 
-    private async Task<bool> UnlockFromGuestToOwnerAsync()
+    private async Task<MainWindow?> UnlockFromGuestToOwnerAsync(string? promptReason = null)
     {
-        var pinDialog = new PinPromptDialog("Ingresa tu PIN de propietario para salir del Modo Invitado y volver a tu cuenta personal") { Owner = this };
+        string dialogMessage = string.IsNullOrWhiteSpace(promptReason)
+            ? "Ingresa tu PIN de propietario para salir del Modo Invitado y volver a tu cuenta personal"
+            : promptReason;
+
+        var pinDialog = new PinPromptDialog(dialogMessage) { Owner = this };
         if (pinDialog.ShowDialog() == true)
         {
             PasswordManager.MarkSessionUnlocked();
@@ -801,7 +829,7 @@ public partial class MainWindow
                 ownerWin.Focus();
                 ownerWin.ShowToast("🔓 Sesión de propietario desbloqueada.");
                 Close();
-                return true;
+                return ownerWin;
             }
 
             if (_stashedOwnerTabs.Count > 0)
@@ -814,7 +842,7 @@ public partial class MainWindow
                     await RestoreOrInitializeSessionTabsAsync();
                 }
                 ShowToast("🔓 Sesión de propietario desbloqueada: tus pestañas, marcadores y contraseñas han sido restaurados.");
-                return true;
+                return this;
             }
 
             var newOwnerWin = new MainWindow();
@@ -826,15 +854,56 @@ public partial class MainWindow
             newOwnerWin.Activate();
             newOwnerWin.Focus();
             Close();
-            return true;
+            return newOwnerWin;
         }
-        return false;
+        return null;
     }
 
-    private bool TryUnlockFromGuestMode(string reason)
+    private async Task ExecuteWithOwnerUnlockAsync(string reason, Func<MainWindow, Task> pendingAction)
     {
-        _ = UnlockFromGuestToOwnerAsync();
-        return false;
+        try
+        {
+            MainWindow? targetWindow = await UnlockFromGuestToOwnerAsync(reason);
+            if (targetWindow == null || targetWindow._isWindowClosing)
+                return;
+
+            await RunAfterOwnerWindowReadyAsync(targetWindow, () => pendingAction(targetWindow));
+        }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("ExecuteWithOwnerUnlockAsync", ex, reason);
+        }
+    }
+
+    private static Task RunAfterOwnerWindowReadyAsync(MainWindow targetWindow, Func<Task> action)
+    {
+        if (targetWindow.IsLoaded)
+        {
+            return targetWindow.Dispatcher.InvokeAsync(async () =>
+            {
+                try { await action(); }
+                catch (Exception ex) { CrashLogger.Log("RunAfterOwnerWindowReadyAsync", ex); }
+            }, DispatcherPriority.ApplicationIdle).Task.Unwrap();
+        }
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        RoutedEventHandler? onLoaded = null;
+        onLoaded = async (_, _) =>
+        {
+            targetWindow.Loaded -= onLoaded;
+            try
+            {
+                await action();
+                tcs.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                CrashLogger.Log("RunAfterOwnerWindowReadyAsync.Loaded", ex);
+                tcs.TrySetException(ex);
+            }
+        };
+        targetWindow.Loaded += onLoaded;
+        return tcs.Task;
     }
 
     private void BtnOverlayShowRecovery_Click(object sender, RoutedEventArgs e)
@@ -865,39 +934,31 @@ public partial class MainWindow
         string answer = TxtOverlayRecoveryAnswer.Text;
         string newPin = PwdOverlayNewPin.Password;
 
-        TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
-        if (wait > TimeSpan.Zero)
-        {
-            TxtOverlayRecoveryError.Text = $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar.";
-            TxtOverlayRecoveryError.Visibility = Visibility.Visible;
-            return;
-        }
-
         _isVerifyingOverlayPin = true;
         try
         {
-            if (!await PasswordManager.VerifyRecoveryAnswerOrCodeAsync(answer))
+            var result = await PasswordManager.TryRecoverAndResetPinAsync(answer, newPin);
+            if (!result.Success || string.IsNullOrEmpty(result.NewRecoveryCode))
             {
-                wait = PasswordManager.GetPinLockoutRemaining();
-                TxtOverlayRecoveryError.Text = wait > TimeSpan.Zero
-                    ? $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar."
-                    : "❌ La respuesta secreta o el código de recuperación no coinciden.";
+                TxtOverlayRecoveryError.Text = result.ErrorMessage;
                 TxtOverlayRecoveryError.Visibility = Visibility.Visible;
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(newPin))
-            {
-                TxtOverlayRecoveryError.Text = "⚠️ Escribe tu nuevo PIN o contraseña para continuar.";
-                TxtOverlayRecoveryError.Visibility = Visibility.Visible;
-                return;
-            }
-
-            var s = SettingsManager.Current;
-            PasswordManager.ConfigureMasterPassword(newPin, s.BrowserLockMode, s.SecurityQuestion, answer);
             _lastRejectedOverlayCandidate = null;
+            MessageBox.Show(
+                this,
+                PasswordManager.BuildPinRecoveredMessage(result.NewRecoveryCode),
+                "Acceso Recuperado — Lex Junior",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
             await CompleteOverlayUnlockAsync();
-            ShowToast("✅ ¡PIN actualizado con éxito! Todas tus contraseñas guardadas siguen intactas.");
+            ShowToast("✅ ¡PIN actualizado y nuevo código de recuperación generado!");
+        }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("BtnOverlayApplyRecovery_Click", ex);
         }
         finally
         {

@@ -30,10 +30,7 @@ public partial class SettingsRecoveryDialog : Window
     }
 
     public void UpdateThemeStyles(string? theme = null)
-    {
-        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
-        BrowserThemeManager.ApplyThemePalette(Resources, target);
-    }
+        => BrowserThemeManager.ApplyThemeToWindow(this, theme);
 
     private void BtnContinueRecovered_Click(object sender, RoutedEventArgs e)
     {

@@ -113,9 +113,21 @@ public partial class MainWindow
 
     private void BtnNotifications_Click(object sender, RoutedEventArgs e)
     {
+        OpenNotificationsPopup();
+    }
+
+    internal void OpenNotificationsPopup()
+    {
         if (IsLocked) return;
-        if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Centro de Notificaciones"))
+        if (_isGuestSession)
         {
+            _ = ExecuteWithOwnerUnlockAsync(
+                "Desbloquea con tu PIN para ver el Centro de Notificaciones",
+                owner =>
+                {
+                    owner.OpenNotificationsPopup();
+                    return Task.CompletedTask;
+                });
             return;
         }
 
@@ -400,7 +412,7 @@ public partial class MainWindow
         };
 
         string tabDesc = $"Tab:{tab.TabId} ({req.DisplayHost})";
-        ShieldLogger.Log(eventType, req.DisplayHost, req.Origin, "MainFrame", $"User selected {mode} (State={state})", tabDesc);
+        ShieldLogger.LogForTab(tab, eventType, req.DisplayHost, req.Origin, "MainFrame", $"User selected {mode} (State={state})", tabDesc);
 
         if (state == CoreWebView2PermissionState.Deny)
         {
@@ -471,7 +483,7 @@ public partial class MainWindow
         if (e.PermissionKind == CoreWebView2PermissionKind.Camera ||
             e.PermissionKind == CoreWebView2PermissionKind.Microphone)
         {
-            ShieldLogger.Log("CAPTURE_PERMISSION_REQUESTED", host, uriStr, "MainFrame", $"{e.PermissionKind} state={e.State} userInitiated={e.IsUserInitiated}", tabDesc);
+            ShieldLogger.LogForTab(tab, "CAPTURE_PERMISSION_REQUESTED", host, uriStr, "MainFrame", $"{e.PermissionKind} state={e.State} userInitiated={e.IsUserInitiated}", tabDesc);
 
             bool isSafeOrigin = false;
 
@@ -497,7 +509,7 @@ public partial class MainWindow
                 e.State = CoreWebView2PermissionState.Deny;
                 e.SavesInProfile = false;
                 e.Handled = true;
-                ShieldLogger.Log("CAPTURE_PERMISSION_BLOCKED", host, uriStr, "InsecureOrigin",
+                ShieldLogger.LogForTab(tab, "CAPTURE_PERMISSION_BLOCKED", host, uriStr, "InsecureOrigin",
                     $"{e.PermissionKind} permission denied because origin is not secure (requires https, localhost, or tv.lex.local)", tabDesc);
                 return;
             }
@@ -570,7 +582,7 @@ public partial class MainWindow
             e.State = CoreWebView2PermissionState.Deny;
             e.SavesInProfile = false;
             e.Handled = true;
-            ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "Subframe", "Cross-origin subframe blocked by security policy", tabDesc);
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "Subframe", "Cross-origin subframe blocked by security policy", tabDesc);
             return;
         }
 
@@ -579,7 +591,7 @@ public partial class MainWindow
             e.State = CoreWebView2PermissionState.Deny;
             e.SavesInProfile = false;
             e.Handled = true;
-            ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Blocked by global policy (BlockAll)", tabDesc);
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Blocked by global policy (BlockAll)", tabDesc);
             return;
         }
 
@@ -592,7 +604,7 @@ public partial class MainWindow
                 e.State = CoreWebView2PermissionState.Deny;
                 e.SavesInProfile = false;
                 e.Handled = true;
-                ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Origin in ad/tracking filter list", tabDesc);
+                ShieldLogger.LogForTab(tab, "NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Origin in ad/tracking filter list", tabDesc);
                 return;
             }
         }
@@ -606,7 +618,7 @@ public partial class MainWindow
             e.State = CoreWebView2PermissionState.Deny;
             e.SavesInProfile = !tab.IsIncognito;
             e.Handled = true;
-            ShieldLogger.Log("NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Previously blocked by user preference", tabDesc);
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_PERMISSION_BLOCKED", host, uriStr, "MainFrame", "Previously blocked by user preference", tabDesc);
             return;
         }
 
@@ -617,7 +629,7 @@ public partial class MainWindow
             e.State = CoreWebView2PermissionState.Allow;
             e.SavesInProfile = !tab.IsIncognito;
             e.Handled = true;
-            ShieldLogger.Log("NOTIFICATION_PERMISSION_ALLOWED", host, uriStr, "MainFrame", $"Previously allowed (Mode={existingMode})", tabDesc);
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_PERMISSION_ALLOWED", host, uriStr, "MainFrame", $"Previously allowed (Mode={existingMode})", tabDesc);
             return;
         }
 
@@ -627,7 +639,7 @@ public partial class MainWindow
             e.State = CoreWebView2PermissionState.Allow;
             e.SavesInProfile = !tab.IsIncognito;
             e.Handled = true;
-            ShieldLogger.Log("NOTIFICATION_PERMISSION_ALLOWED", host, uriStr, "MainFrame", "Auto-allowed as Silent by global policy", tabDesc);
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_PERMISSION_ALLOWED", host, uriStr, "MainFrame", "Auto-allowed as Silent by global policy", tabDesc);
             return;
         }
 
@@ -637,7 +649,7 @@ public partial class MainWindow
         var pendingReq = new PendingNotificationPermissionRequest(e, deferral, origin, host);
         tab.PendingNotificationRequest = pendingReq;
 
-        ShieldLogger.Log("NOTIFICATION_PERMISSION_REQUESTED", host, uriStr, "MainFrame", "User prompted via omnibox chip", tabDesc);
+        ShieldLogger.LogForTab(tab, "NOTIFICATION_PERMISSION_REQUESTED", host, uriStr, "MainFrame", "User prompted via omnibox chip", tabDesc);
 
         var win = tab.OwnerWindow ?? this;
         win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>

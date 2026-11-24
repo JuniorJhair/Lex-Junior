@@ -262,7 +262,7 @@ public sealed class BrowserImportTests : IDisposable
 
         var res = store.ImportCredentials(new[]
         {
-            ("https://login.github.com/", "JHAIR", "NewPassShouldNotOverwrite"),
+            ("https://www.github.com/", "JHAIR", "NewPassShouldNotOverwrite"),
             ("https://example.org/signin", "user1", "PassOne"),
             ("https://sub.example.org/auth", "user2", "PassTwo"),
             ("https://sub.example.org/auth", "user2", "PassTwoDup"),

@@ -162,6 +162,42 @@ public static class BrowserThemeManager
         ApplyBadgeAndSecondaryPanelPalette(res, theme);
     }
 
+    public static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
+    public static SolidColorBrush CreateFrozenBrush(byte a, byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
+    public static Brush GetThemeBrush(FrameworkElement? element, string key, Brush fallback)
+    {
+        if (element != null && element.TryFindResource(key) is Brush localBrush)
+            return localBrush;
+
+        if (Application.Current?.TryFindResource(key) is Brush appBrush)
+            return appBrush;
+
+        return fallback;
+    }
+
+    public static string ApplyThemeToWindow(Window window, string? theme = null)
+    {
+        string target = NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
+        ApplyThemePalette(window.Resources, target);
+        if (Application.Current != null)
+        {
+            ApplyThemePalette(Application.Current.Resources, target);
+        }
+        return target;
+    }
+
     private static void ApplyBadgeAndSecondaryPanelPalette(ResourceDictionary res, string theme)
     {
         bool isLight = theme == Light;

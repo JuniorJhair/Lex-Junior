@@ -31,10 +31,7 @@ public partial class LexClassComingSoonDialog : Window
         LexClassStudioService.IsClassUrl(rawInput);
 
     public void UpdateThemeStyles(string? theme = null)
-    {
-        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
-        BrowserThemeManager.ApplyThemePalette(Resources, target);
-    }
+        => BrowserThemeManager.ApplyThemeToWindow(this, theme);
 
     private void BtnOpenLexClass_Click(object sender, RoutedEventArgs e)
     {

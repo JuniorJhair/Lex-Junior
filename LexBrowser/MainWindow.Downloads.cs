@@ -576,9 +576,21 @@ public partial class MainWindow
 
     private void BtnDownloads_Click(object sender, RoutedEventArgs e)
     {
+        OpenDownloadsPopup();
+    }
+
+    internal void OpenDownloadsPopup()
+    {
         if (IsLocked) return;
-        if (_isGuestSession && !TryUnlockFromGuestMode("Desbloquea con tu PIN para ver el Historial de Descargas"))
+        if (_isGuestSession)
         {
+            _ = ExecuteWithOwnerUnlockAsync(
+                "Desbloquea con tu PIN para ver el Historial de Descargas",
+                owner =>
+                {
+                    owner.OpenDownloadsPopup();
+                    return Task.CompletedTask;
+                });
             return;
         }
 

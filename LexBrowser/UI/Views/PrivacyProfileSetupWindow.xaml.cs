@@ -58,10 +58,7 @@ public partial class PrivacyProfileSetupWindow : Window
     }
 
     public void UpdateThemeStyles(string? theme = null)
-    {
-        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
-        BrowserThemeManager.ApplyThemePalette(Resources, target);
-    }
+        => BrowserThemeManager.ApplyThemeToWindow(this, theme);
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {

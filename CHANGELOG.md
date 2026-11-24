@@ -2,6 +2,25 @@
 
 Todos los cambios notables de **Lex Junior Browser** se documentan en este archivo usando [Semantic Versioning](https://semver.org/).
 
+## [2.8.5] - 2026-11-23
+
+### Seguridad, Estabilidad y Privacidad
+- **Restauración exacta del área útil al salir de pantalla completa (`WindowFullscreenHelper`, `MainWindow.WindowChrome`, `MainWindow.Tabs`)**:
+  - Se separó `IsEnteringFullScreen` de `IsExitingFullScreen` en `FullScreenWindowCoordinator`: al salir de pantalla completa (`F11` o reproductor web de YouTube/Spotify), `WM_GETMINMAXINFO`, `WM_WINDOWPOSCHANGING` y `WM_WINDOWPOSCHANGED` ya no fuerzan `rcMonitor` ni borran el `HRGN`, y `UpdateWindowMargin()` / `ApplyMaximizedMargin()` se aplican tras finalizar la transición para evitar que la ventana y la barra inferior de páginas web queden ocultas detrás de la barra de tareas.
+- **Recuperación de PIN segura sin pérdida del código nuevo ni de la pregunta secreta (`PasswordManager`, `PinPromptDialog`, `MainWindow.Security`)**:
+  - Nuevo flujo unificado `ResetPinAfterRecovery` / `TryRecoverAndResetPinAsync`: genera un nuevo Código de Recuperación de Emergencia (`LEX-XXXX-XXXX`), se lo muestra claramente al usuario antes de desbloquear, invalida el código anterior y preserva intactas la pregunta y respuesta secreta previas.
+- **Protección de marcadores contra sobrescritura y soporte de listas vacías (`BookmarkManager`)**:
+  - Si el usuario elimina todos sus marcadores (`[]`), al reiniciar permanece vacío sin reinyectar marcadores predeterminados. Ante archivos corruptos, `AtomicFile.QuarantineCorruptFile` crea respaldo `.corrupt-*` sin pisar el archivo en disco.
+- **Coincidencia consistente por subdominio en Bóveda (`PasswordVaultStore`)**:
+  - `FindExistingCredential`, `SaveOrUpdateCredential` y `ImportCredentials` utilizan clave normalizada `(OriginHost, Username)` (alineada con `IsAutofillMatch`) para evitar que credenciales con el mismo usuario en subdominios distintos se sobrescriban.
+- **Cero fugas de Incógnito / Invitado en logs e historial de notificaciones**:
+  - `MainWindow.Notifications` e `NotificationManager` filtran vía `ShieldLogger.LogForTab`, omiten la memoria de `_history` en sesiones privadas y `CopyOrExportShieldLog` oculta la URL activa de pestañas privadas.
+- **Estabilidad de hilos, PDF en streaming, mensajería WebView2 autenticable y puntos A–D**:
+  - `SettingsManager.Save()` usa `AtomicFile`, despacha `SettingsChanged` siempre en el hilo de UI y evita reescrituras redundantes de `.security_setup_done`; añadido registro persistente `crash.log` en excepciones no controladas y handlers `async void`.
+  - `PdfStudioService` sirve PDFs locales mediante `FileStream` y verificación asíncrona `%PDF-` sin `File.ReadAllBytes` bloqueante en UI.
+  - Mensajes internos `chrome.webview.postMessage` validados con token de sesión por pestaña (`RuntimeMessageToken` / `BridgeToken`), protección `Win+V` con DWORD binario de 4 bytes en portapapeles, `media_state` seguro ante `duration: Infinity/null` en directos, `SystemEvents.SessionEnding` + nota de Inicio Rápido en Modo Inteligente, seguimiento temporal de orígenes en redirecciones SSO para guardar contraseñas y continuación real tras desbloquear desde Modo Invitado (`ExecuteWithOwnerUnlockAsync`).
+  - Consolidación de utilidades compartidas (`AtomicFile`, `CrashLogger`, `StudioResourceHelper`, `BrowserThemeManager`, `FullScreenExitHoverController` y `PasswordManager.FormatLockoutWait`).
+
 ## [2.8.4] - 2026-11-23
 
 ### Correcciones

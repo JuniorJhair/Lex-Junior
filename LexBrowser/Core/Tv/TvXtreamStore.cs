@@ -98,7 +98,7 @@ public sealed class TvXtreamStore
             else
                 data.Connections.Add(conn);
 
-            SaveJsonAtomic(_storePath, data);
+            AtomicFile.TryWriteJsonAtomic(_storePath, data, JsonOptions);
             return conn;
         }
     }
@@ -116,7 +116,7 @@ public sealed class TvXtreamStore
             int removed = data.Connections.RemoveAll(c => string.Equals(c.Id, cleanId, StringComparison.OrdinalIgnoreCase));
             if (removed > 0)
             {
-                SaveJsonAtomic(_storePath, data);
+                AtomicFile.TryWriteJsonAtomic(_storePath, data, JsonOptions);
                 return true;
             }
             return false;
@@ -200,24 +200,5 @@ public sealed class TvXtreamStore
 
         _cache = new TvXtreamData();
         return _cache;
-    }
-
-    private static void SaveJsonAtomic(string path, object data)
-    {
-        string dir = Path.GetDirectoryName(path) ?? "";
-        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
-
-        string tmp = path + ".tmp." + Guid.NewGuid().ToString("N");
-        try
-        {
-            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(data, JsonOptions);
-            File.WriteAllBytes(tmp, bytes);
-            File.Move(tmp, path, overwrite: true);
-        }
-        finally
-        {
-            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
-        }
     }
 }

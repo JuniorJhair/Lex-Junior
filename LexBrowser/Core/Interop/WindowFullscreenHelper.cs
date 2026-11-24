@@ -1,7 +1,10 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace LexBrowser.Core.Interop;
 
@@ -44,6 +47,17 @@ internal static class WindowFullscreenHelper
 
     public static bool RectEquals(in NativeMethods.RECT a, in NativeMethods.RECT b)
         => a.left == b.left && a.top == b.top && a.right == b.right && a.bottom == b.bottom;
+
+    public static bool ShouldUseFullMonitorBoundsForMinMax(
+        bool isFullScreenActive,
+        bool isEnteringFullScreen,
+        bool hasWindowChrome)
+        => isFullScreenActive || isEnteringFullScreen || !hasWindowChrome;
+
+    public static bool ShouldEnforceFullScreenHook(
+        bool isFullScreenActive,
+        bool isEnteringFullScreen)
+        => isFullScreenActive || isEnteringFullScreen;
 
     public static bool ShouldSnapWindowPosToFullScreen(
         int x,
@@ -112,7 +126,9 @@ internal static class WindowFullscreenHelper
 
 internal sealed class FullScreenWindowCoordinator
 {
-    public bool IsTransitioning { get; private set; }
+    public bool IsEnteringFullScreen { get; private set; }
+    public bool IsExitingFullScreen { get; private set; }
+    public bool IsTransitioning => IsEnteringFullScreen || IsExitingFullScreen;
     public WindowState SavedWindowState { get; private set; } = WindowState.Normal;
     public bool HasSavedPlacement { get; private set; }
     private NativeMethods.WINDOWPLACEMENT _savedPlacement;
@@ -140,7 +156,8 @@ internal sealed class FullScreenWindowCoordinator
     public void EnterFullScreen(Window window, Action collapseChromeAndMargins)
     {
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
-        IsTransitioning = true;
+        IsExitingFullScreen = false;
+        IsEnteringFullScreen = true;
         try
         {
             CapturePreFullScreenStateIfNeeded(window);
@@ -169,7 +186,7 @@ internal sealed class FullScreenWindowCoordinator
         }
         finally
         {
-            IsTransitioning = false;
+            IsEnteringFullScreen = false;
             if (hwnd != IntPtr.Zero)
             {
                 NativeMethods.SetWindowTransitionsDisabled(hwnd, false);
@@ -182,14 +199,15 @@ internal sealed class FullScreenWindowCoordinator
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
         if (hwnd == IntPtr.Zero) return;
 
-        IsTransitioning = true;
+        IsExitingFullScreen = false;
+        IsEnteringFullScreen = true;
         try
         {
             ApplyFullScreenNativeState(window, hwnd, forceFrameChanged: false);
         }
         finally
         {
-            IsTransitioning = false;
+            IsEnteringFullScreen = false;
         }
     }
 
@@ -261,7 +279,8 @@ internal sealed class FullScreenWindowCoordinator
     public void ExitFullScreen(Window window, Action restoreChromeAndRows, Action applyFinalMargins)
     {
         IntPtr hwnd = new WindowInteropHelper(window).Handle;
-        IsTransitioning = true;
+        IsEnteringFullScreen = false;
+        IsExitingFullScreen = true;
         try
         {
             if (hwnd != IntPtr.Zero)
@@ -353,18 +372,22 @@ internal sealed class FullScreenWindowCoordinator
                 }
             }
 
-            applyFinalMargins();
             HasSavedPlacement = false;
             _hasTargetMonitorRect = false;
         }
         finally
         {
-            IsTransitioning = false;
+            IsExitingFullScreen = false;
+            IsEnteringFullScreen = false;
             if (hwnd != IntPtr.Zero)
             {
                 NativeMethods.SetWindowTransitionsDisabled(hwnd, false);
             }
         }
+
+        // Ejecutar fuera de IsTransitioning para que CaptionHeight, ResizeBorderThickness y márgenes
+        // se calculen siempre en modo normal/maximizado y nunca como pantalla completa.
+        applyFinalMargins();
     }
 
     public IntPtr HandleWindowHook(
@@ -387,8 +410,11 @@ internal sealed class FullScreenWindowCoordinator
             var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
             if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return IntPtr.Zero;
 
-            bool useFullMonitorBounds = isFullScreenActive || IsTransitioning ||
-                                        System.Windows.Shell.WindowChrome.GetWindowChrome(window) == null;
+            bool hasChrome = System.Windows.Shell.WindowChrome.GetWindowChrome(window) != null;
+            bool useFullMonitorBounds = WindowFullscreenHelper.ShouldUseFullMonitorBoundsForMinMax(
+                isFullScreenActive,
+                IsEnteringFullScreen,
+                hasChrome);
 
             var mmi = Marshal.PtrToStructure<NativeMethods.MINMAXINFO>(lParam);
             uint dpi = NativeMethods.GetDpiForWindow(hwnd);
@@ -405,13 +431,14 @@ internal sealed class FullScreenWindowCoordinator
             return IntPtr.Zero;
         }
 
-        if (msg == NativeMethods.WM_WINDOWPOSCHANGING && (isFullScreenActive || IsTransitioning))
+        if (msg == NativeMethods.WM_WINDOWPOSCHANGING &&
+            WindowFullscreenHelper.ShouldEnforceFullScreenHook(isFullScreenActive, IsEnteringFullScreen))
         {
             bool isMinimizedOrIconic = window.WindowState == WindowState.Minimized || NativeMethods.IsIconic(hwnd);
             var wp = Marshal.PtrToStructure<NativeMethods.WINDOWPOS>(lParam);
             var targetRect = ResolveTargetMonitorRect(hwnd, wp);
             if (WindowFullscreenHelper.ShouldSnapWindowPosToFullScreen(
-                    wp.x, wp.y, wp.cx, wp.cy, wp.flags, in targetRect, IsTransitioning, isMinimizedOrIconic))
+                    wp.x, wp.y, wp.cx, wp.cy, wp.flags, in targetRect, IsEnteringFullScreen, isMinimizedOrIconic))
             {
                 wp.x = targetRect.left;
                 wp.y = targetRect.top;
@@ -423,7 +450,8 @@ internal sealed class FullScreenWindowCoordinator
             return IntPtr.Zero;
         }
 
-        if (msg == NativeMethods.WM_WINDOWPOSCHANGED && (isFullScreenActive || IsTransitioning))
+        if (msg == NativeMethods.WM_WINDOWPOSCHANGED &&
+            WindowFullscreenHelper.ShouldEnforceFullScreenHook(isFullScreenActive, IsEnteringFullScreen))
         {
             if (window.WindowState != WindowState.Minimized && !NativeMethods.IsIconic(hwnd))
             {
@@ -436,7 +464,7 @@ internal sealed class FullScreenWindowCoordinator
 
     private NativeMethods.RECT ResolveTargetMonitorRect(IntPtr hwnd, in NativeMethods.WINDOWPOS wp)
     {
-        if (IsTransitioning && _hasTargetMonitorRect)
+        if (IsEnteringFullScreen && _hasTargetMonitorRect)
             return _targetMonitorRect;
 
         var monitor = NativeMethods.MonitorFromWindow(hwnd, 2);
@@ -452,5 +480,135 @@ internal sealed class FullScreenWindowCoordinator
         }
 
         return _targetMonitorRect;
+    }
+}
+
+/// <summary>
+/// Controlador compartido del globo superior "Salir de pantalla completa" para MainWindow y LexClassWindow.
+/// Evita temporizadores, cálculos DPI y comprobaciones de área de disparo duplicados entre ventanas.
+/// </summary>
+internal sealed class FullScreenExitHoverController
+{
+    private readonly Window _window;
+    private readonly Func<FrameworkElement?> _getRootElement;
+    private readonly Func<Popup?> _getPopup;
+    private readonly Func<FrameworkElement?> _getCardElement;
+    private readonly Func<bool> _isFullScreenActive;
+    private readonly Func<bool> _isClosing;
+    private DispatcherTimer? _hoverTimer;
+    private DateTime _lastHoverUtc;
+
+    public FullScreenExitHoverController(
+        Window window,
+        Func<FrameworkElement?> getRootElement,
+        Func<Popup?> getPopup,
+        Func<FrameworkElement?> getCardElement,
+        Func<bool> isFullScreenActive,
+        Func<bool> isClosing)
+    {
+        _window = window;
+        _getRootElement = getRootElement;
+        _getPopup = getPopup;
+        _getCardElement = getCardElement;
+        _isFullScreenActive = isFullScreenActive;
+        _isClosing = isClosing;
+    }
+
+    public void Sync()
+    {
+        if (_isFullScreenActive() && !_isClosing())
+        {
+            if (_hoverTimer == null)
+            {
+                _hoverTimer = new DispatcherTimer(DispatcherPriority.Background, _window.Dispatcher)
+                {
+                    Interval = TimeSpan.FromMilliseconds(90)
+                };
+                _hoverTimer.Tick += HoverTimer_Tick;
+            }
+            if (!_hoverTimer.IsEnabled)
+            {
+                _hoverTimer.Start();
+            }
+        }
+        else
+        {
+            HideImmediate();
+        }
+    }
+
+    public void HideImmediate()
+    {
+        _hoverTimer?.Stop();
+        var popup = _getPopup();
+        if (popup != null && popup.IsOpen)
+        {
+            popup.IsOpen = false;
+        }
+    }
+
+    private void HoverTimer_Tick(object? sender, EventArgs e)
+    {
+        var popup = _getPopup();
+        if (!_isFullScreenActive() || _isClosing() || !_window.IsVisible || !_window.IsActive || _window.WindowState == WindowState.Minimized)
+        {
+            if (popup != null && popup.IsOpen)
+            {
+                popup.IsOpen = false;
+            }
+            if (!_isFullScreenActive())
+            {
+                _hoverTimer?.Stop();
+            }
+            return;
+        }
+
+        var root = _getRootElement();
+        if (popup == null || root == null || !root.IsVisible || root.ActualWidth <= 0)
+            return;
+
+        if (!NativeMethods.GetCursorPos(out var pt))
+            return;
+
+        try
+        {
+            var topLeft = root.PointToScreen(new Point(0, 0));
+            var topRight = root.PointToScreen(new Point(root.ActualWidth, 0));
+            double scale = VisualTreeHelper.GetDpi(_window).DpiScaleX;
+            if (scale <= 0) scale = 1.0;
+
+            double centerX = (topLeft.X + topRight.X) * 0.5;
+            double topY = Math.Min(topLeft.Y, topRight.Y);
+
+            double dx = Math.Abs(pt.x - centerX);
+            double dy = pt.y - topY;
+
+            bool inTopTrigger = dy >= -2 && dy <= 14 * scale && dx <= 140 * scale;
+            bool inKeepStrip = dy >= -2 && dy <= 76 * scale && dx <= 165 * scale;
+            bool overCard = false;
+
+            var card = _getCardElement();
+            if (popup.IsOpen && card != null && card.IsVisible && card.ActualWidth > 0 && card.ActualHeight > 0)
+            {
+                var cTl = card.PointToScreen(new Point(0, 0));
+                var cBr = card.PointToScreen(new Point(card.ActualWidth, card.ActualHeight));
+                overCard = pt.x >= Math.Min(cTl.X, cBr.X) - 18 && pt.x <= Math.Max(cTl.X, cBr.X) + 18 &&
+                           pt.y >= Math.Min(cTl.Y, cBr.Y) - 14 && pt.y <= Math.Max(cTl.Y, cBr.Y) + 12;
+            }
+
+            if (inTopTrigger || (popup.IsOpen && (inKeepStrip || overCard)))
+            {
+                _lastHoverUtc = DateTime.UtcNow;
+                if (!popup.IsOpen)
+                {
+                    popup.IsOpen = true;
+                }
+            }
+            else if (popup.IsOpen && (DateTime.UtcNow - _lastHoverUtc).TotalMilliseconds >= 320)
+            {
+                popup.IsOpen = false;
+            }
+        }
+        catch { }
     }
 }

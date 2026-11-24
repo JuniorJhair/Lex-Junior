@@ -79,21 +79,22 @@ public static class NotificationManager
         string rawOrigin = tab.CurrentUri != null ? tab.CurrentUri.GetLeftPart(UriPartial.Authority) : string.Empty;
         string origin = NotificationPermissionManager.NormalizeOrigin(rawOrigin);
         string displayHost = tab.CurrentUri?.Host ?? "Sitio web";
+        bool isPrivateSession = tab.IsIncognito || tab.IsGuest;
 
         var settings = SettingsManager.Current ?? new BrowserSettings();
 
         // 2. Comprobar política global
         if (settings.NotificationGlobalPolicy.Equals("BlockAll", StringComparison.OrdinalIgnoreCase))
         {
-            ShieldLogger.Log("NOTIFICATION_DISCARDED", displayHost, origin, "MainFrame", "Discarded by GlobalPolicy=BlockAll");
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_DISCARDED", displayHost, origin, "MainFrame", "Discarded by GlobalPolicy=BlockAll");
             return;
         }
 
         // 3. Comprobar permiso del origen
-        var mode = NotificationPermissionManager.GetSiteMode(origin, tab.IsIncognito);
+        var mode = NotificationPermissionManager.GetSiteMode(origin, isPrivateSession);
         if (mode == SiteNotificationMode.Block || mode == SiteNotificationMode.Ask)
         {
-            ShieldLogger.Log("NOTIFICATION_DISCARDED", displayHost, origin, "MainFrame", $"Discarded by SiteMode={mode}");
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_DISCARDED", displayHost, origin, "MainFrame", $"Discarded by SiteMode={mode}");
             return;
         }
 
@@ -104,7 +105,7 @@ public static class NotificationManager
         }
 
         // 4. Evaluar cuotas y límites diarios
-        var siteEntry = NotificationPermissionManager.GetSiteEntry(origin, tab.IsIncognito);
+        var siteEntry = NotificationPermissionManager.GetSiteEntry(origin, isPrivateSession);
         int customLimit = siteEntry?.DailyLimit ?? 0;
         int defaultLimit = settings.NotificationDefaultSiteDailyLimit;
         int globalLimit = settings.NotificationGlobalDailyLimit;
@@ -122,7 +123,7 @@ public static class NotificationManager
 
         if (!NotificationRateLimiter.EvaluateNotification(origin, notifTimestamp, customLimit, defaultLimit, globalLimit, discardOlder, out string limitReason))
         {
-            ShieldLogger.Log("NOTIFICATION_RATE_LIMITED", displayHost, origin, "MainFrame", limitReason);
+            ShieldLogger.LogForTab(tab, "NOTIFICATION_RATE_LIMITED", displayHost, origin, "MainFrame", limitReason);
             return;
         }
 
@@ -152,25 +153,31 @@ public static class NotificationManager
             IsRead = false
         };
 
-        // Guardar en el historial en memoria
-        lock (_historyLock)
+        // Guardar en el historial en memoria solo fuera de pestañas Incógnito / Invitado
+        if (!isPrivateSession)
         {
-            _history.Insert(0, item);
-            if (_history.Count > MaxHistoryItems)
+            lock (_historyLock)
             {
-                _history.RemoveAt(_history.Count - 1);
+                _history.Insert(0, item);
+                if (_history.Count > MaxHistoryItems)
+                {
+                    _history.RemoveAt(_history.Count - 1);
+                }
+                _unreadCount++;
             }
-            _unreadCount++;
         }
 
-        NotificationPermissionManager.RecordNotificationSent(origin, tab.IsIncognito);
-        ShieldLogger.Log("NOTIFICATION_DELIVERED", displayHost, origin, "MainFrame", $"Delivered (Mode={mode}, DND={isDnd})");
+        NotificationPermissionManager.RecordNotificationSent(origin, isPrivateSession);
+        ShieldLogger.LogForTab(tab, "NOTIFICATION_DELIVERED", displayHost, origin, "MainFrame", $"Delivered (Mode={mode}, DND={isDnd})");
 
-        // Disparar evento para actualizar el badge en UI
-        Application.Current?.Dispatcher?.BeginInvoke(() =>
+        if (!isPrivateSession)
         {
-            OnNotificationsChanged?.Invoke();
-        });
+            // Disparar evento para actualizar el badge en UI
+            Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                OnNotificationsChanged?.Invoke();
+            });
+        }
 
         // 8. Notificar a WebView2 que fue mostrada
         try { notif.ReportShown(); } catch { }
@@ -190,7 +197,7 @@ public static class NotificationManager
             }
             catch (Exception ex)
             {
-                ShieldLogger.Log("NOTIFICATION_TOAST_ERROR", displayHost, origin, "MainFrame", ex.Message);
+                ShieldLogger.LogForTab(tab, "NOTIFICATION_TOAST_ERROR", displayHost, origin, "MainFrame", ex.Message);
             }
         });
     }

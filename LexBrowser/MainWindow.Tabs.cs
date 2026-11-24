@@ -164,6 +164,10 @@ public partial class MainWindow
                 }
             }
         }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("SuspensionTimer_Tick", ex);
+        }
         finally
         {
             _isSuspensionTickRunning = false;
@@ -262,17 +266,19 @@ public partial class MainWindow
 
     private bool _isBrowserF11FullScreen = false;
     private readonly FullScreenWindowCoordinator _fullScreenCoordinator = new();
-    private DispatcherTimer? _fullScreenExitHoverTimer;
-    private DateTime _fullScreenExitLastHoverUtc = DateTime.MinValue;
+    private FullScreenExitHoverController? _fullScreenExitHoverController;
+
+    private FullScreenExitHoverController GetFullScreenExitHoverController()
+        => _fullScreenExitHoverController ??= new FullScreenExitHoverController(
+            this,
+            () => RootWindowGrid,
+            () => PopupFullScreenExit,
+            () => FullScreenExitCard,
+            () => _fullScreenChromeActive,
+            () => _isWindowClosing);
 
     internal static bool IsYouTubeHost(string? host)
-    {
-        if (string.IsNullOrWhiteSpace(host)) return false;
-        string h = host.Trim().TrimEnd('.').ToLowerInvariant();
-        return h == "youtube.com" || h.EndsWith(".youtube.com", StringComparison.Ordinal) ||
-               h == "youtu.be" ||
-               h == "youtube-nocookie.com" || h.EndsWith(".youtube-nocookie.com", StringComparison.Ordinal);
-    }
+        => ShieldIsolation.IsYouTubeHost(host);
 
     internal static bool IsYouTubeTab(BrowserTab? tab)
     {
@@ -352,91 +358,10 @@ public partial class MainWindow
         => ExitAllFullScreen();
 
     private void SyncFullScreenExitHoverMonitor()
-    {
-        if (_fullScreenChromeActive && !_isWindowClosing)
-        {
-            if (_fullScreenExitHoverTimer == null)
-            {
-                _fullScreenExitHoverTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-                {
-                    Interval = TimeSpan.FromMilliseconds(90)
-                };
-                _fullScreenExitHoverTimer.Tick += FullScreenExitHoverTimer_Tick;
-            }
-            if (!_fullScreenExitHoverTimer.IsEnabled)
-            {
-                _fullScreenExitHoverTimer.Start();
-            }
-        }
-        else
-        {
-            HideFullScreenExitPopupImmediate();
-        }
-    }
+        => GetFullScreenExitHoverController().Sync();
 
     internal void HideFullScreenExitPopupImmediate()
-    {
-        _fullScreenExitHoverTimer?.Stop();
-        if (PopupFullScreenExit != null && PopupFullScreenExit.IsOpen)
-        {
-            PopupFullScreenExit.IsOpen = false;
-        }
-    }
-
-    private void FullScreenExitHoverTimer_Tick(object? sender, EventArgs e)
-    {
-        if (!_fullScreenChromeActive || _isWindowClosing || !IsVisible || !IsActive || WindowState == WindowState.Minimized)
-        {
-            if (PopupFullScreenExit != null && PopupFullScreenExit.IsOpen)
-            {
-                PopupFullScreenExit.IsOpen = false;
-            }
-            if (!_fullScreenChromeActive)
-            {
-                _fullScreenExitHoverTimer?.Stop();
-            }
-            return;
-        }
-
-        if (PopupFullScreenExit == null || RootWindowGrid == null || !RootWindowGrid.IsVisible || RootWindowGrid.ActualWidth <= 0)
-            return;
-
-        if (!NativeMethods.GetCursorPos(out var pt))
-            return;
-
-        try
-        {
-            var topLeft = RootWindowGrid.PointToScreen(new Point(0, 0));
-            var topRight = RootWindowGrid.PointToScreen(new Point(RootWindowGrid.ActualWidth, 0));
-            double scale = VisualTreeHelper.GetDpi(this).DpiScaleX;
-            if (scale <= 0) scale = 1.0;
-
-            double centerX = (topLeft.X + topRight.X) * 0.5;
-            double topY = Math.Min(topLeft.Y, topRight.Y);
-
-            double dx = Math.Abs(pt.x - centerX);
-            double dy = pt.y - topY;
-
-            bool inTopTrigger = dy >= -2 && dy <= 14 * scale && dx <= 140 * scale;
-            bool inKeepStrip = dy >= -2 && dy <= 76 * scale && dx <= 165 * scale;
-            bool overCard = PopupFullScreenExit.IsOpen &&
-                            IsCursorOverSnapElement(FullScreenExitCard, expandTopPx: 14, expandBottomPx: 12, expandSidePx: 18);
-
-            if (inTopTrigger || (PopupFullScreenExit.IsOpen && (inKeepStrip || overCard)))
-            {
-                _fullScreenExitLastHoverUtc = DateTime.UtcNow;
-                if (!PopupFullScreenExit.IsOpen)
-                {
-                    PopupFullScreenExit.IsOpen = true;
-                }
-            }
-            else if (PopupFullScreenExit.IsOpen && (DateTime.UtcNow - _fullScreenExitLastHoverUtc).TotalMilliseconds >= 320)
-            {
-                PopupFullScreenExit.IsOpen = false;
-            }
-        }
-        catch { }
-    }
+        => _fullScreenExitHoverController?.HideImmediate();
 
     internal void ToggleBrowserFullScreen()
     {
@@ -632,7 +557,11 @@ public partial class MainWindow
                             ctrl.NotifyParentWindowPositionChanged();
                         }
                         targetTab.WebView.InvalidateVisual();
-                        if (!enter) UpdateZoomIndicatorUI(showFloating: false);
+                        if (!enter)
+                        {
+                            UpdateWindowMargin();
+                            UpdateZoomIndicatorUI(showFloating: false);
+                        }
                     }
                     catch { }
                 }
@@ -730,6 +659,116 @@ public partial class MainWindow
                        msgUri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase);
 
         return msgUri.Scheme == Uri.UriSchemeHttps || isLocal;
+    }
+
+    private static bool IsSafeRuntimeMessageSource(string? messageSourceUrl)
+    {
+        if (string.IsNullOrWhiteSpace(messageSourceUrl))
+            return false;
+
+        if (!Uri.TryCreate(messageSourceUrl.Trim(), UriKind.Absolute, out var uri))
+            return false;
+
+        return uri.Scheme == Uri.UriSchemeHttps ||
+               uri.Scheme == Uri.UriSchemeHttp ||
+               uri.Scheme == Uri.UriSchemeFile;
+    }
+
+    internal static bool IsAuthorizedRuntimeWebMessage(
+        JsonElement root,
+        string? expectedRuntimeToken,
+        string? expectedShieldToken = null,
+        string? messageSource = null,
+        bool requireHttpOrFileSource = true)
+    {
+        if (requireHttpOrFileSource && !IsSafeRuntimeMessageSource(messageSource))
+            return false;
+
+        if (!root.TryGetProperty("token", out var tokenProp) || tokenProp.ValueKind != JsonValueKind.String)
+            return false;
+
+        string? msgToken = tokenProp.GetString();
+        if (string.IsNullOrEmpty(msgToken))
+            return false;
+
+        if (!string.IsNullOrEmpty(expectedRuntimeToken) &&
+            string.Equals(msgToken, expectedRuntimeToken, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(expectedShieldToken) &&
+            string.Equals(msgToken, expectedShieldToken, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static double TryGetFiniteDouble(JsonElement obj, string propertyName)
+    {
+        if (!obj.TryGetProperty(propertyName, out var prop) || prop.ValueKind != JsonValueKind.Number)
+            return 0;
+
+        return prop.TryGetDouble(out double value) && double.IsFinite(value) ? value : 0;
+    }
+
+    internal static bool TryParseMediaState(
+        JsonElement root,
+        out bool isPlaying,
+        out string title,
+        out double currentTime,
+        out double duration)
+    {
+        isPlaying = false;
+        title = string.Empty;
+        currentTime = 0;
+        duration = 0;
+
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            return false;
+
+        isPlaying = data.TryGetProperty("isPlaying", out var ipProp) && ipProp.ValueKind == JsonValueKind.True;
+        title = data.TryGetProperty("title", out var tProp) && tProp.ValueKind == JsonValueKind.String
+            ? (tProp.GetString() ?? string.Empty)
+            : string.Empty;
+        currentTime = TryGetFiniteDouble(data, "currentTime");
+        duration = TryGetFiniteDouble(data, "duration");
+        return true;
+    }
+
+    internal static bool ShouldAcceptPasswordSubmittedMessage(
+        string? messageSourceUrl,
+        Uri? uriAtMessageTime,
+        Uri? liveTabUri,
+        BrowserTab? tab = null)
+    {
+        if (string.IsNullOrWhiteSpace(messageSourceUrl) ||
+            !Uri.TryCreate(messageSourceUrl.Trim(), UriKind.Absolute, out var srcUri))
+        {
+            return false;
+        }
+
+        bool isLocal = srcUri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                       srcUri.Host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase);
+        if (srcUri.Scheme != Uri.UriSchemeHttps && !isLocal)
+            return false;
+
+        if (IsSecureOriginForPasswordMessage(messageSourceUrl, uriAtMessageTime) ||
+            IsSecureOriginForPasswordMessage(messageSourceUrl, liveTabUri))
+        {
+            return true;
+        }
+
+        if (tab != null &&
+            (IsSecureOriginForPasswordMessage(messageSourceUrl, tab.PendingMainNavigationUri) ||
+             tab.HasRecentTopNavigationOrigin(srcUri, TimeSpan.FromSeconds(10))))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     // Pinceles estáticos congelados para evitar asignaciones repetidas (Auditoría L3)
@@ -1870,6 +1909,9 @@ public partial class MainWindow
 
                 if (type == "ad_blocked")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, tab.ShieldBridge?.BridgeToken, e.Source))
+                        return;
+
                     string reason = root.TryGetProperty("reason", out var rProp) ? (rProp.GetString() ?? "") : "ad_script";
                     string adUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
                     string catStr = root.TryGetProperty("category", out var cProp) ? (cProp.GetString() ?? "") : "";
@@ -1901,6 +1943,9 @@ public partial class MainWindow
                 }
                 else if (type == "site_issue")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, tab.ShieldBridge?.BridgeToken, e.Source))
+                        return;
+
                     string site = root.TryGetProperty("site", out var sProp) ? (sProp.GetString() ?? "") : "unknown";
                     string reason = root.TryGetProperty("reason", out var rProp) ? (rProp.GetString() ?? "") : "issue_detected";
                     string issueUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : (tab.CurrentUri?.AbsoluteUri ?? "");
@@ -1926,6 +1971,9 @@ public partial class MainWindow
                 }
                 else if (type == "diag")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, tab.ShieldBridge?.BridgeToken, e.Source))
+                        return;
+
                     string site = root.TryGetProperty("site", out var sProp) ? (sProp.GetString() ?? "") : "";
                     if (site == "youtube")
                     {
@@ -1941,6 +1989,9 @@ public partial class MainWindow
                 }
                 else if (type == "pip_entered")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
                     int vw = root.TryGetProperty("videoWidth", out var vwProp) ? vwProp.GetInt32() : 16;
                     int vh = root.TryGetProperty("videoHeight", out var vhProp) ? vhProp.GetInt32() : 9;
                     string pipUrl = root.TryGetProperty("url", out var uProp) ? (uProp.GetString() ?? "") : "";
@@ -1950,6 +2001,9 @@ public partial class MainWindow
                 }
                 else if (type == "pip_leaving_now")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
                     if (win._nativePipSourceTab != tab && win._activeTab != tab) return;
                     NativeMethods.GetCursorPos(out win._pipExitCursorPos);
                     win._pipSessionId++;
@@ -1965,6 +2019,9 @@ public partial class MainWindow
                 }
                 else if (type == "pip_left")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
                     if (win._nativePipSourceTab != tab && win._activeTab != tab) return;
                     bool isPaused = root.TryGetProperty("isPaused", out var pProp) && pProp.GetBoolean();
                     double scale = win._lastNativePipDpi > 0 ? win._lastNativePipDpi / 96.0 : 1.25;
@@ -2003,10 +2060,16 @@ public partial class MainWindow
                 }
                 else if (type == "pip_closed" || type == "pip_dismissed")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
                     LogPipEvent(e.WebMessageAsJson);
                 }
                 else if (type == "pip_return_requested")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
                     if (win._nativePipSourceTab != tab && win._activeTab != tab) return;
                     LogPipEvent(e.WebMessageAsJson);
                     _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
@@ -2031,11 +2094,11 @@ public partial class MainWindow
                 }
                 else if (type == "media_state")
                 {
-                    var data = root.GetProperty("data");
-                    bool isPlaying = data.GetProperty("isPlaying").GetBoolean();
-                    string title = data.GetProperty("title").GetString() ?? "";
-                    double curTime = data.GetProperty("currentTime").GetDouble();
-                    double duration = data.GetProperty("duration").GetDouble();
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
+                    if (!TryParseMediaState(root, out bool isPlaying, out string title, out double curTime, out double duration))
+                        return;
 
                     _ = win.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                     {
@@ -2054,6 +2117,9 @@ public partial class MainWindow
                 }
                 else if (type == "cors_unlock_req")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
                     if (tab.VolumeBoostPercent <= 100) return;
                     if (win._activeTab != tab && win._pipWindow?.TargetTab != tab) return;
                     string origin = root.TryGetProperty("origin", out var oP) ? (oP.GetString() ?? "") : "";
@@ -2069,6 +2135,9 @@ public partial class MainWindow
                 }
                 else if (type == "audio_status")
                 {
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
+
                     string status = root.TryGetProperty("status", out var sP) ? (sP.GetString() ?? "") : "";
                     string? msg = status switch
                     {
@@ -2164,6 +2233,7 @@ public partial class MainWindow
                         return;
 
                     string actualSource = e.Source ?? string.Empty;
+                    Uri? uriAtMessageTime = tab.CurrentUri ?? (Uri.TryCreate(core.Source, UriKind.Absolute, out var mu) ? mu : null);
                     string submittedUser = root.TryGetProperty("username", out var usrProp) ? (usrProp.GetString() ?? "") : "";
                     string submittedPwd = root.TryGetProperty("password", out var pwdProp) ? (pwdProp.GetString() ?? "") : "";
 
@@ -2172,8 +2242,8 @@ public partial class MainWindow
                         _ = win.Dispatcher.BeginInvoke(() =>
                         {
                             if (tab.IsDisposed || win._activeTab != tab || win.IsLocked) return;
-                            Uri? expectedUri = tab.CurrentUri ?? (Uri.TryCreate(core.Source, UriKind.Absolute, out var cu) ? cu : null);
-                            if (!IsSecureOriginForPasswordMessage(actualSource, expectedUri)) return;
+                            Uri? liveUri = tab.CurrentUri ?? (Uri.TryCreate(core.Source, UriKind.Absolute, out var cu) ? cu : null);
+                            if (!ShouldAcceptPasswordSubmittedMessage(actualSource, uriAtMessageTime, liveUri, tab)) return;
                             win.PromptSaveOrUpdatePassword(actualSource, submittedUser, submittedPwd);
                         });
                     }
@@ -2181,6 +2251,8 @@ public partial class MainWindow
                 else if (type == "media_detected_batch")
                 {
                     if (!tab.IsMediaSnifferActive) return;
+                    if (!IsAuthorizedRuntimeWebMessage(root, tab.RuntimeMessageToken, messageSource: e.Source))
+                        return;
                     if (root.TryGetProperty("items", out var itemsProp) && itemsProp.ValueKind == JsonValueKind.Array)
                     {
                         var pairs = new List<(string Url, string Category)>();
@@ -3773,21 +3845,35 @@ public partial class MainWindow
     // ─────────────────────────────────────────────────────────────────────
     // BOTONES Y PESTAÑAS (Auditoría E2: bloquear si BrowserLockOverlay está activo)
     // ─────────────────────────────────────────────────────────────────────
-    private async void BtnNewTab_Click(object sender, RoutedEventArgs e)
+    private async void RunTabActionSafeAsync(Func<Task> action, string context)
     {
-        if (IsBrowserLockOverlayActive()) return;
-        await AddNewTabAsync(null, isIncognito: false);
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            CrashLogger.Log(context, ex);
+        }
     }
 
-    private async void BtnNewIncognitoTab_Click(object sender, RoutedEventArgs e)
+    private void BtnNewTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsBrowserLockOverlayActive()) return;
+        RunTabActionSafeAsync(() => AddNewTabAsync(null, isIncognito: false), "BtnNewTab_Click");
+    }
+
+    private void BtnNewIncognitoTab_Click(object sender, RoutedEventArgs e)
     {
         if (IsBrowserLockOverlayActive()) return;
         if (_isGuestSession)
         {
-            if (!TryUnlockFromGuestMode("Ingresa tu PIN de propietario para abrir una pestaña de incógnito"))
-                return;
+            _ = ExecuteWithOwnerUnlockAsync(
+                "Ingresa tu PIN de propietario para abrir una pestaña de incógnito",
+                owner => owner.AddNewTabAsync(null, isIncognito: true));
+            return;
         }
-        await AddNewTabAsync(null, isIncognito: true);
+        RunTabActionSafeAsync(() => AddNewTabAsync(null, isIncognito: true), "BtnNewIncognitoTab_Click");
     }
 
     private void CloseTab_Click(object sender, RoutedEventArgs e)
@@ -3891,13 +3977,13 @@ public partial class MainWindow
         });
     }
 
-    private async void ReopenLastClosedTab()
+    private void ReopenLastClosedTab()
     {
         if (IsBrowserLockOverlayActive() || _isGuestSession) return;
         if (_closedTabsHistory.Count > 0)
         {
             var (url, _, isIncognito) = _closedTabsHistory.Pop();
-            await AddNewTabAsync(url, isIncognito);
+            RunTabActionSafeAsync(() => AddNewTabAsync(url, isIncognito), "ReopenLastClosedTab");
         }
     }
 
@@ -3915,24 +4001,27 @@ public partial class MainWindow
         return _activeTab;
     }
 
-    private async void MenuNewTabRight_Click(object sender, RoutedEventArgs e)
+    private void MenuNewTabRight_Click(object sender, RoutedEventArgs e)
     {
         var tab = GetTabFromMenuItem(sender);
         int targetIndex = tab != null ? Tabs.IndexOf(tab) + 1 : Tabs.Count;
-        await AddNewTabAsync(null, isIncognito: tab?.IsIncognito ?? false, insertIndex: targetIndex);
+        RunTabActionSafeAsync(() => AddNewTabAsync(null, isIncognito: tab?.IsIncognito ?? false, insertIndex: targetIndex), "MenuNewTabRight_Click");
     }
 
-    private async void MenuDuplicateTab_Click(object sender, RoutedEventArgs e)
+    private void MenuDuplicateTab_Click(object sender, RoutedEventArgs e)
     {
         var tab = GetTabFromMenuItem(sender);
         if (tab == null) return;
-        int targetIndex = Tabs.IndexOf(tab) + 1;
-        var duplicated = await AddNewTabAsync(tab.Url, isIncognito: tab.IsIncognito, insertIndex: targetIndex);
-
-        if (tab.IsPinned)
+        RunTabActionSafeAsync(async () =>
         {
-            duplicated.PinMode = tab.PinMode;
-        }
+            int targetIndex = Tabs.IndexOf(tab) + 1;
+            var duplicated = await AddNewTabAsync(tab.Url, isIncognito: tab.IsIncognito, insertIndex: targetIndex);
+
+            if (tab.IsPinned)
+            {
+                duplicated.PinMode = tab.PinMode;
+            }
+        }, "MenuDuplicateTab_Click");
     }
 
     private void MenuToggleMute_Click(object sender, RoutedEventArgs e)
@@ -3952,16 +4041,19 @@ public partial class MainWindow
         }
     }
 
-    private async void MenuMoveToNewWindow_Click(object sender, RoutedEventArgs e)
+    private void MenuMoveToNewWindow_Click(object sender, RoutedEventArgs e)
     {
         var tab = GetTabFromMenuItem(sender);
         if (tab != null)
         {
-            if (Tabs.Count <= 1)
+            RunTabActionSafeAsync(async () =>
             {
-                await AddNewTabAsync(null, isIncognito: false);
-            }
-            DetachTabToNewWindow(tab, useCursorPosition: false);
+                if (Tabs.Count <= 1)
+                {
+                    await AddNewTabAsync(null, isIncognito: false);
+                }
+                DetachTabToNewWindow(tab, useCursorPosition: false);
+            }, "MenuMoveToNewWindow_Click");
         }
     }
 
@@ -3986,7 +4078,8 @@ public partial class MainWindow
         {
             try
             {
-                tab.MediaRuntimeScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(MediaRuntime.InjectedScript);
+                tab.MediaRuntimeScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                    MediaRuntime.BuildInjectedScript(tab.RuntimeMessageToken));
             }
             catch (Exception ex)
             {
@@ -4033,7 +4126,8 @@ public partial class MainWindow
         {
             try
             {
-                tab.YouTubeScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(YouTubeOptimizer.InjectedScript);
+                tab.YouTubeScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                    YouTubeOptimizer.BuildInjectedScript(tab.RuntimeMessageToken));
             }
             catch (Exception ex)
             {
@@ -4099,7 +4193,8 @@ public partial class MainWindow
         {
             try
             {
-                tab.CookieBannerScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(CookieBannerShield.InjectedScript);
+                tab.CookieBannerScriptId = await core.AddScriptToExecuteOnDocumentCreatedAsync(
+                    CookieBannerShield.GetInjectedScript(s.Shield?.Sites, tab.RuntimeMessageToken));
             }
             catch (Exception ex)
             {

@@ -16,32 +16,25 @@ namespace LexBrowser.UI.Views;
 
 public partial class SettingsWindow : Window
 {
-    private static readonly SolidColorBrush BrushEmeraldFg = CreateFrozenBrush(0x34, 0xD3, 0x99);
-    private static readonly SolidColorBrush BrushEmeraldBg = CreateFrozenBrush(0x06, 0x5F, 0x46);
-    private static readonly SolidColorBrush BrushSecondaryFg = CreateFrozenBrush(0xA1, 0xA1, 0xAA);
-    private static readonly SolidColorBrush BrushPrimaryIndigo = CreateFrozenBrush(0x4F, 0x46, 0xE5);
-    private static readonly SolidColorBrush BrushSiteCardBg = CreateFrozenBrush(0x18, 0x18, 0x24);
-    private static readonly SolidColorBrush BrushSiteCardBorder = CreateFrozenBrush(0x29, 0x29, 0x3C);
-    private static readonly SolidColorBrush BrushSiteIconBg = CreateFrozenBrush(0x23, 0x23, 0x34);
-    private static readonly SolidColorBrush BrushBadgeBlockBg = CreateFrozenBrush(0x3B, 0x16, 0x1B);
-    private static readonly SolidColorBrush BrushBadgeBlockFg = CreateFrozenBrush(0xF8, 0x71, 0x71);
-    private static readonly SolidColorBrush BrushBadgeAllowBg = CreateFrozenBrush(0x0E, 0x33, 0x21);
-    private static readonly SolidColorBrush BrushBadgeSilentBg = CreateFrozenBrush(0x28, 0x20, 0x48);
-    private static readonly SolidColorBrush BrushBadgeSilentFg = CreateFrozenBrush(0xA7, 0x8B, 0xFA);
-    private static readonly SolidColorBrush BrushBadgeAskBg = CreateFrozenBrush(0x25, 0x25, 0x33);
-    private static readonly SolidColorBrush BrushBadgeAskFg = CreateFrozenBrush(0xD4, 0xD4, 0xD8);
-    private static readonly SolidColorBrush BrushDrawerBg = CreateFrozenBrush(0x14, 0x14, 0x1F);
-    private static readonly SolidColorBrush BrushDrawerBorder = CreateFrozenBrush(0x31, 0x2E, 0x81);
-
-    private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
-    }
+    private static readonly SolidColorBrush BrushEmeraldFg = BrowserThemeManager.CreateFrozenBrush(0x34, 0xD3, 0x99);
+    private static readonly SolidColorBrush BrushEmeraldBg = BrowserThemeManager.CreateFrozenBrush(0x06, 0x5F, 0x46);
+    private static readonly SolidColorBrush BrushSecondaryFg = BrowserThemeManager.CreateFrozenBrush(0xA1, 0xA1, 0xAA);
+    private static readonly SolidColorBrush BrushPrimaryIndigo = BrowserThemeManager.CreateFrozenBrush(0x4F, 0x46, 0xE5);
+    private static readonly SolidColorBrush BrushSiteCardBg = BrowserThemeManager.CreateFrozenBrush(0x18, 0x18, 0x24);
+    private static readonly SolidColorBrush BrushSiteCardBorder = BrowserThemeManager.CreateFrozenBrush(0x29, 0x29, 0x3C);
+    private static readonly SolidColorBrush BrushSiteIconBg = BrowserThemeManager.CreateFrozenBrush(0x23, 0x23, 0x34);
+    private static readonly SolidColorBrush BrushBadgeBlockBg = BrowserThemeManager.CreateFrozenBrush(0x3B, 0x16, 0x1B);
+    private static readonly SolidColorBrush BrushBadgeBlockFg = BrowserThemeManager.CreateFrozenBrush(0xF8, 0x71, 0x71);
+    private static readonly SolidColorBrush BrushBadgeAllowBg = BrowserThemeManager.CreateFrozenBrush(0x0E, 0x33, 0x21);
+    private static readonly SolidColorBrush BrushBadgeSilentBg = BrowserThemeManager.CreateFrozenBrush(0x28, 0x20, 0x48);
+    private static readonly SolidColorBrush BrushBadgeSilentFg = BrowserThemeManager.CreateFrozenBrush(0xA7, 0x8B, 0xFA);
+    private static readonly SolidColorBrush BrushBadgeAskBg = BrowserThemeManager.CreateFrozenBrush(0x25, 0x25, 0x33);
+    private static readonly SolidColorBrush BrushBadgeAskFg = BrowserThemeManager.CreateFrozenBrush(0xD4, 0xD4, 0xD8);
+    private static readonly SolidColorBrush BrushDrawerBg = BrowserThemeManager.CreateFrozenBrush(0x14, 0x14, 0x1F);
+    private static readonly SolidColorBrush BrushDrawerBorder = BrowserThemeManager.CreateFrozenBrush(0x31, 0x2E, 0x81);
 
     private Brush GetThemeBrush(string key, Brush fallback) =>
-        (Resources[key] as Brush) ?? (TryFindResource(key) as Brush) ?? fallback;
+        BrowserThemeManager.GetThemeBrush(this, key, fallback);
 
     private readonly CoreWebView2? _core;
     private bool _isInitializing = true;
@@ -1429,12 +1422,7 @@ public partial class SettingsWindow : Window
 
     public void UpdateThemeStyles(string? theme = null)
     {
-        string target = BrowserThemeManager.NormalizeTheme(theme ?? SettingsManager.Current?.Theme);
-        BrowserThemeManager.ApplyThemePalette(Resources, target);
-        if (Application.Current != null)
-        {
-            BrowserThemeManager.ApplyThemePalette(Application.Current.Resources, target);
-        }
+        BrowserThemeManager.ApplyThemeToWindow(this, theme);
         if (!_isInitializing)
         {
             UpdateDefaultBrowserUI();

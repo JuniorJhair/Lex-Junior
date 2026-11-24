@@ -28,6 +28,7 @@ public partial class App : Application
         DispatcherUnhandledException += (s, e) =>
         {
             System.Diagnostics.Debug.WriteLine($"[CRASH PREVENTED] Unhandled exception: {e.Exception}");
+            CrashLogger.Log("UI_DISPATCHER_ERROR", e.Exception);
             if (ShieldLogger.DiagnosticMode)
             {
                 ShieldLogger.Log("UI_DISPATCHER_ERROR", "app", "", "Dispatcher", $"{e.Exception.GetType().Name}: {e.Exception.Message}");
@@ -42,6 +43,7 @@ public partial class App : Application
                 System.Diagnostics.Debug.WriteLine($"[APPDOMAIN_UNHANDLED] terminating={e.IsTerminating} ex={e.ExceptionObject}");
                 if (e.ExceptionObject is Exception ex)
                 {
+                    CrashLogger.Log("APPDOMAIN_UNHANDLED", ex, $"Terminating={e.IsTerminating}");
                     ShieldLogger.Log("APPDOMAIN_UNHANDLED", "app", "", e.IsTerminating ? "Terminating" : "NonTerminating", $"{ex.GetType().Name}: {ex.Message}");
                 }
             }
@@ -53,6 +55,7 @@ public partial class App : Application
             try
             {
                 System.Diagnostics.Debug.WriteLine($"[UNOBSERVED_TASK] {e.Exception}");
+                CrashLogger.Log("UNOBSERVED_TASK_ERROR", e.Exception);
                 if (ShieldLogger.DiagnosticMode)
                 {
                     ShieldLogger.Log("UNOBSERVED_TASK_ERROR", "app", "", "TaskScheduler", $"{e.Exception.GetType().Name}: {e.Exception.Message}");
@@ -65,19 +68,21 @@ public partial class App : Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
-        bool isLexClassLauncher = InstallerService.ShouldRunAsLexClassLauncher(e.Args);
-        bool isLexClassInstaller = InstallerService.ShouldRunAsLexClassInstaller(e.Args);
         try
         {
-            // Registrar AppID de Windows para que cada app tenga su propio icono en la barra de tareas
-            SetCurrentProcessExplicitAppUserModelID(
-                (isLexClassLauncher || isLexClassInstaller)
-                    ? InstallerService.LexClassAppUserModelId
-                    : InstallerService.BrowserAppUserModelId);
-        }
-        catch { }
+            bool isLexClassLauncher = InstallerService.ShouldRunAsLexClassLauncher(e.Args);
+            bool isLexClassInstaller = InstallerService.ShouldRunAsLexClassInstaller(e.Args);
+            try
+            {
+                // Registrar AppID de Windows para que cada app tenga su propio icono en la barra de tareas
+                SetCurrentProcessExplicitAppUserModelID(
+                    (isLexClassLauncher || isLexClassInstaller)
+                        ? InstallerService.LexClassAppUserModelId
+                        : InstallerService.BrowserAppUserModelId);
+            }
+            catch { }
 
-        base.OnStartup(e);
+            base.OnStartup(e);
 
         if (InstallerService.ShouldRunAsSilentUpdate(e.Args))
         {
@@ -279,7 +284,21 @@ public partial class App : Application
             });
         });
 
-        browserWindow.Show();
+            browserWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("App.OnStartup", ex);
+            try
+            {
+                MessageBox.Show(
+                    $"Se produjo un error inesperado al iniciar Lex Junior:\n{ex.Message}",
+                    "Error de inicio — Lex Junior",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch { }
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

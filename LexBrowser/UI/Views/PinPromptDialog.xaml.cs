@@ -26,18 +26,11 @@ public partial class PinPromptDialog : Window
         Loaded += (_, _) => PwdPinInput.Focus();
     }
 
-    private static string FormatWait(TimeSpan wait)
-    {
-        if (wait.TotalSeconds >= 60)
-            return $"{(int)Math.Ceiling(wait.TotalMinutes)} min";
-        return $"{(int)Math.Ceiling(wait.TotalSeconds)} s";
-    }
-
     private void ShowPinFailure()
     {
         TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
         TxtPinError.Text = wait > TimeSpan.Zero
-            ? $"⏳ Demasiados intentos. Espera {FormatWait(wait)} para volver a intentar."
+            ? $"⏳ Demasiados intentos. Espera {PasswordManager.FormatLockoutWait(wait)} para volver a intentar."
             : "❌ Contraseña o PIN incorrecto. Inténtalo de nuevo.";
         TxtPinError.Visibility = Visibility.Visible;
         PwdPinInput.SelectAll();
@@ -141,49 +134,32 @@ public partial class PinPromptDialog : Window
         string answer = TxtRecoveryAnswer.Text;
         string newPin = PwdNewPinAfterRecovery.Password;
 
-        TimeSpan wait = PasswordManager.GetPinLockoutRemaining();
-        if (wait > TimeSpan.Zero)
-        {
-            TxtRecoveryError.Text = $"⏳ Demasiados intentos. Espera {FormatWait(wait)} para volver a intentar.";
-            TxtRecoveryError.Visibility = Visibility.Visible;
-            return;
-        }
-
         _isVerifying = true;
         try
         {
-            bool recoveryValid = await PasswordManager.VerifyRecoveryAnswerOrCodeAsync(answer);
+            var result = await PasswordManager.TryRecoverAndResetPinAsync(answer, newPin);
             if (!IsLoaded) return;
 
-            if (!recoveryValid)
+            if (!result.Success || string.IsNullOrEmpty(result.NewRecoveryCode))
             {
-                wait = PasswordManager.GetPinLockoutRemaining();
-                TxtRecoveryError.Text = wait > TimeSpan.Zero
-                    ? $"⏳ Demasiados intentos. Espera {FormatWait(wait)} para volver a intentar."
-                    : "❌ La respuesta secreta o el código de recuperación no coinciden.";
+                TxtRecoveryError.Text = result.ErrorMessage;
                 TxtRecoveryError.Visibility = Visibility.Visible;
                 return;
             }
-
-            if (string.IsNullOrWhiteSpace(newPin))
-            {
-                TxtRecoveryError.Text = "⚠️ Escribe un nuevo PIN o contraseña para continuar.";
-                TxtRecoveryError.Visibility = Visibility.Visible;
-                return;
-            }
-
-            var s = SettingsManager.Current;
-            await Task.Run(() => PasswordManager.ConfigureMasterPassword(newPin, s.BrowserLockMode, s.SecurityQuestion, answer));
-            if (!IsLoaded) return;
 
             MessageBox.Show(
-                "¡Tu PIN/contraseña fue actualizado con éxito!\nTodas tus contraseñas guardadas se conservaron intactas.",
+                this,
+                PasswordManager.BuildPinRecoveredMessage(result.NewRecoveryCode),
                 "Acceso Recuperado — Lex Junior",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
 
             DialogResult = true;
             Close();
+        }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("PinPromptDialog.BtnApplyRecovery_Click", ex);
         }
         finally
         {

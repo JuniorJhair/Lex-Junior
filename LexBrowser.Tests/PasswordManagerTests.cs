@@ -113,8 +113,8 @@ public class PasswordManagerTests : IDisposable
         Assert.Equal("junior@gmail.com", matches[0].Username);
         Assert.Equal("123456", matches[0].Password);
 
-        // Actualizar contraseña para el mismo usuario y dominio
-        store.SaveOrUpdateCredential("https://www.google.com/account", "junior@gmail.com", "nuevaClave99");
+        // Actualizar contraseña para el mismo usuario y host normalizado
+        store.SaveOrUpdateCredential("https://www.accounts.google.com/account", "junior@gmail.com", "nuevaClave99");
         Assert.Equal(1, store.GetTotalCount());
 
         // Recargar desde disco cifrado con DPAPI

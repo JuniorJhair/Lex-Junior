@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// LEX JUNIOR BROWSER v2.8.4 — MULTI-ROUTE WEBSITE & INTERACTIVE SIMULATOR
+// LEX JUNIOR BROWSER v2.8.5 — MULTI-ROUTE WEBSITE & INTERACTIVE SIMULATOR
 // ═══════════════════════════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -9,12 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const navLinksContainer = document.getElementById('nav-links');
 
   const routeTitles = {
-    'inicio': 'Lex Junior Browser v2.8.4 — Navegador Privado, Rápido y Cero Telemetría',
-    'funciones': 'Funciones y Perfiles de Privacidad A/B/C — Lex Junior Browser v2.8.4',
+    'inicio': 'Lex Junior Browser v2.8.5 — Navegador Privado, Rápido y Cero Telemetría',
+    'funciones': 'Funciones y Perfiles de Privacidad A/B/C — Lex Junior Browser v2.8.5',
     'lex-class': 'Lex Junior Class — Academia Interactiva en Lex Junior',
-    'documentacion': 'Documentación Oficial y Manual Técnico — Lex Junior Browser v2.8.4',
-    'faq': 'Preguntas y Respuestas (FAQ) — Lex Junior Browser v2.8.4',
-    'novedades': 'Novedades y Changelog v2.8.4 — Lex Junior Browser'
+    'documentacion': 'Documentación Oficial y Manual Técnico — Lex Junior Browser v2.8.5',
+    'faq': 'Preguntas y Respuestas (FAQ) — Lex Junior Browser v2.8.5',
+    'novedades': 'Novedades y Changelog v2.8.5 — Lex Junior Browser'
   };
 
   const normalizeRoute = (rawHash) => {

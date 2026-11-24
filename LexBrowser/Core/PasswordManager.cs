@@ -159,6 +159,24 @@ public sealed class PasswordVaultStore
     private static string StripLeadingWww(string host) =>
         host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? host[4..] : host;
 
+    internal static string NormalizeCredentialHostKey(string? urlOrHost, string? fallbackDomain = null)
+    {
+        string host = ExtractHost(urlOrHost);
+        if (!string.IsNullOrWhiteSpace(host))
+            return StripLeadingWww(host);
+
+        string fallbackHost = ExtractHost(fallbackDomain);
+        if (!string.IsNullOrWhiteSpace(fallbackHost))
+            return StripLeadingWww(fallbackHost);
+
+        return string.IsNullOrWhiteSpace(fallbackDomain)
+            ? string.Empty
+            : StripLeadingWww(fallbackDomain.Trim().ToLowerInvariant());
+    }
+
+    private static string GetCredentialHostKey(SavedCredential cred)
+        => NormalizeCredentialHostKey(cred.OriginHost, cred.Domain);
+
     public static bool IsSameExactOrWwwHost(string? urlOrHostA, string? urlOrHostB)
     {
         string hostA = ExtractHost(urlOrHostA);
@@ -284,15 +302,15 @@ public sealed class PasswordVaultStore
 
     public SavedCredential? FindExistingCredential(string? urlOrDomain, string? username)
     {
-        string baseDomain = ExtractBaseDomain(urlOrDomain);
-        if (string.IsNullOrEmpty(baseDomain) || string.IsNullOrWhiteSpace(username))
+        string hostKey = NormalizeCredentialHostKey(urlOrDomain, ExtractBaseDomain(urlOrDomain));
+        if (string.IsNullOrEmpty(hostKey) || string.IsNullOrWhiteSpace(username))
             return null;
 
         string cleanUser = username.Trim();
         lock (_lock)
         {
             var match = _credentials.FirstOrDefault(c =>
-                string.Equals(c.Domain, baseDomain, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(GetCredentialHostKey(c), hostKey, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(c.Username, cleanUser, StringComparison.OrdinalIgnoreCase));
             return match != null ? CloneCredential(match) : null;
         }
@@ -315,6 +333,7 @@ public sealed class PasswordVaultStore
 
         string originHost = ExtractHost(urlOrDomain);
         if (string.IsNullOrEmpty(originHost)) originHost = baseDomain;
+        string targetHostKey = NormalizeCredentialHostKey(originHost, baseDomain);
 
         string cleanUser = (username ?? string.Empty).Trim();
         SavedCredential result;
@@ -322,12 +341,13 @@ public sealed class PasswordVaultStore
         lock (_lock)
         {
             var existing = _credentials.FirstOrDefault(c =>
-                string.Equals(c.Domain, baseDomain, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(GetCredentialHostKey(c), targetHostKey, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(c.Username, cleanUser, StringComparison.OrdinalIgnoreCase));
 
             if (existing != null)
             {
                 existing.Password = password;
+                existing.Domain = baseDomain;
                 existing.OriginHost = originHost;
                 existing.UpdatedAtUtc = DateTime.UtcNow;
                 result = CloneCredential(existing);
@@ -628,17 +648,17 @@ public sealed class PasswordVaultStore
         }
     }
 
-    private sealed class DomainUserKeyComparer : IEqualityComparer<(string BaseDomain, string Username)>
+    private sealed class HostUserKeyComparer : IEqualityComparer<(string HostKey, string Username)>
     {
-        public static readonly DomainUserKeyComparer Instance = new();
+        public static readonly HostUserKeyComparer Instance = new();
 
-        public bool Equals((string BaseDomain, string Username) x, (string BaseDomain, string Username) y) =>
-            string.Equals(x.BaseDomain, y.BaseDomain, StringComparison.OrdinalIgnoreCase) &&
+        public bool Equals((string HostKey, string Username) x, (string HostKey, string Username) y) =>
+            string.Equals(x.HostKey, y.HostKey, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(x.Username, y.Username, StringComparison.OrdinalIgnoreCase);
 
-        public int GetHashCode((string BaseDomain, string Username) obj) =>
+        public int GetHashCode((string HostKey, string Username) obj) =>
             HashCode.Combine(
-                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.BaseDomain ?? string.Empty),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(obj.HostKey ?? string.Empty),
                 StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Username ?? string.Empty));
     }
 
@@ -654,12 +674,14 @@ public sealed class PasswordVaultStore
 
         lock (_lock)
         {
-            var existingKeys = new HashSet<(string BaseDomain, string Username)>(DomainUserKeyComparer.Instance);
+            var existingKeys = new HashSet<(string HostKey, string Username)>(HostUserKeyComparer.Instance);
             foreach (var cred in _credentials)
             {
-                string existingBase = ExtractBaseDomain(cred.Domain);
-                if (string.IsNullOrWhiteSpace(existingBase)) existingBase = cred.Domain;
-                existingKeys.Add((existingBase, cred.Username.Trim()));
+                string existingHostKey = GetCredentialHostKey(cred);
+                if (!string.IsNullOrWhiteSpace(existingHostKey))
+                {
+                    existingKeys.Add((existingHostKey, cred.Username.Trim()));
+                }
             }
 
             int originalCount = _credentials.Count;
@@ -688,9 +710,10 @@ public sealed class PasswordVaultStore
 
                 string originHost = ExtractHost(trimmedUrl);
                 if (string.IsNullOrWhiteSpace(originHost)) originHost = baseDomain;
+                string hostKey = NormalizeCredentialHostKey(originHost, baseDomain);
                 string cleanUser = (rawUser ?? string.Empty).Trim();
 
-                if (!existingKeys.Add((baseDomain, cleanUser)))
+                if (!existingKeys.Add((hostKey, cleanUser)))
                 {
                     duplicates++;
                     continue;
@@ -774,6 +797,11 @@ public static class PasswordManager
                 {
                     InvalidateSmartSessionUnlock();
                 }
+            };
+
+            Microsoft.Win32.SystemEvents.SessionEnding += (_, _) =>
+            {
+                InvalidateSmartSessionUnlock();
             };
         }
         catch { }
@@ -1058,6 +1086,100 @@ public static class PasswordManager
         SettingsManager.Save();
         return recoveryCode;
     }
+
+    public sealed record PinRecoveryResult(
+        bool Success,
+        string? NewRecoveryCode,
+        string ErrorMessage,
+        bool IsLockedOut);
+
+    public static string FormatLockoutWait(TimeSpan wait)
+    {
+        if (wait.TotalSeconds >= 60)
+            return $"{(int)Math.Ceiling(wait.TotalMinutes)} min";
+        return $"{Math.Max(1, (int)Math.Ceiling(wait.TotalSeconds))} s";
+    }
+
+    /// <summary>
+    /// Restablece el PIN maestro tras verificar recuperación, genera un nuevo código de emergencia
+    /// y preserva intactas la pregunta y respuesta secretas previas.
+    /// </summary>
+    public static string ResetPinAfterRecovery(string newPin)
+    {
+        if (string.IsNullOrEmpty(newPin))
+            throw new ArgumentException("La contraseña o PIN no puede estar vacío.", nameof(newPin));
+
+        var s = SettingsManager.Current;
+        string newRecoveryCode = GenerateRecoveryCode();
+
+        if (string.IsNullOrWhiteSpace(s.MasterPasswordSalt))
+        {
+            s.MasterPasswordSalt = Guid.NewGuid().ToString("N");
+        }
+
+        s.MasterPasswordHash = ComputePbkdf2Hash(newPin);
+        s.MasterPasswordLength = newPin.Length;
+        s.BrowserLockMode = string.IsNullOrWhiteSpace(s.BrowserLockMode) || s.BrowserLockMode == "None"
+            ? "SmartSession"
+            : s.BrowserLockMode;
+
+        s.RecoveryCodeHash = ComputePbkdf2Hash(NormalizeRecoveryText(newRecoveryCode));
+        s.RecoveryCodeHint = $"LEX-****-{newRecoveryCode[^4..]}";
+        s.LastUnlockedBootId = GetCurrentWindowsBootId();
+        s.HasCompletedInitialSecuritySetup = true;
+        s.PinFailedAttempts = 0;
+        s.PinLockoutUntilUtcTicks = 0;
+        IsUnlockedInCurrentProcess = true;
+
+        SettingsManager.ClearRecoveryLockRestriction();
+        SettingsManager.ResolveRecoveryAndAllowSaves();
+        SettingsManager.Save();
+        return newRecoveryCode;
+    }
+
+    public static async Task<PinRecoveryResult> TryRecoverAndResetPinAsync(string recoveryInput, string newPin)
+    {
+        TimeSpan wait = GetPinLockoutRemaining();
+        if (wait > TimeSpan.Zero)
+        {
+            return new PinRecoveryResult(
+                false,
+                null,
+                $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar.",
+                IsLockedOut: true);
+        }
+
+        bool valid = await VerifyRecoveryAnswerOrCodeAsync(recoveryInput);
+        if (!valid)
+        {
+            wait = GetPinLockoutRemaining();
+            return new PinRecoveryResult(
+                false,
+                null,
+                wait > TimeSpan.Zero
+                    ? $"⏳ Demasiados intentos. Espera {FormatLockoutWait(wait)} para volver a intentar."
+                    : "❌ La respuesta secreta o el código de recuperación no coinciden.",
+                IsLockedOut: wait > TimeSpan.Zero);
+        }
+
+        if (string.IsNullOrWhiteSpace(newPin))
+        {
+            return new PinRecoveryResult(
+                false,
+                null,
+                "⚠️ Escribe tu nuevo PIN o contraseña para continuar.",
+                IsLockedOut: false);
+        }
+
+        string newRecoveryCode = await Task.Run(() => ResetPinAfterRecovery(newPin));
+        return new PinRecoveryResult(true, newRecoveryCode, string.Empty, IsLockedOut: false);
+    }
+
+    public static string BuildPinRecoveredMessage(string newRecoveryCode)
+        => $"¡Tu PIN/contraseña fue actualizado con éxito!\n" +
+           $"Todas tus contraseñas guardadas se conservaron intactas.\n\n" +
+           $"• Nuevo Código de Recuperación de Emergencia: {newRecoveryCode}\n" +
+           $"(El código anterior quedó invalidado. Guarda este nuevo código en un lugar seguro por si algún día vuelves a olvidar tu PIN).";
 
     public static void DisableMasterPassword()
     {

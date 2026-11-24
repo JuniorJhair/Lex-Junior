@@ -15,10 +15,17 @@ public static class BookmarkManager
         "bookmarks.json"
     );
 
+    internal static string? CustomStoragePath { get; set; }
+    private static string EffectiveStoragePath => string.IsNullOrWhiteSpace(CustomStoragePath) ? StoragePath : CustomStoragePath!;
+
+    private static readonly JsonSerializerOptions BookmarkJsonOptions = new() { WriteIndented = true };
+
     public static ObservableCollection<BookmarkItem> Bookmarks { get; } = new();
 
     // Historial para deshacer eliminación
     public static (BookmarkItem Item, int Index)? LastRemovedBookmark { get; private set; }
+    public static string? LastLoadError { get; private set; }
+    public static string? LastQuarantineBackupPath { get; private set; }
 
     static BookmarkManager()
     {
@@ -27,32 +34,43 @@ public static class BookmarkManager
 
     public static void Load()
     {
-        try
-        {
-            if (File.Exists(StoragePath))
-            {
-                string json = File.ReadAllText(StoragePath);
-                var items = JsonSerializer.Deserialize<BookmarkItem[]>(json);
-                Bookmarks.Clear();
-                if (items != null && items.Length > 0)
-                {
-                    foreach (var item in items)
-                    {
-                        Bookmarks.Add(item);
-                    }
-                    return;
-                }
-            }
-        }
-        catch { }
+        string targetPath = EffectiveStoragePath;
+        LastLoadError = null;
+        LastQuarantineBackupPath = null;
 
-        // Marcadores predeterminados si está vacío
-        if (Bookmarks.Count == 0)
+        if (!File.Exists(targetPath))
         {
+            Bookmarks.Clear();
             Bookmarks.Add(new BookmarkItem { Title = "YouTube", Url = "https://www.youtube.com" });
             Bookmarks.Add(new BookmarkItem { Title = "Google", Url = "https://www.google.com" });
             Bookmarks.Add(new BookmarkItem { Title = "Twitch", Url = "https://www.twitch.tv" });
             Save();
+            return;
+        }
+
+        try
+        {
+            string json = File.ReadAllText(targetPath);
+            var items = JsonSerializer.Deserialize<BookmarkItem[]>(json);
+            if (items == null)
+                throw new InvalidDataException("El archivo bookmarks.json deserializó como nulo.");
+
+            Bookmarks.Clear();
+            foreach (var item in items)
+            {
+                if (item != null)
+                {
+                    Bookmarks.Add(item);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LastLoadError = ex.Message;
+            LastQuarantineBackupPath = AtomicFile.QuarantineCorruptFile(targetPath, ".corrupt-");
+            CrashLogger.Log("BookmarkManager.Load", ex, $"Path={targetPath}; Quarantine={LastQuarantineBackupPath}");
+            // No sobrescribir el archivo dañado ni reinyectar marcadores por defecto encima.
+            Bookmarks.Clear();
         }
     }
 
@@ -60,15 +78,15 @@ public static class BookmarkManager
     {
         try
         {
-            string? dir = Path.GetDirectoryName(StoragePath);
-            if (!string.IsNullOrEmpty(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-            string json = JsonSerializer.Serialize(Bookmarks.ToList(), new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(StoragePath, json);
+            string targetPath = EffectiveStoragePath;
+            var snapshot = Bookmarks.ToList();
+            string json = JsonSerializer.Serialize(snapshot, BookmarkJsonOptions);
+            AtomicFile.WriteAllTextAtomic(targetPath, json);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            CrashLogger.Log("BookmarkManager.Save", ex);
+        }
     }
 
     public static (int Imported, int Duplicates, int Skipped) ImportBookmarks(IEnumerable<BookmarkItem> items)

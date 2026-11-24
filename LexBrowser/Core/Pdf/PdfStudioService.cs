@@ -391,13 +391,9 @@ public static class PdfStudioService
         string reasonPhrase,
         string message)
     {
-        byte[] bytes = Encoding.UTF8.GetBytes(message);
         string safeReason = TvUrlGuard.SanitizeHeaderValue(reasonPhrase, 80);
         if (string.IsNullOrEmpty(safeReason)) safeReason = "Error";
-        string headers =
-            $"Content-Type: text/plain; charset=utf-8\r\nAccess-Control-Allow-Origin: {AllowedCorsOrigin}\r\n" +
-            "X-Content-Type-Options: nosniff\r\nCache-Control: no-store";
-        return env.CreateWebResourceResponse(new MemoryStream(bytes, writable: false), statusCode, safeReason, headers);
+        return StudioResourceHelper.CreateTextResponse(env, statusCode, safeReason, message, AllowedCorsOrigin);
     }
 
     /// <summary>
@@ -634,6 +630,80 @@ public static class PdfStudioService
         }
     }
 
+    private static async Task HandleLocalPdfRequestAsync(
+        CoreWebView2Environment env,
+        CoreWebView2WebResourceRequestedEventArgs e,
+        string safeFullPath,
+        CoreWebView2Deferral deferral)
+    {
+        FileStream? pdfStream = null;
+        try
+        {
+            (FileStream? stream, int errorStatus, string errorReason, string errorMessage) = await Task.Run(() =>
+            {
+                FileStream? fs = null;
+                try
+                {
+                    fs = new FileStream(
+                        safeFullPath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.ReadWrite,
+                        bufferSize: 65536,
+                        FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+                    byte[] headerBuf = new byte[1024];
+                    int bytesRead = fs.Read(headerBuf, 0, headerBuf.Length);
+                    if (bytesRead <= 0 || !HasPdfMagicHeader(headerBuf.AsSpan(0, bytesRead)))
+                    {
+                        fs.Dispose();
+                        return ((FileStream?)null, 415, "Unsupported Media Type", "El archivo local no tiene una cabecera %PDF- válida.");
+                    }
+
+                    fs.Position = 0;
+                    return (fs, 200, "OK", string.Empty);
+                }
+                catch (FileNotFoundException)
+                {
+                    fs?.Dispose();
+                    return ((FileStream?)null, 404, "Not Found", "Archivo local no encontrado.");
+                }
+                catch (Exception ex)
+                {
+                    fs?.Dispose();
+                    return ((FileStream?)null, 500, "Read Error", $"Error al leer PDF local: {ex.Message}");
+                }
+            });
+
+            pdfStream = stream;
+            if (pdfStream != null)
+            {
+                string headers =
+                    $"Content-Type: application/pdf\r\n" +
+                    $"Access-Control-Allow-Origin: {AllowedCorsOrigin}\r\n" +
+                    $"X-Content-Type-Options: nosniff\r\n" +
+                    $"Cache-Control: no-store";
+                e.Response = env.CreateWebResourceResponse(pdfStream, 200, "OK", headers);
+                pdfStream = null; // WebView2 toma posesión del Stream
+            }
+            else
+            {
+                e.Response = CreateTextResponse(env, errorStatus, errorReason, errorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            pdfStream?.Dispose();
+            CrashLogger.Log("PdfStudioService.HandleLocalPdfRequestAsync", ex);
+            try { e.Response = CreateTextResponse(env, 500, "Read Error", $"Error al leer PDF local: {ex.Message}"); } catch { }
+        }
+        finally
+        {
+            pdfStream?.Dispose();
+            try { deferral.Complete(); } catch { }
+        }
+    }
+
     /// <summary>
     /// Intercepta las solicitudes hacia https://pdf.lex.local/* y sirve los recursos y el stream del PDF.
     /// </summary>
@@ -677,18 +747,9 @@ public static class PdfStudioService
 
             if (File.Exists(safeFullPath))
             {
-                try
-                {
-                    byte[] fileBytes = File.ReadAllBytes(safeFullPath);
-                    string headers = $"Content-Type: application/pdf\r\nAccess-Control-Allow-Origin: {AllowedCorsOrigin}\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store";
-                    e.Response = env.CreateWebResourceResponse(new MemoryStream(fileBytes, writable: false), 200, "OK", headers);
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    e.Response = CreateTextResponse(env, 500, "Read Error", $"Error al leer PDF local: {ex.Message}");
-                    return true;
-                }
+                var deferral = e.GetDeferral();
+                _ = HandleLocalPdfRequestAsync(env, e, safeFullPath, deferral);
+                return true;
             }
             else
             {
@@ -738,29 +799,12 @@ public static class PdfStudioService
         }
 
         byte[]? bytes = null;
-        try
+        if (!StudioResourceHelper.TryReadSafeFile(folder, path, out bytes))
         {
-            string fullFolder = Path.GetFullPath(folder);
-            string diskFile = Path.GetFullPath(Path.Combine(fullFolder, path));
-            if (diskFile.StartsWith(fullFolder, StringComparison.OrdinalIgnoreCase) && File.Exists(diskFile))
-            {
-                bytes = File.ReadAllBytes(diskFile);
-            }
-        }
-        catch { }
-
-        // Respaldo de alta disponibilidad: Si no está en disco (ej. Single-file publish autónomo en otra máquina),
-        // cargar directamente desde los recursos incrustados en el ensamblado binario.
-        if (bytes == null)
-        {
+            // Respaldo de alta disponibilidad: Si no está en disco (ej. Single-file publish autónomo en otra máquina),
+            // cargar directamente desde los recursos incrustados en el ensamblado binario.
             string resName = $"LexBrowser.Assets.pdf.{path.Replace('/', '.')}";
-            using var stream = typeof(PdfStudioService).Assembly.GetManifestResourceStream(resName);
-            if (stream != null)
-            {
-                using var ms = new MemoryStream();
-                stream.CopyTo(ms);
-                bytes = ms.ToArray();
-            }
+            StudioResourceHelper.TryReadEmbeddedResource(typeof(PdfStudioService).Assembly, resName, out bytes);
         }
 
         if (bytes != null)
