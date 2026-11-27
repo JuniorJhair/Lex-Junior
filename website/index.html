@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lex Junior Browser v2.8.5 — Navegador Privado, Rápido y Cero Telemetría</title>
   <meta name="description" content="Descarga Lex Junior Browser v2.8.5 para Windows 10/11. Navegador privado con Perfiles de Privacidad A/B/C, LexShield Core, Lex PDF Studio, +Lex (Lex Class, Lex Media y Lex Player APK) y amplificador 300%." />
-  <link rel="canonical" href="https://juniorjhair.github.io/Lex-Junior/" />
+  <link rel="canonical" href="https://lexjunior.pages.dev/" />
   <meta name="theme-color" content="#07070B" />
   <meta property="og:title" content="Lex Junior Browser v2.8.5 — Navegador Privado para Windows" />
   <meta property="og:description" content="Cero telemetría, Perfiles de Privacidad A/B/C, LexShield Core, Lex PDF Studio, +Lex (Lex Class, Lex Media y Lex Player APK) y amplificador de volumen hasta 300%." />
-  <meta property="og:url" content="https://juniorjhair.github.io/Lex-Junior/" />
-  <meta property="og:image" content="https://juniorjhair.github.io/Lex-Junior/assets/logo.png" />
+  <meta property="og:url" content="https://lexjunior.pages.dev/" />
+  <meta property="og:image" content="https://lexjunior.pages.dev/assets/logo.png" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Lex Junior Browser" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Lex Junior Browser v2.7.0 — Navegador Privado para Windows" />
-  <meta name="twitter:description" content="Cero telemetría, Perfiles de Privacidad A/B/C, LexShield Core, Lex PDF Studio (locales y virtuales), amplificador 300%, Lex TV y muy pronto Lex Junior Class." />
-  <meta name="twitter:image" content="https://juniorjhair.github.io/Lex-Junior/assets/logo.png" />
+  <meta name="twitter:title" content="Lex Junior Browser v2.8.5 — Navegador Privado para Windows" />
+  <meta name="twitter:description" content="Cero telemetría, Perfiles de Privacidad A/B/C, LexShield Core, Lex PDF Studio (locales y virtuales), amplificador 300%, +Lex (Lex Class, Lex Media, Lex Player APK) y LexSticker." />
+  <meta name="twitter:image" content="https://lexjunior.pages.dev/assets/logo.png" />
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -38,12 +38,15 @@
       <nav class="nav-links" id="nav-links" aria-label="Navegación principal por rutas">
         <a href="#/inicio" class="nav-route-link active" data-route="inicio">Inicio</a>
         <a href="#/funciones" class="nav-route-link" data-route="funciones">Funciones</a>
+        <a href="#/lex-sticker" class="nav-route-link nav-link-sticker" data-route="lex-sticker">
+          <span>🎙️ LexSticker</span>
+          <span class="nav-sticker-pill">WEB</span>
+        </a>
         <a href="#/lex-class" class="nav-route-link nav-link-class" data-route="lex-class">
           <span>🎓 Lex Class</span>
-          <span class="nav-soon-pill">PROTOTIPO</span>
         </a>
         <a href="#/documentacion" class="nav-route-link" data-route="documentacion">Documentación</a>
-        <a href="#/faq" class="nav-route-link" data-route="faq">Preguntas y Respuestas</a>
+        <a href="#/faq" class="nav-route-link" data-route="faq">FAQ</a>
         <a href="#/novedades" class="nav-route-link" data-route="novedades">Novedades</a>
       </nav>
 
@@ -91,19 +94,40 @@
             </a>
           </div>
 
-          <!-- Banner Destacado: Lex Junior Class Muy Pronto -->
-          <div class="hero-class-teaser reveal visible">
-            <div class="hct-left">
-              <span class="hct-badge">🎓 MUY PRONTO EN LA PRÓXIMA ACTUALIZACIÓN</span>
-              <h3>Lex Junior Class — Tu Academia Interactiva Paso a Paso</h3>
-              <p>Desde 1.° de Primaria hasta Preuniversitario con micro-lecciones desde cero, Modo Estudio, Práctica, Examen y 0 telemetría.</p>
+          <!-- Destacados del Ecosistema: Lex Junior Class & LexSticker -->
+          <div class="hero-ecosystem-row reveal visible">
+            <div class="hero-class-teaser">
+              <div class="hct-left">
+                <span class="hct-badge">🎓 ACADEMIA INTEGRADA EN +LEX</span>
+                <h3>Lex Junior Class — Tu Academia Paso a Paso</h3>
+                <p>Ya disponible desde <strong>+Lex</strong>: 1.° de Primaria hasta Preuniversitario con cuadrículas interactivas, Modo Práctica, Examen y 0 telemetría.</p>
+              </div>
+              <a href="#/lex-class" class="btn btn-primary btn-sm" data-route-link="lex-class">Ver Lex Class →</a>
             </div>
-            <a href="#/lex-class" class="btn btn-primary btn-sm" data-route-link="lex-class">Ver adelanto de Lex Class →</a>
+
+            <div class="hero-sticker-teaser">
+              <div class="hst-top">
+                <img src="assets/lexsticker-logo.png" alt="Logo LexSticker" class="hst-logo" />
+                <div class="hct-left">
+                  <span class="hst-badge">🎙️ WEB TEMPORAL · STICKERS WHATSAPP</span>
+                  <h3>LexSticker — Stickers con Audio</h3>
+                  <p>Recorta videos, GIFs o fotos en 512×512 y añade música o tu propia voz directo desde la web.</p>
+                </div>
+              </div>
+              <div class="hst-cta-strip">
+                <span class="hst-cta-label">Web temporal para crear stickers con audio de WhatsApp:</span>
+                <div class="hst-cta-actions">
+                  <a href="./lexsticker/" class="btn btn-sticker btn-sm">🎙️ Abrir LexSticker Web →</a>
+                  <a href="#/lex-sticker" class="btn btn-secondary btn-sm" data-route-link="lex-sticker">Guía paso a paso</a>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="hero-trust-badges reveal visible">
             <div class="trust-item">🛡️ <strong>LexShield Core</strong> integrado</div>
             <div class="trust-item">🔒 <strong>Perfiles A / B / C</strong> de privacidad</div>
+            <div class="trust-item">🎙️ <strong>LexSticker</strong> Audio WhatsApp</div>
             <div class="trust-item">📑 <strong>PDF Studio</strong> Locales y Virtuales</div>
             <div class="trust-item">📺 <strong>Lex Media</strong> IPTV, VOD &amp; Xtream</div>
             <div class="trust-item">📱 <strong>Lex Player APK</strong> Streaming Android</div>
@@ -118,8 +142,8 @@
         <div class="container">
           <div class="section-header reveal visible">
             <span class="section-tag">SIMULADOR INTERACTIVO EN VIVO</span>
-            <h2>Explora Lex Junior Browser v2.7.0 por dentro</h2>
-            <p>Alterna entre los 3 temas visuales (Original, Oscuro y Claro) y haz clic en cualquier herramienta —incluido el nuevo botón <strong>🎓 Lex Class</strong> o <strong>📑 Lex PDF Studio</strong>— para probar su interfaz.</p>
+            <h2>Explora Lex Junior Browser v2.8.5 por dentro</h2>
+            <p>Alterna entre los 3 temas visuales (Original, Oscuro y Claro) y haz clic en cualquier herramienta —incluido <strong>🎓 Lex Class</strong> o <strong>📑 Lex PDF Studio</strong>— para probar su interfaz.</p>
           </div>
 
           <!-- Selector de tema del navegador -->
@@ -135,7 +159,7 @@
           <!-- Selector de vistas del navegador -->
           <div class="showcase-tabs reveal visible" role="tablist">
             <button class="showcase-tab active" data-view="view-newtab">⚡ Nueva Pestaña</button>
-            <button class="showcase-tab" data-view="view-lexclass">🎓 Lex Class (Pronto)</button>
+            <button class="showcase-tab" data-view="view-lexclass">🎓 Lex Class</button>
             <button class="showcase-tab" data-view="view-pdf">📑 PDF Local y Virtual</button>
             <button class="showcase-tab" data-view="view-tv">📺 Lex Media &amp; Xtream</button>
             <button class="showcase-tab" data-view="view-youtube">🛡️ YouTube + Volumen 300%</button>
@@ -251,7 +275,7 @@
                 </div>
               </div>
 
-              <!-- VISTA NUEVA: LEX JUNIOR CLASS (DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN) -->
+              <!-- VISTA NUEVA: LEX JUNIOR CLASS (YA INTEGRADA EN +LEX) -->
               <div class="bw-view" id="view-lexclass">
                 <div class="lc-mock-dialog">
                   <div class="lc-mock-banner">
@@ -260,28 +284,28 @@
                       <span class="lc-cap-badge">🎓 CLASS</span>
                     </div>
                     <div class="lc-mock-copy">
-                      <span class="lc-soon-tag">✨ DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN</span>
-                      <h3>Lex Junior Class — Academia Interactiva Integrada</h3>
-                      <p>Estamos afinando cada micro-lección paso a paso desde <strong>1.° de Primaria hasta Preuniversitario</strong> para que aprendas desde cero absoluto con analogías claras, práctica guiada y 0 telemetría.</p>
+                      <span class="lc-soon-tag">✅ YA INTEGRADO EN +LEX</span>
+                      <h3>Lex Junior Class — Universo de Mundos</h3>
+                      <p>Academia interactiva local integrada en su propia ventana dedicada desde <strong>+Lex → Lex Class</strong> (o <code>lex://class</code>): desde <strong>1.° de Primaria hasta Preuniversitario</strong> con 0 telemetría.</p>
                       <div class="lc-mock-pills">
-                        <span>📚 1.° Primaria → Pre</span>
-                        <span>🎯 Estudio · Práctica · Examen</span>
-                        <span>🛡️ 100% Local · 0 Telemetría</span>
+                        <span>📚 Universo I · Matemáticas</span>
+                        <span>🗣️ Inglés + LexBook</span>
+                        <span>🎵 Ambiente Sonoro Offline</span>
                       </div>
                     </div>
                   </div>
                   <div class="lc-mock-cards">
                     <div class="lc-mini-card">
-                      <strong>📘 Micro-lecciones Paso a Paso</strong>
-                      <p>Explicaciones desde cero sin dar nada por sentado, con ejemplos traducidos y alertas de errores frecuentes.</p>
+                      <strong>🧮 Matemáticas Interactivas</strong>
+                      <p>Cuadrículas posicionales DM|UM|C|D|U con llevadas y préstamos, fracciones, cálculo y simulacros con nota 0–20.</p>
                     </div>
                     <div class="lc-mini-card">
-                      <strong>🧠 Práctica y Nota Vigesimal</strong>
-                      <p>Ejercicios en rampa con pistas graduales, retroalimentación específica y simulacros calificados de 0 a 20.</p>
+                      <strong>🧠 Estudio, Práctica y Examen</strong>
+                      <p>Micro-lecciones paso a paso desde cero con pistas progresivas y análisis de errores frecuentes.</p>
                     </div>
                     <div class="lc-mini-card">
-                      <strong>🎮 Arcade &amp; Laboratorio de Voz</strong>
-                      <p>Pronunciación interactiva en inglés, retos mentales y brújula vocacional integrada en el navegador.</p>
+                      <strong>🎵 Paisaje Sonoro &amp; Brújula</strong>
+                      <p>Música generativa 100 % offline en Web Audio API y módulos de orientación estudiantil.</p>
                     </div>
                   </div>
                 </div>
@@ -512,14 +536,22 @@
               <span class="rh-icon">🛡️</span>
               <div>
                 <strong>Funciones y Perfiles A/B/C</strong>
-                <p>Conoce LexShield Core, los 3 perfiles de privacidad, PDF Studio virtual y Lex TV.</p>
+                <p>Conoce LexShield Core, los 3 perfiles de privacidad, PDF Studio virtual y Lex Media.</p>
+              </div>
+              <span class="rh-arrow">→</span>
+            </a>
+            <a href="#/lex-sticker" class="route-hub-card rh-card-sticker" data-route-link="lex-sticker">
+              <span class="rh-icon">🎙️</span>
+              <div>
+                <strong>LexSticker · Stickers con Audio</strong>
+                <p>Simulador interactivo y guía paso a paso para crear stickers sonoros para WhatsApp.</p>
               </div>
               <span class="rh-arrow">→</span>
             </a>
             <a href="#/lex-class" class="route-hub-card rh-card-accent" data-route-link="lex-class">
               <span class="rh-icon">🎓</span>
               <div>
-                <strong>Lex Junior Class (Muy Pronto)</strong>
+                <strong>Lex Junior Class</strong>
                 <p>Descubre la academia interactiva integrada para Primaria, Secundaria y Pre.</p>
               </div>
               <span class="rh-arrow">→</span>
@@ -537,6 +569,14 @@
               <div>
                 <strong>Preguntas y Respuestas</strong>
                 <p>Resuelve todas tus dudas con nuestro buscador interactivo por categorías.</p>
+              </div>
+              <span class="rh-arrow">→</span>
+            </a>
+            <a href="#/novedades" class="route-hub-card" data-route-link="novedades">
+              <span class="rh-icon">✨</span>
+              <div>
+                <strong>Novedades y Changelog</strong>
+                <p>Revisa todas las mejoras de la versión actual v2.8.5 y lanzamientos previos.</p>
               </div>
               <span class="rh-arrow">→</span>
             </a>
@@ -629,6 +669,15 @@
                 Sintoniza listas <code>M3U/M3U8</code> en vivo, organiza tu videoteca VOD por temporadas y episodios, y conecta servidores <strong>Xtream Codes</strong> o <strong>Jellyfin/Emby</strong> con credenciales cifradas en DPAPI y protección anti-SSRF con DNS pinning.
               </p>
             </article>
+
+            <article class="bento-card bento-wide bento-sticker">
+              <div class="card-icon">🎙️</div>
+              <h3>LexSticker · Estudio de Stickers con Audio para WhatsApp</h3>
+              <p>
+                Convierte tus videos (<code>MP4 / MOV / WEBM</code>), <code>GIF</code> o fotos en stickers <code>512×512</code> de hasta 10 segundos con audio original, pistas <code>MP3/WAV/OGG/M4A</code> o voz grabada con el micrófono, y envíalos directo a WhatsApp por QR o código de 8 dígitos.
+              </p>
+              <a href="#/lex-sticker" class="btn btn-sticker btn-sm" style="margin-top: 14px;" data-route-link="lex-sticker">Abrir Estudio Interactivo y Guía →</a>
+            </article>
           </div>
         </div>
       </section>
@@ -637,7 +686,7 @@
       <section class="profiles-section">
         <div class="container">
           <div class="section-header">
-            <span class="section-tag">NUEVO EN LA VERSIÓN 2.7.0</span>
+            <span class="section-tag">CONTROL DE RED TRANSPARENTE</span>
             <h2>Perfiles de Privacidad Transparentes (A / B / C)</h2>
             <p>Ninguna conexión de red ocurre a tus espaldas. Además, la compuerta de red de arranque (<code>StartupNetworkGate</code>) permanece cerrada hasta que desbloqueas tu PIN y eliges tu perfil.</p>
           </div>
@@ -794,15 +843,15 @@
             </div>
 
             <div class="lc-hero-text">
-              <div class="lc-status-pill">✨ DISPONIBLE EN LA PRÓXIMA ACTUALIZACIÓN</div>
+              <div class="lc-status-pill">✅ YA INTEGRADO EN +LEX (v2.8.5)</div>
               <h1>Lex Junior Class</h1>
               <p class="lc-lead">
-                Tu academia interactiva paso a paso integrada nativamente en <strong>Lex Junior Browser</strong>. En v2.7.0 ya verás el botón <strong>🎓 Lex Class</strong> en tu barra de herramientas; estamos completando la revisión pedagógica unidad por unidad para que se active automáticamente en la próxima actualización.
+                Tu academia interactiva paso a paso ya viene integrada nativamente dentro de <strong>Lex Junior Browser</strong> desde el menú <strong>✦ +Lex → 🎓 Lex Class</strong> (o escribiendo <code>lex://class</code>), en ventana independiente con modo pantalla completa, instalador opcional en Escritorio y actualizaciones modulares sin reinstalar el navegador.
               </p>
               <div class="lc-highlight-tags">
-                <span>⚡ Explicado desde cero absoluto</span>
-                <span>🧩 Micro-lecciones paso a paso</span>
-                <span>🎯 Nota vigesimal (0 a 20)</span>
+                <span>⚡ Universo I · Matemáticas 5 niveles</span>
+                <span>🗣️ Inglés paso a paso + LexBook</span>
+                <span>🎵 Paisaje sonoro offline</span>
                 <span>🛡️ 100% Local y 0 Telemetría</span>
               </div>
             </div>
@@ -810,7 +859,7 @@
 
           <!-- Pilares Pedagógicos de Lex Junior Class -->
           <div class="section-header" style="margin-top: 56px;">
-            <span class="section-tag">¿POR QUÉ ESTAMOS CONSTRUYENDO LEX CLASS CON TANTO CUIDADO?</span>
+            <span class="section-tag">ARQUITECTURA PEDAGÓGICA INTEGRADA</span>
             <h2>Aprendizaje real desde cero, sin vacíos ni relleno</h2>
             <p>Diseñado para que cualquier estudiante de Primaria, Secundaria o Preuniversitario entienda el porqué de cada concepto antes de pasar al siguiente.</p>
           </div>
@@ -869,6 +918,431 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- RUTA 3B: #/lex-sticker (ESTUDIO DE STICKERS CON AUDIO + GUÍA)       -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <div class="route-page" id="route-lex-sticker" data-route-page="lex-sticker">
+      <section class="lexsticker-section">
+        <div class="container">
+          <!-- A. Hero de LexSticker -->
+          <div class="ls-hero-card">
+            <div class="ls-hero-art">
+              <div class="ls-orb-orange"></div>
+              <div class="ls-orb-emerald"></div>
+              <div class="ls-wave-ring ls-wave-1"></div>
+              <div class="ls-wave-ring ls-wave-2"></div>
+              <div class="ls-art-center">
+                <div class="ls-logo-glass">
+                  <img src="assets/lexsticker-logo.png" alt="LexSticker Logo Oficial" />
+                </div>
+                <div class="ls-floating-pill ls-fp-top">🔊 Sticker + Audio</div>
+                <div class="ls-floating-pill ls-fp-bottom">💚 512×512 · Opus</div>
+              </div>
+            </div>
+
+            <div class="ls-hero-copy">
+              <div class="ls-status-pill">🎙️ WEB INDEPENDIENTE · DISEÑO PROPIO · 100 % GRATIS</div>
+              <h1>LexSticker</h1>
+              <p class="ls-lead">
+                Convierte cualquier <strong>video, GIF animado o foto</strong> en un sticker cuadrado de <code>512×512 px</code> con <strong>sonido original, MP3 o tu propia voz</strong> directo desde tu navegador, sin descargar ni ejecutar archivos <code>.bat</code>.
+              </p>
+              <div class="ls-highlight-tags">
+                <span>🎬 MP4 · MOV · WEBM · GIF · Foto</span>
+                <span>✂️ Recorte 1:1 inteligente</span>
+                <span>⏱️ Tramo de 5 s o 10 s</span>
+                <span>🎤 Micrófono o audio propio</span>
+                <span>🌐 100 % Web desde PC o celular</span>
+              </div>
+              <div class="ls-web-cta-box">
+                <span class="ls-web-cta-label">Web temporal para crear stickers con audio de WhatsApp:</span>
+                <a href="./lexsticker/" class="btn btn-sticker btn-lg">
+                  <span>🚀 Abrir LexSticker Web →</span>
+                </a>
+              </div>
+              <div class="ls-hero-actions" style="margin-top: 14px;">
+                <button type="button" class="btn btn-secondary btn-sm" id="ls-btn-jump-sim">
+                  <span>▶ Probar Simulador aquí</span>
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" id="ls-btn-jump-guide">
+                  <span>📋 Ver Cómo Se Hace Paso a Paso ↓</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- B. Simulador Interactivo de LexSticker -->
+          <div class="ls-sim-wrapper" id="ls-simulator">
+            <div class="section-header" style="margin-bottom: 28px;">
+              <span class="section-tag">PRUÉBALO AQUÍ EN VIVO</span>
+              <h2>Simulador Interactivo de LexSticker</h2>
+              <p>Juega con los controles reales del estudio, cambia el sonido y toca la burbuja de WhatsApp para escuchar cómo queda tu sticker.</p>
+            </div>
+
+            <div class="ls-sim-card">
+              <!-- Barra de selección rápida de fuente -->
+              <div class="ls-sim-sourcebar">
+                <div class="ls-preset-group" role="group" aria-label="Ejemplos interactivos">
+                  <span class="ls-bar-label">Ejemplo rápido:</span>
+                  <button type="button" class="ls-preset-btn active" data-ls-preset="lol">😂 Reacción LOL</button>
+                  <button type="button" class="ls-preset-btn" data-ls-preset="fire">🔥 Risa Épica</button>
+                  <button type="button" class="ls-preset-btn" data-ls-preset="cool">😎 Saludo Pro</button>
+                </div>
+                <div class="ls-upload-group">
+                  <input type="file" id="ls-sim-file" accept="image/*,video/*" hidden />
+                  <button type="button" class="btn btn-secondary btn-sm" id="ls-sim-upload-btn">
+                    <span>📁 Probar con mi foto o video</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="ls-sim-reset-btn" style="display: none;">
+                    <span>↺ Volver a ejemplos</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="ls-studio-grid">
+                <!-- Columna Izquierda: Lienzo 1:1 + Línea de Tiempo -->
+                <div class="ls-studio-col">
+                  <div class="ls-panel-head">
+                    <strong>1. Recorte cuadrado 1:1 (512×512)</strong>
+                    <span class="ls-badge-mini" id="ls-crop-coords">Encuadre: 100% · Centro</span>
+                  </div>
+
+                  <div class="ls-crop-stage" id="ls-crop-stage" title="Arrastra o ajusta el zoom para encuadrar">
+                    <div class="ls-crop-visual" id="ls-crop-visual"></div>
+                    <img id="ls-crop-user-img" alt="Vista previa de imagen local" style="display: none;" />
+                    <video id="ls-crop-user-video" playsinline muted loop style="display: none;"></video>
+                    <div class="ls-crop-frame">
+                      <span class="ls-corner tl"></span>
+                      <span class="ls-corner tr"></span>
+                      <span class="ls-corner bl"></span>
+                      <span class="ls-corner br"></span>
+                      <div class="ls-crop-grid"></div>
+                    </div>
+                  </div>
+
+                  <div class="ls-slider-row">
+                    <label for="ls-crop-zoom">🔍 Zoom de encuadre (arrastra el cuadro para mover):</label>
+                    <input type="range" id="ls-crop-zoom" min="100" max="180" value="100" step="2" />
+                  </div>
+
+                  <div class="ls-timeline-box">
+                    <div class="ls-panel-head">
+                      <strong>2. Tramo y duración máxima</strong>
+                      <div class="ls-cap-group">
+                        <button type="button" class="ls-cap-pill active" data-ls-cap="5">Máx. 5 s</button>
+                        <button type="button" class="ls-cap-pill" data-ls-cap="10">Máx. 10 s</button>
+                      </div>
+                    </div>
+
+                    <div class="ls-trim-track">
+                      <div class="ls-trim-window" id="ls-trim-window" style="left: 10%; width: 50%;">
+                        <span class="ls-trim-handle left"></span>
+                        <span class="ls-trim-text" id="ls-trim-text">0.5s – 5.5s</span>
+                        <span class="ls-trim-handle right"></span>
+                      </div>
+                    </div>
+
+                    <div class="ls-dual-sliders">
+                      <div class="ls-slider-row">
+                        <label for="ls-start-slider">Inicio del corte: <strong id="ls-start-label">0.5 s</strong></label>
+                        <input type="range" id="ls-start-slider" min="0" max="8" step="0.5" value="0.5" />
+                      </div>
+                      <div class="ls-slider-row">
+                        <label for="ls-dur-slider">Duración del sticker: <strong id="ls-dur-label">5.0 s</strong></label>
+                        <input type="range" id="ls-dur-slider" min="1" max="5" step="0.5" value="5" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Columna Derecha: Audio + Vista Previa Chat WhatsApp -->
+                <div class="ls-studio-col">
+                  <div class="ls-panel-head">
+                    <strong>3. Elige el sonido del sticker</strong>
+                    <span class="ls-badge-mini emerald" id="ls-audio-pill">Opus 24 kbps</span>
+                  </div>
+
+                  <div class="ls-sound-grid">
+                    <button type="button" class="ls-sound-card" data-ls-sound="none">
+                      <span class="ls-sc-ico">🔇</span>
+                      <div>
+                        <strong>Sin sonido</strong>
+                        <small>Sticker tradicional</small>
+                      </div>
+                    </button>
+                    <button type="button" class="ls-sound-card active" data-ls-sound="original">
+                      <span class="ls-sc-ico">🔊</span>
+                      <div>
+                        <strong>Sonido original</strong>
+                        <small>Audio del video</small>
+                      </div>
+                    </button>
+                    <button type="button" class="ls-sound-card" data-ls-sound="upload">
+                      <span class="ls-sc-ico">🎵</span>
+                      <div>
+                        <strong>Subir audio</strong>
+                        <small>MP3, WAV, OGG, M4A</small>
+                      </div>
+                    </button>
+                    <button type="button" class="ls-sound-card" data-ls-sound="mic">
+                      <span class="ls-sc-ico">🎤</span>
+                      <div>
+                        <strong>Grabar voz</strong>
+                        <small>Con tu micrófono</small>
+                      </div>
+                    </button>
+                  </div>
+
+                  <p class="ls-audio-hint" id="ls-audio-hint">
+                    🔊 Usa la pista original del video (puedes mover el inicio del audio si solo quieres una frase).
+                  </p>
+
+                  <!-- Vista previa tipo WhatsApp -->
+                  <div class="ls-wa-stage">
+                    <div class="ls-wa-topbar">
+                      <div class="ls-wa-user">
+                        <span class="ls-wa-avatar">💚</span>
+                        <div>
+                          <strong>Mensajes contigo mismo</strong>
+                          <small>Vista previa interactiva en WhatsApp</small>
+                        </div>
+                      </div>
+                      <button type="button" class="ls-wa-fav-btn" id="ls-wa-fav-btn">⭐ Favoritos</button>
+                    </div>
+
+                    <div class="ls-wa-chat-area">
+                      <div class="ls-wa-bubble" id="ls-wa-bubble" role="button" tabindex="0" title="Haz clic para escuchar el sticker">
+                        <div class="ls-wa-sticker-art" id="ls-wa-sticker-art"></div>
+                        <img id="ls-wa-user-img" alt="Sticker generado" style="display: none;" />
+                        <video id="ls-wa-user-video" playsinline muted loop style="display: none;"></video>
+                        <div class="ls-wa-sound-badge" id="ls-wa-sound-badge">
+                          <span class="ls-eq" id="ls-wa-eq"><i></i><i></i><i></i></span>
+                          <span id="ls-wa-sound-text">🔊 Toca para oír</span>
+                        </div>
+                      </div>
+                      <div class="ls-wa-meta" id="ls-wa-dual-note" style="display: none;">
+                        🎤 Nota de voz aparte (0:05 · Modo Universal)
+                      </div>
+                      <div class="ls-wa-toast" id="ls-wa-fav-toast" aria-live="polite"></div>
+                    </div>
+
+                    <div class="ls-send-modes">
+                      <span class="ls-bar-label">Formato de envío:</span>
+                      <div class="ls-send-pills">
+                        <button type="button" class="ls-send-pill active" data-ls-send="audioSticker">Nativo (audioSticker)</button>
+                        <button type="button" class="ls-send-pill" data-ls-send="stickerDirect">Directo (sticker+audio)</button>
+                        <button type="button" class="ls-send-pill" data-ls-send="dual">Universal (Dual)</button>
+                      </div>
+                      <small class="ls-send-desc" id="ls-send-desc">
+                        Envía el sticker con audio nativo embebido: suena al tocarlo en WhatsApp y puedes guardarlo en Favoritos.
+                      </small>
+                    </div>
+
+                    <div class="ls-output-chips">
+                      <span class="ls-chip" id="ls-chip-dim">📐 512×512 px</span>
+                      <span class="ls-chip" id="ls-chip-dur">⏱️ 5.0 s</span>
+                      <span class="ls-chip" id="ls-chip-webp">🖼️ WebP ~215 KB</span>
+                      <span class="ls-chip" id="ls-chip-audio">🔊 Opus ~18 KB</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- C. Cómo funciona sin .bat (Modo Web Directo + Servidor Docker opcional) -->
+          <div class="ls-launch-section" id="ls-launch-section">
+            <div class="section-header" style="margin-bottom: 26px;">
+              <span class="section-tag">100 % WEB · SIN ARCHIVOS .BAT</span>
+              <h2>Úsalo directo en tu navegador o con servidor en la nube</h2>
+              <p>Todo funciona desde <code>lexjunior.pages.dev/lexsticker/</code> con diseño propio adaptado a PC y celular.</p>
+            </div>
+
+            <div class="ls-launch-tabs" role="tablist">
+              <button type="button" class="ls-launch-tab active" data-ls-launch="web">🌐 Web Temporal Directa (Sin instalar nada)</button>
+              <button type="button" class="ls-launch-tab" data-ls-launch="docker">☁️ Conectar Servidor Docker (Para QR Directo)</button>
+            </div>
+
+            <div class="ls-launch-panels">
+              <div class="ls-launch-panel active" data-ls-panel="web">
+                <div class="ls-launch-grid">
+                  <div class="ls-launch-step">
+                    <span class="ls-step-num">1</span>
+                    <div>
+                      <h4>Pulsa «Abrir LexSticker Web»</h4>
+                      <p>Entra a la web independiente en <a href="./lexsticker/" style="color:#6EE7B7;font-weight:700;">lexjunior.pages.dev/lexsticker/</a> desde tu PC o celular.</p>
+                    </div>
+                  </div>
+                  <div class="ls-launch-step">
+                    <span class="ls-step-num">2</span>
+                    <div>
+                      <h4>Edita y graba todo en tu navegador</h4>
+                      <p>Sube video, GIF o imagen, encuadra en <code>512×512</code>, elige tramo de <code>5 s</code> / <code>10 s</code> y añade audio MP3 o tu micrófono sin ejecutar <code>.bat</code>.</p>
+                    </div>
+                  </div>
+                  <div class="ls-launch-step">
+                    <span class="ls-step-num">3</span>
+                    <div>
+                      <h4>Descarga o comparte por WhatsApp</h4>
+                      <p>Exporta tu clip cuadrado listo en segundos (<code>.mp4</code> con audio o <code>.webp</code>) para abrirlo o compartirlo directo en WhatsApp.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ls-launch-panel" data-ls-panel="docker">
+                <div class="ls-launch-grid">
+                  <div class="ls-launch-step">
+                    <span class="ls-step-num">1</span>
+                    <div>
+                      <h4>Despliega el <code>Dockerfile</code> en la nube</h4>
+                      <p>Si deseas envío automático por QR con conversión FFmpeg a WebP + Opus, aloja la carpeta <code>LexStickers</code> en Render, Railway o tu VPS con Node 22 + FFmpeg.</p>
+                      <div class="ls-code-row">
+                        <code>docker build -t lexsticker . && docker run -p 3000:3000 lexsticker</code>
+                        <button type="button" class="ls-copy-btn" data-copy="docker build -t lexsticker . && docker run -p 3000:3000 lexsticker">📋 Copiar</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ls-launch-step">
+                    <span class="ls-step-num">2</span>
+                    <div>
+                      <h4>Pega tu URL en la pestaña WhatsApp</h4>
+                      <p>Dentro de <a href="./lexsticker/" style="color:#6EE7B7;font-weight:700;">LexSticker Web</a>, ve a <strong>WhatsApp</strong>, pega la URL HTTPS de tu contenedor y pulsa <strong>Conectar servidor</strong>.</p>
+                    </div>
+                  </div>
+                  <div class="ls-launch-step">
+                    <span class="ls-step-num">3</span>
+                    <div>
+                      <h4>Envío directo por QR o 8 dígitos</h4>
+                      <p>Vincula WhatsApp una vez y envía stickers con audio nativo (<code>audioStickerMessage</code>) directo a tu chat sin abrir consola ni <code>.bat</code>.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- D. Guía Visual Paso a Paso (5 Pasos Interactivos) -->
+          <div class="ls-steps-section" id="ls-steps-guide">
+            <div class="section-header" style="margin-bottom: 24px;">
+              <span class="section-tag">GUÍA INTERACTIVA PASO A PASO</span>
+              <h2>Cómo crear y enviar tu sticker con audio</h2>
+              <p>Toca cada paso para marcarlo como completado mientras creas tu primer sticker.</p>
+            </div>
+
+            <div class="ls-progress-card">
+              <div class="ls-progress-head">
+                <strong>Tu progreso en la guía</strong>
+                <span id="ls-guide-progress-text">0 de 5 pasos completados</span>
+              </div>
+              <div class="ls-progress-track">
+                <div class="ls-progress-fill" id="ls-guide-progress-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <div class="ls-steps-list">
+              <article class="ls-step-card" data-ls-step="1">
+                <button type="button" class="ls-step-check" aria-label="Marcar paso 1 completado">✓</button>
+                <div class="ls-step-body">
+                  <div class="ls-step-top">
+                    <span class="ls-step-badge">PASO 1 · ACCESO WEB DIRECTO</span>
+                    <h3>Abre LexSticker Web sin descargar ni usar .bat</h3>
+                  </div>
+                  <p>
+                    Haz clic en el botón <strong>Abrir LexSticker Web</strong> (<a href="./lexsticker/" style="color:#6EE7B7;font-weight:700;"><code>lexjunior.pages.dev/lexsticker/</code></a>) desde tu laptop o celular. Se abrirá el estudio completo con su propio diseño listo para usar.
+                  </p>
+                  <div class="ls-step-tip">
+                    💡 <strong>Opcional (envío por QR):</strong> Si quieres que el sticker llegue solo a tu WhatsApp por QR o código de 8 dígitos (como <code>audioStickerMessage</code>), conecta la URL de tu servidor Docker en la pestaña <strong>WhatsApp Vincular</strong>.
+                  </div>
+                </div>
+              </article>
+
+              <article class="ls-step-card" data-ls-step="2">
+                <button type="button" class="ls-step-check" aria-label="Marcar paso 2 completado">✓</button>
+                <div class="ls-step-body">
+                  <div class="ls-step-top">
+                    <span class="ls-step-badge">PASO 2 · ARCHIVO LOCAL</span>
+                    <h3>Sube tu video, GIF o imagen desde tu galería</h3>
+                  </div>
+                  <p>
+                    En la pestaña <strong>Crear Sticker</strong>, arrastra cualquier archivo de tu dispositivo o pulsa <strong>Subir video / GIF / foto</strong>. Funciona con <code>MP4</code>, <code>MOV</code>, <code>WEBM</code>, <code>GIF</code> animado, <code>JPG</code>, <code>PNG</code> y <code>WebP</code>.
+                  </p>
+                </div>
+              </article>
+
+              <article class="ls-step-card" data-ls-step="3">
+                <button type="button" class="ls-step-check" aria-label="Marcar paso 3 completado">✓</button>
+                <div class="ls-step-body">
+                  <div class="ls-step-top">
+                    <span class="ls-step-badge">PASO 3 · ENCUADRE Y DURACIÓN</span>
+                    <h3>Ajusta el cuadro 1:1 y recorta 5 s o 10 s exactos</h3>
+                  </div>
+                  <p>
+                    En el lienzo izquierdo, mueve y redimensiona el cuadro cuadrado para enfocar la parte exacta que quieres en formato <code>512×512</code>. En la línea de tiempo derecha, elige límite de <strong>5 s</strong> o <strong>10 s</strong> y desliza los controles para recortar el instante ideal (desde <code>0.5 s</code>).
+                  </p>
+                </div>
+              </article>
+
+              <article class="ls-step-card" data-ls-step="4">
+                <button type="button" class="ls-step-check" aria-label="Marcar paso 4 completado">✓</button>
+                <div class="ls-step-body">
+                  <div class="ls-step-top">
+                    <span class="ls-step-badge">PASO 4 · SONIDO O VOZ</span>
+                    <h3>Añade audio original, música MP3 o graba con tu micrófono</h3>
+                  </div>
+                  <p>
+                    Elige una de las 4 opciones en <strong>Sonido del sticker</strong>: <strong>🔇 Sin sonido</strong>, <strong>🔊 Sonido original</strong> (con deslizador para sincronizar el segundo exacto de inicio), <strong>🎵 Subir audio</strong> (acepta <code>MP3</code>, <code>WAV</code>, <code>OGG</code>, <code>M4A</code> o extrae el audio de otro video) o <strong>🎤 Grabar voz</strong> en vivo con tu micrófono.
+                  </p>
+                  <div class="ls-step-tip">
+                    💡 <strong>Tip pro:</strong> ¡Incluso una <strong>foto estática</strong> puede tener audio! Solo súbela y escoge <em>Subir audio</em> o <em>Grabar voz</em> para crear un sticker con imagen fija + sonido.
+                  </div>
+                </div>
+              </article>
+
+              <article class="ls-step-card" data-ls-step="5">
+                <button type="button" class="ls-step-check" aria-label="Marcar paso 5 completado">✓</button>
+                <div class="ls-step-body">
+                  <div class="ls-step-top">
+                    <span class="ls-step-badge">PASO 5 · GENERAR Y COMPARTIR</span>
+                    <h3>Genera el sticker/clip, pruébalo y envíalo a WhatsApp</h3>
+                  </div>
+                  <p>
+                    Pulsa <strong>✨ Generar Sticker</strong>: en modo navegador exporta al instante tu recorte <code>512×512</code> listo para descargar o compartir con sonido; y si conectaste un servidor Docker en la pestaña WhatsApp, convierte automáticamente a <strong>WebP (<code>≤ 490 KB</code>) + Opus 24 kbps</strong> y lo manda directo con <strong>Enviar por WhatsApp ahora</strong>.
+                  </p>
+                </div>
+              </article>
+            </div>
+
+            <!-- Comparativa de los 3 Formatos de Envío + Notas -->
+            <div class="ls-modes-grid">
+              <article class="bento-card">
+                <div class="card-icon">🔊</div>
+                <h3>1. Sticker con audio nativo (<code>audioSticker</code>)</h3>
+                <p>
+                  <strong>Recomendado:</strong> envía el sticker con la pista Opus encapsulada de forma nativa para que suene al tocarlo y puedas guardarlo directo en <strong>Favoritos</strong> de WhatsApp.
+                </p>
+              </article>
+
+              <article class="bento-card">
+                <div class="card-icon">⚡</div>
+                <h3>2. Sticker directo (<code>stickerDirect</code>)</h3>
+                <p>
+                  Adjunta la pista de audio directamente en la carga multimedia del <code>stickerMessage</code>. Útil como alternativa rápida si un destinatario no reproduce el envoltorio anterior.
+                </p>
+              </article>
+
+              <article class="bento-card">
+                <div class="card-icon">🔁</div>
+                <h3>3. Modo Universal Dual (<code>sticker + audio</code>)</h3>
+                <p>
+                  Envía el sticker y justo debajo la nota de voz aparte. Compatible al 100 % con cualquier cliente web, escritorio o versión antigua de WhatsApp.
+                </p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
     <!-- RUTA 4: #/documentacion (DOCUMENTACIÓN OFICIAL COMPLETA)            -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
     <div class="route-page" id="route-documentacion" data-route-page="documentacion">
@@ -891,7 +1365,8 @@
                 <button type="button" class="doc-nav-btn" data-doc-target="doc-shield">4. LexShield Core y Compatibilidad</button>
                 <button type="button" class="doc-nav-btn" data-doc-target="doc-seguridad">5. Bóveda PIN, Anti-Downgrade y Recuperación</button>
                 <button type="button" class="doc-nav-btn" data-doc-target="doc-tv">6. +Lex (Lex Media, Lex Player APK) y 300%</button>
-                <button type="button" class="doc-nav-btn" data-doc-target="doc-atajos">7. Referencia de Atajos de Teclado</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-lexsticker">7. LexSticker (Stickers con Audio)</button>
+                <button type="button" class="doc-nav-btn" data-doc-target="doc-atajos">8. Referencia de Atajos de Teclado</button>
               </div>
             </aside>
 
@@ -906,8 +1381,8 @@
                 </p>
                 <ul class="doc-list">
                   <li><strong>Requisitos del sistema:</strong> Windows 10 (64-bit) o Windows 11 (64-bit) con <em>Microsoft Edge WebView2 Runtime</em> (preinstalado en Windows 10/11).</li>
-                  <li><strong>Ventana de instalación mejorada (v2.7.0):</strong> El encabezado del instalador cuenta con margen ampliado y botón de cierre (<code>✕</code>) independiente de <code>32×32 px</code> para evitar cualquier recorte visual.</li>
-                  <li><strong>Actualizador integrado con formato rico y verificación SHA-256:</strong> Cuando hay una nueva versión en GitHub Releases, aparece el botón <strong>⬆️ Actualizar</strong> en la barra superior. Al pulsarlo se abre el nuevo diálogo con <code>ScrollViewer</code>, notas de versión formateadas (encabezados, negritas, código y listas sin mostrar asteriscos <code>**</code> crudos) y barra de progreso en vivo.</li>
+                  <li><strong>Instalador inteligente sin duplicados:</strong> Comprueba automáticamente si WebView2 y el navegador ya están al día y cuenta con ventana limpia sin recortes ni procesos residuales.</li>
+                  <li><strong>Actualizador estricto y formato rico:</strong> Selecciona exclusivamente el instalador oficial <code>LexJuniorSetup.exe</code> desde GitHub Releases y abre un diálogo con <code>ScrollViewer</code>, notas formateadas y barra de progreso en vivo.</li>
                   <li><strong>Seguridad de descarga:</strong> El actualizador solo acepta hosts oficiales de GitHub (<code>github.com</code> / <code>objects.githubusercontent.com</code>), descarga en <code>%LOCALAPPDATA%\LexBrowser\Updates</code> y verifica el tamaño exacto y el digest <strong>SHA-256</strong> antes de iniciar la actualización.</li>
                 </ul>
               </article>
@@ -922,7 +1397,7 @@
                 <ul class="doc-list">
                   <li><strong>🔒 Perfil A — Privacidad Estricta:</strong> Desactiva SmartScreen, detección anti-phishing, descarga de favicons remotos, sugerencias de búsqueda en tiempo real y comprobación automática de actualizaciones (solo manual). Ideal para máximo aislamiento.</li>
                   <li><strong>⚖️ Perfil B — Equilibrado (Recomendado):</strong> Mantiene activos SmartScreen, anti-phishing, descarga de favicons del propio sitio (protegida contra SSRF) y búsqueda de actualizaciones al iniciar, pero mantiene desactivados el servicio externo de favicons de terceros y las sugerencias de búsqueda mientras escribes.</li>
-                  <li><strong>🌐 Perfil C — Completo:</strong> Activa todas las ayudas visuales, incluyendo sugerencias de búsqueda en vivo en el Omnibox y respaldo externo de iconos con DuckDuckGo.</li>
+                  <li><strong>🌐 Perfil C — Completo:</strong> Activa todas las ayudas visuales, incluyendo sugerencias de búsqueda en vivo en el Omnibox y respaldo externo de iconos con Google Favicon API.</li>
                   <li><strong>🛠️ Personalizado:</strong> Si cambias cualquier interruptor individual en Configuración, el navegador cambia automáticamente al estado <em>Personalizado</em> respetando tu combinación exacta.</li>
                   <li><strong>Compuerta de Red en el Arranque (<code>StartupNetworkGate</code>):</strong> Ninguna petición de favicons ni sincronización de marcadores se ejecuta hasta que hayas completado el desbloqueo por PIN y la elección inicial de tu perfil de privacidad.</li>
                 </ul>
@@ -936,7 +1411,7 @@
                   <strong>Lex PDF Studio</strong> (<code>https://pdf.lex.local/viewer.html</code>) abre automáticamente tanto archivos PDF de tu disco local como documentos PDF alojados en Internet o intranets académicas.
                 </p>
                 <ul class="doc-list">
-                  <li><strong>Soporte para PDFs Virtuales (Nuevo en v2.7.0):</strong> Cuando abres un enlace <code>https://.../documento.pdf</code> (o escribes <code>dominio.com/archivo.pdf</code> en la barra de direcciones), Lex Junior autoriza la URL en la sesión actual y la carga mediante el canal interno <code>api/load-remote-pdf</code>.</li>
+                  <li><strong>Soporte para PDFs Locales (en streaming) y Virtuales:</strong> Los PDFs locales se sirven vía <code>FileStream</code> sin bloquear la interfaz, y los enlaces <code>https://.../documento.pdf</code> se cargan mediante el canal interno autenticado <code>api/load-remote-pdf</code>.</li>
                   <li><strong>Compatibilidad con Aulas Virtuales y Sesiones Iniciadas:</strong> El proxy interno adjunta automáticamente las cookies de sesión de WebView2 correspondientes a cada salto de redirección (hasta 8 redirecciones seguras), permitiendo abrir PDFs protegidos por inicio de sesión sin errores de CORS.</li>
                   <li><strong>Defensa Anti-SSRF y Validación Binaria:</strong> Bloquea redirecciones desde dominios públicos hacia IPs privadas/locales (<code>127.0.0.1</code>, <code>10.x</code>, <code>192.168.x</code>, <code>169.254.x</code>) con DNS pinning y verifica la cabecera mágica <code>%PDF-</code> para no confundir páginas HTML de login con documentos PDF. Si un servidor devuelve HTML o falla, ofrece los botones <strong>Reintentar</strong> y <strong>Abrir en modo navegador</strong>.</li>
                   <li><strong>Edición y Guardado Sin Pérdida:</strong> Los bytes del PDF se conservan en memoria (<code>AppState.pdfBytes</code>), permitiendo hacer zoom sin volver a descargar el archivo, dibujar con lápiz (8 grosores), resaltar, borrar, agregar texto, estampar tu firma digital o sellos y guardar el PDF modificado directamente en tu equipo.</li>
@@ -954,7 +1429,7 @@
                   <li><strong>Bloqueo de Red <code>O(1)</code> y Reglas Cosméticas:</strong> Evalúa peticiones antes de que se descarguen y oculta contenedores publicitarios vacíos.</li>
                   <li><strong>Puente Seguro por Pestaña:</strong> Los scriptlets se comunican con el host mediante un token único por pestaña, impidiendo que scripts de la página suplanten o desactiven el escudo.</li>
                   <li><strong>Modo Compatibilidad Temporal:</strong> Si un sitio bancario o gubernamental falla por bloqueos estrictos, puedes activar el <em>Modo Compatibilidad Temporal</em> desde el icono del escudo en la barra de direcciones o recargando repetidamente la pestaña.</li>
-                  <li><strong>Exportación de Diagnóstico (<code>Ctrl + Shift + L</code>):</strong> Permite exportar el registro técnico de LexShield a la carpeta <code>Logs\</code> para auditar qué reglas se aplicaron en cada pestaña.</li>
+                  <li><strong>Exportación de Diagnóstico (<code>Ctrl + Shift + L</code>):</strong> Permite exportar el registro técnico de LexShield a la carpeta <code>Logs\</code> ocultando hosts privados de pestañas Incógnito o Invitado.</li>
                 </ul>
               </article>
 
@@ -963,12 +1438,12 @@
                 <span class="doc-badge">SECCIÓN 5</span>
                 <h3>Bóveda PIN, Autocompletado Estricto, Anti-Downgrade y Recuperación</h3>
                 <p>
-                  Lex Junior v2.7.0 incorpora protecciones de grado empresarial para tus credenciales y tu archivo de configuración:
+                  Lex Junior v2.8.5 incorpora protecciones de grado empresarial para tus credenciales, marcadores y configuración:
                 </p>
                 <ul class="doc-list">
-                  <li><strong>Cifrado DPAPI y Coincidencia Exacta de Host:</strong> Las contraseñas se cifran con la clave de tu usuario de Windows (<code>DPAPI</code>). El autocompletado valida <code>IsSameExactOrWwwHost</code>, evitando que un sitio en <code>usuarioA.github.io</code> reciba credenciales guardadas en <code>usuarioB.github.io</code>, y exige interacción real sobre campos de login visibles.</li>
-                  <li><strong>Bloqueo con PIN y Modo Invitado:</strong> Configura un PIN de 6 caracteres (al abrir siempre o por sesión de Windows / bloqueo <code>Win + L</code>). Quienes usen tu PC pueden pulsar <strong>Entrar como Invitado</strong> en una sesión efímera sin acceso a tu bóveda, historial ni marcadores.</li>
-                  <li><strong>Recuperación Inteligente de <code>settings.json</code>:</strong> Si un corte de energía corrompe <code>settings.json</code>, Lex Junior rescata propiedad por propiedad las preferencias legibles, crea un respaldo único <code>.corrupt.&lt;timestamp&gt;.bak</code> y protege el estado de bloqueo PIN mediante el marcador <code>vault.lock</code>.</li>
+                  <li><strong>Cifrado DPAPI y Coincidencia Consistente:</strong> Las contraseñas se cifran con la clave de tu usuario de Windows (<code>DPAPI</code>) y se almacenan/autocompletan por <code>(OriginHost, Username)</code> validando <code>IsSameExactOrWwwHost</code> para evitar choques entre subdominios y proteger contra suplantaciones.</li>
+                  <li><strong>Bloqueo con PIN, Recuperación Segura y Modo Invitado:</strong> Configura un PIN de 6 caracteres (siempre al iniciar o modo Inteligente). Al recuperar acceso con tu pregunta secreta o Código de Emergencia (<code>LEX-XXXX-XXXX</code>), muestra el nuevo código sin sobrescribir tu pregunta secreta y continúa la acción pendiente al instante.</li>
+                  <li><strong>Escritura Atómica y Cuarentena Inteligente:</strong> Settings, Bóveda y Marcadores guardan mediante <code>AtomicFile</code>; ante archivos corruptos se crea respaldo <code>.corrupt-*</code> sin sobrescribir datos, y las listas vacías de marcadores se respetan intactas.</li>
                   <li><strong>Protección Anti-Downgrade:</strong> Si intentas abrir una versión antigua del navegador sobre un perfil actualizado, <code>VersionDowngradeDialog</code> bloquea la sobrescritura destructiva de <code>settings.json</code> y te permite actualizar en un clic.</li>
                 </ul>
               </article>
@@ -976,17 +1451,32 @@
               <!-- DOC 6 -->
               <article class="doc-card" id="doc-tv">
                 <span class="doc-badge">SECCIÓN 6</span>
-                <h3>Lex TV, Amplificador de Volumen 300% y Detector Multimedia</h3>
+                <h3>+Lex (Lex Media, Lex Class, Lex Player APK), Amplificador 300% y Detector</h3>
                 <ul class="doc-list">
-                  <li><strong>Lex TV (<code>lex://tv</code> o botón 📺 Lex TV):</strong> Reproduce listas IPTV (<code>M3U/M3U8</code>), organiza películas y series VOD por temporadas y conecta servidores <strong>Xtream Codes</strong> o <strong>Jellyfin/Emby</strong> con credenciales cifradas en DPAPI. Al cerrar la pestaña de Lex TV, todos los flujos se detienen por completo.</li>
+                  <li><strong>Lex Media (<code>lex://media</code> / <code>lex://tv</code>):</strong> Reproduce listas IPTV (<code>M3U/M3U8</code>), organiza películas y series VOD por temporadas y conecta servidores <strong>Xtream Codes</strong> o <strong>Jellyfin/Emby</strong> con credenciales cifradas en DPAPI. Al cerrar la pestaña, todos los flujos se detienen por completo.</li>
+                  <li><strong>Lex Class &amp; Lex Player APK (opcionales desde +Lex):</strong> Abre la academia interactiva local <strong>Lex Class</strong> o lanza el complemento <strong>Lex Player APK</strong> optimizado para APKs de streaming con chequeo inteligente de SDK/aceleración.</li>
                   <li><strong>Amplificador de Volumen 300%:</strong> Utiliza <code>AudioContext + GainNode + DynamicsCompressor</code> para triplicar el volumen de cualquier video o clase grabada sin distorsionar las voces. En <code>100%</code> permanece desconectado para no alterar el audio original.</li>
                   <li><strong>Detector Multimedia Bajo Demanda:</strong> Captura streams <code>MP4</code>, <code>M3U8</code>, <code>MP3</code> y documentos solo cuando lo activas en la pestaña actual, apagándose automáticamente al navegar a otra página.</li>
                 </ul>
               </article>
 
-              <!-- DOC 7 -->
-              <article class="doc-card" id="doc-atajos">
+              <!-- DOC 7: LEXSTICKER -->
+              <article class="doc-card" id="doc-lexsticker">
                 <span class="doc-badge">SECCIÓN 7</span>
+                <h3>LexSticker: Web Temporal para Stickers con Audio de WhatsApp</h3>
+                <p>
+                  Accesible directamente desde tu navegador en <a href="./lexsticker/" style="color:#6EE7B7;font-weight:700;"><code>lexjunior.pages.dev/lexsticker/</code></a> con diseño propio e independiente, sin instalar programas ni ejecutar archivos <code>.bat</code>.
+                </p>
+                <ul class="doc-list">
+                  <li><strong>Entradas compatibles:</strong> Videos (<code>MP4</code>, <code>MOV</code>, <code>WEBM</code>), <code>GIF</code> animados e imágenes (<code>JPG</code>, <code>PNG</code>, <code>WebP</code>) recortados en <code>512×512</code> y rango configurable de <code>5 s</code> o <code>10 s</code>.</li>
+                  <li><strong>Audio y voz en el navegador:</strong> Conserva el sonido original del video, carga pistas (<code>MP3</code>, <code>WAV</code>, <code>OGG</code>, <code>M4A</code>) o graba tu propia voz con el micrófono para exportar o compartir tu clip por WhatsApp.</li>
+                  <li><strong>Conexión Docker opcional para QR directo:</strong> Si conectas un backend de <code>LexStickers</code> (Docker con FFmpeg + WhatsApp), habilitas vinculación por QR o código de 8 dígitos y envío nativo (<code>audioSticker</code>, <code>stickerDirect</code> y <code>dual</code>). <a href="#/lex-sticker" data-route-link="lex-sticker" style="color:#6EE7B7;font-weight:700;">Ver simulador y guía paso a paso →</a></li>
+                </ul>
+              </article>
+
+              <!-- DOC 8 -->
+              <article class="doc-card" id="doc-atajos">
+                <span class="doc-badge">SECCIÓN 8</span>
                 <h3>Referencia Completa de Atajos de Teclado</h3>
                 <div class="shortcuts-table-wrap">
                   <table class="profiles-table">
@@ -1045,28 +1535,33 @@
               <button type="button" class="faq-cat-pill" data-faq-cat="pdf-media">PDFs y Multimedia</button>
               <button type="button" class="faq-cat-pill" data-faq-cat="actualizaciones">Actualizaciones y Seguridad</button>
               <button type="button" class="faq-cat-pill" data-faq-cat="lexclass">Lex Junior Class</button>
+              <button type="button" class="faq-cat-pill" data-faq-cat="lexsticker">LexSticker (WhatsApp)</button>
             </div>
           </div>
 
           <div class="faq-list" id="faq-list">
+            <details class="faq-item" data-cat="lexsticker" open>
+              <summary>¿Cómo creo un sticker con audio para WhatsApp en LexSticker sin descargar archivos .bat?</summary>
+              <p>Entra directo a la web independiente de <a href="./lexsticker/" style="color:#6EE7B7;font-weight:700;">LexSticker Web</a> desde el botón <strong>Web temporal para crear stickers con audio de WhatsApp</strong>, sube tu video, GIF o foto, recorta el cuadro <code>1:1</code>, añade audio original, archivo MP3 o grabación con tu micrófono y descárgalo/compártelo en WhatsApp. Si además conectas un servidor Docker opcional en la pestaña <strong>WhatsApp</strong>, podrás enviarlo directo por QR o código de 8 dígitos. Revisa la guía interactiva en <a href="#/lex-sticker" data-route-link="lex-sticker" style="color:#6EE7B7;font-weight:700;">LexSticker</a>.</p>
+            </details>
             <details class="faq-item" data-cat="general" open>
               <summary>¿Necesito instalar extensiones para bloquear anuncios, editar PDFs o subir el volumen a 300%?</summary>
-              <p>No. Todas las herramientas vienen integradas de forma nativa en el código C# de Lex Junior Browser: el escudo <strong>LexShield Core</strong>, <strong>Lex PDF Studio</strong> (locales y virtuales), el amplificador de volumen hasta <strong>300%</strong>, el detector multimedia y <strong>Lex TV</strong> funcionan desde el primer segundo sin instalar complementos externos.</p>
+              <p>No. Todas las herramientas vienen integradas de forma nativa en el código C# de Lex Junior Browser: el escudo <strong>LexShield Core</strong>, <strong>Lex PDF Studio</strong> (locales y virtuales), el amplificador de volumen hasta <strong>300%</strong>, el detector multimedia y <strong>+Lex (Lex Class, Lex Media y Lex Player APK)</strong> funcionan sin instalar extensiones externas.</p>
             </details>
 
             <details class="faq-item" data-cat="actualizaciones" open>
-              <summary>¿Por qué antes se veían asteriscos (**) en el anuncio de actualización y cómo se solucionó en v2.7.0?</summary>
-              <p>En versiones anteriores el aviso de actualización usaba un cuadro de mensaje básico de Windows que mostraba el texto Markdown sin procesar. En <strong>v2.7.0</strong> estrenamos una ventana propia con diseño adaptable al tema, <strong>barra de desplazamiento (Scroll)</strong>, insignias comparativas de versión, barra de progreso en vivo y un motor de formato que convierte encabezados, listas, código y <strong>texto en negrita</strong> limpiamente sin mostrar ningún <code>**</code>.</p>
+              <summary>¿Cómo funciona el actualizador automático de Lex Junior?</summary>
+              <p>Cuando hay una nueva versión en GitHub Releases, aparece el aviso con formato limpio en ventana adaptable al tema, <strong>barra de desplazamiento (Scroll)</strong>, insignias comparativas y barra de progreso en vivo, seleccionando exclusivamente el instalador oficial <code>LexJuniorSetup.exe</code> verificado criptográficamente por <strong>SHA-256</strong> y tamaño exacto antes de actualizar.</p>
             </details>
 
             <details class="faq-item" data-cat="pdf-media" open>
-              <summary>¿Lex PDF Studio ahora abre tanto archivos PDF locales como PDFs virtuales de Internet?</summary>
-              <p>¡Sí! En <strong>v2.7.0</strong> solucionamos la apertura de PDFs virtuales (<code>http://</code> y <code>https://</code>). Ahora cuando haces clic en un PDF en la web o en tu aula virtual, Lex PDF Studio lo descarga de forma segura a través de un canal interno autenticado que respeta tus cookies de sesión, valida que sea un archivo <code>%PDF-</code> real y mantiene los bytes en memoria para que puedas hacer zoom, anotar, resaltar, estampar tu firma digital y guardarlo en tu PC sin errores de CORS.</p>
+              <summary>¿Lex PDF Studio abre tanto archivos PDF locales como PDFs virtuales de Internet?</summary>
+              <p>¡Sí! Abre archivos PDF locales vía streaming sin congelar la interfaz y enlaces PDF virtuales (<code>http://</code> y <code>https://</code>) mediante un canal interno autenticado que respeta tus cookies de sesión, verifica la cabecera <code>%PDF-</code> y permite hacer zoom, anotar, resaltar, estampar tu firma digital y guardar en tu PC sin errores de CORS.</p>
             </details>
 
             <details class="faq-item" data-cat="lexclass" open>
-              <summary>¿Qué pasa cuando presiono el botón «🎓 Lex Class» en esta versión?</summary>
-              <p>Al presionar el botón <strong>🎓 Lex Class</strong> en la barra superior (o desde la Nueva Pestaña), se abre una ventana especial con una ilustración inspirada en el logo oficial de Lex Junior anunciando que <strong>Lex Junior Class estará disponible en la próxima actualización</strong>, junto con un adelanto de sus cursos paso a paso de 1.° de Primaria a Preuniversitario.</p>
+              <summary>¿Cómo abro «🎓 Lex Class» y qué incluye?</summary>
+              <p>Desde el menú <strong>✦ +Lex → 🎓 Lex Class</strong> en la barra superior (o escribiendo <code>lex://class</code>), se abre una ventana independiente con modo pantalla completa y el motor de <strong>Universo de Mundos</strong>: Matemáticas paso a paso (cuadrículas posicionales, fracciones, cálculo), Inglés + LexBook, modo Práctica/Examen con nota 0–20 y paisaje sonoro 100 % offline.</p>
             </details>
 
             <details class="faq-item" data-cat="privacidad">
@@ -1081,7 +1576,7 @@
 
             <details class="faq-item" data-cat="actualizaciones">
               <summary>¿Qué ocurre si mi archivo settings.json se daña por un apagón o si abro una versión antigua?</summary>
-              <p>En <strong>v2.7.0</strong> añadimos dos defensas automáticas: <strong>1) Recuperación parcial inteligente</strong>, que rescata todas las preferencias válidas de un <code>settings.json</code> dañado, guarda una copia <code>.corrupt.bak</code> y preserva tu bloqueo PIN gracias a <code>vault.lock</code>; y <strong>2) Protección Anti-Downgrade</strong>, que impide que un ejecutable antiguo sobrescriba la configuración creada por una versión más nueva.</p>
+              <p>Lex Junior incluye escritura atómica (<code>AtomicFile</code>) y dos defensas automáticas: <strong>1) Recuperación parcial inteligente</strong>, que rescata las preferencias válidas de un <code>settings.json</code> dañado, guarda una copia <code>.corrupt-*</code> y preserva tu bloqueo PIN gracias a <code>vault.lock</code>; y <strong>2) Protección Anti-Downgrade</strong>, que impide que un ejecutable antiguo sobrescriba la configuración de una versión más nueva.</p>
             </details>
 
             <details class="faq-item" data-cat="actualizaciones">
@@ -1202,7 +1697,8 @@
       <div class="footer-links">
         <a href="#/inicio" data-route-link="inicio">Inicio</a>
         <a href="#/funciones" data-route-link="funciones">Funciones</a>
-        <a href="#/lex-class" data-route-link="lex-class">Lex Class (Muy Pronto)</a>
+        <a href="#/lex-sticker" data-route-link="lex-sticker">LexSticker (Stickers + Audio)</a>
+        <a href="#/lex-class" data-route-link="lex-class">Lex Class</a>
         <a href="#/documentacion" data-route-link="documentacion">Documentación</a>
         <a href="#/faq" data-route-link="faq">Preguntas y Respuestas</a>
         <a href="#/novedades" data-route-link="novedades">Novedades</a>
