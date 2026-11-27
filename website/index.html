@@ -1193,26 +1193,22 @@
                   <div class="ls-launch-step">
                     <span class="ls-step-num">1</span>
                     <div>
-                      <h4>Despliega el <code>Dockerfile</code> en la nube</h4>
-                      <p>Si deseas envío automático por QR con conversión FFmpeg a WebP + Opus, aloja la carpeta <code>LexStickers</code> en Render, Railway o tu VPS con Node 22 + FFmpeg.</p>
-                      <div class="ls-code-row">
-                        <code>docker build -t lexsticker . && docker run -p 3000:3000 lexsticker</code>
-                        <button type="button" class="ls-copy-btn" data-copy="docker build -t lexsticker . && docker run -p 3000:3000 lexsticker">📋 Copiar</button>
-                      </div>
+                      <h4>Sube a Hugging Face Spaces ($0)</h4>
+                      <p>Crea un Space público en <strong>huggingface.co/spaces</strong> con SDK <strong>Docker</strong> y sube la carpeta <code>LexStickers</code> (ya incluye <code>Dockerfile</code>, puerto <code>7860</code>, <code>.dockerignore</code> y sesiones aisladas por usuario).</p>
                     </div>
                   </div>
                   <div class="ls-launch-step">
                     <span class="ls-step-num">2</span>
                     <div>
                       <h4>Pega tu URL en la pestaña WhatsApp</h4>
-                      <p>Dentro de <a href="./lexsticker/" style="color:#6EE7B7;font-weight:700;">LexSticker Web</a>, ve a <strong>WhatsApp</strong>, pega la URL HTTPS de tu contenedor y pulsa <strong>Conectar servidor</strong>.</p>
+                      <p>Dentro de <a href="./lexsticker/" style="color:#6EE7B7;font-weight:700;">LexSticker Web</a>, ve a <strong>WhatsApp</strong>, pega la URL HTTPS de tu Space (<code>https://tu-usuario-lexsticker.hf.space</code>) y pulsa <strong>Conectar servidor</strong>.</p>
                     </div>
                   </div>
                   <div class="ls-launch-step">
                     <span class="ls-step-num">3</span>
                     <div>
-                      <h4>Envío directo por QR o 8 dígitos</h4>
-                      <p>Vincula WhatsApp una vez y envía stickers con audio nativo (<code>audioStickerMessage</code>) directo a tu chat sin abrir consola ni <code>.bat</code>.</p>
+                      <h4>QR privado por cada visitante</h4>
+                      <p>Cada usuario recibe su propio identificador aislado para ver <strong>solo su QR o código de 8 dígitos</strong> y recibir stickers con audio nativo sin mezclarse con otros.</p>
                     </div>
                   </div>
                 </div>
