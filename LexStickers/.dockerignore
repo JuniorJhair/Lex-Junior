@@ -1,0 +1,12 @@
+node_modules/
+**/node_modules/
+server/data/
+server/bin/
+web/dist/
+web/android/.gradle/
+web/android/app/build/
+web/android/build/
+INICIAR_STICKERSLEX.bat
+.git/
+*.log
+.DS_Store
