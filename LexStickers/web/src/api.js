@@ -1,5 +1,6 @@
 const API_BASE_STORAGE_KEY = 'lexsticker_api_base';
 const CLIENT_SESSION_STORAGE_KEY = 'lexsticker_client_session';
+export const DEFAULT_PUBLIC_BACKEND_URL = 'https://lexsticker.onrender.com';
 
 export function getClientSessionId() {
   try {
@@ -38,7 +39,20 @@ export function getApiBase() {
   }
   const envUrl = import.meta.env?.VITE_API_URL;
   if (envUrl) return String(envUrl).trim().replace(/\/+$/, '');
-  return '';
+
+  if (typeof window !== 'undefined') {
+    const host = (window.location.hostname || '').toLowerCase();
+    if (
+      host.endsWith('.onrender.com') ||
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host.startsWith('192.168.') ||
+      host.startsWith('10.')
+    ) {
+      return '';
+    }
+  }
+  return DEFAULT_PUBLIC_BACKEND_URL;
 }
 
 export function setApiBase(rawUrl) {
@@ -67,7 +81,7 @@ async function apiFetch(path, options = {}) {
   const signal =
     options.signal ||
     (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
-      ? AbortSignal.timeout(path === '/api/health' ? 15000 : 120000)
+      ? AbortSignal.timeout(path === '/api/health' ? 55000 : 120000)
       : undefined);
 
   const headers = new Headers(options.headers || {});

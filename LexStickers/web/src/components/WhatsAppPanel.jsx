@@ -4,6 +4,7 @@ import { api, getApiBase, setApiBase } from '../api.js';
 
 export default function WhatsAppPanel({
   serverOnline,
+  serverWaking,
   waStatus,
   onRefresh,
   targetJid,
@@ -93,10 +94,21 @@ export default function WhatsAppPanel({
 
       {!serverOnline && (
         <div className="alert warn" style={{ marginBottom: 14 }}>
-          <strong>Modo Web Temporal activo:</strong> actualmente estás navegando solo la interfaz estática (o el servidor gratuito se está despertando).
-          <div style={{ marginTop: 4 }}>
-            Para activar tu <strong>QR privado de WhatsApp</strong>, conecta abajo la URL de tu servidor <strong>Render Free</strong> (<code>https://tu-app.onrender.com</code>) o pulsa <strong>Actualizar</strong> si está despertando (~40 s).
-          </div>
+          {serverWaking ? (
+            <>
+              <strong>⏳ Conectando y despertando servidor gratuito de WhatsApp...</strong>
+              <div style={{ marginTop: 4 }}>
+                En Render Free puede tardar ~35–50 segundos la primera vez si estaba dormido. En cuanto responda aparecerá tu código QR aquí mismo.
+              </div>
+            </>
+          ) : (
+            <>
+              <strong>Servidor gratuito temporalmente inaccesible o despertando:</strong>
+              <div style={{ marginTop: 4 }}>
+                Pulsa <strong>Actualizar</strong> arriba para reintentar despertar <code>https://lexsticker.onrender.com</code>, o conecta tu propia URL Render abajo.
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -150,17 +162,20 @@ export default function WhatsAppPanel({
             {waStatus.pairingCode}
           </div>
         </div>
-      ) : (
+      ) : serverOnline ? (
         <div className="alert warn" style={{ marginBottom: 16 }}>
           Estado actual: <strong>{status === 'connecting' ? 'Conectando...' : 'Desconectado'}</strong>. Elige vincular con QR o con código de 8 dígitos.
         </div>
-      )}
+      ) : null}
 
       {!serverOnline ? (
         <div className="row-wrap" style={{ marginTop: 8 }}>
+          <button type="button" className="btn btn-brand" onClick={onRefresh} disabled={busy}>
+            <RefreshCw size={15} /> {serverWaking ? 'Conectando...' : 'Despertar / Reintentar conexión'}
+          </button>
           {onGoCreate && (
             <button type="button" className="btn btn-primary" onClick={onGoCreate}>
-              <ArrowLeft size={16} /> Volver a Crear Sticker en modo web
+              <ArrowLeft size={16} /> Volver a Crear Sticker
             </button>
           )}
         </div>

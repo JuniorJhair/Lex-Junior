@@ -29,6 +29,7 @@ export default function App() {
   const [tab, setTab] = useState('create'); // create | whatsapp
   const [serverInfo, setServerInfo] = useState(null);
   const [serverOnline, setServerOnline] = useState(false);
+  const [serverWaking, setServerWaking] = useState(true);
 
   // Media source state
   const [source, setSource] = useState(null);
@@ -91,6 +92,8 @@ export default function App() {
       setServerOnline(true);
     } catch {
       setServerOnline(false);
+    } finally {
+      setServerWaking(false);
     }
   }, []);
 
@@ -445,13 +448,22 @@ export default function App() {
       {!serverOnline && (
         <div className="alert warn" style={{ marginBottom: 16 }}>
           <WifiOff size={15} style={{ verticalAlign: '-2px', marginRight: 6 }} />
-          <strong>Modo Web Temporal activo (100 % navegador):</strong> recorta en 512×512, agrega audio o graba tu voz y descarga/comparte el archivo. Para activar tu <strong>QR privado de WhatsApp</strong>, conecta tu servidor Render Free en la pestaña <strong>WhatsApp Vincular</strong>.
+          {serverWaking ? (
+            <>
+              <strong>⏳ Despertando servidor de stickers con audio y WhatsApp...</strong> (en el plan gratuito tarda ~35 s tras inactividad; mientras tanto ya puedes ir subiendo y recortando tu archivo).
+            </>
+          ) : (
+            <>
+              <strong>Servidor en reposo o desconectado:</strong> puedes seguir recortando y descargando clips localmente, o ir a <strong>WhatsApp Vincular → Actualizar</strong> para despertar el servidor de QR.
+            </>
+          )}
         </div>
       )}
 
       {tab === 'whatsapp' && (
         <WhatsAppPanel
           serverOnline={serverOnline}
+          serverWaking={serverWaking}
           waStatus={serverInfo?.whatsapp}
           onRefresh={refreshServer}
           targetJid={targetJid}
